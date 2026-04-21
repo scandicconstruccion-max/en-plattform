@@ -3561,7 +3561,8 @@ function SjekklistePage({ onNavigateDetail }) {
   const [showNew, setShowNew] = useState(false)
   const [showNewTemplate, setShowNewTemplate] = useState(false)
   const [editTemplate, setEditTemplate] = useState(null)
-  const [newForm, setNewForm] = useState({ project_id: '', template_id: '', title: '' })
+  const [newForm, setNewForm] = useState({ project_id: '', template_id: '', template_ids: [], title: '' })
+  const [newModalSearch, setNewModalSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [expandedMalKat, setExpandedMalKat] = useState({})
   const [expandedTemplates, setExpandedTemplates] = useState({})
@@ -3623,22 +3624,61 @@ function SjekklistePage({ onNavigateDetail }) {
     if (!newForm.project_id) return alert('Velg et prosjekt')
     setSaving(true)
     try {
-      const tmpl = templates.find(t => t.id === newForm.template_id)
-      const title = newForm.title || (tmpl ? `${tmpl.name} – ${projects.find(p => p.id === newForm.project_id)?.name}` : 'Ny sjekkliste')
-      const items = tmpl ? (tmpl.items || tmpl.sections?.flatMap(s => s.items.map(item => ({ title: typeof item === 'string' ? item : item.title, section: s.title, checked: false }))) || []) : []
-      const { data, error } = await supabase.from('checklists').insert({
-        title,
-        project_id: newForm.project_id,
-        template_id: newForm.template_id || null,
-        status: 'ikke_startet',
-        items,
-        created_by: user?.id,
-      }).select().single()
-      if (error) throw error
-      setShowNew(false)
-      setNewForm({ project_id: '', template_id: '', title: '' })
-      loadData()
-      if (data?.id) onNavigateDetail(data.id)
+      // Slå sammen template_ids (array) og template_id (gammel enkelt-felt) for bakoverkompatibilitet.
+      // Hvis ingen er valgt → opprett én tom sjekkliste (som før).
+      const tmplIds = [...new Set([...(newForm.template_ids || []), ...(newForm.template_id ? [newForm.template_id] : [])])]
+      const project = projects.find(p => p.id === newForm.project_id)
+
+      // Hjelpefunksjon: bygg items-array fra en mal (samme logikk som handleBulkAdd)
+      const buildItems = (tmpl) => {
+        if (!tmpl) return []
+        if (tmpl.items && tmpl.items.length > 0) {
+          return tmpl.items.map(i => ({ title: typeof i === 'string' ? i : (i.title || i.text || ''), checked: false }))
+        }
+        return tmpl.sections?.flatMap(s => (s.items || []).map(item => ({ title: typeof item === 'string' ? item : (item.title || item.text || ''), section: s.title, checked: false }))) || []
+      }
+
+      if (tmplIds.length === 0) {
+        // Én tom sjekkliste
+        const title = newForm.title || 'Ny sjekkliste'
+        const { data, error } = await supabase.from('checklists').insert({
+          title, project_id: newForm.project_id, template_id: null, status: 'ikke_startet', items: [], created_by: user?.id,
+        }).select().single()
+        if (error) throw error
+        setShowNew(false); setNewForm({ project_id: '', template_id: '', template_ids: [], title: '' }); setNewModalSearch('')
+        loadData()
+        if (data?.id) onNavigateDetail(data.id)
+      } else if (tmplIds.length === 1) {
+        // Én mal → behold gammel UX (naviger inn i den nye sjekklisten)
+        const tmpl = templates.find(t => t.id === tmplIds[0])
+        const title = newForm.title || (tmpl ? `${tmpl.name} – ${project?.name || ''}`.trim() : 'Ny sjekkliste')
+        const { data, error } = await supabase.from('checklists').insert({
+          title, project_id: newForm.project_id, template_id: tmpl?.id || null, status: 'ikke_startet', items: buildItems(tmpl), created_by: user?.id,
+        }).select().single()
+        if (error) throw error
+        setShowNew(false); setNewForm({ project_id: '', template_id: '', template_ids: [], title: '' }); setNewModalSearch('')
+        loadData()
+        if (data?.id) onNavigateDetail(data.id)
+      } else {
+        // Flere maler → batch-insert, bli stående på oversikten
+        const rows = tmplIds.map(id => {
+          const tmpl = templates.find(t => t.id === id)
+          if (!tmpl) return null
+          return {
+            title: `${tmpl.name} – ${project?.name || ''}`.trim(),
+            project_id: newForm.project_id,
+            template_id: tmpl.id,
+            status: 'ikke_startet',
+            items: buildItems(tmpl),
+            created_by: user?.id,
+          }
+        }).filter(Boolean)
+        const { error } = await supabase.from('checklists').insert(rows)
+        if (error) throw error
+        alert(`${rows.length} sjekklister lagt til på ${project?.name || 'prosjektet'}`)
+        setShowNew(false); setNewForm({ project_id: '', template_id: '', template_ids: [], title: '' }); setNewModalSearch('')
+        loadData()
+      }
     } catch(e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
   }
@@ -4016,7 +4056,7 @@ function SjekklistePage({ onNavigateDetail }) {
       {showNew && (
         <>
           <div onClick={() => setShowNew(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
-          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(520px, calc(100vw - 32px))', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(580px, calc(100vw - 32px))', maxHeight: '90vh', overflowY: 'auto', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Ny sjekkliste</h2>
               <button onClick={() => setShowNew(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
@@ -4027,27 +4067,81 @@ function SjekklistePage({ onNavigateDetail }) {
                 <SearchableProjectSelect value={newForm.project_id} onChange={v => (e => setNewForm(f => ({...f, project_id: e.target.value})))({ target: { value: v } })} projects={projects} style={{ ...inp, background: 'white' }} placeholder="Velg prosjekt" />
               </div>
               <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Mal (valgfritt)</label>
-                <select value={newForm.template_id} onChange={e => setNewForm(f => ({...f, template_id: e.target.value}))} style={{ ...inp, background: 'white' }}>
-                  <option value="">Ingen mal – tom sjekkliste</option>
-                  {Object.entries(CATEGORY_LABELS).map(([cat, {label, emoji}]) => {
-                    const catTemplates = templates.filter(t => t.category === cat)
-                    if (catTemplates.length === 0) return null
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>
+                  Maler (valgfritt)
+                  {newForm.template_ids.length > 0 && <span style={{ color:'#059669', marginLeft:'8px', fontWeight:'700' }}>· {newForm.template_ids.length} valgt</span>}
+                </label>
+                <input value={newModalSearch} onChange={e => setNewModalSearch(e.target.value)} placeholder="🔍 Søk i maler..." style={{ ...inp, marginBottom:'8px' }} />
+                <div style={{ maxHeight:'260px', overflowY:'auto', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'6px', background:'#f8fafc' }}>
+                  {(() => {
+                    const q = newModalSearch.trim().toLowerCase()
+                    // Grupper maler etter kategori; filtrer på søk
+                    const filteredByCat = Object.entries(CATEGORY_LABELS).map(([cat, {label, emoji}]) => {
+                      const catTemplates = templates.filter(t => t.category === cat && (!q || t.name.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q)))
+                      return { cat, label, emoji, templates: catTemplates }
+                    }).filter(g => g.templates.length > 0)
+                    const uncat = templates.filter(t => !t.category && (!q || t.name.toLowerCase().includes(q)))
+                    if (filteredByCat.length === 0 && uncat.length === 0) {
+                      return <div style={{ padding:'16px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>{q ? `Ingen treff for "${newModalSearch}"` : 'Ingen maler tilgjengelig'}</div>
+                    }
+                    const toggleTmpl = (id) => setNewForm(f => ({ ...f, template_id: '', template_ids: f.template_ids.includes(id) ? f.template_ids.filter(x => x !== id) : [...f.template_ids, id] }))
                     return (
-                      <optgroup key={cat} label={`${emoji} ${label}`}>
-                        {catTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                      </optgroup>
+                      <>
+                        {filteredByCat.map(({ cat, label, emoji, templates: cts }) => (
+                          <div key={cat} style={{ marginBottom:'8px' }}>
+                            <div style={{ padding:'6px 8px', fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.04em' }}>{emoji} {label.toUpperCase()}</div>
+                            {cts.map(t => {
+                              const selected = newForm.template_ids.includes(t.id)
+                              return (
+                                <div key={t.id} onClick={() => toggleTmpl(t.id)}
+                                  style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 10px', borderRadius:'8px', cursor:'pointer', background: selected ? '#f0fdf4' : 'white', border: `1px solid ${selected ? '#bbf7d0' : '#f1f5f9'}`, marginBottom:'4px' }}>
+                                  <div style={{ width:'18px', height:'18px', borderRadius:'4px', border:`2px solid ${selected ? '#059669' : '#cbd5e1'}`, background: selected ? '#059669' : 'white', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'12px', fontWeight:'700', flexShrink:0 }}>{selected && '✓'}</div>
+                                  <div style={{ flex:1, minWidth:0 }}>
+                                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.name}</div>
+                                    {t.description && <div style={{ fontSize:'11px', color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.description}</div>}
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        ))}
+                        {uncat.length > 0 && (
+                          <div style={{ marginBottom:'8px' }}>
+                            <div style={{ padding:'6px 8px', fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.04em' }}>📋 ANDRE</div>
+                            {uncat.map(t => {
+                              const selected = newForm.template_ids.includes(t.id)
+                              return (
+                                <div key={t.id} onClick={() => toggleTmpl(t.id)}
+                                  style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 10px', borderRadius:'8px', cursor:'pointer', background: selected ? '#f0fdf4' : 'white', border: `1px solid ${selected ? '#bbf7d0' : '#f1f5f9'}`, marginBottom:'4px' }}>
+                                  <div style={{ width:'18px', height:'18px', borderRadius:'4px', border:`2px solid ${selected ? '#059669' : '#cbd5e1'}`, background: selected ? '#059669' : 'white', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'12px', fontWeight:'700', flexShrink:0 }}>{selected && '✓'}</div>
+                                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.name}</div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </>
                     )
-                  })}
-                </select>
+                  })()}
+                </div>
+                {newForm.template_ids.length === 0 && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px' }}>Hopp over for å opprette en tom sjekkliste</div>}
               </div>
-              <div>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Tittel (valgfritt)</label>
-                <input value={newForm.title} onChange={e => setNewForm(f => ({...f, title: e.target.value}))} placeholder="Genereres automatisk hvis tom" style={inp} />
-              </div>
+              {newForm.template_ids.length <= 1 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#374151', marginBottom: '4px' }}>Tittel (valgfritt)</label>
+                  <input value={newForm.title} onChange={e => setNewForm(f => ({...f, title: e.target.value}))} placeholder="Genereres automatisk hvis tom" style={inp} />
+                </div>
+              )}
+              {newForm.template_ids.length > 1 && (
+                <div style={{ fontSize:'12px', color:'#64748b', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'10px 12px' }}>
+                  ℹ️ Flere maler valgt — hver sjekkliste får automatisk tittel «Malnavn – Prosjekt».
+                </div>
+              )}
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', paddingTop: '8px' }}>
                 <button type="button" onClick={() => setShowNew(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Avbryt</button>
-                <button type="submit" disabled={saving} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>{saving ? 'Oppretter...' : 'Opprett sjekkliste'}</button>
+                <button type="submit" disabled={saving} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>
+                  {saving ? 'Oppretter...' : (newForm.template_ids.length > 1 ? `Opprett ${newForm.template_ids.length} sjekklister` : 'Opprett sjekkliste')}
+                </button>
               </div>
             </form>
           </div>
