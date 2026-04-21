@@ -32,6 +32,186 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
+// ══════════════════════════════════════════════════════════════════════
+// PDF-RAMMEVERK: createBrandedPdf()
+// ══════════════════════════════════════════════════════════════════════
+// Felles hjelpefunksjon for all PDF-generering. Gir konsistent header/footer
+// med bedriftsinfo, logo og "En Plattform"-merking.
+//
+// Bruk:
+//   const pdf = await createBrandedPdf()
+//   pdf.drawHeader('AVVIKSRAPPORT')  // evt. med subtitle som 2. arg
+//   // ... bygg innhold med pdf.doc (jsPDF-instans), bruk pdf.y som markør
+//   pdf.drawFooters()  // kall til slutt for å tegne footer på alle sider
+//   pdf.doc.save('filnavn.pdf')
+// ══════════════════════════════════════════════════════════════════════
+
+const _brandCache = { settings: null, logoDataUrl: null, loading: null }
+
+async function _loadJsPdf() {
+  if (window.jspdf) return window.jspdf
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+    s.onload = resolve; s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return window.jspdf
+}
+
+async function _fetchBrandData() {
+  if (_brandCache.settings !== null) return _brandCache
+  if (_brandCache.loading) return _brandCache.loading
+  _brandCache.loading = (async () => {
+    try {
+      const { data } = await supabase.from('company_settings').select('*').limit(1).single()
+      _brandCache.settings = data || {}
+      // Hent logo som base64 data-URL hvis tilgjengelig (jsPDF kan ikke hente URL direkte)
+      if (data?.logo_url) {
+        try {
+          const resp = await fetch(data.logo_url)
+          const blob = await resp.blob()
+          _brandCache.logoDataUrl = await new Promise((res) => {
+            const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob)
+          })
+        } catch (e) { console.error('[brandPdf] Kunne ikke laste logo:', e); _brandCache.logoDataUrl = null }
+      }
+    } catch (e) {
+      console.error('[brandPdf] Kunne ikke laste company_settings:', e)
+      _brandCache.settings = {}
+    } finally {
+      _brandCache.loading = null
+    }
+    return _brandCache
+  })()
+  return _brandCache.loading
+}
+
+// Invaliderer brand-cache — kalles når bedriftsinfo oppdateres i innstillinger
+function invalidateBrandCache() {
+  _brandCache.settings = null
+  _brandCache.logoDataUrl = null
+  _brandCache.loading = null
+}
+
+async function createBrandedPdf(options = {}) {
+  const { orientation = 'p' } = options
+  const { jsPDF } = await _loadJsPdf()
+  const doc = new jsPDF(orientation, 'mm', 'a4')
+  const brand = await _fetchBrandData()
+  const settings = brand.settings || {}
+  const logoDataUrl = brand.logoDataUrl
+
+  // Sidedimensjoner (portrait A4 = 210×297mm)
+  const pw = orientation === 'l' ? 297 : 210
+  const ph = orientation === 'l' ? 210 : 297
+  const ml = 14, mr = 14
+  const cw = pw - ml - mr
+
+  // Farge-helpers
+  const hex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+  const setC = c => doc.setTextColor(c[0],c[1],c[2])
+  const setF = c => doc.setFillColor(c[0],c[1],c[2])
+  const setD = c => doc.setDrawColor(c[0],c[1],c[2])
+
+  // Tilstand som caller muterer
+  const state = { y: 0 }
+
+  // ── drawHeader ──
+  // Tegner bedriftens logo + navn/org/adresse venstre, rapporttittel + dato høyre.
+  // Oppdaterer state.y til første linje etter header.
+  const drawHeader = (title, subtitle = null) => {
+    const headerTop = 14
+    const headerHeight = 26
+    state.y = headerTop
+
+    // Logo venstre (hvis tilgjengelig)
+    let textStartX = ml
+    if (logoDataUrl) {
+      try {
+        const logoSize = 18
+        doc.addImage(logoDataUrl, 'JPEG', ml, headerTop, logoSize, logoSize)
+        textStartX = ml + logoSize + 4
+      } catch (e) {
+        // Fallback: prøv PNG
+        try {
+          doc.addImage(logoDataUrl, 'PNG', ml, headerTop, 18, 18)
+          textStartX = ml + 22
+        } catch (e2) { /* ignorer — fortsett uten logo */ }
+      }
+    }
+
+    // Bedriftsnavn + info venstre
+    setC(hex('#0f172a')); doc.setFontSize(12); doc.setFont('helvetica', 'bold')
+    doc.text(settings.name || 'Din bedrift', textStartX, headerTop + 5)
+
+    setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+    const infoLines = []
+    if (settings.org_number) infoLines.push(`Org.nr: ${settings.org_number}`)
+    const addrParts = [settings.address, [settings.postal_code, settings.city].filter(Boolean).join(' ')].filter(Boolean)
+    if (addrParts.length > 0) infoLines.push(addrParts.join(', '))
+    const contactParts = [settings.phone && `Tlf: ${settings.phone}`, settings.email].filter(Boolean)
+    if (contactParts.length > 0) infoLines.push(contactParts.join(' · '))
+    infoLines.slice(0, 3).forEach((line, i) => {
+      doc.text(line, textStartX, headerTop + 10 + i * 3.5)
+    })
+
+    // Rapporttittel + dato høyre
+    setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+    doc.text(new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }), pw - mr, headerTop + 5, { align:'right' })
+
+    setC(hex('#0f172a')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+    doc.text(title, pw - mr, headerTop + 12, { align:'right' })
+
+    if (subtitle) {
+      setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+      doc.text(subtitle, pw - mr, headerTop + 17, { align:'right' })
+    }
+
+    // Skillelinje
+    state.y = headerTop + headerHeight
+    setD(hex('#e2e8f0'))
+    doc.setLineWidth(0.3)
+    doc.line(ml, state.y, pw - mr, state.y)
+    state.y += 6
+  }
+
+  // ── drawFooters ──
+  // Tegner diskret footer på ALLE sider: "En Plattform — Av håndverkern, for håndverkern" + sidetall.
+  // Skal kalles helt til slutt, etter at alt innhold er tegnet.
+  const drawFooters = () => {
+    const pageCount = doc.internal.getNumberOfPages()
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i)
+      setC(hex('#cbd5e1')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+      doc.text('En Plattform — Av håndverkern, for håndverkern', ml, ph - 8)
+      doc.text(`Side ${i} av ${pageCount}`, pw - mr, ph - 8, { align:'right' })
+    }
+  }
+
+  // ── Hjelpere som caller kan bruke (caller definerer ofte sine egne) ──
+  const addPage = () => { doc.addPage(); state.y = 14 }
+  const checkSpace = (needed) => { if (state.y + needed > ph - 18) addPage() }
+
+  return {
+    doc,
+    settings,
+    logoDataUrl,
+    // Layout-konstanter
+    pw, ph, ml, mr, cw,
+    // Tilstand (muterbar — bruk pdf.y for posisjon, sett pdf.setY(n) for å oppdatere)
+    get y() { return state.y },
+    set y(v) { state.y = v },
+    setY: (v) => { state.y = v },
+    // Color-helpers
+    hex, setC, setF, setD,
+    // Sideflyt (kun relevant hvis caller bruker pdf.y — ellers definerer caller egen)
+    addPage, checkSpace,
+    // Header/footer
+    drawHeader, drawFooters,
+  }
+}
+
 const AuthContext = createContext({})
 
 function AuthProvider({ children }) {
@@ -4266,36 +4446,12 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
   const exportPDF = async () => {
     setExporting(true)
     try {
-      if (!window.jspdf) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-          s.onload = resolve; s.onerror = reject
-          document.head.appendChild(s)
-        })
-      }
-      const { jsPDF } = window.jspdf
-      const doc = new jsPDF('p', 'mm', 'a4')
-      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
-      let y = 0
-
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
+      pdf.drawHeader('SJEKKLISTE', checklist.title || '')
+      let y = pdf.y
       const addPage = () => { doc.addPage(); y = 14 }
-      const checkSpace = (needed) => { if (y + needed > ph - 22) addPage() }
-
-      // ── Farger (matcher UI) ──
-      const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
-      const setC = (c) => doc.setTextColor(c[0],c[1],c[2])
-      const setF = (c) => doc.setFillColor(c[0],c[1],c[2])
-      const setD = (c) => doc.setDrawColor(c[0],c[1],c[2])
-
-      // ── Header — ren hvit som UI ──
-      y = 14
-      setC(hex('#0f172a'))
-      doc.setFontSize(18)
-      doc.setFont('helvetica', 'bold')
-      const titleLines = doc.splitTextToSize(checklist.title || 'Sjekkliste', cw - 40)
-      doc.text(titleLines, ml, y)
-      y += titleLines.length * 7
+      const checkSpace = (needed) => { if (y + needed > ph - 18) addPage() }
 
       // Status-pill (som i UI)
       const itms = checklist.items || []
@@ -4492,18 +4648,8 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         doc.text('Dato: ____/____/________', sc.x, sigY + 37)
       })
 
-      // ── Footer ──
-      const pageCount = doc.internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
-        setD(hex('#f1f5f9')); doc.line(ml, ph - 14, pw - mr, ph - 14)
-        doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-        setC(hex('#94a3b8'))
-        doc.text(checklist.title || '', ml, ph - 9)
-        doc.text(`Side ${i}/${pageCount}`, pw / 2, ph - 9, { align: 'center' })
-        doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
-        doc.text('En Plattform', pw - mr, ph - 9, { align: 'right' })
-      }
+      // ── Footer (merking av En Plattform på alle sider) ──
+      pdf.drawFooters()
 
       doc.save(`Sjekkliste - ${checklist.title || 'Ukjent'}.pdf`)
     } catch(e) { console.error(e); alert('Feil ved PDF-generering: ' + e.message) }
@@ -5234,52 +5380,22 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const exportAvvikPDF = async () => {
     setExporting(true)
     try {
-      if (!window.jspdf) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-          s.onload = resolve; s.onerror = reject
-          document.head.appendChild(s)
-        })
-      }
-      const { jsPDF } = window.jspdf
-      const doc = new jsPDF('p', 'mm', 'a4')
-      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
-      let y = 0
-
-      const addPage = () => { doc.addPage(); y = 14 }
-      const checkSpace = (n) => { if (y + n > ph - 22) addPage() }
-      const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
-      const setC = (c) => doc.setTextColor(c[0],c[1],c[2])
-      const setF = (c) => doc.setFillColor(c[0],c[1],c[2])
-      const setD = (c) => doc.setDrawColor(c[0],c[1],c[2])
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
 
       const sevColors = { Kritisk: '#dc2626', Hoy: '#ea580c', Medium: '#d97706', Lav: '#16a34a' }
       const sevBg = { Kritisk: '#fef2f2', Hoy: '#fff7ed', Medium: '#fffbeb', Lav: '#f0fdf4' }
       const statColors = { 'Aapen': '#dc2626', 'Under behandling': '#d97706', 'Lukket': '#16a34a' }
 
-      // ── Alvorlighets-stripe øverst ──
+      // ── Alvorlighets-stripe øverst (før header) ──
       const sevCol = sevColors[dev.severity] || '#d97706'
       setF(hex(sevCol))
       doc.rect(0, 0, pw, 4, 'F')
 
-      y = 14
-
-      // ── Tittel-seksjon ──
-      setC(hex('#94a3b8'))
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'bold')
-      doc.text('AVVIKSRAPPORT', ml, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }), pw - mr, y, { align: 'right' })
-      y += 8
-
-      setC(hex('#0f172a'))
-      doc.setFontSize(18)
-      doc.setFont('helvetica', 'bold')
-      const tLines = doc.splitTextToSize(dev.title || 'Avvik', cw - 40)
-      doc.text(tLines, ml, y)
-      y += tLines.length * 7 + 2
+      pdf.drawHeader('AVVIKSRAPPORT', dev.title || '')
+      let y = pdf.y
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (n) => { if (y + n > ph - 18) addPage() }
 
       // ── Badges: alvorlighet + status ──
       const sevPillW = doc.getTextWidth(dev.severity || 'Medium') + 8
@@ -5427,22 +5543,14 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
         doc.text('Navn / Dato', sc.x, sigY + 29)
       })
 
-      // ── Footer ──
+      // ── Alvorlighets-stripe nederst på alle sider + merking ──
       const pageCount = doc.internal.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
         doc.setPage(i)
-        // Alvorlighets-stripe nederst også
         setF(hex(sevCol))
         doc.rect(0, ph - 3, pw, 3, 'F')
-        // Tekst
-        setD(hex('#f1f5f9')); doc.line(ml, ph - 14, pw - mr, ph - 14)
-        doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-        setC(hex('#94a3b8'))
-        doc.text(`Avviksrapport: ${dev.title}`, ml, ph - 8)
-        doc.text(`Side ${i}/${pageCount}`, pw / 2, ph - 8, { align: 'center' })
-        doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
-        doc.text('En Plattform', pw - mr, ph - 8, { align: 'right' })
       }
+      pdf.drawFooters()
 
       doc.save(`Avviksrapport - ${dev.title || 'Avvik'}.pdf`)
     } catch(e) { console.error(e); alert('Feil ved PDF-generering: ' + e.message) }
@@ -10253,25 +10361,8 @@ function EndringsmeldingPage() {
   const exportProjectPDF = async (projectId) => {
     setExportingPdf(true)
     try {
-      if (!window.jspdf) {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script')
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-          s.onload = resolve; s.onerror = reject
-          document.head.appendChild(s)
-        })
-      }
-      const { jsPDF } = window.jspdf
-      const doc = new jsPDF('p', 'mm', 'a4')
-      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
-      let y = 0
-
-      const hex = (h) => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
-      const setC = (c) => doc.setTextColor(c[0],c[1],c[2])
-      const setF = (c) => doc.setFillColor(c[0],c[1],c[2])
-      const setD = (c) => doc.setDrawColor(c[0],c[1],c[2])
-      const addPage = () => { doc.addPage(); y = 14 }
-      const checkSpace = (n) => { if (y + n > ph - 22) addPage() }
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
 
       const proj = projects.find(p => p.id === projectId)
       const projEms = endringer.filter(e => e.project_id === projectId).sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
@@ -10279,17 +10370,10 @@ function EndringsmeldingPage() {
       const totalGodkjent = godkjent.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
       const totalTimer = projEms.reduce((s, e) => s + (parseFloat(e.hours) || 0), 0)
 
-      // ── Header ──
-      y = 14
-      setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-      doc.text('ENDRINGSMELDINGSRAPPORT', ml, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }), pw - mr, y, { align:'right' })
-      y += 8
-
-      setC(hex('#0f172a')); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
-      doc.text(proj?.name || 'Alle prosjekter', ml, y)
-      y += 8
+      pdf.drawHeader('ENDRINGSMELDINGER', proj?.name || 'Alle prosjekter')
+      let y = pdf.y
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (n) => { if (y + n > ph - 18) addPage() }
 
       setC(hex('#64748b')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
       doc.text(`${projEms.length} endringsmeldinger · ${godkjent.length} godkjent`, ml, y)
@@ -10411,17 +10495,7 @@ function EndringsmeldingPage() {
         doc.text('Navn (blokkbokstaver)', sc.x, sigY + 29)
       })
 
-      // ── Footer ──
-      const pageCount = doc.internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
-        setD(hex('#f1f5f9')); doc.line(ml, ph - 14, pw - mr, ph - 14)
-        doc.setFontSize(7); doc.setFont('helvetica', 'normal'); setC(hex('#94a3b8'))
-        doc.text(`Endringsmeldingsrapport — ${proj?.name || 'Prosjekt'}`, ml, ph - 9)
-        doc.text(`Side ${i}/${pageCount}`, pw/2, ph - 9, { align:'center' })
-        doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
-        doc.text('En Plattform', pw - mr, ph - 9, { align:'right' })
-      }
+      pdf.drawFooters()
 
       doc.save(`EM-rapport - ${proj?.name || 'Prosjekt'}.pdf`)
       setShowPdfPicker(false)
@@ -24154,18 +24228,13 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   // ── PDF-rapport ──
   const exportPDF = async () => {
     try {
-      if (!window.jspdf) { await new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';s.onload=res;s.onerror=rej;document.head.appendChild(s)}) }
-      const { jsPDF } = window.jspdf; const doc=new jsPDF('p','mm','a4')
-      const pw=210,ph=297,ml=14,mr=14,cw=pw-ml-mr; let y=0
-      const hex=h=>[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]
-      const setC=c=>doc.setTextColor(c[0],c[1],c[2]), setF=c=>doc.setFillColor(c[0],c[1],c[2]), setD=c=>doc.setDrawColor(c[0],c[1],c[2])
-      const addPage=()=>{doc.addPage();y=14}, checkSpace=n=>{if(y+n>ph-22)addPage()}
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
+      pdf.drawHeader('BEFARINGSRAPPORT', ins.title || '')
+      let y = pdf.y
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = n => { if (y + n > ph - 18) addPage() }
 
-      y=14; setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica','bold')
-      doc.text('BEFARINGSRAPPORT',ml,y); doc.setFont('helvetica','normal')
-      doc.text(new Date().toLocaleDateString('nb-NO',{day:'numeric',month:'long',year:'numeric'}),pw-mr,y,{align:'right'})
-      y+=8; setC(hex('#0f172a')); doc.setFontSize(18); doc.setFont('helvetica','bold')
-      doc.text(ins.title,ml,y); y+=8
       setC(hex('#64748b')); doc.setFontSize(10); doc.setFont('helvetica','normal')
       doc.text([ins.date,ins.location,proj?.name].filter(Boolean).join(' · '),ml,y); y+=6
       if(ins.participants?.length){doc.text('Deltakere: '+ins.participants.join(', '),ml,y);y+=6}
@@ -24193,8 +24262,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       const sigW=(cw-18)/2,sigY=y+12
       ;[{l:'Inspeksjonsansvarlig',x:ml+5},{l:'Prosjektleder / Byggherre',x:ml+5+sigW+8}].forEach(sc=>{setC(hex('#64748b'));doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.text(sc.l,sc.x,sigY);setD(hex('#0f172a'));doc.line(sc.x,sigY+14,sc.x+sigW,sigY+14);setC(hex('#94a3b8'));doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.text('Signatur / Dato',sc.x,sigY+18);doc.line(sc.x,sigY+25,sc.x+sigW,sigY+25);doc.text('Navn',sc.x,sigY+29)})
 
-      const pc=doc.internal.getNumberOfPages()
-      for(let i=1;i<=pc;i++){doc.setPage(i);setD(hex('#f1f5f9'));doc.line(ml,ph-14,pw-mr,ph-14);doc.setFontSize(7);setC(hex('#94a3b8'));doc.setFont('helvetica','normal');doc.text('Befaringsrapport — '+ins.title,ml,ph-9);doc.text('Side '+i+'/'+pc,pw/2,ph-9,{align:'center'});doc.setFont('helvetica','bold');setC(hex('#059669'));doc.text('En Plattform',pw-mr,ph-9,{align:'right'})}
+      pdf.drawFooters()
       doc.save('Befaring - '+ins.title+'.pdf')
     } catch(e){alert('PDF-feil: '+e.message)}
   }
@@ -24973,41 +25041,20 @@ function FDVPage() {
 
   const exportFDVPakke = async () => {
     try {
-      // Last jsPDF fra CDN hvis ikke allerede tilgjengelig (samme mønster som befaring-eksport)
-      if (!window.jspdf) {
-        await new Promise((res, rej) => {
-          const s = document.createElement('script')
-          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
-          s.onload = res; s.onerror = rej; document.head.appendChild(s)
-        })
-      }
-      const { jsPDF } = window.jspdf
-      const doc = new jsPDF('p', 'mm', 'a4')
-      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
-      const hex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
-      const setC = c => doc.setTextColor(c[0],c[1],c[2])
-      const setF = c => doc.setFillColor(c[0],c[1],c[2])
-      const setD = c => doc.setDrawColor(c[0],c[1],c[2])
-      const addPage = () => { doc.addPage(); y = 14 }
-      const checkSpace = n => { if (y + n > ph - 22) addPage() }
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
 
       const proj = filterProject !== 'alle' ? projects.find(p => p.id === filterProject) : null
       const projDocs = filterProject !== 'alle' ? filteredDocs : documents
       const projComps = filterProject !== 'alle' ? filteredComps : components
 
-      let y = 14
+      pdf.drawHeader('FDV-DOKUMENTASJON', proj?.name || 'Alle prosjekter')
+      let y = pdf.y
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = n => { if (y + n > ph - 18) addPage() }
 
-      // ── Header ──
-      setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-      doc.text('FDV-DOKUMENTASJON', ml, y); doc.setFont('helvetica', 'normal')
-      doc.text(new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }), pw - mr, y, { align:'right' })
-      y += 8
-      setC(hex('#0f172a')); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
-      doc.text('Forvaltning, Drift og Vedlikehold', ml, y); y += 8
       setC(hex('#64748b')); doc.setFontSize(11); doc.setFont('helvetica', 'normal')
-      doc.text(`Prosjekt: ${proj?.name || 'Alle prosjekter'}`, ml, y); y += 6
       doc.text(`${projComps.length} komponenter · ${projDocs.length} dokumenter`, ml, y); y += 8
-      setD(hex('#e2e8f0')); doc.line(ml, y, pw - mr, y); y += 8
 
       // ── Komponenter ──
       setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
@@ -25080,14 +25127,7 @@ function FDVPage() {
         })
       }
 
-      // ── Footer ──
-      const pageCount = doc.internal.getNumberOfPages()
-      for (let i = 1; i <= pageCount; i++) {
-        doc.setPage(i)
-        setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-        doc.text(`Side ${i} av ${pageCount}`, pw - mr, ph - 8, { align:'right' })
-        doc.text('Generert fra En Plattform · KS-system', ml, ph - 8)
-      }
+      pdf.drawFooters()
 
       const safeName = (proj?.name || 'alle').replace(/[^a-zA-Z0-9_-]/g, '_')
       doc.save(`FDV-${safeName}-${today}.pdf`)
@@ -26632,6 +26672,7 @@ function MinBedriftPage() {
         const { error } = await supabase.from('company_settings').insert(payload)
         if (error) throw error
       }
+      invalidateBrandCache() // Sikre at nye PDFer får oppdatert logo/info
       alert('✅ Bedriftsinformasjon lagret!')
     } catch(e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
