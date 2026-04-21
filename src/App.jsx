@@ -14025,10 +14025,12 @@ function getWeekDates(week, year) {
   const jan4 = new Date(year,0,4)
   const startOfWeek = new Date(jan4)
   startOfWeek.setDate(jan4.getDate()-((jan4.getDay()||7)-1)+(week-1)*7)
+  // Bruk lokaltids-basert YYYY-MM-DD (unngår UTC-skjev fra toISOString som gir feil dato i tidssoner øst for UTC)
+  const fmtLocal = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   return Array.from({length:7},(_,i)=>{
     const d = new Date(startOfWeek)
     d.setDate(startOfWeek.getDate()+i)
-    return d.toISOString().split('T')[0]
+    return fmtLocal(d)
   })
 }
 
@@ -14306,7 +14308,9 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
           const dayEntries = entries.filter(e=>e.date===date)
           const dayHours = dayEntries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
           const isWeekend = i>=5
-          const isToday = date===new Date().toISOString().split('T')[0]
+          const _tdy = new Date()
+          const _todayStr = `${_tdy.getFullYear()}-${String(_tdy.getMonth()+1).padStart(2,'0')}-${String(_tdy.getDate()).padStart(2,'0')}`
+          const isToday = date===_todayStr
           return (
             <div key={date} style={{ background:isToday?'#f0fdf4':isWeekend?'#f8fafc':'white', borderRadius:'14px', border:`1px solid ${isToday?'#bbf7d0':isWeekend?'#f1f5f9':'#f1f5f9'}`, padding:'14px 18px' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:dayEntries.length>0?'10px':'0' }}>
@@ -14537,7 +14541,9 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
         {weekDates.map((date,i)=>{
           const entry = getEntry(date)
           const isWeekend = i>=5
-          const isToday = date===new Date().toISOString().split('T')[0]
+          const _tdy = new Date()
+          const _todayStr = `${_tdy.getFullYear()}-${String(_tdy.getMonth()+1).padStart(2,'0')}-${String(_tdy.getDate()).padStart(2,'0')}`
+          const isToday = date===_todayStr
           const isActive = activeDay===date
           const dayHours = entry?(parseFloat(entry.normal_hours)||0)+(parseFloat(entry.overtime_50)||0)+(parseFloat(entry.overtime_100)||0):0
 
