@@ -10788,21 +10788,38 @@ function EndringsmeldingPage() {
         )}
       </div>
 
-      {/* Statistikk */}
+      {/* Statistikk — klikkbare status-kort filtrerer listen under */}
       <div style={{ padding: isMobEM ? '10px 12px' : '16px 32px', display:'grid', gridTemplateColumns: isMobEM ? 'repeat(3, 1fr)' : 'repeat(6, 1fr)', gap: isMobEM ? '6px' : '12px' }}>
         {[
-          { label:'Totalt', value: endringer.length, color:'#0f172a' },
-          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b' },
-          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb' },
-          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a' },
-          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669' },
-          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706' },
-        ].map((s,i) => (
-          <div key={i} style={{ background:'white', borderRadius: isMobEM ? '10px' : '12px', border:'1px solid #f1f5f9', padding: isMobEM ? '8px' : '12px 16px', textAlign:'center' }}>
-            <div style={{ fontSize: isMobEM ? '14px' : '18px', fontWeight:'800', color:s.color }}>{s.value}</div>
-            <div style={{ fontSize: isMobEM ? '9px' : '11px', color:'#94a3b8' }}>{s.label}</div>
-          </div>
-        ))}
+          { label:'Totalt', value: endringer.length, color:'#0f172a', filter:'all' },
+          { label:'Utkast', value: endringer.filter(e=>e.status==='Utkast').length, color:'#64748b', filter:'Utkast' },
+          { label:'Sendt', value: endringer.filter(e=>e.status==='Sendt').length, color:'#2563eb', filter:'Sendt' },
+          { label:'Godkjent', value: endringer.filter(e=>e.status==='Godkjent').length, color:'#16a34a', filter:'Godkjent' },
+          { label:'Godkjent beløp', value: Math.round(totalTillegg).toLocaleString('nb-NO') + ' kr', color:'#059669', filter:null },
+          { label:'Klar til fakturering', value: Math.round(totalIkkeFakturert).toLocaleString('nb-NO') + ' kr', color:'#d97706', filter:null },
+        ].map((s,i) => {
+          const isClickable = s.filter !== null
+          const isActive = isClickable && statusFilter === s.filter
+          const commonStyle = { background: isActive ? '#f0fdf4' : 'white', borderRadius: isMobEM ? '10px' : '12px', border: `1px solid ${isActive ? s.color + '66' : '#f1f5f9'}`, padding: isMobEM ? '8px' : '12px 16px', textAlign:'center', transition:'all 0.15s' }
+          if (!isClickable) {
+            return (
+              <div key={i} style={commonStyle}>
+                <div style={{ fontSize: isMobEM ? '14px' : '18px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                <div style={{ fontSize: isMobEM ? '9px' : '11px', color:'#94a3b8' }}>{s.label}</div>
+              </div>
+            )
+          }
+          return (
+            <button key={i}
+              onClick={() => { if (isActive) setStatusFilter('all'); else setStatusFilter(s.filter) }}
+              style={{ ...commonStyle, cursor:'pointer', fontFamily:'inherit' }}
+              onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
+              onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'white' }}>
+              <div style={{ fontSize: isMobEM ? '14px' : '18px', fontWeight:'800', color:s.color }}>{s.value}</div>
+              <div style={{ fontSize: isMobEM ? '9px' : '11px', color: isActive ? s.color : '#94a3b8', fontWeight: isActive ? '600' : '400' }}>{s.label}</div>
+            </button>
+          )
+        })}
       </div>
 
       {/* Filtre */}
