@@ -4859,23 +4859,34 @@ function AvvikPage() {
       </div>
 
       <div style={{ padding: isMob ? '12px' : '24px 32px', display: 'flex', flexDirection: 'column', gap: isMob ? '12px' : '20px', overflowX: 'hidden' }}>
-        {/* Stats */}
+        {/* Stats — klikkbare kort som toggler status/alvorlighet-filter */}
         <div style={{ display: 'grid', gridTemplateColumns: isMob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: isMob ? '8px' : '16px' }}>
           {[
-            { label: 'Åpne avvik', value: counts.open, color: '#dc2626', bg: '#fef2f2', emoji: '🔴' },
-            { label: 'Under behandling', value: counts.inProgress, color: '#d97706', bg: '#fffbeb', emoji: '🟡' },
-            { label: 'Lukkede avvik', value: counts.closed, color: '#16a34a', bg: '#f0fdf4', emoji: '🟢' },
-            { label: 'Kritiske (åpne)', value: counts.critical, color: '#dc2626', bg: '#fef2f2', emoji: '🚨' },
-          ].map((s, i) => (
-            <div key={i} style={{ background: 'white', borderRadius: isMob ? '10px' : '14px', border: '1px solid #f1f5f9', padding: isMob ? '12px' : '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                <span style={{ fontSize: '20px' }}>{s.emoji}</span>
-                <span style={{ background: s.bg, color: s.color, fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>{s.value}</span>
-              </div>
-              <div style={{ fontSize: '22px', fontWeight: '800', color: '#0f172a' }}>{s.value}</div>
-              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>{s.label}</div>
-            </div>
-          ))}
+            { label: 'Åpne avvik', value: counts.open, color: '#dc2626', bg: '#fef2f2', emoji: '🔴', status: 'Åpen', severity: 'alle' },
+            { label: 'Under behandling', value: counts.inProgress, color: '#d97706', bg: '#fffbeb', emoji: '🟡', status: 'Under behandling', severity: 'alle' },
+            { label: 'Lukkede avvik', value: counts.closed, color: '#16a34a', bg: '#f0fdf4', emoji: '🟢', status: 'Lukket', severity: 'alle' },
+            { label: 'Kritiske (åpne)', value: counts.critical, color: '#dc2626', bg: '#fef2f2', emoji: '🚨', status: 'Åpen', severity: 'Kritisk' },
+          ].map((s, i) => {
+            // Kortet er "aktivt" når både status og alvorlighet matcher filtrene akkurat nå
+            const isActive = filterStatus === s.status && filterSeverity === s.severity
+            return (
+              <button key={i}
+                onClick={() => {
+                  if (isActive) { setFilterStatus('alle'); setFilterSeverity('alle') }
+                  else { setFilterStatus(s.status); setFilterSeverity(s.severity) }
+                }}
+                style={{ background: isActive ? s.bg : 'white', borderRadius: isMob ? '10px' : '14px', border: `1px solid ${isActive ? s.color + '66' : '#f1f5f9'}`, padding: isMob ? '12px' : '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s', fontFamily: 'inherit' }}
+                onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
+                onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'white' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <span style={{ fontSize: '20px' }}>{s.emoji}</span>
+                  <span style={{ background: s.bg, color: s.color, fontSize: '11px', fontWeight: '700', padding: '2px 8px', borderRadius: '999px' }}>{s.value}</span>
+                </div>
+                <div style={{ fontSize: '22px', fontWeight: '800', color: isActive ? s.color : '#0f172a' }}>{s.value}</div>
+                <div style={{ fontSize: '12px', color: isActive ? s.color : '#94a3b8', marginTop: '2px', fontWeight: isActive ? '600' : '400' }}>{s.label}</div>
+              </button>
+            )
+          })}
         </div>
 
         {/* Filters */}
