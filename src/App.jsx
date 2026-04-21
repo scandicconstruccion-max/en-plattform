@@ -6308,6 +6308,7 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
   const [form, setForm] = useState({ dato:d0.dato||new Date().toISOString().split('T')[0], ansvarlig:d0.ansvarlig||'', omrade:d0.omrade||'', formal:d0.formal||'' })
   const [risikoer, setRisikoer] = useState(d0.risikoer||[{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', restRisiko:'' }])
   const [saving, setSaving] = useState(false)
+  const [restInfoOpenFor, setRestInfoOpenFor] = useState(null)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
   const addR = () => setRisikoer(r=>[...r,{ id:Date.now(), fare:'', arsak:'', konsekvens:'', sannsynlighet:2, konsekvensGrad:2, tiltak:'', restRisiko:'' }])
   const removeR = (id) => setRisikoer(r=>r.filter(x=>x.id!==id))
@@ -6365,7 +6366,32 @@ function RisikoModal({ projects, user, initial, onClose, onSaved }) {
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Tiltak</label><input value={r.tiltak} onChange={e=>updateR(r.id,'tiltak',e.target.value)} placeholder="Hva gjøres?" style={hmsInp} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Sannsynlighet: <strong>{r.sannsynlighet}</strong>/5</label><input type="range" min="1" max="5" value={r.sannsynlighet} onChange={e=>updateR(r.id,'sannsynlighet',+e.target.value)} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Konsekvensgrad: <strong>{r.konsekvensGrad}</strong>/5</label><input type="range" min="1" max="5" value={r.konsekvensGrad} onChange={e=>updateR(r.id,'konsekvensGrad',+e.target.value)} style={{ width:'100%', accentColor:'#7c3aed' }} /></div>
-                  <div style={{ gridColumn:'1/-1' }}><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>Restrisiko etter tiltak</label><input value={r.restRisiko} onChange={e=>updateR(r.id,'restRisiko',e.target.value)} placeholder="Hva er restrisikoen?" style={hmsInp} /></div>
+                  <div style={{ gridColumn:'1/-1' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
+                      <label style={{ fontSize:'12px', fontWeight:'600', color:'#374151' }}>Restrisiko etter tiltak</label>
+                      <button type="button" onClick={() => setRestInfoOpenFor(p => p === r.id ? null : r.id)}
+                        title="Hva betyr restrisiko?"
+                        style={{ width:'18px', height:'18px', borderRadius:'50%', border:'1px solid #cbd5e1', background: restInfoOpenFor === r.id ? '#eff6ff' : 'white', color: restInfoOpenFor === r.id ? '#2563eb' : '#64748b', fontSize:'11px', fontWeight:'700', cursor:'pointer', padding:0, display:'inline-flex', alignItems:'center', justifyContent:'center', lineHeight:1 }}>
+                        ℹ
+                      </button>
+                    </div>
+                    {restInfoOpenFor === r.id && (
+                      <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'12px 14px', marginBottom:'8px', fontSize:'12px', color:'#1e3a8a', lineHeight:1.5 }}>
+                        <div style={{ fontWeight:'700', marginBottom:'6px', color:'#1e40af' }}>Hva er restrisiko?</div>
+                        <div style={{ marginBottom:'8px' }}>
+                          Restrisiko er risikoen som <b>fortsatt gjenstår</b> etter at tiltakene er satt i verk. Ingen tiltak fjerner 100 % av risikoen — her dokumenterer du hva som er igjen og om det er akseptabelt.
+                        </div>
+                        <div style={{ background:'white', borderRadius:'8px', padding:'8px 10px', border:'1px solid #dbeafe' }}>
+                          <div style={{ fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Eksempel:</div>
+                          <div style={{ color:'#334155' }}>«Fallrisiko fortsatt tilstede ved feil bruk av fallsele eller skade på rekkverk. Akseptabel med daglig egenkontroll og signert sjekkliste.»</div>
+                        </div>
+                        <div style={{ marginTop:'8px', fontSize:'11px', color:'#475569' }}>
+                          📋 Dokumentasjon av restrisiko er en del av systematisk HMS-arbeid (internkontrollforskriften § 5).
+                        </div>
+                      </div>
+                    )}
+                    <input value={r.restRisiko} onChange={e=>updateR(r.id,'restRisiko',e.target.value)} placeholder="F.eks. Risiko fortsatt tilstede ved feil bruk — akseptabel med daglig kontroll" style={hmsInp} />
+                  </div>
                 </div>
               </div>
             )
