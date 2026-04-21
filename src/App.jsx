@@ -14571,17 +14571,17 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
               {isActive && (
                 <div style={{ padding:'16px 18px', borderTop:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'14px' }}>
 
-                  {/* Type: Arbeid eller Frav\u00E6r */}
+                  {/* Type: Arbeid eller Fravær */}
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Type registrering</label>
                     <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px' }}>
                       <button onClick={() => updateEntry(date, 'absence_type', '')}
                         style={{ padding:'8px', borderRadius:'8px', border: `2px solid ${!entry?.absence_type ? '#059669' : '#e2e8f0'}`, background: !entry?.absence_type ? '#f0fdf4' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: !entry?.absence_type ? '#059669' : '#64748b' }}>
-                        \u23F1\uFE0F Arbeid
+                        ⏱️ Arbeid
                       </button>
                       <button onClick={() => { updateEntry(date, 'absence_type', 'ferie'); updateEntry(date, 'normal_hours', 7.5); updateEntry(date, 'overtime_50', 0); updateEntry(date, 'overtime_100', 0) }}
                         style={{ padding:'8px', borderRadius:'8px', border: `2px solid ${entry?.absence_type ? '#2563eb' : '#e2e8f0'}`, background: entry?.absence_type ? '#eff6ff' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: entry?.absence_type ? '#2563eb' : '#64748b' }}>
-                        \uD83D\uDCCB Frav\u00E6r
+                        📋 Fravær
                       </button>
                     </div>
                   </div>
@@ -14589,7 +14589,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   {entry?.absence_type ? (
                     <>
                       <div>
-                        <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Frav\u00E6rstype</label>
+                        <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Fraværstype</label>
                         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'6px' }}>
                           {ABSENCE_TYPES.filter(a => a.id).map(a => (
                             <button key={a.id} onClick={() => {
@@ -14599,7 +14599,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                             }}
                               style={{ padding:'8px 10px', borderRadius:'8px', border:`1px solid ${entry?.absence_type === a.id ? a.color + '60' : '#f1f5f9'}`, background: entry?.absence_type === a.id ? a.color + '10' : 'white', cursor:'pointer', textAlign:'left', fontSize:'12px' }}>
                               <span style={{ fontWeight:'600', color: entry?.absence_type === a.id ? a.color : '#374151' }}>{a.emoji} {a.label}</span>
-                              {!a.paid && <div style={{ fontSize:'10px', color:'#94a3b8' }}>Uten l\u00F8nn</div>}
+                              {!a.paid && <div style={{ fontSize:'10px', color:'#94a3b8' }}>Uten lønn</div>}
                             </button>
                           ))}
                         </div>
@@ -14610,7 +14610,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                       </div>
                       {(() => { const at = ABSENCE_TYPES.find(a => a.id === entry?.absence_type); return at ? (
                         <div style={{ background: at.color + '10', borderRadius:'8px', padding:'10px 14px', border:`1px solid ${at.color}30`, fontSize:'12px', color: at.color }}>
-                          {at.emoji} <strong>{at.label}</strong> \u2014 {at.paid ? '7,5 timer l\u00F8nnet frav\u00E6r' : 'Ubetalt frav\u00E6r (0 timer)'}
+                          {at.emoji} <strong>{at.label}</strong> — {at.paid ? '7,5 timer lønnet fravær' : 'Ubetalt fravær (0 timer)'}
                         </div>
                       ) : null })()}
                     </>
@@ -14618,7 +14618,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     <>
                   {isWeekend && (
                     <div style={{ background:'#fef2f2', borderRadius:'8px', padding:'8px 12px', border:'1px solid #fecaca', fontSize:'12px', color:'#dc2626', fontWeight:'600' }}>
-                      \uD83D\uDEA8 Helgearbeid \u2014 alle timer registreres automatisk som 100% overtid
+                      🚨 Helgearbeid — alle timer registreres automatisk som 100% overtid
                     </div>
                   )}
 {/* Project + Activity */}
