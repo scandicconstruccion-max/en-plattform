@@ -4621,32 +4621,34 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
 
       y += 28
 
-      // ── Signaturfelt (clean, matcher hvit UI-stil) ──
-      checkSpace(55)
-      y += 4
-      setF(hex('#ffffff')); setD(hex('#e2e8f0'))
-      doc.roundedRect(ml, y, cw, 48, 2.5, 2.5, 'FD')
+      // ── Utført av / sist oppdatert (kun informativ — ingen signaturfelt) ──
+      if (checklist.created_by || checklist.updated_at) {
+        checkSpace(18)
+        y += 2
+        setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+        doc.roundedRect(ml, y, cw, 14, 2, 2, 'FD')
 
-      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-      doc.text('Signaturer', ml + 5, y + 7)
+        // Slå opp brukernavn fra user_profiles hvis vi har created_by
+        let userName = ''
+        if (checklist.created_by) {
+          try {
+            const { data: up } = await supabase.from('user_profiles').select('full_name').eq('id', checklist.created_by).single()
+            userName = up?.full_name || ''
+          } catch(e) { /* fallback til tom */ }
+        }
 
-      const sigW = (cw - 18) / 2
-      const sigY = y + 13
-      const sigCols = [
-        { label: 'Utfort av', x: ml + 5 },
-        { label: 'Kontrollert / godkjent av', x: ml + 5 + sigW + 8 },
-      ]
-      sigCols.forEach(sc => {
         setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
-        doc.text(sc.label, sc.x, sigY)
-        setD(hex('#0f172a'))
-        doc.line(sc.x, sigY + 16, sc.x + sigW, sigY + 16)
-        setC(hex('#94a3b8')); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal')
-        doc.text('Signatur', sc.x, sigY + 20)
-        doc.line(sc.x, sigY + 28, sc.x + sigW, sigY + 28)
-        doc.text('Navn (blokkbokstaver)', sc.x, sigY + 32)
-        doc.text('Dato: ____/____/________', sc.x, sigY + 37)
-      })
+        doc.text('OPPRETTET AV', ml + 5, y + 5)
+        setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+        doc.text(userName || '—', ml + 5, y + 10)
+
+        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text('SIST OPPDATERT', ml + cw/2, y + 5)
+        setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+        const updStr = checklist.updated_at ? new Date(checklist.updated_at).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) : '—'
+        doc.text(updStr, ml + cw/2, y + 10)
+        y += 18
+      }
 
       // ── Footer (merking av En Plattform på alle sider) ──
       pdf.drawFooters()
@@ -5122,6 +5124,8 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
   const [form, setForm] = useState(initial || {
     title: '', description: '', location: '', severity: 'Medium',
     project_id: '', assigned_to: '', assigned_to_user_id: '',
+    has_cost_impact: false, cost_impact_amount: '',
+    has_time_impact: false, time_impact_days: '',
   })
   const [employees, setEmployees] = useState([])
   const [images, setImages] = useState([])
@@ -5272,6 +5276,37 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Beskrivelse</label>
             <textarea value={form.description} onChange={e => set('description', e.target.value)} placeholder="Beskriv avviket i detalj..." rows={4}
               style={{ ...inp, resize: 'none' }} />
+          </div>
+
+          {/* Konsekvenser: pris og tid */}
+          <div style={{ background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0', padding:'14px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Konsekvenser</div>
+
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: form.has_cost_impact ? '8px' : '10px' }}>
+              <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'500', color:'#374151', flexShrink:0 }}>
+                <input type="checkbox" checked={!!form.has_cost_impact} onChange={e => set('has_cost_impact', e.target.checked)} style={{ accentColor:'#059669', width:'16px', height:'16px', cursor:'pointer' }} />
+                <span>Medfører priskonsekvens</span>
+              </label>
+            </div>
+            {form.has_cost_impact && (
+              <div style={{ marginBottom:'12px', paddingLeft:'26px' }}>
+                <label style={{ display:'block', fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>Estimert beløp (kr) — valgfritt</label>
+                <input type="number" value={form.cost_impact_amount || ''} onChange={e => set('cost_impact_amount', e.target.value)} placeholder="0" style={{ ...inp, maxWidth:'220px' }} />
+              </div>
+            )}
+
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: form.has_time_impact ? '8px' : 0 }}>
+              <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'500', color:'#374151', flexShrink:0 }}>
+                <input type="checkbox" checked={!!form.has_time_impact} onChange={e => set('has_time_impact', e.target.checked)} style={{ accentColor:'#059669', width:'16px', height:'16px', cursor:'pointer' }} />
+                <span>Medfører tidforlengelse</span>
+              </label>
+            </div>
+            {form.has_time_impact && (
+              <div style={{ paddingLeft:'26px' }}>
+                <label style={{ display:'block', fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>Antall dager — valgfritt</label>
+                <input type="number" value={form.time_impact_days || ''} onChange={e => set('time_impact_days', e.target.value)} placeholder="0" style={{ ...inp, maxWidth:'220px' }} />
+              </div>
+            )}
           </div>
 
           {/* Bilder */}
@@ -5452,6 +5487,40 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
         y += descH + 6
       }
 
+      // ── Konsekvenser (pris + tid) ──
+      if (dev.has_cost_impact || dev.has_time_impact) {
+        checkSpace(22)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Konsekvenser', ml, y)
+        y += 6
+
+        setF(hex('#fffbeb')); setD(hex('#fde68a'))
+        const boxH = 14 + (dev.has_cost_impact && dev.has_time_impact ? 6 : 0)
+        doc.roundedRect(ml, y, cw, boxH, 2.5, 2.5, 'FD')
+
+        let ly = y + 5
+        if (dev.has_cost_impact) {
+          setC(hex('#92400e')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+          doc.text('💰 Priskonsekvens:', ml + 6, ly)
+          setC(hex('#0f172a')); doc.setFont('helvetica', 'normal')
+          const amt = dev.cost_impact_amount
+            ? `${Math.round(parseFloat(dev.cost_impact_amount)).toLocaleString('nb-NO')} kr`
+            : 'Ja (beløp ikke spesifisert)'
+          doc.text(amt, ml + 6 + doc.getTextWidth('💰 Priskonsekvens:  '), ly)
+          ly += 5
+        }
+        if (dev.has_time_impact) {
+          setC(hex('#92400e')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+          doc.text('⏱ Tidforlengelse:', ml + 6, ly)
+          setC(hex('#0f172a')); doc.setFont('helvetica', 'normal')
+          const days = dev.time_impact_days
+            ? `${dev.time_impact_days} dag${parseInt(dev.time_impact_days) === 1 ? '' : 'er'}`
+            : 'Ja (antall dager ikke spesifisert)'
+          doc.text(days, ml + 6 + doc.getTextWidth('⏱ Tidforlengelse:  '), ly)
+        }
+        y += boxH + 6
+      }
+
       // ── Bilder ──
       if (imageUrls.length > 0) {
         checkSpace(20)
@@ -5516,32 +5585,6 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
           y += 6
         }
       }
-
-      // ── Signatur-seksjon ──
-      checkSpace(55)
-      y += 8
-      setF(hex('#ffffff')); setD(hex('#e2e8f0'))
-      doc.roundedRect(ml, y, cw, 46, 2.5, 2.5, 'FD')
-
-      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-      doc.text('Signaturer', ml + 5, y + 7)
-
-      const sigW = (cw - 18) / 2
-      const sigY = y + 12
-      const sigCols = [
-        { label: 'Utfort av / Registrert av', x: ml + 5 },
-        { label: 'Kontrollert / Godkjent av', x: ml + 5 + sigW + 8 },
-      ]
-      sigCols.forEach(sc => {
-        setC(hex('#64748b')); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold')
-        doc.text(sc.label, sc.x, sigY)
-        setD(hex('#0f172a'))
-        doc.line(sc.x, sigY + 14, sc.x + sigW, sigY + 14)
-        setC(hex('#94a3b8')); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal')
-        doc.text('Signatur', sc.x, sigY + 18)
-        doc.line(sc.x, sigY + 25, sc.x + sigW, sigY + 25)
-        doc.text('Navn / Dato', sc.x, sigY + 29)
-      })
 
       // ── Alvorlighets-stripe nederst på alle sider + merking ──
       const pageCount = doc.internal.getNumberOfPages()
@@ -6103,7 +6146,6 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
             </div>
           </div>
           <div style={{ display:'flex', gap: isMobH ? '6px' : '8px', flexShrink:0 }}>
-            <button onClick={() => window.print()} style={{ padding: isMobH ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '13px' }}>{isMobH ? '🖨️' : '🖨️ Skriv ut'}</button>
             <button onClick={() => setEditing(true)} style={{ padding: isMobH ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobH ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '13px' }}>🗑️</button>
           </div>
@@ -8154,14 +8196,11 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
     } catch(e) { alert('Feil ved opprettelse av revisjon: ' + e.message) }
   }
 
-  const handlePrint = () => window.print()
-
   const isMobTD = typeof window !== 'undefined' && window.innerWidth < 768
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
-      <style>{`@media print { .no-print { display:none !important } body { background:white } }`}</style>
-      <div className="no-print" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobTD ? '14px' : '20px 32px' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobTD ? '14px' : '20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til tilbud</button>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobTD ? '8px' : '16px', flexWrap: isMobTD ? 'wrap' : 'nowrap' }}>
           <div style={{ display:'flex', alignItems:'flex-start', gap: isMobTD ? '10px' : '14px', flex:1, minWidth:0 }}>
@@ -8184,7 +8223,6 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
             {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Send' : '📧 Send til kunde'}</button>}
             {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Purring' : '📧 Send purring'}</button>}
             {!isMobTD && <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>}
-            {!isMobTD && <button onClick={handlePrint} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
             {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTD ? '12px' : '13px' }}>✏️</button>}
             <button onClick={handleDelete} style={{ padding: isMobTD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobTD ? '12px' : '13px' }}>🗑️</button>
           </div>
@@ -10358,147 +10396,132 @@ function EndringsmeldingPage() {
   const [showPdfPicker, setShowPdfPicker] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
 
-  const exportProjectPDF = async (projectId) => {
+  const exportSingleEmPDF = async (em) => {
     setExportingPdf(true)
     try {
       const pdf = await createBrandedPdf()
       const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
 
-      const proj = projects.find(p => p.id === projectId)
-      const projEms = endringer.filter(e => e.project_id === projectId).sort((a,b) => new Date(a.created_at) - new Date(b.created_at))
-      const godkjent = projEms.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
-      const totalGodkjent = godkjent.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-      const totalTimer = projEms.reduce((s, e) => s + (parseFloat(e.hours) || 0), 0)
+      const proj = projects.find(p => p.id === em.project_id)
 
-      pdf.drawHeader('ENDRINGSMELDINGER', proj?.name || 'Alle prosjekter')
+      // Slå opp brukernavn for created_by
+      let createdByName = ''
+      if (em.created_by) {
+        try {
+          const { data: up } = await supabase.from('user_profiles').select('full_name').eq('id', em.created_by).single()
+          createdByName = up?.full_name || ''
+        } catch(e) {/* ignore */}
+      }
+
+      pdf.drawHeader('ENDRINGSMELDING', em.em_number || em.title || '')
       let y = pdf.y
       const addPage = () => { doc.addPage(); y = 14 }
       const checkSpace = (n) => { if (y + n > ph - 18) addPage() }
 
-      setC(hex('#64748b')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
-      doc.text(`${projEms.length} endringsmeldinger · ${godkjent.length} godkjent`, ml, y)
+      // ── Tittel ──
+      setC(hex('#0f172a')); doc.setFontSize(16); doc.setFont('helvetica', 'bold')
+      const titleLines = doc.splitTextToSize(em.title || 'Uten tittel', cw)
+      doc.text(titleLines, ml, y)
+      y += titleLines.length * 7 + 2
+
+      // Status-pill + beløp
+      const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
+      setF(hex(st.bg)); doc.roundedRect(ml, y - 3, doc.getTextWidth(em.status || '') + 10, 6, 1.5, 1.5, 'F')
+      setC(hex(st.color)); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text(em.status || '—', ml + 5, y + 1)
+      if (em.amount) {
+        setC(hex('#059669')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+        doc.text(Math.round(em.amount).toLocaleString('nb-NO') + ' kr', pw - mr, y + 1, { align:'right' })
+      }
       y += 10
 
-      // ── Oppsummering ──
+      // ── Info-kort: prosjekt, opprettet av, dato, sendt til ──
       setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
-      doc.roundedRect(ml, y, cw, 20, 2.5, 2.5, 'FD')
-
-      const sumW = cw / 4
-      const sumItems = [
-        { label: 'Totalt godkjent', value: Math.round(totalGodkjent).toLocaleString('nb-NO') + ' kr', color: '#059669' },
-        { label: 'Antall EM', value: String(projEms.length), color: '#0f172a' },
-        { label: 'Godkjente', value: String(godkjent.length), color: '#16a34a' },
-        { label: 'Timer totalt', value: totalTimer.toFixed(0) + ' t', color: '#2563eb' },
+      const infoH = 24
+      doc.roundedRect(ml, y, cw, infoH, 2, 2, 'FD')
+      const infoCols = [
+        { label: 'PROSJEKT', value: proj?.name || '—' },
+        { label: 'OPPRETTET AV', value: createdByName || '—' },
+        { label: 'OPPRETTET', value: em.created_at ? new Date(em.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) : '—' },
+        { label: 'SENDT TIL', value: em.sent_to || em.customer_email || '—' },
       ]
-      sumItems.forEach((s, i) => {
-        const sx = ml + 6 + i * sumW
-        setC(hex(s.color)); doc.setFontSize(12); doc.setFont('helvetica', 'bold')
-        doc.text(s.value, sx, y + 8)
-        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-        doc.text(s.label, sx, y + 14)
+      const colW = cw / infoCols.length
+      infoCols.forEach((c, i) => {
+        const cx = ml + 5 + i * colW
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+        doc.text(c.label, cx, y + 6)
+        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        const lines = doc.splitTextToSize(String(c.value), colW - 6)
+        doc.text(lines.slice(0, 2), cx, y + 12)
       })
-      y += 28
+      y += infoH + 6
 
-      // ── Statusfordeling ──
-      const statusCounts = {}
-      projEms.forEach(em => { statusCounts[em.status] = (statusCounts[em.status] || 0) + 1 })
-      if (Object.keys(statusCounts).length > 0) {
-        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-        const statusText = Object.entries(statusCounts).map(([s, c]) => `${s}: ${c}`).join('  ·  ')
-        doc.text(statusText, ml, y)
+      // ── Beskrivelse ──
+      if (em.description) {
+        checkSpace(20)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Beskrivelse', ml, y); y += 6
+        setC(hex('#475569')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+        const dLines = doc.splitTextToSize(em.description, cw)
+        doc.text(dLines, ml, y)
+        y += dLines.length * 5 + 4
+      }
+
+      // ── Årsak ──
+      if (em.reason) {
+        checkSpace(20)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Årsak', ml, y); y += 6
+        setC(hex('#475569')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+        const rLines = doc.splitTextToSize(em.reason, cw)
+        doc.text(rLines, ml, y)
+        y += rLines.length * 5 + 4
+      }
+
+      // ── Timekonsekvens ──
+      if (em.time_consequence) {
+        checkSpace(14)
+        setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+        doc.text('Tidkonsekvens: ', ml, y)
+        setC(hex('#475569')); doc.setFont('helvetica', 'normal')
+        const hoursTxt = em.hours ? `${em.hours} timer` : em.time_consequence
+        doc.text(String(hoursTxt), ml + doc.getTextWidth('Tidkonsekvens: '), y)
         y += 8
       }
 
-      setD(hex('#e2e8f0')); doc.line(ml, y, pw - mr, y); y += 8
+      // ── Aktivitetslogg ──
+      const log = Array.isArray(em.activity_log) ? em.activity_log : []
+      if (log.length > 0) {
+        checkSpace(30)
+        y += 2
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Aktivitetslogg', ml, y); y += 7
 
-      // ── Endringsmeldinger ──
-      projEms.forEach((em, idx) => {
-        const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
-        const stColor = st.color
-        const hasDesc = !!em.description
-        const hasReason = !!em.reason
-        const cardH = 16 + (hasDesc ? Math.min(doc.splitTextToSize(em.description, cw - 30).length * 3.5, 20) + 4 : 0) + (hasReason ? 5 : 0) + (em.time_consequence ? 5 : 0)
-        checkSpace(cardH + 6)
+        log.slice().reverse().forEach((entry, i) => {
+          checkSpace(12)
+          // Timeline-prikk
+          const isFirst = i === 0
+          setF(hex(isFirst ? '#059669' : '#cbd5e1'))
+          doc.circle(ml + 2, y + 1.5, 1.5, 'F')
 
-        // Kort
-        setF(hex('#ffffff')); setD(hex('#f1f5f9'))
-        doc.roundedRect(ml, y, cw, cardH, 2, 2, 'FD')
-
-        // Venstre fargekant
-        setF(hex(stColor))
-        doc.rect(ml, y + 0.5, 1.5, cardH - 1, 'F')
-
-        // Nummer + tittel
-        setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
-        doc.text(em.em_number || `EM-${String(idx+1).padStart(4,'0')}`, ml + 5, y + 5)
-
-        setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-        const titleLines = doc.splitTextToSize(em.title || '', cw - 60)
-        doc.text(titleLines, ml + 5, y + 10)
-
-        // Status-pill + beløp
-        const pillW = doc.getTextWidth(em.status) + 6
-        setF(hex(st.bg)); doc.roundedRect(pw - mr - pillW - 4, y + 2, pillW, 5, 1, 1, 'F')
-        setC(hex(stColor)); doc.setFontSize(6.5); doc.setFont('helvetica', 'bold')
-        doc.text(em.status, pw - mr - pillW/2 - 1, y + 5.5, { align:'center' })
-
-        // Beløp
-        if (em.amount) {
-          setC(hex('#059669')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-          doc.text(Math.round(em.amount).toLocaleString('nb-NO') + ' kr', pw - mr - 5, y + 12, { align:'right' })
-        }
-
-        let ey = y + 14
-
-        // Årsak
-        if (hasReason) {
-          setC(hex('#d97706')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-          doc.text('Arsak: ' + em.reason, ml + 5, ey)
-          ey += 4
-        }
-
-        // Beskrivelse
-        if (hasDesc) {
-          setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-          const descLines = doc.splitTextToSize(em.description, cw - 14).slice(0, 5)
-          doc.text(descLines, ml + 5, ey)
-          ey += descLines.length * 3.5 + 1
-        }
-
-        // Tidskonsekvens
-        if (em.time_consequence) {
-          setC(hex('#d97706')); doc.setFontSize(7)
-          doc.text('Tidskonsekvens: ' + em.time_consequence, ml + 5, ey)
-        }
-
-        y += cardH + 4
-      })
-
-      // ── Signaturfelt ──
-      checkSpace(50)
-      y += 6
-      setF(hex('#ffffff')); setD(hex('#e2e8f0'))
-      doc.roundedRect(ml, y, cw, 42, 2.5, 2.5, 'FD')
-      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-      doc.text('Signaturer', ml + 5, y + 7)
-
-      const sigW = (cw - 18) / 2
-      const sigY = y + 12
-      ;[{ label:'Entreprenor', x:ml+5 }, { label:'Byggherre / Kunde', x:ml+5+sigW+8 }].forEach(sc => {
-        setC(hex('#64748b')); doc.setFontSize(7.5); doc.setFont('helvetica', 'bold')
-        doc.text(sc.label, sc.x, sigY)
-        setD(hex('#0f172a'))
-        doc.line(sc.x, sigY + 14, sc.x + sigW, sigY + 14)
-        setC(hex('#94a3b8')); doc.setFontSize(6.5); doc.setFont('helvetica', 'normal')
-        doc.text('Signatur / Dato', sc.x, sigY + 18)
-        doc.line(sc.x, sigY + 25, sc.x + sigW, sigY + 25)
-        doc.text('Navn (blokkbokstaver)', sc.x, sigY + 29)
-      })
+          setC(hex(isFirst ? '#059669' : '#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+          doc.text(entry.action || '—', ml + 7, y + 2)
+          if (entry.to) {
+            setC(hex('#64748b')); doc.setFont('helvetica', 'normal')
+            doc.text(`→ ${entry.to}`, ml + 7 + doc.getTextWidth((entry.action || '—') + ' '), y + 2)
+          }
+          setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+          const ts = entry.at ? new Date(entry.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : ''
+          const byTxt = entry.by ? `${ts} · ${entry.by}` : ts
+          doc.text(byTxt, ml + 7, y + 7)
+          y += 10
+        })
+      }
 
       pdf.drawFooters()
 
-      doc.save(`EM-rapport - ${proj?.name || 'Prosjekt'}.pdf`)
-      setShowPdfPicker(false)
+      const safeName = (em.em_number || em.title || 'EM').replace(/[^a-zA-Z0-9_-]/g, '_')
+      doc.save(`Endringsmelding - ${safeName}.pdf`)
     } catch(e) { console.error(e); alert('Feil ved PDF: ' + e.message) }
     finally { setExportingPdf(false) }
   }
@@ -10829,37 +10852,9 @@ function EndringsmeldingPage() {
             {!isMobEM && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            {!isMobEM && <button onClick={() => setShowPdfPicker(!showPdfPicker)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151' }}>📄 PDF</button>}
             <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>
           </div>
         </div>
-        {/* PDF prosjektvelger */}
-        {showPdfPicker && (
-          <div style={{ marginTop:'16px', background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0', padding:'16px' }}>
-            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Velg prosjekt for PDF-rapport</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:'6px', maxHeight:'200px', overflowY:'auto' }}>
-              {projects.filter(p => endringer.some(e => e.project_id === p.id)).map(p => {
-                const pEms = endringer.filter(e => e.project_id === p.id)
-                const pTotal = pEms.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert').reduce((s,e) => s + (parseFloat(e.amount)||0), 0)
-                return (
-                  <button key={p.id} onClick={() => exportProjectPDF(p.id)} disabled={exportingPdf}
-                    style={{ display:'flex', alignItems:'center', justifyContent:'space-between', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}
-                    onMouseEnter={e => e.currentTarget.style.borderColor='#059669'} onMouseLeave={e => e.currentTarget.style.borderColor='#f1f5f9'}>
-                    <div>
-                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{p.name}</div>
-                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{pEms.length} EM · {pEms.filter(e=>e.status==='Godkjent').length} godkjent</div>
-                    </div>
-                    <span style={{ fontWeight:'700', color:'#059669' }}>{Math.round(pTotal).toLocaleString('nb-NO')} kr</span>
-                  </button>
-                )
-              })}
-              {projects.filter(p => endringer.some(e => e.project_id === p.id)).length === 0 && (
-                <p style={{ margin:0, color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'12px' }}>Ingen prosjekter med endringsmeldinger</p>
-              )}
-            </div>
-            <button onClick={() => setShowPdfPicker(false)} style={{ marginTop:'10px', background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'12px' }}>Avbryt</button>
-          </div>
-        )}
       </div>
 
       {/* Statistikk — klikkbare status-kort filtrerer listen under */}
@@ -10945,6 +10940,7 @@ function EndringsmeldingPage() {
                       <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
                         style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
                     )}
+                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); exportSingleEmPDF(em) }} disabled={exportingPdf} title="Last ned som PDF" style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor: exportingPdf?'not-allowed':'pointer', fontSize:'13px', color:'#374151' }}>📄</button>}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
                     <button onClick={(e) => { e.stopPropagation(); isMobEM ? setViewEm(em) : setExpandedEm(isExpanded ? null : em.id) }} title={isMobEM ? "Vis" : "Vis historikk"}
@@ -11225,7 +11221,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
             {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '📧 Send' : '📧 Send bekreftelse'}</button>}
             {!isMobOD && o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Faktura</button>}
             {!isMobOD && <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄</button>}
-            {!isMobOD && <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
             <button onClick={()=>setEditing(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobOD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobOD ? '12px' : '13px' }}>🗑️</button>
           </div>
@@ -12290,7 +12285,6 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
             {inv.status==='Utkast'&&<button onClick={()=>setShowSend(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '📧 Send' : '📧 Send faktura'}</button>}
             {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '⚠️ Purr' : '⚠️ Send purring'}</button>}
             {!isMobFD && inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kredit</button>}
-            {!isMobFD && <button onClick={()=>window.print()} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🖨️</button>}
             {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobFD ? '12px' : '13px' }}>✏️</button>}
             <button onClick={handleDelete} style={{ padding: isMobFD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobFD ? '12px' : '13px' }}>🗑️</button>
           </div>
@@ -24230,14 +24224,49 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
     try {
       const pdf = await createBrandedPdf()
       const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
+
+      // Slå opp hvem som opprettet befaringen
+      let createdByName = ''
+      if (ins.created_by) {
+        try {
+          const { data: up } = await supabase.from('user_profiles').select('full_name').eq('id', ins.created_by).single()
+          createdByName = up?.full_name || ''
+        } catch(e) { /* fallback til tom */ }
+      }
+
+      const befType = BEFARING_TYPES.find(t => t.id === ins.inspection_type)
+      const typeLabel = befType?.label || ins.inspection_type || 'Befaring'
+
       pdf.drawHeader('BEFARINGSRAPPORT', ins.title || '')
       let y = pdf.y
       const addPage = () => { doc.addPage(); y = 14 }
       const checkSpace = n => { if (y + n > ph - 18) addPage() }
 
-      setC(hex('#64748b')); doc.setFontSize(10); doc.setFont('helvetica','normal')
-      doc.text([ins.date,ins.location,proj?.name].filter(Boolean).join(' · '),ml,y); y+=6
-      if(ins.participants?.length){doc.text('Deltakere: '+ins.participants.join(', '),ml,y);y+=6}
+      // ── Info-kort: type, dato, sted, utført av ──
+      setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+      const infoH = 24
+      doc.roundedRect(ml, y, cw, infoH, 2, 2, 'FD')
+      const infoCols = [
+        { label: 'BEFARINGSTYPE', value: typeLabel },
+        { label: 'DATO', value: ins.date ? new Date(ins.date+'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) : '—' },
+        { label: 'STED', value: ins.location || proj?.name || '—' },
+        { label: 'UTFØRT AV', value: createdByName || '—' },
+      ]
+      const colW = cw / infoCols.length
+      infoCols.forEach((c, i) => {
+        const cx = ml + 5 + i * colW
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+        doc.text(c.label, cx, y + 6)
+        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        const lines = doc.splitTextToSize(c.value, colW - 6)
+        doc.text(lines.slice(0, 2), cx, y + 12)
+      })
+      y += infoH + 4
+
+      if(ins.participants?.length){
+        setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        doc.text('Deltakere: '+ins.participants.join(', '), ml, y); y += 6
+      }
       if(ins.notes){y+=2;setC(hex('#475569'));doc.setFontSize(9);const nl=doc.splitTextToSize(ins.notes,cw);doc.text(nl,ml,y);y+=nl.length*4}
       y+=6
 
@@ -24257,10 +24286,6 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       const imgFiles=files.filter(f=>f.file_type?.startsWith('image/'))
       if(imgFiles.length>0){checkSpace(20);setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Bilder',ml,y);y+=7
         for(const f of imgFiles){try{checkSpace(55);const resp=await fetch(f.file_url);const blob=await resp.blob();const b64=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(blob)});doc.addImage(b64,'JPEG',ml,y,60,45);setC(hex('#64748b'));doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(f.name,ml+64,y+6);y+=50}catch(e){console.warn(e)}}}
-
-      checkSpace(50);y+=6;setF(hex('#ffffff'));setD(hex('#e2e8f0'));doc.roundedRect(ml,y,cw,40,2.5,2.5,'FD');setC(hex('#0f172a'));doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('Signaturer',ml+5,y+7)
-      const sigW=(cw-18)/2,sigY=y+12
-      ;[{l:'Inspeksjonsansvarlig',x:ml+5},{l:'Prosjektleder / Byggherre',x:ml+5+sigW+8}].forEach(sc=>{setC(hex('#64748b'));doc.setFontSize(7.5);doc.setFont('helvetica','bold');doc.text(sc.l,sc.x,sigY);setD(hex('#0f172a'));doc.line(sc.x,sigY+14,sc.x+sigW,sigY+14);setC(hex('#94a3b8'));doc.setFontSize(6.5);doc.setFont('helvetica','normal');doc.text('Signatur / Dato',sc.x,sigY+18);doc.line(sc.x,sigY+25,sc.x+sigW,sigY+25);doc.text('Navn',sc.x,sigY+29)})
 
       pdf.drawFooters()
       doc.save('Befaring - '+ins.title+'.pdf')
@@ -24319,7 +24344,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             </div>
           </div>
           <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap', width: isMobBD ? '100%' : 'auto' }}>
-            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#2563eb',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📄 PDF' : '📄 PDF-rapport'}</button>
+            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '10px 18px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize: isMobBD ? '12px' : '14px', fontWeight:'600', flex: isMobBD ? 1 : 'none', display:'flex', alignItems:'center', gap:'6px' }}>{isMobBD ? '📄 PDF' : '📄 PDF'}</button>
             <button onClick={()=>{setSendItems(items.map(i=>i.id));setShowSend(true)}} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📧 Send' : '📧 Send rapport'}</button>
             {!isMobBD && <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>}
             <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
@@ -25056,6 +25081,30 @@ function FDVPage() {
       setC(hex('#64748b')); doc.setFontSize(11); doc.setFont('helvetica', 'normal')
       doc.text(`${projComps.length} komponenter · ${projDocs.length} dokumenter`, ml, y); y += 8
 
+      // ── Prosjektinformasjon ──
+      if (proj) {
+        setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+        const infoH = 24
+        doc.roundedRect(ml, y, cw, infoH, 2, 2, 'FD')
+
+        const projInfo = [
+          { label: 'PROSJEKT', value: proj.name || '—' },
+          { label: 'PROSJEKTNR', value: proj.project_number || '—' },
+          { label: 'ADRESSE', value: [proj.address_street, proj.address_city].filter(Boolean).join(', ') || '—' },
+          { label: 'STATUS', value: proj.status || '—' },
+        ]
+        const colW = cw / projInfo.length
+        projInfo.forEach((c, i) => {
+          const cx = ml + 5 + i * colW
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(c.label, cx, y + 6)
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          const lines = doc.splitTextToSize(String(c.value), colW - 6)
+          doc.text(lines.slice(0, 2), cx, y + 12)
+        })
+        y += infoH + 6
+      }
+
       // ── Komponenter ──
       setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
       doc.text(`KOMPONENTER (${projComps.length})`, ml, y); y += 8
@@ -25148,7 +25197,6 @@ function FDVPage() {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Forvaltning, Drift og Vedlikehold</p>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={exportFDVPakke} style={{ padding:'9px 16px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#475569' }}>📦 Eksporter FDV-pakke</button>
             <button onClick={()=>view==='komponenter'?setShowNewComp(true):setShowUploadDoc(true)} style={{ padding:'10px 18px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>
               {view==='komponenter'?'+ Ny komponent':'📎 Last opp dokument'}
             </button>
@@ -25170,6 +25218,12 @@ function FDVPage() {
           </div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
           <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...fInp,maxWidth:'180px' }} placeholder="Alle prosjekter" emptyValue="alle" />
+          {filterProject !== 'alle' && (
+            <button onClick={exportFDVPakke} title="Last ned FDV-pakke som PDF for valgt prosjekt"
+              style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#374151',display:'flex',alignItems:'center',gap:'6px' }}>
+              📄 FDV-pakke (PDF)
+            </button>
+          )}
           {view==='komponenter'&&<select value={filterCat} onChange={e=>setFilterCat(e.target.value)} style={{ ...fInp,maxWidth:'150px' }}>
             <option value="alle">Alle kategorier</option>
             {FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
