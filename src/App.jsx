@@ -155,7 +155,7 @@ const navGroups = [
     title: 'PERSONELL & RESSURSER',
     items: [
       { id: 'timelister',  label: 'Timelister',   emoji: '⏱️' },
-      { id: 'ressursplan', label: 'Ressursplan',  emoji: '📅' },
+      { id: 'ressursplan', label: 'Ressursplan',  emoji: '📌' },
       { id: 'kalender',    label: 'Kalender',     emoji: '📆' },
       { id: 'chat',        label: 'Intern Chat',  emoji: '💬' },
     ]
@@ -200,7 +200,7 @@ const moduleCards = [
   { id: 'faktura', name: 'Faktura', desc: 'Fakturering', emoji: '🧾', color: '#f0fdf4' },
   { id: 'ansatte', name: 'Ansatte', desc: 'Personaladministrasjon', emoji: '👷', color: '#f8fafc' },
   { id: 'timelister', name: 'Timelister', desc: 'Timeføring', emoji: '⏱️', color: '#eef2ff' },
-  { id: 'ressursplan', name: 'Ressursplan', desc: 'Bemanning', emoji: '📅', color: '#faf5ff' },
+  { id: 'ressursplan', name: 'Ressursplan', desc: 'Bemanning', emoji: '📌', color: '#faf5ff' },
   { id: 'kalender', name: 'Kalender', desc: 'Hendelser og møter', emoji: '📆', color: '#eff6ff' },
   { id: 'chat', name: 'Intern Chat', desc: 'Intern kommunikasjon', emoji: '💬', color: '#fdf4ff' },
   { id: 'crm', name: 'CRM', desc: 'Kundeadministrasjon', emoji: '📊', color: '#fff1f2' },
@@ -17086,7 +17086,7 @@ function RessursPage() {
         <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', padding:'10px 16px' }}>
           {/* Tittel */}
           <h1 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:'6px' }}>
-            <span>📅</span><span>Ressursplan</span>
+            <span>📌</span><span>Ressursplan</span>
           </h1>
 
           {/* Ansatte/Maskiner toggle — segmentert knappegruppe */}
@@ -26477,7 +26477,7 @@ const ALL_MODULES_LIST = [
   { id:'faktura',      label:'Faktura',            emoji:'🧾' },
   { id:'ansatte',      label:'Ansatte',            emoji:'👷' },
   { id:'timelister',   label:'Timelister',         emoji:'⏱️' },
-  { id:'ressursplan',  label:'Ressursplanlegger',  emoji:'📅' },
+  { id:'ressursplan',  label:'Ressursplanlegger',  emoji:'📌' },
   { id:'kalender',     label:'Kalender',           emoji:'📆' },
   { id:'chat',         label:'Intern Chat',        emoji:'💬' },
   { id:'befaring',     label:'Befaring',           emoji:'🔍' },
