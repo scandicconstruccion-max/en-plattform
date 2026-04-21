@@ -8133,6 +8133,192 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
     if (data) setQ(data)
   }
 
+  // ── PDF-eksport ────────────────────────────────────────────────────────
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const exportQuotePDF = async () => {
+    setExportingPdf(true)
+    try {
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD, settings } = pdf
+      pdf.drawHeader('TILBUD', q.quote_number || '')
+      let y = pdf.y
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (n) => { if (y + n > ph - 18) addPage() }
+
+      // ── Tittel ──
+      setC(hex('#0f172a')); doc.setFontSize(16); doc.setFont('helvetica', 'bold')
+      const titleLines = doc.splitTextToSize(q.title || 'Tilbud', cw)
+      doc.text(titleLines, ml, y)
+      y += titleLines.length * 7 + 2
+
+      // ── Kunde + tilbudsinfo (to-kolonne-kort) ──
+      setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+      const infoH = 28
+      doc.roundedRect(ml, y, cw, infoH, 2, 2, 'FD')
+
+      // Venstre: Kunde
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text('KUNDE', ml + 5, y + 6)
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text(q.customer_name || '—', ml + 5, y + 12)
+      setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+      const custDetails = [q.customer_address, q.customer_email, q.customer_phone].filter(Boolean)
+      custDetails.slice(0, 2).forEach((line, i) => doc.text(line, ml + 5, y + 17 + i * 4))
+
+      // Høyre: Tilbudsinfo
+      const rx = ml + cw / 2 + 4
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text('TILBUDSINFO', rx, y + 6)
+      setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+      const tilbudInfo = [
+        q.quote_number && `Nr.: ${q.quote_number}`,
+        `Dato: ${q.created_at ? new Date(q.created_at).toLocaleDateString('nb-NO') : new Date().toLocaleDateString('nb-NO')}`,
+        q.valid_until && `Gyldig til: ${new Date(q.valid_until).toLocaleDateString('nb-NO')}`,
+        q.payment_terms && `Betalingsbetingelser: ${q.payment_terms}`,
+        proj?.name && `Prosjekt: ${proj.name}`,
+      ].filter(Boolean)
+      tilbudInfo.slice(0, 4).forEach((line, i) => doc.text(line, rx, y + 12 + i * 4))
+      y += infoH + 6
+
+      // ── Introduksjon (settings.quote_intro_text) ──
+      const introText = q.intro_text || settings.quote_intro_text
+      if (introText) {
+        checkSpace(20)
+        setC(hex('#475569')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+        const iLines = doc.splitTextToSize(introText, cw)
+        doc.text(iLines, ml, y)
+        y += iLines.length * 5 + 6
+      }
+
+      // ── Kapitler ──
+      const chapters = q.chapters || []
+      chapters.forEach((ch, ci) => {
+        const chCalc = calcChapter(ch)
+        checkSpace(22)
+
+        // Kapitteltittel
+        setC(hex('#0f172a')); doc.setFontSize(12); doc.setFont('helvetica', 'bold')
+        const chTitle = `${String(ci + 1).padStart(2, '0')}. ${ch.title || 'Uten tittel'}`
+        doc.text(chTitle, ml, y)
+        // Kapittel-total høyre
+        setC(hex('#059669'))
+        doc.text(fmt(chCalc.total), pw - mr, y, { align: 'right' })
+        y += 5
+        setD(hex('#e2e8f0')); doc.line(ml, y, pw - mr, y)
+        y += 4
+
+        // Postene som tabell
+        const posts = ch.posts || []
+        if (posts.length === 0) {
+          setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica', 'italic')
+          doc.text('Ingen poster', ml + 4, y + 3)
+          y += 8
+        } else {
+          // Header-rad
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          const colX = {
+            desc: ml + 4,
+            qty: ml + cw * 0.50,
+            unit: ml + cw * 0.58,
+            work: ml + cw * 0.70,
+            mat: ml + cw * 0.82,
+            sum: pw - mr - 2,
+          }
+          doc.text('BESKRIVELSE', colX.desc, y + 2)
+          doc.text('MENGDE', colX.qty, y + 2, { align: 'right' })
+          doc.text('ENHET', colX.unit, y + 2, { align: 'center' })
+          doc.text('ARBEID/ENH', colX.work, y + 2, { align: 'right' })
+          doc.text('MATERIAL/ENH', colX.mat, y + 2, { align: 'right' })
+          doc.text('SUM', colX.sum, y + 2, { align: 'right' })
+          y += 4
+          setD(hex('#f1f5f9')); doc.line(ml, y, pw - mr, y); y += 3
+
+          posts.forEach(p => {
+            const qty = parseFloat(p.qty) || 0
+            const uw = parseFloat(p.unitPriceWork) || 0
+            const um = parseFloat(p.unitPriceMaterial) || 0
+            const postSum = qty * (uw + um)
+            const descLines = doc.splitTextToSize(p.description || '—', cw * 0.48)
+            const rowH = Math.max(descLines.length * 4 + 2, 6)
+            checkSpace(rowH + 2)
+
+            setC(hex('#0f172a')); doc.setFontSize(8.5); doc.setFont('helvetica', 'normal')
+            doc.text(descLines, colX.desc, y + 3)
+            setC(hex('#475569'))
+            doc.text(String(qty || ''), colX.qty, y + 3, { align: 'right' })
+            doc.text(p.unit || '', colX.unit, y + 3, { align: 'center' })
+            doc.text(uw ? fmt(uw).replace(' kr', '') + ' kr' : '—', colX.work, y + 3, { align: 'right' })
+            doc.text(um ? fmt(um).replace(' kr', '') + ' kr' : '—', colX.mat, y + 3, { align: 'right' })
+            setC(hex('#0f172a')); doc.setFont('helvetica', 'bold')
+            doc.text(fmt(postSum), colX.sum, y + 3, { align: 'right' })
+            y += rowH
+          })
+        }
+
+        // Påslag hvis relevant
+        if (ch.markup && parseFloat(ch.markup) > 0) {
+          setD(hex('#f1f5f9')); doc.line(ml, y, pw - mr, y); y += 3
+          setC(hex('#7c3aed')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+          doc.text(`Påslag ${ch.markup}%`, ml + 4, y + 3)
+          doc.text(fmt(chCalc.total - chCalc.sum), pw - mr, y + 3, { align: 'right' })
+          y += 6
+        }
+
+        // Kapittel-sum
+        setF(hex('#f8fafc'))
+        doc.rect(ml, y, cw, 7, 'F')
+        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+        doc.text('Kapittelsum', ml + 4, y + 5)
+        doc.text(fmt(chCalc.total), pw - mr - 2, y + 5, { align: 'right' })
+        y += 11
+      })
+
+      // ── Totaler-kort ──
+      checkSpace(36)
+      setF(hex('#f0fdf4')); setD(hex('#bbf7d0'))
+      doc.roundedRect(ml, y, cw, 32, 2.5, 2.5, 'FD')
+
+      const tx = ml + 6
+      const tvx = pw - mr - 6
+      let ty = y + 7
+
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+      doc.text('Total eks. mva', tx, ty)
+      doc.setFont('helvetica', 'bold'); setC(hex('#059669'))
+      doc.text(fmt(grandTotal), tvx, ty, { align: 'right' })
+      ty += 6
+
+      setC(hex('#64748b')); doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
+      doc.text('Mva 25%', tx, ty)
+      doc.text(fmt(grandTotal * 0.25), tvx, ty, { align: 'right' })
+      ty += 6
+
+      setD(hex('#bbf7d0')); doc.setLineWidth(0.3); doc.line(tx, ty - 1, tvx, ty - 1)
+      ty += 3
+
+      setC(hex('#0f172a')); doc.setFont('helvetica', 'bold'); doc.setFontSize(11)
+      doc.text('Total inkl. mva', tx, ty)
+      doc.text(fmt(grandTotal * 1.25), tvx, ty, { align: 'right' })
+      y += 36
+
+      // ── Avslutning ──
+      const outroText = q.outro_text || settings.quote_outro_text
+      if (outroText) {
+        checkSpace(20)
+        setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'italic')
+        const oLines = doc.splitTextToSize(outroText, cw)
+        doc.text(oLines, ml, y)
+        y += oLines.length * 4.5
+      }
+
+      pdf.drawFooters()
+
+      const safeName = (q.quote_number || q.title || 'Tilbud').replace(/[^a-zA-Z0-9_-]/g, '_')
+      doc.save(`Tilbud - ${safeName}.pdf`)
+    } catch(e) { console.error(e); alert('Feil ved PDF: ' + e.message) }
+    finally { setExportingPdf(false) }
+  }
+
   // Hent alle revisjoner av dette tilbudet
   const loadRevisions = async () => {
     const rootId = q.parent_quote_id || q.id
@@ -8223,6 +8409,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
             {q.status === 'Utkast' && <button onClick={() => setShowSendModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Send' : '📧 Send til kunde'}</button>}
             {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Purring' : '📧 Send purring'}</button>}
             {!isMobTD && <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>}
+            {!isMobTD && <button onClick={exportQuotePDF} disabled={exportingPdf} title="Last ned som PDF" style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: exportingPdf?'not-allowed':'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>{exportingPdf ? '⏳' : '📄 PDF'}</button>}
             {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTD ? '12px' : '13px' }}>✏️</button>}
             <button onClick={handleDelete} style={{ padding: isMobTD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobTD ? '12px' : '13px' }}>🗑️</button>
           </div>
