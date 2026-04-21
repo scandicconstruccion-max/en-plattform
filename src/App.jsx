@@ -16031,8 +16031,14 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
   // Bottom-sheet som viser hver ansatt som egen knapp — brukeren velger hvem de vil redigere
   const [resourcePicker, setResourcePicker] = useState(null) // { date, projectName, projectColor, bookingsByResource } | null
 
-  const today = new Date().toISOString().split('T')[0]
+  const today = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  })()
   const todayObj = new Date(today + 'T12:00:00')
+
+  // Hjelpefunksjon: lokaltids-basert YYYY-MM-DD (unngår UTC-skjev fra toISOString)
+  const fmtLocalDate = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
 
   // Avatar-farge (samme hash-logikk som i RessursGanttGrid) for konsistent visuell identitet på tvers av desktop/mobil
   const avatarGradient = (id) => {
@@ -16076,13 +16082,14 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
       const weekStart = new Date(current)
       const week = []
       for (let i = 0; i < 7; i++) {
+        const dateStr = fmtLocalDate(current)
         week.push({
-          date: current.toISOString().split('T')[0],
+          date: dateStr,
           inMonth: current.getMonth() === month,
           dayName: ['søn', 'man', 'tir', 'ons', 'tor', 'fre', 'lør'][current.getDay()],
           dayNumber: current.getDate(),
-          isToday: current.toISOString().split('T')[0] === today,
-          isPast: current < todayObj && current.toISOString().split('T')[0] !== today,
+          isToday: dateStr === today,
+          isPast: current < todayObj && dateStr !== today,
           isWeekend: current.getDay() === 0 || current.getDay() === 6,
         })
         current.setDate(current.getDate() + 1)
