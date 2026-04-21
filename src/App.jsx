@@ -24972,23 +24972,129 @@ function FDVPage() {
   })
 
   const exportFDVPakke = async () => {
-    const proj = filterProject!=='alle' ? projects.find(p=>p.id===filterProject) : null
-    const projDocs = filterProject!=='alle' ? filteredDocs : documents
-    const projComps = filterProject!=='alle' ? filteredComps : components
-    const content = [
-      `FDV-DOKUMENTASJON`,
-      `Prosjekt: ${proj?.name||'Alle prosjekter'}`,
-      `Generert: ${new Date().toLocaleDateString('nb-NO')}`,
-      ``,
-      `=== KOMPONENTER (${projComps.length}) ===`,
-      ...projComps.map(c=>`\n${c.name}\n  Kategori: ${c.category||'-'}\n  Plassering: ${c.location||'-'}\n  Produsent: ${c.manufacturer||'-'} · Modell: ${c.model||'-'}\n  Serienr: ${c.serial_number||'-'}\n  Installert: ${c.installed_date||'-'}\n  Neste service: ${c.next_service_date||'-'}`),
-      ``,
-      `=== DOKUMENTER (${projDocs.length}) ===`,
-      ...projDocs.map(d=>`\n${d.title}\n  Type: ${FDV_DOC_TYPES[d.doc_type]?.label||'-'}\n  Mappe: ${d.folder_path||'/'}\n  URL: ${d.file_url||'-'}`)
-    ].join('\n')
-    const blob=new Blob([content],{type:'text/plain;charset=utf-8'})
-    const url=URL.createObjectURL(blob)
-    const a=document.createElement('a'); a.href=url; a.download=`FDV-${proj?.name||'alle'}-${today}.txt`; a.click()
+    try {
+      // Last jsPDF fra CDN hvis ikke allerede tilgjengelig (samme mønster som befaring-eksport)
+      if (!window.jspdf) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script')
+          s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js'
+          s.onload = res; s.onerror = rej; document.head.appendChild(s)
+        })
+      }
+      const { jsPDF } = window.jspdf
+      const doc = new jsPDF('p', 'mm', 'a4')
+      const pw = 210, ph = 297, ml = 14, mr = 14, cw = pw - ml - mr
+      const hex = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]
+      const setC = c => doc.setTextColor(c[0],c[1],c[2])
+      const setF = c => doc.setFillColor(c[0],c[1],c[2])
+      const setD = c => doc.setDrawColor(c[0],c[1],c[2])
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = n => { if (y + n > ph - 22) addPage() }
+
+      const proj = filterProject !== 'alle' ? projects.find(p => p.id === filterProject) : null
+      const projDocs = filterProject !== 'alle' ? filteredDocs : documents
+      const projComps = filterProject !== 'alle' ? filteredComps : components
+
+      let y = 14
+
+      // ── Header ──
+      setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text('FDV-DOKUMENTASJON', ml, y); doc.setFont('helvetica', 'normal')
+      doc.text(new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }), pw - mr, y, { align:'right' })
+      y += 8
+      setC(hex('#0f172a')); doc.setFontSize(18); doc.setFont('helvetica', 'bold')
+      doc.text('Forvaltning, Drift og Vedlikehold', ml, y); y += 8
+      setC(hex('#64748b')); doc.setFontSize(11); doc.setFont('helvetica', 'normal')
+      doc.text(`Prosjekt: ${proj?.name || 'Alle prosjekter'}`, ml, y); y += 6
+      doc.text(`${projComps.length} komponenter · ${projDocs.length} dokumenter`, ml, y); y += 8
+      setD(hex('#e2e8f0')); doc.line(ml, y, pw - mr, y); y += 8
+
+      // ── Komponenter ──
+      setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+      doc.text(`KOMPONENTER (${projComps.length})`, ml, y); y += 8
+
+      if (projComps.length === 0) {
+        setC(hex('#94a3b8')); doc.setFontSize(10); doc.setFont('helvetica', 'italic')
+        doc.text('Ingen komponenter registrert.', ml, y); y += 8
+      } else {
+        projComps.forEach(c => {
+          checkSpace(32)
+          // Kort-bakgrunn
+          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+          doc.roundedRect(ml, y, cw, 28, 2, 2, 'FD')
+
+          setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+          doc.text(c.name || '(uten navn)', ml + 4, y + 6)
+
+          setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+          const line1 = [
+            c.category && `Kategori: ${c.category}`,
+            c.location && `Plassering: ${c.location}`,
+          ].filter(Boolean).join('  ·  ')
+          if (line1) doc.text(line1, ml + 4, y + 11)
+
+          const line2 = [
+            c.manufacturer && `Produsent: ${c.manufacturer}`,
+            c.model && `Modell: ${c.model}`,
+            c.serial_number && `Serienr: ${c.serial_number}`,
+          ].filter(Boolean).join('  ·  ')
+          if (line2) doc.text(line2, ml + 4, y + 16)
+
+          const line3 = [
+            c.installed_date && `Installert: ${c.installed_date}`,
+            c.next_service_date && `Neste service: ${c.next_service_date}`,
+          ].filter(Boolean).join('  ·  ')
+          if (line3) doc.text(line3, ml + 4, y + 21)
+
+          y += 32
+        })
+      }
+
+      // ── Dokumenter ──
+      checkSpace(20)
+      y += 4
+      setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+      doc.text(`DOKUMENTER (${projDocs.length})`, ml, y); y += 8
+
+      if (projDocs.length === 0) {
+        setC(hex('#94a3b8')); doc.setFontSize(10); doc.setFont('helvetica', 'italic')
+        doc.text('Ingen dokumenter registrert.', ml, y); y += 8
+      } else {
+        projDocs.forEach(d => {
+          checkSpace(20)
+          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+          doc.roundedRect(ml, y, cw, 16, 2, 2, 'FD')
+
+          setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+          const titleLines = doc.splitTextToSize(d.title || '(uten tittel)', cw - 10)
+          doc.text(titleLines[0], ml + 4, y + 6)
+
+          setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+          const docInfo = [
+            `Type: ${FDV_DOC_TYPES[d.doc_type]?.label || '—'}`,
+            `Mappe: ${d.folder_path || '/'}`,
+          ].join('  ·  ')
+          doc.text(docInfo, ml + 4, y + 11)
+
+          y += 20
+        })
+      }
+
+      // ── Footer ──
+      const pageCount = doc.internal.getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+        doc.text(`Side ${i} av ${pageCount}`, pw - mr, ph - 8, { align:'right' })
+        doc.text('Generert fra En Plattform · KS-system', ml, ph - 8)
+      }
+
+      const safeName = (proj?.name || 'alle').replace(/[^a-zA-Z0-9_-]/g, '_')
+      doc.save(`FDV-${safeName}-${today}.pdf`)
+    } catch (e) {
+      console.error('[fdv] PDF-eksport feilet:', e)
+      alert('Kunne ikke generere PDF: ' + (e.message || e.toString()))
+    }
   }
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster FDV...</p></div></div>
