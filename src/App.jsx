@@ -3565,6 +3565,11 @@ function SjekklistePage({ onNavigateDetail }) {
   const [saving, setSaving] = useState(false)
   const [expandedMalKat, setExpandedMalKat] = useState({})
   const [expandedTemplates, setExpandedTemplates] = useState({})
+  // Bulk-modus: bruker kan velge flere maler og legge alle til samme prosjekt i én operasjon
+  const [bulkMode, setBulkMode] = useState(false)
+  const [bulkSelected, setBulkSelected] = useState(new Set())
+  const [bulkProjectId, setBulkProjectId] = useState('')
+  const [bulkSaving, setBulkSaving] = useState(false)
   const { user } = useAuth()
   const f = { fontFamily: 'system-ui, sans-serif' }
   const card = { background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }
@@ -3636,6 +3641,52 @@ function SjekklistePage({ onNavigateDetail }) {
       if (data?.id) onNavigateDetail(data.id)
     } catch(e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
+  }
+
+  // Bulk-opprettelse: lag flere sjekklister på samme prosjekt i én batch-insert.
+  // Henter items fra hver mal (samme logikk som handleCreate), så alle sjekklister får riktig innhold.
+  const handleBulkAdd = async () => {
+    if (!bulkProjectId) return alert('Velg et prosjekt')
+    if (bulkSelected.size === 0) return alert('Velg minst én mal')
+    setBulkSaving(true)
+    try {
+      const project = projects.find(p => p.id === bulkProjectId)
+      const rows = Array.from(bulkSelected).map(tmplId => {
+        const tmpl = templates.find(t => t.id === tmplId)
+        if (!tmpl) return null
+        const title = `${tmpl.name} – ${project?.name || ''}`.trim()
+        // Flat ut items fra sections hvis malen har det, ellers bruk items direkte (samme fallback-logikk som handleCreate)
+        const items = tmpl.items && tmpl.items.length > 0
+          ? tmpl.items.map(i => ({ title: typeof i === 'string' ? i : (i.title || i.text || ''), checked: false }))
+          : (tmpl.sections?.flatMap(s => (s.items || []).map(item => ({ title: typeof item === 'string' ? item : (item.title || item.text || ''), section: s.title, checked: false }))) || [])
+        return {
+          title,
+          project_id: bulkProjectId,
+          template_id: tmplId,
+          status: 'ikke_startet',
+          items,
+          created_by: user?.id,
+        }
+      }).filter(Boolean)
+      const { error } = await supabase.from('checklists').insert(rows)
+      if (error) throw error
+      alert(`${rows.length} sjekklist${rows.length === 1 ? 'e' : 'er'} lagt til på ${project?.name || 'prosjektet'}`)
+      // Nullstill og gå ut av bulk-modus
+      setBulkMode(false)
+      setBulkSelected(new Set())
+      setBulkProjectId('')
+      loadData()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setBulkSaving(false) }
+  }
+
+  const toggleBulkSelect = (tmplId) => {
+    setBulkSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(tmplId)) next.delete(tmplId)
+      else next.add(tmplId)
+      return next
+    })
   }
 
   const handleDeleteChecklist = async (id) => {
@@ -3774,7 +3825,22 @@ function SjekklistePage({ onNavigateDetail }) {
             {loading ? (
               <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>Laster maler...</div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+              <>
+                {/* Bulk-modus toggle */}
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', marginBottom:'16px', flexWrap:'wrap' }}>
+                  <div style={{ fontSize:'13px', color:'#64748b' }}>
+                    {bulkMode ? (
+                      <span><b style={{ color:'#059669' }}>{bulkSelected.size}</b> mal{bulkSelected.size === 1 ? '' : 'er'} valgt</span>
+                    ) : (
+                      <span>Velg én og én med «Bruk mal», eller legg til flere samtidig</span>
+                    )}
+                  </div>
+                  <button onClick={() => { setBulkMode(v => !v); setBulkSelected(new Set()); setBulkProjectId('') }}
+                    style={{ padding:'8px 14px', background: bulkMode ? '#fef2f2' : '#eff6ff', color: bulkMode ? '#dc2626' : '#2563eb', border:`1px solid ${bulkMode ? '#fecaca' : '#bfdbfe'}`, borderRadius:'10px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
+                    {bulkMode ? '× Avbryt flervalg' : '☑️ Legg til flere samtidig'}
+                  </button>
+                </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '28px', paddingBottom: bulkMode && bulkSelected.size > 0 ? '120px' : '0' }}>
                 {groupedTemplates.map(group => (
                   <div key={group.cat}>
                     <button onClick={() => setExpandedMalKat(p => ({ ...p, [group.cat]: !p[group.cat] }))}
@@ -3788,20 +3854,37 @@ function SjekklistePage({ onNavigateDetail }) {
                     <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px', marginBottom:'16px', paddingLeft:'12px' }}>
                       {group.templates.map(tmpl => {
                         const isExpanded = expandedTemplates[tmpl.id]
+                        const isSelected = bulkSelected.has(tmpl.id)
                         const topItemsCount = Array.isArray(tmpl.items) ? tmpl.items.length : 0
                         const sectionItemsCount = Array.isArray(tmpl.sections)
                           ? tmpl.sections.reduce((s, sec) => s + (Array.isArray(sec.items) ? sec.items.length : 0), 0)
                           : 0
                         const totalItems = topItemsCount + sectionItemsCount
                         return (
-                        <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
-                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px' }}>
+                        <div key={tmpl.id}
+                          onClick={bulkMode ? () => toggleBulkSelect(tmpl.id) : undefined}
+                          style={{
+                            ...card,
+                            padding: '18px',
+                            cursor: bulkMode ? 'pointer' : 'default',
+                            border: bulkMode && isSelected ? '2px solid #059669' : card.border,
+                            background: bulkMode && isSelected ? '#f0fdf4' : card.background,
+                            transition: 'border-color 0.15s, background 0.15s',
+                          }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '10px', gap:'10px' }}>
+                            {bulkMode && (
+                              <div style={{ flexShrink:0, marginTop:'2px' }}>
+                                <div style={{ width:'20px', height:'20px', borderRadius:'5px', border: `2px solid ${isSelected ? '#059669' : '#cbd5e1'}`, background: isSelected ? '#059669' : 'white', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'13px', fontWeight:'700' }}>
+                                  {isSelected && '✓'}
+                                </div>
+                              </div>
+                            )}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <h3 style={{ margin: '0 0 4px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{tmpl.name}</h3>
                               {tmpl.description && <p style={{ margin: 0, fontSize: '12px', color: '#64748b' }}>{tmpl.description}</p>}
                             </div>
                           </div>
-                          <button onClick={() => setExpandedTemplates(p => ({ ...p, [tmpl.id]: !p[tmpl.id] }))}
+                          <button onClick={(e) => { e.stopPropagation(); setExpandedTemplates(p => ({ ...p, [tmpl.id]: !p[tmpl.id] })) }}
                             style={{ display:'flex', alignItems:'center', gap:'6px', width:'100%', background:'transparent', border:'none', padding:'4px 0', fontSize:'12px', color:'#64748b', cursor:'pointer', marginBottom:'12px' }}>
                             <span style={{ fontSize: '11px', color:'#059669', transition:'transform 0.15s', transform: isExpanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
                             <span>{totalItems} kontrollpunkter {isExpanded ? '— klikk for å skjule' : '— klikk for å se innhold'}</span>
@@ -3847,11 +3930,13 @@ function SjekklistePage({ onNavigateDetail }) {
                               })()}
                             </div>
                           )}
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => { setNewForm(f => ({ ...f, template_id: tmpl.id })); setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
-                            <button onClick={() => { setEditTemplate(tmpl); setShowNewTemplate(true) }} style={{ background: '#f8fafc', color: '#475569', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', cursor: 'pointer' }}>✏️</button>
-                            <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
-                          </div>
+                          {!bulkMode && (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => { setNewForm(f => ({ ...f, template_id: tmpl.id })); setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
+                              <button onClick={() => { setEditTemplate(tmpl); setShowNewTemplate(true) }} style={{ background: '#f8fafc', color: '#475569', border: 'none', borderRadius: '8px', padding: '8px 12px', fontSize: '13px', cursor: 'pointer' }}>✏️</button>
+                              <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
+                            </div>
+                          )}
                         </div>
                       )})}
                     </div>
@@ -3866,19 +3951,62 @@ function SjekklistePage({ onNavigateDetail }) {
                       <div style={{ flex: 1, height: '1px', background: '#f1f5f9' }} />
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '12px' }}>
-                      {uncategorized.map(tmpl => (
-                        <div key={tmpl.id} style={{ ...card, padding: '18px' }}>
-                          <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{tmpl.name}</h3>
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            <button onClick={() => setShowNew(true)} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
-                            <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
+                      {uncategorized.map(tmpl => {
+                        const isSelected = bulkSelected.has(tmpl.id)
+                        return (
+                        <div key={tmpl.id}
+                          onClick={bulkMode ? () => toggleBulkSelect(tmpl.id) : undefined}
+                          style={{
+                            ...card,
+                            padding: '18px',
+                            cursor: bulkMode ? 'pointer' : 'default',
+                            border: bulkMode && isSelected ? '2px solid #059669' : card.border,
+                            background: bulkMode && isSelected ? '#f0fdf4' : card.background,
+                          }}>
+                          <div style={{ display:'flex', alignItems:'flex-start', gap:'10px', marginBottom:'8px' }}>
+                            {bulkMode && (
+                              <div style={{ width:'20px', height:'20px', borderRadius:'5px', border: `2px solid ${isSelected ? '#059669' : '#cbd5e1'}`, background: isSelected ? '#059669' : 'white', display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'13px', fontWeight:'700', flexShrink:0, marginTop:'2px' }}>
+                                {isSelected && '✓'}
+                              </div>
+                            )}
+                            <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600', color: '#0f172a', flex:1 }}>{tmpl.name}</h3>
                           </div>
+                          {!bulkMode && (
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button onClick={() => { setNewForm(f => ({ ...f, template_id: tmpl.id })); setShowNew(true) }} style={{ flex: 1, background: '#ecfdf5', color: '#059669', border: 'none', borderRadius: '8px', padding: '8px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Bruk mal</button>
+                              <button onClick={() => handleDeleteTemplate(tmpl.id)} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '8px 10px', fontSize: '13px', cursor: 'pointer' }}>🗑️</button>
+                            </div>
+                          )}
                         </div>
-                      ))}
+                      )})}
                     </div>
                   </div>
                 )}
               </div>
+              {/* Sticky bulk-footer: vises kun i bulk-modus med minst én valgt mal */}
+              {bulkMode && bulkSelected.size > 0 && (
+                <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'white', borderTop:'1px solid #e2e8f0', boxShadow:'0 -4px 16px rgba(0,0,0,0.08)', padding: isMob ? '12px 16px' : '16px 32px', zIndex:50 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap: isMob ? '8px' : '12px', flexWrap:'wrap', maxWidth:'1400px', margin:'0 auto' }}>
+                    <div style={{ fontSize: isMob ? '13px' : '14px', fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>
+                      <span style={{ color:'#059669' }}>{bulkSelected.size}</span> mal{bulkSelected.size === 1 ? '' : 'er'} valgt
+                    </div>
+                    <div style={{ flex:1, minWidth: isMob ? '100%' : '200px' }}>
+                      <SearchableProjectSelect value={bulkProjectId} onChange={setBulkProjectId} projects={projects} placeholder="Velg prosjekt å legge til på..." style={{ ...inp, background:'white' }} />
+                    </div>
+                    <div style={{ display:'flex', gap:'8px', width: isMob ? '100%' : 'auto' }}>
+                      <button onClick={() => { setBulkSelected(new Set()); setBulkProjectId('') }} disabled={bulkSaving}
+                        style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#64748b', flex: isMob ? 1 : 'none' }}>
+                        Nullstill
+                      </button>
+                      <button onClick={handleBulkAdd} disabled={bulkSaving || !bulkProjectId}
+                        style={{ padding:'10px 20px', background: (!bulkProjectId || bulkSaving) ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: (!bulkProjectId || bulkSaving) ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', flex: isMob ? 2 : 'none', whiteSpace:'nowrap' }}>
+                        {bulkSaving ? 'Legger til...' : `Legg til ${bulkSelected.size} sjekklist${bulkSelected.size === 1 ? 'e' : 'er'}`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+              </>
             )}
           </div>
         )}
