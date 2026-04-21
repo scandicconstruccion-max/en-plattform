@@ -16020,7 +16020,7 @@ function RessursGanttGrid({
 
 // ── MobilRessursView — feltmodus for håndverkere ──
 // Erstatter Gantt-grida på mobil (<768px). Bruker kortbasert layout gruppert per uke per dag.
-function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenMilestone, getProjectColor, holidays, user }) {
+function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenPlanning, onOpenMilestone, getProjectColor, holidays, user }) {
   // Start av inneværende måned
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date()
@@ -16279,8 +16279,8 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                   </div>
                 )}
               </div>
-            ) : isCurrMonth && resourceType === 'ansatte' && onOpenBooking ? (
-              <button onClick={() => onOpenBooking({ date: today })}
+            ) : isCurrMonth && resourceType === 'ansatte' && onOpenPlanning ? (
+              <button onClick={() => onOpenPlanning({ date: today })}
                 style={{ padding:'12px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:'pointer', minHeight:'44px', display:'inline-flex', alignItems:'center', gap:'6px' }}>
                 <span>＋</span><span>Opprett første booking</span>
               </button>
@@ -16366,7 +16366,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
               return (
                 <div key={d.date}
                   id={d.isToday ? 'mobil-today-card' : undefined}
-                  onClick={() => onOpenBooking && resourceType === 'ansatte' && onOpenBooking({ date: d.date })}
+                  onClick={() => onOpenPlanning && resourceType === 'ansatte' && onOpenPlanning({ date: d.date })}
                   style={{
                     background: cardBg,
                     border: cardBorder,
@@ -16410,7 +16410,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                       </div>
                     </div>
                     {!hasContent && !d.isPast && resourceType === 'ansatte' && (
-                      <button onClick={e => { e.stopPropagation(); onOpenBooking && onOpenBooking({ date: d.date }) }}
+                      <button onClick={e => { e.stopPropagation(); onOpenPlanning && onOpenPlanning({ date: d.date }) }}
                         style={{ padding:'6px 12px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', flexShrink:0, minHeight:'36px', display:'flex', alignItems:'center', gap:'4px' }}>
                         <span>＋</span>
                         <span>Book</span>
@@ -17783,6 +17783,7 @@ function RessursPage() {
           filterEmployee={filterEmployee}
           filterProject={filterProject}
           onOpenBooking={(data) => setShowBookingModal(data)}
+          onOpenPlanning={(data) => setShowOppgaveModal(data || true)}
           onOpenMilestone={(ms) => setShowNewMilestone({ edit: ms })}
           getProjectColor={getProjectColor}
           holidays={ALL_HOLIDAYS}
@@ -18191,6 +18192,7 @@ function RessursPage() {
           employees={employees} machines={machines} projects={projects}
           allSkills={allSkills} plans={plans} dates={dates}
           user={user}
+          initialFromDate={typeof showOppgaveModal === 'object' && showOppgaveModal?.date ? showOppgaveModal.date : undefined}
           onClose={()=>setShowOppgaveModal(false)}
           onSaved={()=>{ setShowOppgaveModal(false); load() }}
           defaultStartTime={settings.workdayStart}
@@ -19988,12 +19990,15 @@ function LedigMaskinerModal({ machines, plans, projects, onClose, onOpenBooking 
   )
 }
 
-function OppgavePlanleggingModal({ employees, machines, projects, allSkills, plans, dates, user, onClose, onSaved, workdayStart='07:00', workdayEnd='15:30' }) {
+function OppgavePlanleggingModal({ employees, machines, projects, allSkills, plans, dates, user, onClose, onSaved, workdayStart='07:00', workdayEnd='15:30', initialFromDate }) {
   const appAlert = useAppAlert()
   const [step, setStep] = useState(1)
   const [projectId, setProjectId] = useState('')
-  const [fromDate, setFromDate] = useState(new Date().toISOString().split('T')[0])
-  const [toDate, setToDate] = useState(new Date().toISOString().split('T')[0])
+  // Default-dato: bruker lokaltids-basert dato (unngår UTC-skjev fra toISOString)
+  const fmtLocalToday = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
+  const startDate = initialFromDate || fmtLocalToday()
+  const [fromDate, setFromDate] = useState(startDate)
+  const [toDate, setToDate] = useState(startDate)
   const calcDefaultHours = () => { try { const [sh,sm]=workdayStart.split(':').map(Number); const [eh,em]=workdayEnd.split(':').map(Number); return Math.round(((eh*60+em)-(sh*60+sm))/60*10)/10 } catch(e) { return 8 } }
   const [hours, setHours] = useState(calcDefaultHours())
   const [filterSkills, setFilterSkills] = useState([])
