@@ -4425,6 +4425,7 @@ function TemplateEditorModal({ template, onSave, onClose, saving }) {
 }
 
 function SjekklisteDetaljerPage({ checklistId, onBack }) {
+  const { user, displayName } = useAuth()
   const [checklist, setChecklist] = useState(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -4515,7 +4516,12 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
           const tLines = doc.splitTextToSize(item.title || '', cw - 16)
           let cardH = 10 + tLines.length * 4.5 + 10 // tittel + statusknapper
           if (hasComment) { const cL = doc.splitTextToSize(item.comment, cw - 20); cardH += cL.length * 3.5 + 4 }
-          if (hasImages) cardH += 6
+          // Kvitterings-info (hvis punktet er utført)
+          const hasCompletion = !!(item.completed_by_name && item.completed_at)
+          if (hasCompletion) cardH += 4
+          // Bilder + opplaster-info per bilde
+          const imagesWithUploader = hasImages ? item.images.filter(img => img.uploaded_by_name) : []
+          if (hasImages) cardH += 4 + imagesWithUploader.length * 3.5
           cardH += 4
 
           checkSpace(cardH + 4)
@@ -4572,11 +4578,28 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
           })
           cy += 7
 
-          // ── Bilde-info ──
+          // ── Kvittering: hvem kvitterte ut punktet + når ──
+          if (hasCompletion) {
+            setC(hex('#64748b')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+            const stamp = new Date(item.completed_at).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            doc.text(`Kvittert av ${item.completed_by_name} · ${stamp}`, ml + 6, cy)
+            cy += 4
+          }
+
+          // ── Bilde-info (inkl. opplaster) ──
           if (hasImages) {
-            setC(hex('#475569')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-            doc.text(`+ Bilde (${item.images.length})`, ml + 6, cy)
-            cy += 5
+            setC(hex('#475569')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+            doc.text(`Bilder (${item.images.length}):`, ml + 6, cy)
+            cy += 4
+            setC(hex('#94a3b8')); doc.setFont('helvetica', 'normal')
+            item.images.forEach(img => {
+              if (img.uploaded_by_name) {
+                const imgStamp = img.date ? new Date(img.date).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+                const line = imgStamp ? `  • ${img.uploaded_by_name} · ${imgStamp}` : `  • ${img.uploaded_by_name}`
+                doc.text(line, ml + 6, cy)
+                cy += 3.5
+              }
+            })
           }
 
           // ── Kommentar ──
@@ -4682,7 +4705,19 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
     const current = newItems[index]
     // Toggle: klikk på samme status → nullstill
     const newStatus = current.status === status ? null : status
-    newItems[index] = { ...current, status: newStatus, checked: newStatus === 'ok' }
+    // Hvem + når kvitterte ut punktet. Fjernes ved nullstilling (toggle av).
+    const completionMeta = newStatus
+      ? {
+          completed_by: user?.id || null,
+          completed_by_name: displayName || null,
+          completed_at: new Date().toISOString(),
+        }
+      : {
+          completed_by: null,
+          completed_by_name: null,
+          completed_at: null,
+        }
+    newItems[index] = { ...current, status: newStatus, checked: newStatus === 'ok', ...completionMeta }
     const allResolved = newItems.every(i => i.status === 'ok' || i.status === 'ikke_relevant')
     const anyStarted = newItems.some(i => i.status)
     const newChecklistStatus = allResolved ? 'fullfort' : anyStarted ? 'påbegynt' : 'ikke_startet'
@@ -4713,7 +4748,14 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
       }
       const newItems = [...items]
       const images = newItems[index].images || []
-      newItems[index] = { ...newItems[index], images: [...images, { url: imgUrl, path, name: file.name, date: new Date().toISOString() }] }
+      newItems[index] = { ...newItems[index], images: [...images, {
+        url: imgUrl,
+        path,
+        name: file.name,
+        date: new Date().toISOString(),
+        uploaded_by: user?.id || null,
+        uploaded_by_name: displayName || null,
+      }] }
       setChecklist(c => ({ ...c, items: newItems }))
       await supabase.from('checklists').update({ items: newItems }).eq('id', checklistId)
     } catch(e) { alert('Feil ved bildeopplasting: ' + e.message) }
@@ -4817,6 +4859,14 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
                     })}
                   </div>
 
+                  {/* Kvittering: hvem + når */}
+                  {item.completed_by_name && item.completed_at && (
+                    <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', display: 'flex', alignItems: 'flex-start', gap: '4px', flexWrap: 'wrap', lineHeight: 1.4 }}>
+                      <span style={{ flexShrink: 0 }}>✓</span>
+                      <span style={{ wordBreak: 'break-word' }}>Kvittert av <strong style={{ color: '#374151' }}>{item.completed_by_name}</strong> · {new Date(item.completed_at).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  )}
+
                   {/* Bilde-knapper + eksisterende bilder */}
                   <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '8px' }}>
                     <label style={{ padding: '5px 12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#475569', display: 'flex', alignItems: 'center', gap: '5px' }}>
@@ -4835,12 +4885,26 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
                   {/* Bilde-miniatyrer */}
                   {item.images?.length > 0 && (
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
-                      {item.images.map((img, imgI) => (
-                        <div key={imgI} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                          <img src={img.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(img.url, '_blank')} />
-                          <button onClick={() => removeItemImage(item.idx, imgI)}
-                            style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-                        </div>
+                      {item.images.map((img, imgI) => {
+                        const uploadedInfo = img.uploaded_by_name && img.date
+                          ? `Lastet opp av ${img.uploaded_by_name} · ${new Date(img.date).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                          : (img.name || 'Bilde')
+                        return (
+                          <div key={imgI} title={uploadedInfo} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
+                            <img src={img.url} alt={uploadedInfo} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(img.url, '_blank')} />
+                            <button onClick={() => removeItemImage(item.idx, imgI)}
+                              style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Liste over opplastede bilder med opplaster-info */}
+                  {item.images?.length > 0 && item.images.some(img => img.uploaded_by_name) && (
+                    <div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '8px', display: 'flex', flexDirection: 'column', gap: '2px', lineHeight: 1.4 }}>
+                      {item.images.filter(img => img.uploaded_by_name).map((img, i) => (
+                        <div key={i} style={{ wordBreak: 'break-word' }}>📷 <strong style={{ color: '#64748b' }}>{img.uploaded_by_name}</strong> · {new Date(img.date).toLocaleString('nb-NO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
                       ))}
                     </div>
                   )}
