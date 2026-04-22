@@ -5367,6 +5367,10 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         status: 'Åpen',
         images: imageUrls,
         created_by: user?.id,
+        has_cost_impact: !!form.has_cost_impact,
+        cost_impact_amount: form.has_cost_impact && form.cost_impact_amount ? parseFloat(form.cost_impact_amount) : null,
+        has_time_impact: !!form.has_time_impact,
+        time_impact_days: form.has_time_impact && form.time_impact_days ? parseInt(form.time_impact_days, 10) : null,
       })
       if (error) throw error
 
@@ -5822,8 +5826,8 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
           </div>
           <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0 }}>
             <button onClick={exportAvvikPDF} disabled={exporting}
-              style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500', color: exporting ? '#94a3b8' : '#374151' }}>
-              {exporting ? '⏳' : '📄'}
+              style={{ padding: isMobD ? '7px 10px' : '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '14px', fontWeight: '600', color: exporting ? '#94a3b8' : '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              {exporting ? '⏳ Genererer...' : '📄 PDF'}
             </button>
             <button onClick={() => setShowEdit(true)} style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobD ? '7px 10px' : '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: isMobD ? '12px' : '13px' }}>🗑️</button>
@@ -5979,6 +5983,10 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
     project_id: dev.project_id || '',
     assigned_to: dev.assigned_to_name || '',
     status: dev.status || 'Åpen',
+    has_cost_impact: !!dev.has_cost_impact,
+    cost_impact_amount: dev.cost_impact_amount || '',
+    has_time_impact: !!dev.has_time_impact,
+    time_impact_days: dev.time_impact_days || '',
   })
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -6049,6 +6057,35 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
           <div>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Beskrivelse</label>
             <textarea value={form.description} onChange={e => set('description', e.target.value)} rows={4} style={{ ...inp, resize: 'none' }} />
+          </div>
+
+          {/* Konsekvenser: pris og tid */}
+          <div style={{ background:'#f8fafc', borderRadius:'12px', border:'1px solid #e2e8f0', padding:'14px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Konsekvenser</div>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: form.has_cost_impact ? '8px' : '10px' }}>
+              <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'500', color:'#374151', flexShrink:0 }}>
+                <input type="checkbox" checked={!!form.has_cost_impact} onChange={e => set('has_cost_impact', e.target.checked)} style={{ accentColor:'#059669', width:'16px', height:'16px', cursor:'pointer' }} />
+                <span>Medfører priskonsekvens</span>
+              </label>
+            </div>
+            {form.has_cost_impact && (
+              <div style={{ marginBottom:'12px', paddingLeft:'26px' }}>
+                <label style={{ display:'block', fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>Estimert beløp (kr) — valgfritt</label>
+                <input type="number" value={form.cost_impact_amount || ''} onChange={e => set('cost_impact_amount', e.target.value)} placeholder="0" style={{ ...inp, maxWidth:'220px' }} />
+              </div>
+            )}
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: form.has_time_impact ? '8px' : 0 }}>
+              <label style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', fontSize:'13px', fontWeight:'500', color:'#374151', flexShrink:0 }}>
+                <input type="checkbox" checked={!!form.has_time_impact} onChange={e => set('has_time_impact', e.target.checked)} style={{ accentColor:'#059669', width:'16px', height:'16px', cursor:'pointer' }} />
+                <span>Medfører tidforlengelse</span>
+              </label>
+            </div>
+            {form.has_time_impact && (
+              <div style={{ paddingLeft:'26px' }}>
+                <label style={{ display:'block', fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>Antall dager — valgfritt</label>
+                <input type="number" value={form.time_impact_days || ''} onChange={e => set('time_impact_days', e.target.value)} placeholder="0" style={{ ...inp, maxWidth:'220px' }} />
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingTop: '4px' }}>
             <button type="button" onClick={onClose} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
