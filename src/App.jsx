@@ -5687,28 +5687,32 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
         y += 6
 
         setF(hex('#fffbeb')); setD(hex('#fde68a'))
-        const boxH = 14 + (dev.has_cost_impact && dev.has_time_impact ? 6 : 0)
+        const lineCount = (dev.has_cost_impact ? 1 : 0) + (dev.has_time_impact ? 1 : 0)
+        const boxH = 6 + lineCount * 6 + 2
         doc.roundedRect(ml, y, cw, boxH, 2.5, 2.5, 'FD')
 
-        let ly = y + 5
+        const labelX = ml + 6
+        const valueX = ml + 55  // Fast kolonne for verdi-justering
+
+        let ly = y + 7
         if (dev.has_cost_impact) {
           setC(hex('#92400e')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-          doc.text('💰 Priskonsekvens:', ml + 6, ly)
+          doc.text('Priskonsekvens:', labelX, ly)
           setC(hex('#0f172a')); doc.setFont('helvetica', 'normal')
           const amt = dev.cost_impact_amount
             ? `${Math.round(parseFloat(dev.cost_impact_amount)).toLocaleString('nb-NO')} kr`
             : 'Ja (beløp ikke spesifisert)'
-          doc.text(amt, ml + 6 + doc.getTextWidth('💰 Priskonsekvens:  '), ly)
-          ly += 5
+          doc.text(amt, valueX, ly)
+          ly += 6
         }
         if (dev.has_time_impact) {
           setC(hex('#92400e')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-          doc.text('⏱ Tidforlengelse:', ml + 6, ly)
+          doc.text('Tidforlengelse:', labelX, ly)
           setC(hex('#0f172a')); doc.setFont('helvetica', 'normal')
           const days = dev.time_impact_days
             ? `${dev.time_impact_days} dag${parseInt(dev.time_impact_days) === 1 ? '' : 'er'}`
             : 'Ja (antall dager ikke spesifisert)'
-          doc.text(days, ml + 6 + doc.getTextWidth('⏱ Tidforlengelse:  '), ly)
+          doc.text(days, valueX, ly)
         }
         y += boxH + 6
       }
