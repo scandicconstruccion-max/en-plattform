@@ -5356,6 +5356,10 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         if (!error) imageUrls.push(path)
       }
       const projName = projects.find(p => p.id === form.project_id)?.name || ''
+      const now = new Date().toISOString()
+      const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
+      const initialLog = [{ at: now, by: user?.id || null, by_name: userName, action: 'Avvik opprettet', meta: {} }]
+
       const { error } = await supabase.from('deviations').insert({
         title: form.title.trim(),
         description: form.description,
@@ -5371,6 +5375,8 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         cost_impact_amount: form.has_cost_impact && form.cost_impact_amount ? parseFloat(form.cost_impact_amount) : null,
         has_time_impact: !!form.has_time_impact,
         time_impact_days: form.has_time_impact && form.time_impact_days ? parseInt(form.time_impact_days, 10) : null,
+        activity_log: initialLog,
+        sent_to: [],
       })
       if (error) throw error
 
@@ -5546,6 +5552,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const [showClose, setShowClose] = useState(false)
   const [closeComment, setCloseComment] = useState('')
   const [showEdit, setShowEdit] = useState(false)
+  const [showSend, setShowSend] = useState(false)
   const [saving, setSaving] = useState(false)
   const [imageUrls, setImageUrls] = useState([])
   const [lightbox, setLightbox] = useState(null)
@@ -5569,8 +5576,19 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const updateStatus = async (newStatus) => {
     setSaving(true)
     try {
-      const updates = { status: newStatus, updated_at: new Date().toISOString() }
-      if (newStatus === 'Lukket') { updates.closed_at = new Date().toISOString(); updates.close_comment = closeComment }
+      const now = new Date().toISOString()
+      const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
+      const existingLog = Array.isArray(dev.activity_log) ? dev.activity_log : []
+      const logEntry = newStatus === 'Lukket'
+        ? { at: now, by: user?.id || null, by_name: userName, action: 'Avvik lukket', meta: { close_comment: closeComment || null } }
+        : { at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} → ${newStatus}`, meta: { from: dev.status, to: newStatus } }
+
+      const updates = {
+        status: newStatus,
+        updated_at: now,
+        activity_log: [...existingLog, logEntry],
+      }
+      if (newStatus === 'Lukket') { updates.closed_at = now; updates.close_comment = closeComment }
       const { data, error } = await supabase.from('deviations').update(updates).eq('id', dev.id).select().single()
       if (error) throw error
       setDev(data)
@@ -5782,6 +5800,65 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
         }
       }
 
+      // ── Aktivitetslogg ──
+      if (Array.isArray(dev.activity_log) && dev.activity_log.length > 0) {
+        checkSpace(24)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text(`Aktivitetslogg (${dev.activity_log.length})`, ml, y)
+        y += 7
+
+        // Kronologisk visning (nyeste øverst)
+        const logEntries = [...dev.activity_log].reverse()
+        for (let i = 0; i < logEntries.length; i++) {
+          const log = logEntries[i]
+          checkSpace(12)
+          // Liten prikk
+          setF(hex(i === 0 ? '#059669' : '#cbd5e1'))
+          doc.circle(ml + 1.5, y + 1.5, 1, 'F')
+          // Handlingstekst
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          const actionLines = doc.splitTextToSize(log.action || '—', cw - 8)
+          doc.text(actionLines, ml + 6, y + 2)
+          y += actionLines.length * 4
+          // Meta-info (dato + bruker)
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+          const meta = [
+            log.by_name || '—',
+            log.at ? new Date(log.at).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—',
+          ].join('  ·  ')
+          doc.text(meta, ml + 6, y + 1.5)
+          y += 6
+          // Lukkingskommentar hvis til stede
+          if (log.meta?.close_comment) {
+            setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'italic')
+            const cmtLines = doc.splitTextToSize(`"${log.meta.close_comment}"`, cw - 10)
+            doc.text(cmtLines, ml + 6, y)
+            y += cmtLines.length * 3.5 + 2
+          }
+        }
+        y += 4
+      }
+
+      // ── Sendt til ──
+      if (Array.isArray(dev.sent_to) && dev.sent_to.length > 0) {
+        checkSpace(16)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text(`Sendt til (${dev.sent_to.length})`, ml, y)
+        y += 6
+        for (const r of dev.sent_to) {
+          checkSpace(8)
+          const typeLabel = { intern: 'Internt', ue: 'UE', byggherre: 'Byggherre' }[r.type] || r.type || '—'
+          setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          const line = `${typeLabel}: ${r.name || r.email}`
+          doc.text(line, ml + 2, y)
+          setC(hex('#94a3b8')); doc.setFontSize(7)
+          const stamp = r.sent_at ? new Date(r.sent_at).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
+          doc.text(`${r.email}${stamp ? '  ·  ' + stamp : ''}`, ml + 2, y + 3.5)
+          y += 9
+        }
+        y += 4
+      }
+
       // ── Alvorlighets-stripe nederst på alle sider + merking ──
       const pageCount = doc.internal.getNumberOfPages()
       for (let i = 1; i <= pageCount; i++) {
@@ -5829,6 +5906,10 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0 }}>
+            <button onClick={() => setShowSend(true)}
+              style={{ padding: isMobD ? '7px 10px' : '9px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600' }}>
+              {isMobD ? '📧' : '📧 Send'}
+            </button>
             <button onClick={exportAvvikPDF} disabled={exporting}
               style={{ padding: isMobD ? '7px 10px' : '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '14px', fontWeight: '600', color: exporting ? '#94a3b8' : '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
               {exporting ? '⏳ Genererer...' : '📄 PDF'}
@@ -5871,6 +5952,56 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
               <h3 style={{ margin: '0 0 8px', fontSize: '14px', fontWeight: '600', color: '#16a34a' }}>✅ Lukket avvik</h3>
               <p style={{ margin: '0 0 6px', color: '#166534', fontSize: '14px', lineHeight: 1.6 }}>{dev.close_comment}</p>
               {dev.closed_at && <p style={{ margin: 0, fontSize: '12px', color: '#4ade80' }}>Lukket: {new Date(dev.closed_at).toLocaleDateString('nb-NO')}</p>}
+            </div>
+          )}
+
+          {/* Aktivitetslogg */}
+          {Array.isArray(dev.activity_log) && dev.activity_log.length > 0 && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>📋 Aktivitetslogg ({dev.activity_log.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {[...dev.activity_log].reverse().map((log, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', padding: '10px 0', borderBottom: i < dev.activity_log.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: i === 0 ? '#059669' : '#cbd5e1', marginTop: '8px', flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', color: '#0f172a', fontWeight: '500', lineHeight: 1.4, wordBreak: 'break-word' }}>{log.action}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                        <span>{log.by_name || '—'}</span>
+                        <span>·</span>
+                        <span>{log.at ? new Date(log.at).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}</span>
+                      </div>
+                      {log.meta?.close_comment && (
+                        <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px', padding: '6px 10px', background: '#f8fafc', borderRadius: '6px', fontStyle: 'italic' }}>
+                          "{log.meta.close_comment}"
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Sendt til (sammendrag) */}
+          {Array.isArray(dev.sent_to) && dev.sent_to.length > 0 && (
+            <div style={card}>
+              <h3 style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>📧 Sendt til ({dev.sent_to.length})</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {dev.sent_to.map((r, i) => {
+                  const typeLabel = { intern: 'Internt', ue: 'UE', byggherre: 'Byggherre' }[r.type] || r.type
+                  const typeBg = { intern: '#eff6ff', ue: '#fdf4ff', byggherre: '#fff7ed' }[r.type] || '#f8fafc'
+                  const typeColor = { intern: '#1e40af', ue: '#86198f', byggherre: '#9a3412' }[r.type] || '#475569'
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: '#f8fafc', borderRadius: '8px', flexWrap: 'wrap' }}>
+                      <span style={{ background: typeBg, color: typeColor, padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: '700', flexShrink: 0 }}>{typeLabel}</span>
+                      <div style={{ flex: 1, minWidth: 0, wordBreak: 'break-word' }}>
+                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{r.name || r.email}</div>
+                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{r.email} · {r.sent_at ? new Date(r.sent_at).toLocaleString('nb-NO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}</div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
           )}
         </div>
@@ -5974,6 +6105,21 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
           }}
         />
       )}
+
+      {/* Send avvik modal */}
+      {showSend && (
+        <SendAvvikModal
+          dev={dev}
+          project={proj}
+          user={user}
+          onClose={() => setShowSend(false)}
+          onSent={async () => {
+            setShowSend(false)
+            const { data } = await supabase.from('deviations').select('*').eq('id', dev.id).single()
+            if (data) setDev(data)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -6001,7 +6147,32 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
     setSaving(true)
     try {
       const { assigned_to, ...rest } = form
-      const { error } = await supabase.from('deviations').update({ ...rest, assigned_to_name: assigned_to || null, updated_at: new Date().toISOString() }).eq('id', dev.id)
+      // Logg endringer: bygg aktivitetslogg-oppføringer basert på hva som faktisk er endret
+      const now = new Date().toISOString()
+      const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
+      const existingLog = Array.isArray(dev.activity_log) ? dev.activity_log : []
+      const newLogEntries = []
+
+      if (dev.status !== form.status) {
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} → ${form.status}`, meta: { from: dev.status, to: form.status } })
+      }
+      if (dev.severity !== form.severity) {
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Alvorlighet endret: ${dev.severity || '—'} → ${form.severity}`, meta: { from: dev.severity, to: form.severity } })
+      }
+      if ((dev.assigned_to_name || '') !== (assigned_to || '')) {
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Ansvarlig endret: ${dev.assigned_to_name || '—'} → ${assigned_to || '—'}`, meta: {} })
+      }
+      // Hvis ingen av de store feltene er endret men lagring skjer likevel, legg inn en generisk "Redigert"
+      if (newLogEntries.length === 0) {
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: 'Avvik redigert', meta: {} })
+      }
+
+      const { error } = await supabase.from('deviations').update({
+        ...rest,
+        assigned_to_name: assigned_to || null,
+        activity_log: [...existingLog, ...newLogEntries],
+        updated_at: now,
+      }).eq('id', dev.id)
       if (error) throw error
       onSaved()
     } catch (e) { alert('Feil: ' + e.message) }
@@ -6098,6 +6269,198 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── SEND AVVIK MODAL ─────────────────────────────────────────────────────────
+function SendAvvikModal({ dev, project, onClose, onSent, user }) {
+  const appAlert = useAppAlert()
+  const [recipientType, setRecipientType] = useState('intern') // 'intern' | 'ue' | 'byggherre'
+  const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
+  const [customMessage, setCustomMessage] = useState('')
+  const [sending, setSending] = useState(false)
+
+  // Forslagslister basert på mottakertype
+  const [employees, setEmployees] = useState([])
+  const [suggestions, setSuggestions] = useState([]) // {name, email} objekter
+
+  useEffect(() => {
+    supabase.from('employees').select('first_name, last_name, email').then(({ data }) => {
+      setEmployees((data || []).filter(e => e.email))
+    })
+  }, [])
+
+  // Oppdater forslag når mottakertype endres
+  useEffect(() => {
+    if (recipientType === 'intern') {
+      setSuggestions(employees.map(e => ({
+        name: `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email,
+        email: e.email,
+      })))
+    } else if (recipientType === 'ue') {
+      const ues = (project?.subcontractors || []).filter(s => s.email)
+      setSuggestions(ues.map(u => ({ name: u.name || u.company || u.email, email: u.email })))
+    } else if (recipientType === 'byggherre') {
+      const bhList = []
+      if (project?.customer_email) {
+        bhList.push({ name: project.customer_name || project.customer_email, email: project.customer_email })
+      }
+      if (project?.project_manager_email) {
+        bhList.push({ name: project.project_manager_name || project.project_manager_email, email: project.project_manager_email })
+      }
+      setSuggestions(bhList)
+    }
+  }, [recipientType, employees, project])
+
+  const selectSuggestion = (s) => {
+    setName(s.name)
+    setEmail(s.email)
+  }
+
+  const recipientLabel = {
+    intern: 'Internt (ansatte i bedriften)',
+    ue: 'Underentreprenør',
+    byggherre: 'Byggherre / oppdragsgiver',
+  }
+
+  const handleSend = async () => {
+    if (!email || !email.includes('@')) return appAlert({ message: 'Ugyldig e-postadresse', kind: 'error' })
+    setSending(true)
+    try {
+      const sevColor = { 'Lav':'#059669','Medium':'#d97706','Høy':'#dc2626','Kritisk':'#991b1b' }[dev.severity] || '#64748b'
+      const sevBg    = { 'Lav':'#ecfdf5','Medium':'#fffbeb','Høy':'#fef2f2','Kritisk':'#fef2f2' }[dev.severity] || '#f8fafc'
+
+      // Bygg HTML-e-post
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;color:#0f172a">' +
+        '<h1 style="color:#0f172a;font-size:22px;margin:0 0 4px">Avviksrapport</h1>' +
+        '<p style="color:#64748b;font-size:13px;margin:0 0 24px">Sendt fra En Plattform</p>' +
+        (customMessage ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:20px"><div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:4px">MELDING</div><div style="color:#1e3a8a;font-size:14px;white-space:pre-wrap">' + customMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' : '') +
+        '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>' +
+          '<div style="font-weight:700;font-size:15px">' + (project?.name || '—') + '</div>' +
+          (dev.location ? '<div style="font-size:13px;color:#64748b;margin-top:4px">Sted: ' + dev.location + '</div>' : '') +
+        '</div>' +
+        '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:16px;border-left:4px solid ' + sevColor + ';border:1px solid #e2e8f0">' +
+          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+            '<span style="background:' + sevBg + ';color:' + sevColor + ';padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">' + (dev.severity || 'Medium') + '</span>' +
+            '<span style="background:#f1f5f9;color:#475569;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600">' + (dev.status || 'Åpen') + '</span>' +
+          '</div>' +
+          '<div style="font-weight:700;font-size:16px;margin-bottom:10px">' + (dev.title || '') + '</div>' +
+          (dev.description ? '<div style="font-size:14px;color:#374151;line-height:1.5;white-space:pre-wrap">' + (dev.description || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
+        '</div>' +
+        (dev.has_cost_impact || dev.has_time_impact
+          ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:16px">' +
+            '<div style="font-size:12px;color:#92400e;font-weight:700;margin-bottom:8px">KONSEKVENSER</div>' +
+            (dev.has_cost_impact ? '<div style="font-size:14px;color:#374151;margin-bottom:4px"><strong>Priskonsekvens:</strong> ' + (dev.cost_impact_amount ? Math.round(parseFloat(dev.cost_impact_amount)).toLocaleString('nb-NO') + ' kr' : 'Ja (beløp ikke spesifisert)') + '</div>' : '') +
+            (dev.has_time_impact ? '<div style="font-size:14px;color:#374151"><strong>Tidforlengelse:</strong> ' + (dev.time_impact_days ? dev.time_impact_days + ' dag' + (parseInt(dev.time_impact_days) === 1 ? '' : 'er') : 'Ja (antall dager ikke spesifisert)') + '</div>' : '') +
+          '</div>'
+          : '') +
+        '<p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9">Avviket er sendt via En Plattform</p>' +
+      '</div>'
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: email, subject: `Avvik: ${dev.title} (${dev.severity || 'Medium'})`, html })
+      })
+      if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
+
+      // Oppdater avviket med sent_to + activity_log
+      const now = new Date().toISOString()
+      const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
+      const newSent = { type: recipientType, email, name, sent_at: now, sent_by_name: userName }
+      const logEntry = {
+        at: now, by: user?.id || null, by_name: userName,
+        action: `Sendt til ${recipientLabel[recipientType].toLowerCase()}: ${name || email}`,
+        meta: { recipient_type: recipientType, email, name },
+      }
+      const existingSent = Array.isArray(dev.sent_to) ? dev.sent_to : []
+      const existingLog = Array.isArray(dev.activity_log) ? dev.activity_log : []
+
+      const { error } = await supabase.from('deviations').update({
+        sent_to: [...existingSent, newSent],
+        activity_log: [...existingLog, logEntry],
+        updated_at: now,
+      }).eq('id', dev.id)
+      if (error) throw error
+
+      await appAlert({ message: 'Avvik sendt', subMessage: `Sendt til ${email}`, kind: 'success' })
+      onSent()
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke sende avvik', subMessage: e.message, kind: 'error' })
+    } finally { setSending(false) }
+  }
+
+  const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send avvik</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Mottakertype</label>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'6px' }}>
+              {[['intern','Internt'],['ue','UE'],['byggherre','Byggherre']].map(([v, lbl]) => (
+                <button key={v} type="button" onClick={() => setRecipientType(v)}
+                  style={{ padding:'9px 6px', borderRadius:'10px', border: `2px solid ${recipientType === v ? '#059669' : '#e2e8f0'}`, background: recipientType === v ? '#f0fdf4' : 'white', color: recipientType === v ? '#059669' : '#64748b', fontWeight: recipientType === v ? '700' : '500', fontSize:'13px', cursor:'pointer' }}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {suggestions.length > 0 && (
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>Velg fra listen — eller fyll ut manuelt under</label>
+              <div style={{ display:'flex', flexDirection:'column', gap:'5px', maxHeight:'140px', overflowY:'auto', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'6px' }}>
+                {suggestions.map((s, i) => (
+                  <button key={i} type="button" onClick={() => selectSuggestion(s)}
+                    style={{ textAlign:'left', padding:'7px 10px', border:'none', borderRadius:'6px', background: email === s.email ? '#ecfdf5' : 'transparent', cursor:'pointer', fontSize:'13px', color:'#0f172a' }}>
+                    <div style={{ fontWeight:'600' }}>{s.name}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.email}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Navn</label>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="Ola Nordmann" style={inp} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-post *</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="ola@eksempel.no" style={inp} required />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Melding (valgfri)</label>
+            <textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} rows={3} placeholder="Legg til en melding til mottakeren..." style={{ ...inp, resize:'none', fontFamily:'system-ui, sans-serif' }} />
+          </div>
+
+          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px' }}>
+            <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER FÅR</div>
+            <div style={{ fontSize:'13px', color:'#374151' }}>E-post med avviksrapport: tittel, beskrivelse, alvorlighet, konsekvenser og prosjektinfo.</div>
+          </div>
+        </div>
+
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end', flexShrink:0 }}>
+          <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="button" onClick={handleSend} disabled={sending || !email} style={{ padding:'10px 20px', background: sending || !email ? '#86efac' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending || !email ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+            {sending ? 'Sender...' : '📧 Send'}
+          </button>
+        </div>
       </div>
     </div>
   )
