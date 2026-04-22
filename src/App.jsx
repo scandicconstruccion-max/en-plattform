@@ -2203,6 +2203,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
   const [checklists, setChecklists] = useState([])
+  const [checklistTemplates, setChecklistTemplates] = useState([])
+  const [checklistSortBy, setChecklistSortBy] = useState('newest') // 'newest' | 'oldest' | 'alpha' | 'category'
   const [endringsmeldinger, setEndringsmeldinger] = useState([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
@@ -2215,16 +2217,18 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
   const load = async () => {
     try {
-      const [proj, allProj, clRes, emRes] = await Promise.all([
+      const [proj, allProj, clRes, emRes, tmplRes] = await Promise.all([
         db.getProject(projectId),
         db.getProjects(),
         supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('endringsmeldinger').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
+        supabase.from('checklist_templates').select('id, category').then(r => r.data || []),
       ])
       setProject(proj)
       setAllProjects(allProj)
       setChecklists(clRes.data || [])
       setEndringsmeldinger(emRes.data || [])
+      setChecklistTemplates(tmplRes)
     } catch(e){console.error(e)} finally { setLoading(false) }
   }
   useEffect(() => { load() }, [projectId])
@@ -2369,18 +2373,55 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
           {/* Sjekklister tilknyttet prosjektet */}
           <div style={card}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', gap:'10px', flexWrap:'wrap' }}>
               <h3 style={{ margin:0, fontSize: isMobH ? '14px' : '15px', fontWeight:'600', color:'#0f172a' }}>✅ Sjekklister ({checklists.length})</h3>
-              {onNavigateChecklist && (
-                <button onClick={() => onNavigateChecklist('new', projectId)}
-                  style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding: isMobH ? '6px 10px' : '6px 14px', fontSize: isMobH ? '11px' : '12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>{isMobH ? '+ Ny' : '+ Ny sjekkliste'}</button>
-              )}
+              <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+                {checklists.length > 1 && (
+                  <select value={checklistSortBy} onChange={e => setChecklistSortBy(e.target.value)} title="Sortering"
+                    style={{ padding: isMobH ? '6px 8px' : '6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize: isMobH ? '11px' : '12px', background:'white', cursor:'pointer', color:'#475569', fontFamily:'system-ui, sans-serif' }}>
+                    <option value="newest">🆕 Nyeste først</option>
+                    <option value="oldest">📅 Eldste først</option>
+                    <option value="alpha">🔤 Alfabetisk</option>
+                    <option value="category">📂 Etter fag</option>
+                  </select>
+                )}
+                {onNavigateChecklist && (
+                  <button onClick={() => onNavigateChecklist('new', projectId)}
+                    style={{ background:'#ecfdf5', color:'#059669', border:'none', borderRadius:'8px', padding: isMobH ? '6px 10px' : '6px 14px', fontSize: isMobH ? '11px' : '12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>{isMobH ? '+ Ny' : '+ Ny sjekkliste'}</button>
+                )}
+              </div>
             </div>
             {checklists.length === 0 ? (
               <p style={{ color:'#94a3b8', fontSize:'13px', margin:0, textAlign:'center', padding:'16px 0' }}>Ingen sjekklister opprettet for dette prosjektet</p>
             ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {checklists.map(cl => {
+                {(() => {
+                  // Sortér etter valgt kriterium
+                  const tmplCatMap = {}
+                  checklistTemplates.forEach(t => { if (t.id) tmplCatMap[t.id] = t.category || 'annet' })
+                  const sortedList = [...checklists]
+                  switch (checklistSortBy) {
+                    case 'alpha':
+                      sortedList.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'nb')); break
+                    case 'oldest':
+                      sortedList.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)); break
+                    case 'category': {
+                      sortedList.sort((a, b) => {
+                        const catA = tmplCatMap[a.template_id] || 'annet'
+                        const catB = tmplCatMap[b.template_id] || 'annet'
+                        const labelA = (CATEGORY_LABELS[catA]?.label || catA).toLowerCase()
+                        const labelB = (CATEGORY_LABELS[catB]?.label || catB).toLowerCase()
+                        if (labelA !== labelB) return labelA.localeCompare(labelB, 'nb')
+                        return (a.title || '').localeCompare(b.title || '', 'nb')
+                      })
+                      break
+                    }
+                    case 'newest':
+                    default:
+                      sortedList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                  }
+                  return sortedList
+                })().map(cl => {
                   const items = cl.items || []
                   const total = items.length
                   const done = items.filter(i => i.checked).length
@@ -3737,6 +3778,7 @@ function SjekklistePage({ onNavigateDetail }) {
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [sortBy, setSortBy] = useState('newest') // 'newest' | 'oldest' | 'alpha' | 'category'
   const [view, setView] = useState('lister') // 'lister' or 'maler'
   const [showNew, setShowNew] = useState(false)
   const [showNewTemplate, setShowNewTemplate] = useState(false)
@@ -3792,6 +3834,36 @@ function SjekklistePage({ onNavigateDetail }) {
     const mst = statusFilter === 'all' || c.status === statusFilter
     return ms && mp && mst
   })
+
+  // Sortering — returnerer ny sortert kopi (endrer ikke original)
+  const templateCategoryById = React.useMemo(() => {
+    const map = {}
+    templates.forEach(t => { if (t.id) map[t.id] = t.category || 'annet' })
+    return map
+  }, [templates])
+
+  const sorted = React.useMemo(() => {
+    const arr = [...filtered]
+    switch (sortBy) {
+      case 'alpha':
+        return arr.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'nb'))
+      case 'oldest':
+        return arr.sort((a, b) => new Date(a.created_at) - new Date(b.created_at))
+      case 'category':
+        return arr.sort((a, b) => {
+          const catA = templateCategoryById[a.template_id] || 'annet'
+          const catB = templateCategoryById[b.template_id] || 'annet'
+          const labelA = (CATEGORY_LABELS[catA]?.label || catA).toLowerCase()
+          const labelB = (CATEGORY_LABELS[catB]?.label || catB).toLowerCase()
+          if (labelA !== labelB) return labelA.localeCompare(labelB, 'nb')
+          // Sekundær: alfabetisk tittel innen samme fag
+          return (a.title || '').localeCompare(b.title || '', 'nb')
+        })
+      case 'newest':
+      default:
+        return arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    }
+  }, [filtered, sortBy, templateCategoryById])
 
   const getProgress = (c) => {
     const items = c.items || []
@@ -3992,6 +4064,12 @@ function SjekklistePage({ onNavigateDetail }) {
               <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...inp, width: isMob ? '100%' : '160px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
                 {statusOpts2.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} title="Sortering" style={{ ...inp, width: isMob ? '100%' : '170px', background: 'white', flex: isMob ? '1 1 48%' : 'none' }}>
+                <option value="newest">🆕 Nyeste først</option>
+                <option value="oldest">📅 Eldste først</option>
+                <option value="alpha">🔤 Alfabetisk</option>
+                <option value="category">📂 Etter fag</option>
+              </select>
             </div>
 
             {loading ? (
@@ -4005,7 +4083,7 @@ function SjekklistePage({ onNavigateDetail }) {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {filtered.map(c => {
+                {sorted.map(c => {
                   const progress = getProgress(c)
                   const projectName = projects.find(p => p.id === c.project_id)?.name || '–'
                   return (
