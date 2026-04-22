@@ -26878,6 +26878,7 @@ function SuperAdminPage() {
 
 function MinBedriftPage() {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const [tab, setTab] = useState('info')
   const [settings, setSettings] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -26914,8 +26915,8 @@ function MinBedriftPage() {
         if (error) throw error
       }
       invalidateBrandCache() // Sikre at nye PDFer får oppdatert logo/info
-      alert('✅ Bedriftsinformasjon lagret!')
-    } catch(e) { alert('Feil: ' + e.message) }
+      appAlert({ message: 'Bedriftsinformasjon lagret', kind: 'success' })
+    } catch(e) { appAlert({ message: 'Kunne ikke lagre', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -26928,7 +26929,7 @@ function MinBedriftPage() {
       if (upErr) throw upErr
       const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
       setSettings(s => ({ ...s, logo_url: publicUrl }))
-    } catch(e) { alert('Feil ved opplasting: ' + e.message) }
+    } catch(e) { appAlert({ message: 'Kunne ikke laste opp logo', subMessage: e.message, kind: 'error' }) }
     finally { setLogoUploading(false); e.target.value = '' }
   }
 
@@ -26961,7 +26962,7 @@ function MinBedriftPage() {
           }
         } catch(e) { console.error(e) }
       }
-    } catch(e) { alert('Feil: ' + e.message); setActiveModules(activeModules) }
+    } catch(e) { appAlert({ message: 'Kunne ikke oppdatere modul', subMessage: e.message, kind: 'error' }); setActiveModules(activeModules) }
     setConfirmModule(null)
   }
 
