@@ -4498,7 +4498,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         secs[sec].push({ ...item, idx })
       })
 
-      Object.entries(secs).forEach(([secTitle, secItems]) => {
+      for (const [secTitle, secItems] of Object.entries(secs)) {
         checkSpace(16)
         // Seksjonstittel (bold, som i UI)
         setC(hex('#0f172a'))
@@ -4507,10 +4507,12 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
         doc.text(secTitle, ml, y)
         y += 8
 
-        secItems.forEach(item => {
+        for (const item of secItems) {
           const st = item.status || (item.checked ? 'ok' : null)
           const hasComment = !!item.comment
           const hasImages = item.images?.length > 0
+          const imagesToShow = hasImages ? item.images.slice(0, 2) : []  // Maks 2 bilder per punkt
+          const extraImagesCount = hasImages ? Math.max(0, item.images.length - 2) : 0
 
           // Beregn korthøyde
           const tLines = doc.splitTextToSize(item.title || '', cw - 16)
@@ -4519,9 +4521,13 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
           // Kvitterings-info (hvis punktet er utført)
           const hasCompletion = !!(item.completed_by_name && item.completed_at)
           if (hasCompletion) cardH += 4
-          // Bilder + opplaster-info per bilde
-          const imagesWithUploader = hasImages ? item.images.filter(img => img.uploaded_by_name) : []
-          if (hasImages) cardH += 4 + imagesWithUploader.length * 3.5
+          // Bilder: 45mm høyde hvis bilder + 4mm "Bilder:"-label + 3.5mm per metadata-linje + 3mm for "flere bilder"
+          if (hasImages) {
+            cardH += 4 // "Bilder:" label
+            cardH += 48 // selve bildene (45mm + litt marg)
+            cardH += imagesToShow.filter(img => img.uploaded_by_name).length * 3.5
+            if (extraImagesCount > 0) cardH += 4
+          }
           cardH += 4
 
           checkSpace(cardH + 4)
@@ -4586,20 +4592,60 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
             cy += 4
           }
 
-          // ── Bilde-info (inkl. opplaster) ──
+          // ── Bilder (inkl. selve bildene, maks 2 per punkt) ──
           if (hasImages) {
             setC(hex('#475569')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
             doc.text(`Bilder (${item.images.length}):`, ml + 6, cy)
             cy += 4
-            setC(hex('#94a3b8')); doc.setFont('helvetica', 'normal')
-            item.images.forEach(img => {
+
+            // Tegn opp til 2 bilder side om side (45×45mm)
+            const imgSize = 45
+            const imgGap = 5
+            const imgStartX = ml + 6
+            const imgTopY = cy
+            for (let i = 0; i < imagesToShow.length; i++) {
+              const img = imagesToShow[i]
+              const xPos = imgStartX + i * (imgSize + imgGap)
+              try {
+                const resp = await fetch(img.url)
+                const blob = await resp.blob()
+                const base64 = await new Promise(resolve => {
+                  const reader = new FileReader()
+                  reader.onload = () => resolve(reader.result)
+                  reader.readAsDataURL(blob)
+                })
+                // Ramme rundt bildet
+                setD(hex('#e2e8f0')); doc.setLineWidth(0.2)
+                doc.rect(xPos, imgTopY, imgSize, imgSize, 'S')
+                doc.addImage(base64, 'JPEG', xPos + 0.5, imgTopY + 0.5, imgSize - 1, imgSize - 1)
+              } catch (err) {
+                // Fallback: vis placeholder hvis bildet ikke kan lastes
+                setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+                doc.rect(xPos, imgTopY, imgSize, imgSize, 'FD')
+                setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'italic')
+                const txt = doc.splitTextToSize('(bilde kunne ikke lastes)', imgSize - 4)
+                doc.text(txt, xPos + 2, imgTopY + imgSize / 2, { baseline: 'middle' })
+              }
+            }
+            cy = imgTopY + imgSize + 3
+
+            // Opplaster-info per viste bilde
+            setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+            for (const img of imagesToShow) {
               if (img.uploaded_by_name) {
                 const imgStamp = img.date ? new Date(img.date).toLocaleString('nb-NO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''
                 const line = imgStamp ? `  • ${img.uploaded_by_name} · ${imgStamp}` : `  • ${img.uploaded_by_name}`
                 doc.text(line, ml + 6, cy)
                 cy += 3.5
               }
-            })
+            }
+
+            // Indiker hvis det er flere bilder enn vi har plass til
+            if (extraImagesCount > 0) {
+              setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'italic')
+              doc.text(`+ ${extraImagesCount} flere bilde${extraImagesCount === 1 ? '' : 'r'} tatt (ikke vist)`, ml + 6, cy)
+              cy += 4
+            }
           }
 
           // ── Kommentar ──
@@ -4611,10 +4657,10 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
           }
 
           y += cardH + 3
-        })
+        }
 
         y += 5
-      })
+      }
 
       // ── Oppsummering (matcher UI: 4-grid) ──
       checkSpace(28)
