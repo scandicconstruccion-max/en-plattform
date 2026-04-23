@@ -230,6 +230,20 @@ function AuthProvider({ children }) {
       } else {
         setProfile(data || null)
       }
+
+      // Automatisk kobling: hvis denne brukeren finnes som ansatt men user_id er NULL, oppdater koblingen.
+      // Dette sørger for at alle ansatte med brukerkonto kan motta systemvarsler.
+      if (authUser.email) {
+        try {
+          const { data: emp } = await supabase.from('employees')
+            .select('id, user_id')
+            .eq('email', authUser.email)
+            .maybeSingle()
+          if (emp && !emp.user_id) {
+            await supabase.from('employees').update({ user_id: authUser.id }).eq('id', emp.id)
+          }
+        } catch (e) { /* ignorer feil - ikke kritisk */ }
+      }
     } catch(e) { setProfile(null) }
   }
 
@@ -6357,13 +6371,34 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
       return appAlert({ message: 'Velg minst én leveringsmåte', subMessage: 'Velg e-post, systemvarsel, eller begge.', kind: 'warn' })
     }
     if (wantEmail && (!email || !email.includes('@'))) return appAlert({ message: 'Ugyldig e-postadresse', kind: 'error' })
-    if (wantNotification && !recipientUserId) {
-      // Finn user_id fra e-post hvis mulig (brukeren har skrevet inn manuelt)
-      const match = employees.find(e => e.email === email)
-      if (!match || !match.user_id) {
-        return appAlert({ message: 'Kan ikke sende systemvarsel', subMessage: 'Denne mottakeren finnes ikke som bruker i systemet. Velg fra forslagslisten eller send kun på e-post.', kind: 'warn' })
+
+    // Hvis varsel er valgt, sjekk om mottakeren har brukerkonto
+    let targetUserIdResolved = recipientUserId
+    if (wantNotification) {
+      if (!targetUserIdResolved) {
+        const match = employees.find(e => e.email === email)
+        if (match?.user_id) targetUserIdResolved = match.user_id
       }
-      setRecipientUserId(match.user_id)
+      if (!targetUserIdResolved) {
+        // Mottakeren har ikke en brukerkonto — informer og gi valget
+        if (wantEmail) {
+          // Kan fortsatt sende kun e-post
+          const fortsett = await appAlert({
+            message: 'Mottakeren har ikke brukerkonto',
+            subMessage: `${name || email} kan ikke motta systemvarsel fordi de ikke har logget inn i systemet. E-post vil fortsatt sendes. For å kunne varsle dem i bjellen, inviter dem under Brukere-modulen.`,
+            kind: 'warn',
+          })
+          // Hopp over varsel, fortsett med e-post
+          // (appAlert returnerer alltid true for alert, så vi setter wantNotification lokalt til false)
+        } else {
+          // Bare varsel var valgt og det går ikke → avbryt
+          return appAlert({
+            message: 'Kan ikke sende',
+            subMessage: `${name || email} har ikke brukerkonto i systemet og kan ikke motta systemvarsel. Hak av "Send som e-post" også, eller inviter dem som bruker først.`,
+            kind: 'error',
+          })
+        }
+      }
     }
 
     setSending(true)
@@ -6425,11 +6460,10 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
         if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
       }
 
-      // ─── 2. Opprett systemvarsel i bjellen (hvis valgt og intern) ───
-      const targetUserId = recipientUserId || employees.find(e => e.email === email)?.user_id || null
-      if (wantNotification && targetUserId) {
+      // ─── 2. Opprett systemvarsel i bjellen (hvis valgt og mottaker finnes) ───
+      if (wantNotification && targetUserIdResolved) {
         await supabase.from('notifications').insert({
-          user_id: targetUserId,
+          user_id: targetUserIdResolved,
           title: `Avvik: ${dev.title}`,
           message: `${dev.severity || 'Medium'} · ${project?.name || 'Ukjent prosjekt'}${dev.location ? ' · ' + dev.location : ''}${customMessage ? ' · ' + customMessage.slice(0, 100) : ''}`,
           type: dev.severity === 'Kritisk' || dev.severity === 'Høy' ? 'warning' : 'info',
@@ -6438,7 +6472,8 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
       }
 
       // ─── 3. Oppdater avviket: sent_to + activity_log ────────────────
-      const channels = [wantEmail && 'e-post', wantNotification && 'systemvarsel'].filter(Boolean).join(' + ')
+      const actualNotificationSent = wantNotification && targetUserIdResolved
+      const channels = [wantEmail && 'e-post', actualNotificationSent && 'systemvarsel'].filter(Boolean).join(' + ') || 'ingen leveringsmåte'
       const newSent = {
         type: recipientType,
         email: wantEmail ? email : null,
@@ -6462,10 +6497,11 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
       }).eq('id', dev.id)
       if (error) throw error
 
-      const destinationText = wantEmail && wantNotification
+      const destinationText = wantEmail && actualNotificationSent
         ? `E-post til ${email} + systemvarsel i bjellen`
         : wantEmail ? `E-post til ${email}`
-        : 'Systemvarsel i bjellen'
+        : actualNotificationSent ? 'Systemvarsel i bjellen'
+        : 'Ingen leveringsmåter vellykket'
       await appAlert({ message: 'Avvik sendt', subMessage: destinationText, kind: 'success' })
       onSent()
     } catch (e) {
@@ -11209,13 +11245,16 @@ function OrderStatusBadge({ status }) {
 }
 
 function calcOrderChapter(ch) {
+  // Ordre bruker IKKE påslag — totalt = sum av poster
   const sum = (ch.posts||[]).reduce((acc,p) => acc + (parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0)), 0)
-  return { sum, total: sum * (1 + (parseFloat(ch.markup)||0)/100) }
+  return { sum, total: sum }
 }
 
 function calcOrder(chapters, globalMarkup) {
+  // Ordre bruker IKKE påslag — grandTotal = sum av alle kapitler
+  // globalMarkup-parameteren beholdes for bakoverkompatibilitet men ignoreres
   const chapterTotals = chapters.reduce((acc,ch) => acc + calcOrderChapter(ch).total, 0)
-  return { chapterTotals, grandTotal: chapterTotals * (1 + (parseFloat(globalMarkup)||0)/100) }
+  return { chapterTotals, grandTotal: chapterTotals }
 }
 
 // ─── ENDRINGSMELDINGER ────────────────────────────────────────────────────────
@@ -12363,7 +12402,6 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
               <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}><div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'12px' }}>📅 Betingelser</div></div>
               <div>{lbl('Leveringsdato')}<input type="date" value={form.delivery_date} onChange={e=>set('delivery_date',e.target.value)} style={oInp} /></div>
               <div>{lbl('Betalingsbetingelser')}<input value={form.payment_terms} onChange={e=>set('payment_terms',e.target.value)} placeholder="30 dager netto" style={oInp} /></div>
-              <div>{lbl('Generelt påslag (%)')}<input type="number" value={form.global_markup} onChange={e=>set('global_markup',e.target.value)} placeholder="0" min="0" style={oInp} /></div>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Innledende tekst')}<textarea value={form.intro_text} onChange={e=>set('intro_text',e.target.value)} rows={3} placeholder="Ordrebekreftelse for..." style={{ ...oInp, resize:'none' }} /></div>
             </div>
           )}
@@ -12376,8 +12414,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                     <div style={{ background:'#f8fafc', padding: isMobOE ? '10px 12px' : '12px 18px', display:'flex', alignItems:'center', gap: isMobOE ? '6px' : '12px', borderBottom:'1px solid #f1f5f9', flexWrap: isMobOE ? 'wrap' : 'nowrap' }}>
                       <span style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#059669', color:'white', fontWeight:'800', fontSize:'11px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{ci+1}</span>
                       <input value={ch.title} onChange={e=>updateChapter(ch.id,'title',e.target.value)} placeholder="Kapitteltittel" style={{ ...oInp, flex:1, background:'transparent', fontWeight:'700', minWidth: isMobOE ? '120px' : 'auto', fontSize: isMobOE ? '13px' : '14px' }} />
-                      <input type="number" value={ch.markup} onChange={e=>updateChapter(ch.id,'markup',e.target.value)} placeholder="%" style={{ ...oInp, width: isMobOE ? '60px' : '100px', fontSize: isMobOE ? '12px' : '14px' }} title="Påslag %" />
-                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobOE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtO(total)}</span>
+                      <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobOE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtO(sum)}</span>
                       {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
                     <div style={{ padding: isMobOE ? '10px' : '14px 18px', overflowX: isMobOE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
@@ -12400,7 +12437,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                       </table>
                       <div style={{ display:'flex', justifyContent:'space-between', marginTop:'10px' }}>
                         <button onClick={()=>addPost(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
-                        <div style={{ fontSize:'13px', color:'#64748b' }}>Sum: <strong>{fmtO(sum)}</strong>{ch.markup>0?` + påslag = ${fmtO(total)}`:''}</div>
+                        <div style={{ fontSize:'13px', color:'#64748b' }}>Sum: <strong>{fmtO(sum)}</strong></div>
                       </div>
                     </div>
                   </div>
