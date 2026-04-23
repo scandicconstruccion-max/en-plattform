@@ -11352,8 +11352,10 @@ function EndringsmeldingPage() {
       if (em.amount) {
         setC(hex('#059669')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
         doc.text(Math.round(em.amount).toLocaleString('nb-NO') + ' kr', pw - mr, y + 1, { align:'right' })
+        setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+        doc.text('eks. mva', pw - mr, y + 5, { align:'right' })
       }
-      y += 10
+      y += 12
 
       // ── Info-kort: prosjekt, opprettet av, dato, sendt til ──
       setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
@@ -11398,14 +11400,73 @@ function EndringsmeldingPage() {
         y += rLines.length * 5 + 4
       }
 
-      // ── Timekonsekvens ──
+      // ── Poster-tabell ──
+      const validPosts = Array.isArray(em.posts) ? em.posts.filter(p => p.description || parseFloat(p.qty) > 0) : []
+      if (validPosts.length > 0) {
+        checkSpace(30)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Poster', ml, y); y += 7
+
+        // Tabell-hoder
+        const colW = {
+          desc: cw * 0.35,
+          qty: cw * 0.08,
+          unit: cw * 0.10,
+          work: cw * 0.15,
+          mat: cw * 0.15,
+          sum: cw * 0.17,
+        }
+        const xDesc = ml
+        const xQty = xDesc + colW.desc
+        const xUnit = xQty + colW.qty
+        const xWork = xUnit + colW.unit
+        const xMat = xWork + colW.work
+        const xSum = xMat + colW.mat
+
+        setF(hex('#f8fafc')); doc.rect(ml, y - 4, cw, 6, 'F')
+        setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text('BESKRIVELSE', xDesc + 2, y)
+        doc.text('MGD', xQty + colW.qty - 2, y, { align:'right' })
+        doc.text('ENHET', xUnit + 2, y)
+        doc.text('ARBEID/ENH', xWork + colW.work - 2, y, { align:'right' })
+        doc.text('MAT./ENH', xMat + colW.mat - 2, y, { align:'right' })
+        doc.text('SUM', xSum + colW.sum - 2, y, { align:'right' })
+        y += 5
+
+        // Rader
+        setC(hex('#0f172a')); doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
+        validPosts.forEach(p => {
+          checkSpace(7)
+          const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+          // Desk beskrivelse kan være lang, så klipp hvis nødvendig
+          const descText = String(p.description || '').length > 40 ? String(p.description).slice(0, 37) + '...' : String(p.description || '—')
+          doc.text(descText, xDesc + 2, y)
+          doc.text(String(p.qty || 0), xQty + colW.qty - 2, y, { align:'right' })
+          doc.text(String(p.unit || 'stk'), xUnit + 2, y)
+          doc.text(Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO'), xWork + colW.work - 2, y, { align:'right' })
+          doc.text(Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO'), xMat + colW.mat - 2, y, { align:'right' })
+          doc.setFont('helvetica', 'bold')
+          doc.text(Math.round(sum).toLocaleString('nb-NO'), xSum + colW.sum - 2, y, { align:'right' })
+          doc.setFont('helvetica', 'normal')
+          y += 5
+          // Stripe under rad
+          setF(hex('#f1f5f9')); doc.rect(ml, y - 2, cw, 0.2, 'F')
+        })
+
+        // Total
+        y += 3
+        setC(hex('#059669')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+        doc.text('Total eks. mva: ' + Math.round(em.amount || 0).toLocaleString('nb-NO') + ' kr', pw - mr, y, { align:'right' })
+        y += 8
+      }
+
+      // ── Tidskonsekvens ──
       if (em.time_consequence) {
         checkSpace(14)
         setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-        doc.text('Tidkonsekvens: ', ml, y)
+        doc.text('Tidskonsekvens: ', ml, y)
         setC(hex('#475569')); doc.setFont('helvetica', 'normal')
-        const hoursTxt = em.hours ? `${em.hours} timer` : em.time_consequence
-        doc.text(String(hoursTxt), ml + doc.getTextWidth('Tidkonsekvens: '), y)
+        doc.text(String(em.time_consequence), ml + doc.getTextWidth('Tidskonsekvens: '), y)
         y += 8
       }
 
@@ -11484,16 +11545,23 @@ function EndringsmeldingPage() {
     })
     const [images, setImages] = useState(initial?.images || [])
     const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
+    const [posts, setPosts] = useState(() => {
+      // Bruk eksisterende poster hvis det finnes
+      const existing = initial?.posts
+      if (Array.isArray(existing) && existing.length > 0) return existing
+      // Ellers start med en tom rad
+      return [{ id: crypto.randomUUID(), description: '', qty: 1, unit: 'stk', unitPriceWork: '', unitPriceMaterial: '' }]
+    })
     const [saving, setSaving] = useState(false)
     const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-    const calcTotal = () => {
-      const h = (parseFloat(form.hours) || 0) * 550 // Snittimepris
-      const m = parseFloat(form.materials_cost) || 0
-      const u = parseFloat(form.ue_cost) || 0
-      const manual = parseFloat(form.amount) || 0
-      return manual || (h + m + u)
-    }
+    // Post-håndtering
+    const addPost = () => setPosts(p => [...p, { id: crypto.randomUUID(), description: '', qty: 1, unit: 'stk', unitPriceWork: '', unitPriceMaterial: '' }])
+    const removePost = (id) => setPosts(p => p.length > 1 ? p.filter(post => post.id !== id) : p)
+    const updatePost = (id, key, value) => setPosts(p => p.map(post => post.id === id ? { ...post, [key]: value } : post))
+
+    const calcPostSum = (p) => (parseFloat(p.qty) || 0) * ((parseFloat(p.unitPriceWork) || 0) + (parseFloat(p.unitPriceMaterial) || 0))
+    const calcTotal = () => posts.reduce((acc, p) => acc + calcPostSum(p), 0)
 
     const handleSave = async (e) => {
       e?.preventDefault()
@@ -11507,9 +11575,10 @@ function EndringsmeldingPage() {
           description: form.description,
           reason: form.reason,
           amount: calcTotal() || 0,
-          hours: parseFloat(form.hours) || 0,
-          materials_cost: parseFloat(form.materials_cost) || 0,
-          ue_cost: parseFloat(form.ue_cost) || 0,
+          hours: 0, // Legacy - erstattet av posts
+          materials_cost: 0, // Legacy - erstattet av posts
+          ue_cost: 0, // Legacy - erstattet av posts
+          posts, // Nye strukturerte poster
           time_consequence: form.time_consequence,
           status: form.status,
           customer_email: form.customer_email,
@@ -11591,13 +11660,61 @@ function EndringsmeldingPage() {
             <div>{lbl('Beskrivelse av endringen')}<textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} placeholder="Detaljert beskrivelse av hva som er endret fra opprinnelig kontrakt..." style={{ ...inp, resize:'vertical', fontFamily:'system-ui,sans-serif' }} /></div>
 
             <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px' }}>
-              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>💰 Kostnadskonsekvens</div>
-              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'10px' }}>
-                <div>{lbl('Timer')}<input type="number" value={form.hours} onChange={e=>set('hours',e.target.value)} placeholder="0" style={inp} /></div>
-                <div>{lbl('Materialer (kr)')}<input type="number" value={form.materials_cost} onChange={e=>set('materials_cost',e.target.value)} placeholder="0" style={inp} /></div>
-                <div>{lbl('UE (kr)')}<input type="number" value={form.ue_cost} onChange={e=>set('ue_cost',e.target.value)} placeholder="0" style={inp} /></div>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px', flexWrap:'wrap', gap:'8px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>💰 Poster / kostnadskonsekvens</div>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>Total: <strong style={{ color:'#059669' }}>{Math.round(calcTotal()).toLocaleString('nb-NO')} kr eks. mva</strong></div>
               </div>
-              <div style={{ marginTop:'10px' }}>{lbl('Totalbeløp (kr)')}<input type="number" value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder={calcTotal() > 0 ? String(calcTotal()) : '0'} style={{ ...inp, fontWeight:'700', fontSize:'16px' }} /></div>
+
+              <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', marginLeft:'-14px', marginRight:'-14px', paddingLeft:'14px', paddingRight:'14px' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', minWidth: '640px' }}>
+                  <thead>
+                    <tr>
+                      {['Beskrivelse', 'Mengde', 'Enhet', 'Arbeid kr/enh', 'Material kr/enh', 'Sum', ''].map((h, i) => (
+                        <th key={i} style={{ padding:'6px 8px', textAlign: i >= 3 && i <= 5 ? 'right' : 'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #e2e8f0' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {posts.map(p => {
+                      const sum = calcPostSum(p)
+                      return (
+                        <tr key={p.id}>
+                          <td style={{ padding:'6px 4px' }}>
+                            <input value={p.description} onChange={e => updatePost(p.id, 'description', e.target.value)} placeholder="Beskriv post" style={{ ...inp, minWidth:'160px' }} />
+                          </td>
+                          <td style={{ padding:'6px 4px' }}>
+                            <input type="number" value={p.qty} onChange={e => updatePost(p.id, 'qty', e.target.value)} style={{ ...inp, width:'70px', textAlign:'right' }} />
+                          </td>
+                          <td style={{ padding:'6px 4px' }}>
+                            <input value={p.unit} onChange={e => updatePost(p.id, 'unit', e.target.value)} placeholder="stk" style={{ ...inp, width:'60px' }} />
+                          </td>
+                          <td style={{ padding:'6px 4px' }}>
+                            <input type="number" value={p.unitPriceWork} onChange={e => updatePost(p.id, 'unitPriceWork', e.target.value)} placeholder="0" style={{ ...inp, width:'100px', textAlign:'right' }} />
+                          </td>
+                          <td style={{ padding:'6px 4px' }}>
+                            <input type="number" value={p.unitPriceMaterial} onChange={e => updatePost(p.id, 'unitPriceMaterial', e.target.value)} placeholder="0" style={{ ...inp, width:'100px', textAlign:'right' }} />
+                          </td>
+                          <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>
+                            {Math.round(sum).toLocaleString('nb-NO')} kr
+                          </td>
+                          <td style={{ padding:'6px 4px' }}>
+                            {posts.length > 1 && (
+                              <button type="button" onClick={() => removePost(p.id)}
+                                style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'18px', padding:'0 4px' }}>×</button>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'10px', flexWrap:'wrap', gap:'8px' }}>
+                <button type="button" onClick={addPost}
+                  style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
+                <div style={{ fontSize:'11px', color:'#94a3b8' }}>Scroll tabellen horisontalt på mobil</div>
+              </div>
             </div>
 
             <div>{lbl('Tidskonsekvens')}
@@ -11703,9 +11820,36 @@ function EndringsmeldingPage() {
           '<div style="font-size:14px;color:#374151">' + (em.description || '').replace(/\n/g, '<br>') + '</div>' +
           imgHtml +
         '</div>' +
+        (() => {
+          const validPosts = Array.isArray(em.posts) ? em.posts.filter(p => p.description || parseFloat(p.qty) > 0) : []
+          if (validPosts.length === 0) return ''
+          const rows = validPosts.map(p => {
+            const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+            return '<tr style="border-bottom:1px solid #f1f5f9">' +
+              '<td style="padding:8px;font-size:13px">' + (p.description || '—').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</td>' +
+              '<td style="padding:8px;font-size:13px;text-align:right">' + (p.qty || 0) + ' ' + (p.unit || 'stk') + '</td>' +
+              '<td style="padding:8px;font-size:13px;text-align:right">' + Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO') + '</td>' +
+              '<td style="padding:8px;font-size:13px;text-align:right">' + Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO') + '</td>' +
+              '<td style="padding:8px;font-size:13px;font-weight:700;text-align:right">' + Math.round(sum).toLocaleString('nb-NO') + ' kr</td>' +
+            '</tr>'
+          }).join('')
+          return '<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:16px;overflow-x:auto">' +
+            '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px">💰 Poster</div>' +
+            '<table style="width:100%;border-collapse:collapse">' +
+              '<thead><tr style="border-bottom:2px solid #e2e8f0">' +
+                '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:left">Beskrivelse</th>' +
+                '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Mengde</th>' +
+                '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Arb./enh</th>' +
+                '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Mat./enh</th>' +
+                '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Sum</th>' +
+              '</tr></thead>' +
+              '<tbody>' + rows + '</tbody>' +
+            '</table>' +
+          '</div>'
+        })() +
         '<div style="background:#f0fdf4;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bbf7d0">' +
           '<div style="font-size:24px;font-weight:800;color:#059669;text-align:center">' + Math.round(em.amount || 0).toLocaleString('nb-NO') + ' kr</div>' +
-          '<div style="font-size:12px;color:#64748b;text-align:center">eks. mva</div>' +
+          '<div style="font-size:12px;color:#64748b;text-align:center">Total eks. mva</div>' +
           (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
         '</div>' + vedleggHtml +
         '<p style="color:#475569;font-size:14px">Vurder endringsmeldingen og gi svar:</p>' +
@@ -11810,20 +11954,56 @@ function EndringsmeldingPage() {
             <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
             <p style={{ margin:0, fontSize:'14px', color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{em.description || '—'}</p>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'12px', marginBottom:'16px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px', marginBottom:'16px' }}>
             <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
               <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
-              <div style={{ fontSize:'12px', color:'#64748b' }}>Totalt beløp</div>
+              <div style={{ fontSize:'12px', color:'#64748b' }}>Totalt beløp eks. mva</div>
             </div>
-            {em.hours > 0 && <div style={{ background:'#eff6ff', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:'#2563eb' }}>{em.hours}</div>
-              <div style={{ fontSize:'12px', color:'#64748b' }}>Timer</div>
-            </div>}
             {em.time_consequence && <div style={{ background:'#fffbeb', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
               <div style={{ fontSize:'14px', fontWeight:'700', color:'#d97706' }}>{em.time_consequence}</div>
               <div style={{ fontSize:'12px', color:'#64748b' }}>Tidskonsekvens</div>
             </div>}
           </div>
+
+          {/* Poster-tabell */}
+          {Array.isArray(em.posts) && em.posts.length > 0 && em.posts.some(p => p.description || parseFloat(p.qty) > 0) && (
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px', overflowX:'auto' }}>
+              <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600' }}>💰 Poster</h3>
+              <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'500px' }}>
+                <thead>
+                  <tr style={{ borderBottom:'1px solid #e2e8f0' }}>
+                    <th style={{ padding:'8px', textAlign:'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Beskrivelse</th>
+                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Mengde</th>
+                    <th style={{ padding:'8px', textAlign:'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Enhet</th>
+                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Arbeid/enh</th>
+                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Mat./enh</th>
+                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Sum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {em.posts.filter(p => p.description || parseFloat(p.qty) > 0).map(p => {
+                    const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                    return (
+                      <tr key={p.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                        <td style={{ padding:'8px', fontSize:'13px', color:'#0f172a' }}>{p.description || '—'}</td>
+                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{p.qty || 0}</td>
+                        <td style={{ padding:'8px', fontSize:'13px', color:'#475569' }}>{p.unit || 'stk'}</td>
+                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')} kr</td>
+                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')} kr</td>
+                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={5} style={{ padding:'10px 8px', fontSize:'13px', fontWeight:'700', color:'#0f172a', textAlign:'right', borderTop:'2px solid #e2e8f0' }}>Total eks. mva:</td>
+                    <td style={{ padding:'10px 8px', fontSize:'15px', fontWeight:'800', color:'#059669', textAlign:'right', borderTop:'2px solid #e2e8f0' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
           {/* Bilder */}
           {(em.images||[]).length > 0 && (
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px' }}>
@@ -11944,6 +12124,7 @@ function EndringsmeldingPage() {
                   </div>
                   {!isMobEM && <div style={{ textAlign:'right', flexShrink:0, marginRight:'8px' }}>
                     <div style={{ fontSize:'16px', fontWeight:'700', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8' }}>eks. mva</div>
                     {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
                   </div>}
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
