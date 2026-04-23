@@ -11272,7 +11272,9 @@ const EM_STATUS = {
 function EndringsmeldingPage() {
   const isMobBild = typeof window !== 'undefined' && window.innerWidth < 768
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const [endringer, setEndringer] = useState([])
+  const [sendDialogEm, setSendDialogEm] = useState(null) // EM for som skal sendes (åpner frist-modal)
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -11464,6 +11466,18 @@ function EndringsmeldingPage() {
       materials_cost: initial?.materials_cost || '',
       ue_cost: initial?.ue_cost || '',
       time_consequence: initial?.time_consequence || '',
+      // Parse eksisterende fri-tekst til verdi + enhet (f.eks. "3 dager" → 3 + "dager")
+      time_consequence_value: (() => {
+        const tc = initial?.time_consequence || ''
+        const match = tc.match(/^(\d+)\s*(dag|uke|måned)/i)
+        return match ? match[1] : ''
+      })(),
+      time_consequence_unit: (() => {
+        const tc = initial?.time_consequence || ''
+        if (/måned/i.test(tc)) return 'måneder'
+        if (/uke/i.test(tc)) return 'uker'
+        return 'dager'
+      })(),
       status: initial?.status || 'Utkast',
       customer_email: initial?.customer_email || '',
       notes: initial?.notes || '',
@@ -11586,7 +11600,34 @@ function EndringsmeldingPage() {
               <div style={{ marginTop:'10px' }}>{lbl('Totalbeløp (kr)')}<input type="number" value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder={calcTotal() > 0 ? String(calcTotal()) : '0'} style={{ ...inp, fontWeight:'700', fontSize:'16px' }} /></div>
             </div>
 
-            <div>{lbl('Tidskonsekvens')}<input value={form.time_consequence} onChange={e=>set('time_consequence',e.target.value)} placeholder="F.eks. 3 dagers fristforlengelse" style={inp} /></div>
+            <div>{lbl('Tidskonsekvens')}
+              <div style={{ display:'flex', gap:'8px', alignItems:'stretch' }}>
+                <input type="number" min="0" step="1"
+                  value={form.time_consequence_value || ''}
+                  onChange={e => {
+                    const val = e.target.value
+                    const unit = form.time_consequence_unit || 'dager'
+                    set('time_consequence_value', val)
+                    set('time_consequence', val ? `${val} ${unit}` : '')
+                  }}
+                  placeholder="0"
+                  style={{ ...inp, flex: '0 0 120px' }} />
+                <select
+                  value={form.time_consequence_unit || 'dager'}
+                  onChange={e => {
+                    const unit = e.target.value
+                    const val = form.time_consequence_value || ''
+                    set('time_consequence_unit', unit)
+                    set('time_consequence', val ? `${val} ${unit}` : '')
+                  }}
+                  style={{ ...inp, flex: 1, background:'white' }}>
+                  <option value="dager">dager</option>
+                  <option value="uker">uker</option>
+                  <option value="måneder">måneder</option>
+                </select>
+              </div>
+              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>Eksempel: 3 dager, 2 uker, 1 måned</div>
+            </div>
 
             {/* Bilder */}
             <div>
@@ -11633,8 +11674,8 @@ function EndringsmeldingPage() {
   }
 
   // ── Send til kunde ─────────────────────────────────────────────────────────
-  const sendToCustomer = async (em) => {
-    if (!em.customer_email) return alert('Legg til kundens e-post først')
+  const sendToCustomer = async (em, reminderDays = null) => {
+    if (!em.customer_email) return appAlert({ message: 'Legg til kundens e-post først', kind: 'warn' })
     try {
       const proj = projects.find(p => p.id === em.project_id)
 
@@ -11667,21 +11708,77 @@ function EndringsmeldingPage() {
           '<div style="font-size:12px;color:#64748b;text-align:center">eks. mva</div>' +
           (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
         '</div>' + vedleggHtml +
-        '<p style="color:#475569;font-size:14px">Se fullstendig endringsmelding og gi ditt svar:</p>' +
+        '<p style="color:#475569;font-size:14px">Vurder endringsmeldingen og gi svar:</p>' +
         '<div style="text-align:center;margin:24px 0">' +
-          '<a href="' + viewUrl + '" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Se endringsmelding og gi svar →</a>' +
+          '<a href="' + viewUrl + '" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Godkjenn / Avvis endringsmelding →</a>' +
         '</div>' +
         '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
 
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
         body: JSON.stringify({ to: em.customer_email, subject: `Endringsmelding ${em.em_number} – ${em.title}`, html })
       })
+      if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
-      await supabase.from('endringsmeldinger').update({ status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }).eq('id', em.id)
+
+      // Beregn purringsfrist hvis bruker valgte antall dager
+      const updates = { status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }
+      if (reminderDays && reminderDays > 0) {
+        const dueDate = new Date()
+        dueDate.setDate(dueDate.getDate() + parseInt(reminderDays))
+        updates.reminder_days = parseInt(reminderDays)
+        updates.reminder_due_date = dueDate.toISOString()
+        updates.last_reminder_sent_at = null // Nullstill hvis det er en re-send
+      }
+
+      await supabase.from('endringsmeldinger').update(updates).eq('id', em.id)
+      const reminderText = reminderDays ? ` · Purring settes til ${reminderDays} dager` : ''
+      await appAlert({ message: 'Endringsmelding sendt', subMessage: `Sendt til ${em.customer_email}${reminderText}`, kind: 'success' })
       load()
-    } catch(e) { alert('Feil ved utsendelse: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Kunne ikke sende endringsmelding', subMessage: e.message, kind: 'error' }) }
+  }
+
+  // ── Send purring (forenklet påminnelse) ────────────────────────────────────
+  const sendReminder = async (em) => {
+    if (!em.customer_email) return appAlert({ message: 'Legg til kundens e-post først', kind: 'warn' })
+    try {
+      const proj = projects.find(p => p.id === em.project_id)
+      const viewToken = em.view_token || crypto.randomUUID()
+      const viewUrl = `${window.location.origin}/em-view?token=${viewToken}`
+
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        '<h1 style="color:#d97706;font-size:20px;margin:0 0 4px">⏰ Påminnelse</h1>' +
+        '<p style="color:#64748b;font-size:14px;margin:0 0 20px">Vi venter fortsatt på ditt svar</p>' +
+        '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px;margin-bottom:20px">' +
+          '<div style="font-size:12px;color:#92400e;font-weight:700;margin-bottom:6px">ENDRINGSMELDING ' + em.em_number + '</div>' +
+          '<div style="font-weight:700;font-size:15px;color:#0f172a;margin-bottom:4px">' + em.title + '</div>' +
+          (proj ? '<div style="font-size:13px;color:#64748b">Prosjekt: ' + proj.name + '</div>' : '') +
+        '</div>' +
+        '<p style="color:#475569;font-size:14px">Vennligst godkjenn eller avvis endringsmeldingen slik at vi kan fortsette arbeidet:</p>' +
+        '<div style="text-align:center;margin:24px 0">' +
+          '<a href="' + viewUrl + '" style="background:#d97706;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Godkjenn / Avvis endringsmelding →</a>' +
+        '</div>' +
+        '<p style="color:#94a3b8;font-size:12px">Påminnelse sendt via En Plattform</p></div>'
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: em.customer_email, subject: `Påminnelse: ${em.em_number} venter på svar`, html })
+      })
+      if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
+
+      // Oppdater last_reminder_sent_at og legg til i aktivitetslogg
+      const log = [...(em.activity_log || []), { action: 'Purring sendt', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
+      await supabase.from('endringsmeldinger').update({
+        last_reminder_sent_at: new Date().toISOString(),
+        activity_log: log,
+        updated_at: new Date().toISOString(),
+      }).eq('id', em.id)
+
+      await appAlert({ message: 'Purring sendt', subMessage: `Påminnelse sendt til ${em.customer_email}`, kind: 'success' })
+      load()
+    } catch(e) { await appAlert({ message: 'Kunne ikke sende purring', subMessage: e.message, kind: 'error' }) }
   }
 
   // ── Detail View ────────────────────────────────────────────────────────────
@@ -11702,7 +11799,7 @@ function EndringsmeldingPage() {
               <p style={{ margin:0, color:'#94a3b8', fontSize: isMobEM ? '11px' : '13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
             </div>
             <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-              {em.status === 'Utkast' && <button onClick={() => sendToCustomer(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📧 Send' : '📧 Send til kunde'}</button>}
+              {em.status === 'Utkast' && <button onClick={() => setSendDialogEm(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📧 Send' : '📧 Send til kunde'}</button>}
               <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '12px' : '14px', cursor:'pointer' }}>✏️</button>
             </div>
           </div>
@@ -11851,11 +11948,11 @@ function EndringsmeldingPage() {
                   </div>}
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
                     {!isMobEM && (em.status === 'Utkast' || em.status === 'Under forhandling') && (
-                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send til kunde"
+                      <button onClick={(e) => { e.stopPropagation(); setSendDialogEm(em) }} title="Send til kunde"
                         style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
                     )}
                     {!isMobEM && em.status === 'Sendt' && (
-                      <button onClick={(e) => { e.stopPropagation(); sendToCustomer(em) }} title="Send påminnelse"
+                      <button onClick={(e) => { e.stopPropagation(); sendReminder(em) }} title="Send påminnelse"
                         style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
                     )}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); exportSingleEmPDF(em) }} disabled={exportingPdf} title="Last ned som PDF" style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor: exportingPdf?'not-allowed':'pointer', fontSize:'13px', color:'#374151' }}>📄</button>}
@@ -11930,9 +12027,101 @@ function EndringsmeldingPage() {
       </div>
 
       {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
+
+      {/* Send-dialog med frist-valg */}
+      {sendDialogEm && (
+        <SendEmDialog
+          em={sendDialogEm}
+          onClose={() => setSendDialogEm(null)}
+          onConfirm={async (reminderDays) => {
+            const em = sendDialogEm
+            setSendDialogEm(null)
+            await sendToCustomer(em, reminderDays)
+          }}
+        />
+      )}
     </div>
   )
 }
+
+// ─── SEND-EM-DIALOG ───────────────────────────────────────────────────────────
+function SendEmDialog({ em, onClose, onConfirm }) {
+  const [reminderDays, setReminderDays] = useState(7) // Standard 7 dager
+  const [sending, setSending] = useState(false)
+
+  const handleConfirm = async () => {
+    setSending(true)
+    try { await onConfirm(reminderDays) }
+    finally { setSending(false) }
+  }
+
+  const dueDate = new Date()
+  dueDate.setDate(dueDate.getDate() + parseInt(reminderDays || 0))
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send endringsmelding</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+
+        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
+            <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER</div>
+            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{em.customer_email || '—'}</div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>
+              Purringsfrist — hvor mange dager har kunden på å svare?
+            </label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px', marginBottom:'8px' }}>
+              {[3, 7, 14, 30].map(d => (
+                <button key={d} type="button" onClick={() => setReminderDays(d)}
+                  style={{ padding:'9px 6px', borderRadius:'10px', border: `2px solid ${parseInt(reminderDays) === d ? '#2563eb' : '#e2e8f0'}`, background: parseInt(reminderDays) === d ? '#eff6ff' : 'white', color: parseInt(reminderDays) === d ? '#2563eb' : '#64748b', fontWeight: parseInt(reminderDays) === d ? '700' : '500', fontSize:'13px', cursor:'pointer' }}>
+                  {d} dager
+                </button>
+              ))}
+            </div>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+              <label style={{ fontSize:'12px', color:'#64748b', flexShrink:0 }}>Egendefinert:</label>
+              <input type="number" min="1" max="365" value={reminderDays} onChange={e => setReminderDays(e.target.value)}
+                style={{ flex:1, padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', boxSizing:'border-box' }} />
+              <span style={{ fontSize:'12px', color:'#94a3b8' }}>dager</span>
+            </div>
+          </div>
+
+          {reminderDays > 0 && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px' }}>
+              <div style={{ fontSize:'12px', color:'#92400e', marginBottom:'2px' }}>⏰ PURRING TRIGGES</div>
+              <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600' }}>
+                {dueDate.toLocaleDateString('nb-NO', { weekday:'long', day:'2-digit', month:'long', year:'numeric' })}
+              </div>
+              <div style={{ fontSize:'11px', color:'#92400e', marginTop:'4px' }}>
+                Hvis kunden ikke har svart innen denne datoen, får du varsel i bjellen og kan sende purring med ett klikk.
+              </div>
+            </div>
+          )}
+
+          <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'10px 14px', fontSize:'12px', color:'#059669' }}>
+            <strong>Kunde får:</strong> E-post med alle detaljer og knapp for å godkjenne/avvise endringsmeldingen.
+          </div>
+        </div>
+
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+          <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="button" onClick={handleConfirm} disabled={sending || !em.customer_email}
+            style={{ padding:'10px 20px', background: sending ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
+            {sending ? 'Sender...' : '📧 Send'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+// ─── END SEND-EM-DIALOG ───────────────────────────────────────────────────────
 
 function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
 
@@ -35583,6 +35772,57 @@ function AppContent() {
   // Load active modules from company_settings
   const [trialInfo, setTrialInfo] = React.useState(null) // { daysLeft, isExpired, status }
   const [showTrialExpired, setShowTrialExpired] = React.useState(false)
+
+  // ── Purringssjekk ved innlogging ─────────────────────────────────────────
+  // Sjekker forfalte endringsmeldinger og oppretter varsler for dem.
+  // Kjører kun én gang per sesjon for å unngå duplikate varsler.
+  React.useEffect(() => {
+    if (!user?.id) return
+    const sessionKey = `em_reminder_check_${user.id}_${new Date().toDateString()}`
+    if (sessionStorage.getItem(sessionKey)) return // Allerede sjekket i dag
+
+    const checkOverdueEMs = async () => {
+      try {
+        const now = new Date().toISOString()
+        // Finn forfalte EM-er som ikke har blitt purret ennå
+        const { data: overdue } = await supabase
+          .from('endringsmeldinger')
+          .select('id, title, em_number, customer_email, reminder_due_date, last_reminder_sent_at')
+          .eq('status', 'Sendt')
+          .lt('reminder_due_date', now)
+          .or('last_reminder_sent_at.is.null,last_reminder_sent_at.lt.reminder_due_date')
+
+        if (!overdue || overdue.length === 0) return
+
+        // For hver forfalt EM: opprett varsel i bjellen (hvis ikke allerede finnes)
+        for (const em of overdue) {
+          // Sjekk om vi allerede har sendt varsel for denne EM i dag
+          const { data: existing } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('link_page', 'endringsmelding')
+            .ilike('title', `%${em.em_number}%`)
+            .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+            .limit(1)
+
+          if (existing && existing.length > 0) continue // Allerede varslet i dag
+
+          await supabase.from('notifications').insert({
+            user_id: user.id,
+            title: `⏰ Purring: ${em.em_number}`,
+            message: `Kunden (${em.customer_email || 'ukjent'}) har ikke svart på endringsmeldingen "${em.title}". Vurder å sende purring.`,
+            type: 'warning',
+            link_page: 'endringsmelding',
+          })
+        }
+
+        sessionStorage.setItem(sessionKey, '1')
+      } catch (e) { console.error('[Purringssjekk feilet]', e) }
+    }
+
+    checkOverdueEMs()
+  }, [user?.id])
 
   React.useEffect(() => {
     if (!user) return
