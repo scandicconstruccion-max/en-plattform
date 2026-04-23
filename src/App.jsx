@@ -5582,7 +5582,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       const existingLog = Array.isArray(dev.activity_log) ? dev.activity_log : []
       const logEntry = newStatus === 'Lukket'
         ? { at: now, by: user?.id || null, by_name: userName, action: 'Avvik lukket', meta: { close_comment: closeComment || null } }
-        : { at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} → ${newStatus}`, meta: { from: dev.status, to: newStatus } }
+        : { at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} -> ${newStatus}`, meta: { from: dev.status, to: newStatus } }
 
       const updates = {
         status: newStatus,
@@ -6155,13 +6155,13 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
       const newLogEntries = []
 
       if (dev.status !== form.status) {
-        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} → ${form.status}`, meta: { from: dev.status, to: form.status } })
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} -> ${form.status}`, meta: { from: dev.status, to: form.status } })
       }
       if (dev.severity !== form.severity) {
-        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Alvorlighet endret: ${dev.severity || '—'} → ${form.severity}`, meta: { from: dev.severity, to: form.severity } })
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Alvorlighet endret: ${dev.severity || '—'} -> ${form.severity}`, meta: { from: dev.severity, to: form.severity } })
       }
       if ((dev.assigned_to_name || '') !== (assigned_to || '')) {
-        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Ansvarlig endret: ${dev.assigned_to_name || '—'} → ${assigned_to || '—'}`, meta: {} })
+        newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: `Ansvarlig endret: ${dev.assigned_to_name || '—'} -> ${assigned_to || '—'}`, meta: {} })
       }
       // Hvis ingen av de store feltene er endret men lagring skjer likevel, legg inn en generisk "Redigert"
       if (newLogEntries.length === 0) {
@@ -6281,15 +6281,19 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
   const [recipientType, setRecipientType] = useState('intern') // 'intern' | 'ue' | 'byggherre'
   const [email, setEmail] = useState('')
   const [name, setName] = useState('')
+  const [recipientUserId, setRecipientUserId] = useState(null) // Brukes for system-varsel til intern
   const [customMessage, setCustomMessage] = useState('')
+  // Leveringskanal for interne: e-post og/eller systemvarsel
+  const [sendEmail, setSendEmail] = useState(true)
+  const [sendNotification, setSendNotification] = useState(true)
   const [sending, setSending] = useState(false)
 
   // Forslagslister basert på mottakertype
   const [employees, setEmployees] = useState([])
-  const [suggestions, setSuggestions] = useState([]) // {name, email} objekter
+  const [suggestions, setSuggestions] = useState([]) // {name, email, user_id?} objekter
 
   useEffect(() => {
-    supabase.from('employees').select('first_name, last_name, email').then(({ data }) => {
+    supabase.from('employees').select('first_name, last_name, email, user_id').then(({ data }) => {
       setEmployees((data || []).filter(e => e.email))
     })
   }, [])
@@ -6300,6 +6304,7 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
       setSuggestions(employees.map(e => ({
         name: `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email,
         email: e.email,
+        user_id: e.user_id || null,
       })))
     } else if (recipientType === 'ue') {
       const ues = (project?.subcontractors || []).filter(s => s.email)
@@ -6319,6 +6324,7 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
   const selectSuggestion = (s) => {
     setName(s.name)
     setEmail(s.email)
+    setRecipientUserId(s.user_id || null)
   }
 
   const recipientLabel = {
@@ -6328,55 +6334,96 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
   }
 
   const handleSend = async () => {
-    if (!email || !email.includes('@')) return appAlert({ message: 'Ugyldig e-postadresse', kind: 'error' })
+    // Validering: minst én leveringsmåte må være valgt
+    const isIntern = recipientType === 'intern'
+    const wantEmail = !isIntern || sendEmail
+    const wantNotification = isIntern && sendNotification
+
+    if (!wantEmail && !wantNotification) {
+      return appAlert({ message: 'Velg minst én leveringsmåte', subMessage: 'Velg e-post, systemvarsel, eller begge.', kind: 'warn' })
+    }
+    if (wantEmail && (!email || !email.includes('@'))) return appAlert({ message: 'Ugyldig e-postadresse', kind: 'error' })
+    if (wantNotification && !recipientUserId) {
+      // Finn user_id fra e-post hvis mulig (brukeren har skrevet inn manuelt)
+      const match = employees.find(e => e.email === email)
+      if (!match || !match.user_id) {
+        return appAlert({ message: 'Kan ikke sende systemvarsel', subMessage: 'Denne mottakeren finnes ikke som bruker i systemet. Velg fra forslagslisten eller send kun på e-post.', kind: 'warn' })
+      }
+      setRecipientUserId(match.user_id)
+    }
+
     setSending(true)
     try {
-      const sevColor = { 'Lav':'#059669','Medium':'#d97706','Høy':'#dc2626','Kritisk':'#991b1b' }[dev.severity] || '#64748b'
-      const sevBg    = { 'Lav':'#ecfdf5','Medium':'#fffbeb','Høy':'#fef2f2','Kritisk':'#fef2f2' }[dev.severity] || '#f8fafc'
-
-      // Bygg HTML-e-post
-      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;color:#0f172a">' +
-        '<h1 style="color:#0f172a;font-size:22px;margin:0 0 4px">Avviksrapport</h1>' +
-        '<p style="color:#64748b;font-size:13px;margin:0 0 24px">Sendt fra En Plattform</p>' +
-        (customMessage ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:20px"><div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:4px">MELDING</div><div style="color:#1e3a8a;font-size:14px;white-space:pre-wrap">' + customMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' : '') +
-        '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
-          '<div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>' +
-          '<div style="font-weight:700;font-size:15px">' + (project?.name || '—') + '</div>' +
-          (dev.location ? '<div style="font-size:13px;color:#64748b;margin-top:4px">Sted: ' + dev.location + '</div>' : '') +
-        '</div>' +
-        '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:16px;border-left:4px solid ' + sevColor + ';border:1px solid #e2e8f0">' +
-          '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
-            '<span style="background:' + sevBg + ';color:' + sevColor + ';padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">' + (dev.severity || 'Medium') + '</span>' +
-            '<span style="background:#f1f5f9;color:#475569;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600">' + (dev.status || 'Åpen') + '</span>' +
-          '</div>' +
-          '<div style="font-weight:700;font-size:16px;margin-bottom:10px">' + (dev.title || '') + '</div>' +
-          (dev.description ? '<div style="font-size:14px;color:#374151;line-height:1.5;white-space:pre-wrap">' + (dev.description || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
-        '</div>' +
-        (dev.has_cost_impact || dev.has_time_impact
-          ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:16px">' +
-            '<div style="font-size:12px;color:#92400e;font-weight:700;margin-bottom:8px">KONSEKVENSER</div>' +
-            (dev.has_cost_impact ? '<div style="font-size:14px;color:#374151;margin-bottom:4px"><strong>Priskonsekvens:</strong> ' + (dev.cost_impact_amount ? Math.round(parseFloat(dev.cost_impact_amount)).toLocaleString('nb-NO') + ' kr' : 'Ja (beløp ikke spesifisert)') + '</div>' : '') +
-            (dev.has_time_impact ? '<div style="font-size:14px;color:#374151"><strong>Tidforlengelse:</strong> ' + (dev.time_impact_days ? dev.time_impact_days + ' dag' + (parseInt(dev.time_impact_days) === 1 ? '' : 'er') : 'Ja (antall dager ikke spesifisert)') + '</div>' : '') +
-          '</div>'
-          : '') +
-        '<p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9">Avviket er sendt via En Plattform</p>' +
-      '</div>'
-
-      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: email, subject: `Avvik: ${dev.title} (${dev.severity || 'Medium'})`, html })
-      })
-      if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
-
-      // Oppdater avviket med sent_to + activity_log
       const now = new Date().toISOString()
       const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
-      const newSent = { type: recipientType, email, name, sent_at: now, sent_by_name: userName }
+
+      // ─── 1. Send e-post (hvis valgt) ────────────────────────────────
+      if (wantEmail) {
+        const sevColor = { 'Lav':'#059669','Medium':'#d97706','Høy':'#dc2626','Kritisk':'#991b1b' }[dev.severity] || '#64748b'
+        const sevBg    = { 'Lav':'#ecfdf5','Medium':'#fffbeb','Høy':'#fef2f2','Kritisk':'#fef2f2' }[dev.severity] || '#f8fafc'
+
+        // Bygg HTML-e-post
+        const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;color:#0f172a">' +
+          '<h1 style="color:#0f172a;font-size:22px;margin:0 0 4px">Avviksrapport</h1>' +
+          '<p style="color:#64748b;font-size:13px;margin:0 0 24px">Sendt fra En Plattform</p>' +
+          (customMessage ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:20px"><div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:4px">MELDING</div><div style="color:#1e3a8a;font-size:14px;white-space:pre-wrap">' + customMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' : '') +
+          '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
+            '<div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>' +
+            '<div style="font-weight:700;font-size:15px">' + (project?.name || '—') + '</div>' +
+            (dev.location ? '<div style="font-size:13px;color:#64748b;margin-top:4px">Sted: ' + dev.location + '</div>' : '') +
+          '</div>' +
+          '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:16px;border-left:4px solid ' + sevColor + ';border:1px solid #e2e8f0">' +
+            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
+              '<span style="background:' + sevBg + ';color:' + sevColor + ';padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">' + (dev.severity || 'Medium') + '</span>' +
+              '<span style="background:#f1f5f9;color:#475569;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600">' + (dev.status || 'Åpen') + '</span>' +
+            '</div>' +
+            '<div style="font-weight:700;font-size:16px;margin-bottom:10px">' + (dev.title || '') + '</div>' +
+            (dev.description ? '<div style="font-size:14px;color:#374151;line-height:1.5;white-space:pre-wrap">' + (dev.description || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
+          '</div>' +
+          (dev.has_cost_impact || dev.has_time_impact
+            ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:16px">' +
+              '<div style="font-size:12px;color:#92400e;font-weight:700;margin-bottom:8px">KONSEKVENSER</div>' +
+              (dev.has_cost_impact ? '<div style="font-size:14px;color:#374151;margin-bottom:4px"><strong>Priskonsekvens:</strong> ' + (dev.cost_impact_amount ? Math.round(parseFloat(dev.cost_impact_amount)).toLocaleString('nb-NO') + ' kr' : 'Ja (beløp ikke spesifisert)') + '</div>' : '') +
+              (dev.has_time_impact ? '<div style="font-size:14px;color:#374151"><strong>Tidforlengelse:</strong> ' + (dev.time_impact_days ? dev.time_impact_days + ' dag' + (parseInt(dev.time_impact_days) === 1 ? '' : 'er') : 'Ja (antall dager ikke spesifisert)') + '</div>' : '') +
+            '</div>'
+            : '') +
+          '<p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9">Avviket er sendt via En Plattform</p>' +
+        '</div>'
+
+        const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+          body: JSON.stringify({ to: email, subject: `Avvik: ${dev.title} (${dev.severity || 'Medium'})`, html })
+        })
+        if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
+      }
+
+      // ─── 2. Opprett systemvarsel i bjellen (hvis valgt og intern) ───
+      const targetUserId = recipientUserId || employees.find(e => e.email === email)?.user_id || null
+      if (wantNotification && targetUserId) {
+        await supabase.from('notifications').insert({
+          user_id: targetUserId,
+          title: `Avvik: ${dev.title}`,
+          message: `${dev.severity || 'Medium'} · ${project?.name || 'Ukjent prosjekt'}${dev.location ? ' · ' + dev.location : ''}${customMessage ? ' · ' + customMessage.slice(0, 100) : ''}`,
+          type: dev.severity === 'Kritisk' || dev.severity === 'Høy' ? 'warning' : 'info',
+          link_page: 'avvik',
+        })
+      }
+
+      // ─── 3. Oppdater avviket: sent_to + activity_log ────────────────
+      const channels = [wantEmail && 'e-post', wantNotification && 'systemvarsel'].filter(Boolean).join(' + ')
+      const newSent = {
+        type: recipientType,
+        email: wantEmail ? email : null,
+        name,
+        sent_at: now,
+        sent_by_name: userName,
+        channels: channels,
+      }
       const logEntry = {
         at: now, by: user?.id || null, by_name: userName,
-        action: `Sendt til ${recipientLabel[recipientType].toLowerCase()}: ${name || email}`,
-        meta: { recipient_type: recipientType, email, name },
+        action: `Sendt til ${recipientLabel[recipientType].toLowerCase()}: ${name || email} (${channels})`,
+        meta: { recipient_type: recipientType, email, name, channels },
       }
       const existingSent = Array.isArray(dev.sent_to) ? dev.sent_to : []
       const existingLog = Array.isArray(dev.activity_log) ? dev.activity_log : []
@@ -6388,7 +6435,11 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
       }).eq('id', dev.id)
       if (error) throw error
 
-      await appAlert({ message: 'Avvik sendt', subMessage: `Sendt til ${email}`, kind: 'success' })
+      const destinationText = wantEmail && wantNotification
+        ? `E-post til ${email} + systemvarsel i bjellen`
+        : wantEmail ? `E-post til ${email}`
+        : 'Systemvarsel i bjellen'
+      await appAlert({ message: 'Avvik sendt', subMessage: destinationText, kind: 'success' })
       onSent()
     } catch (e) {
       await appAlert({ message: 'Kunne ikke sende avvik', subMessage: e.message, kind: 'error' })
@@ -6441,7 +6492,7 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
             </div>
             <div>
               <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-post *</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="ola@eksempel.no" style={inp} required />
+              <input type="email" value={email} onChange={e => { setEmail(e.target.value); setRecipientUserId(null) }} placeholder="ola@eksempel.no" style={inp} required={!(recipientType === 'intern' && !sendEmail && sendNotification)} />
             </div>
           </div>
 
@@ -6450,15 +6501,36 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
             <textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} rows={3} placeholder="Legg til en melding til mottakeren..." style={{ ...inp, resize:'none', fontFamily:'system-ui, sans-serif' }} />
           </div>
 
-          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px' }}>
-            <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER FÅR</div>
-            <div style={{ fontSize:'13px', color:'#374151' }}>E-post med avviksrapport: tittel, beskrivelse, alvorlighet, konsekvenser og prosjektinfo.</div>
-          </div>
+          {/* Leveringsmåte (kun for interne) */}
+          {recipientType === 'intern' ? (
+            <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'14px' }}>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Leveringsmåte</div>
+              <label style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', fontSize:'13px', color:'#374151', marginBottom:'8px' }}>
+                <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)} style={{ accentColor:'#059669', width:'16px', height:'16px', cursor:'pointer' }} />
+                <span>📧 Send som e-post</span>
+              </label>
+              <label style={{ display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', fontSize:'13px', color:'#374151' }}>
+                <input type="checkbox" checked={sendNotification} onChange={e => setSendNotification(e.target.checked)} style={{ accentColor:'#059669', width:'16px', height:'16px', cursor:'pointer' }} />
+                <span>🔔 Varsle i bjellen (kun registrerte brukere)</span>
+              </label>
+              {sendNotification && !recipientUserId && email && !employees.find(e => e.email === email) && (
+                <div style={{ marginTop:'8px', padding:'8px 10px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'8px', fontSize:'12px', color:'#92400e' }}>
+                  ⚠️ Denne e-postadressen er ikke knyttet til en bruker i systemet. Bjelle-varsel vil ikke fungere — velg fra forslagslisten eller send kun på e-post.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px' }}>
+              <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER FÅR</div>
+              <div style={{ fontSize:'13px', color:'#374151' }}>E-post med avviksrapport: tittel, beskrivelse, alvorlighet, konsekvenser og prosjektinfo.</div>
+            </div>
+          )}
         </div>
 
         <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end', flexShrink:0 }}>
           <button type="button" onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button type="button" onClick={handleSend} disabled={sending || !email} style={{ padding:'10px 20px', background: sending || !email ? '#86efac' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending || !email ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+          <button type="button" onClick={handleSend} disabled={sending || (!email && !(recipientType === 'intern' && sendNotification && recipientUserId))}
+            style={{ padding:'10px 20px', background: sending ? '#86efac' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
             {sending ? 'Sender...' : '📧 Send'}
           </button>
         </div>
