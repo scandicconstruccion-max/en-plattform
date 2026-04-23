@@ -11514,7 +11514,7 @@ function EndringsmeldingPage() {
   }
 
   // ── Form Component ─────────────────────────────────────────────────────────
-  const EmForm = ({ initial, onClose, onSaved }) => {
+  const EmForm = ({ initial, onClose, onSaved, onSaveAndSend }) => {
     const isEdit = !!initial?.id
     const [form, setForm] = useState({
       title: initial?.title || '',
@@ -11563,8 +11563,7 @@ function EndringsmeldingPage() {
     const calcPostSum = (p) => (parseFloat(p.qty) || 0) * ((parseFloat(p.unitPriceWork) || 0) + (parseFloat(p.unitPriceMaterial) || 0))
     const calcTotal = () => posts.reduce((acc, p) => acc + calcPostSum(p), 0)
 
-    const handleSave = async (e) => {
-      e?.preventDefault()
+    const handleSave = async (alsoSend = false) => {
       if (!form.title.trim()) return
       setSaving(true)
       try {
@@ -11587,22 +11586,30 @@ function EndringsmeldingPage() {
           vedlegg,
           updated_at: new Date().toISOString(),
         }
+        let savedEm = null
         if (isEdit) {
-          const { error } = await supabase.from('endringsmeldinger').update(payload).eq('id', initial.id)
+          const { data, error } = await supabase.from('endringsmeldinger').update(payload).eq('id', initial.id).select().single()
           if (error) throw error
+          savedEm = data
           // Log activity
           const log = [...(initial.activity_log || []), { action: 'Endret', by: user?.email, at: new Date().toISOString() }]
           await supabase.from('endringsmeldinger').update({ activity_log: log }).eq('id', initial.id)
         } else {
-          const { error } = await supabase.from('endringsmeldinger').insert({
+          const { data, error } = await supabase.from('endringsmeldinger').insert({
             ...payload,
             created_by: user?.id,
             activity_log: [{ action: 'Opprettet', by: user?.email, at: new Date().toISOString() }],
-          })
+          }).select().single()
           if (error) throw error
+          savedEm = data
         }
-        onSaved()
-      } catch(e) { alert('Feil: ' + e.message) }
+        // Hvis "Opprett og send" ble valgt, åpne send-dialog
+        if (alsoSend && savedEm) {
+          onSaveAndSend(savedEm)
+        } else {
+          onSaved()
+        }
+      } catch(e) { await appAlert({ message: 'Kunne ikke lagre', subMessage: e.message, kind: 'error' }) }
       finally { setSaving(false) }
     }
 
@@ -11635,7 +11642,7 @@ function EndringsmeldingPage() {
     return (
       <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
         <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
-        <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
           <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700' }}>🔄 {isEdit ? 'Rediger' : 'Ny'} endringsmelding</h2>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
@@ -11644,7 +11651,14 @@ function EndringsmeldingPage() {
             <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
               <div style={{ gridColumn:'1/-1' }}>{lbl('Tittel *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid elektrisk i kjøkken" style={inp} required /></div>
               <div>{lbl('EM-nummer')}<input value={form.em_number} onChange={e=>set('em_number',e.target.value)} style={inp} /></div>
-              <div>{lbl('Prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={{ ...inp, background:'white' }} placeholder="Velg prosjekt" /></div>
+              <div>{lbl('Prosjekt')}<SearchableProjectSelect value={form.project_id} onChange={v => {
+                set('project_id', v)
+                // Auto-fyll kundeinfo fra prosjektet
+                const proj = projects.find(p => p.id === v)
+                if (proj?.customer_email && !form.customer_email) {
+                  set('customer_email', proj.customer_email)
+                }
+              }} projects={projects} style={{ ...inp, background:'white' }} placeholder="Velg prosjekt" /></div>
             </div>
 
             <div>{lbl('Årsak til endring')}<select value={form.reason} onChange={e=>set('reason',e.target.value)} style={{ ...inp, background:'white' }}>
@@ -11666,7 +11680,7 @@ function EndringsmeldingPage() {
               </div>
 
               <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', marginLeft:'-14px', marginRight:'-14px', paddingLeft:'14px', paddingRight:'14px' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', minWidth: '640px' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', minWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '640px' : 'auto' }}>
                   <thead>
                     <tr>
                       {['Beskrivelse', 'Mengde', 'Enhet', 'Arbeid kr/enh', 'Material kr/enh', 'Sum', ''].map((h, i) => (
@@ -11680,7 +11694,7 @@ function EndringsmeldingPage() {
                       return (
                         <tr key={p.id}>
                           <td style={{ padding:'6px 4px' }}>
-                            <input value={p.description} onChange={e => updatePost(p.id, 'description', e.target.value)} placeholder="Beskriv post" style={{ ...inp, minWidth:'160px' }} />
+                            <input value={p.description} onChange={e => updatePost(p.id, 'description', e.target.value)} placeholder="Beskriv post" style={{ ...inp, width:'100%', minWidth:'120px' }} />
                           </td>
                           <td style={{ padding:'6px 4px' }}>
                             <input type="number" value={p.qty} onChange={e => updatePost(p.id, 'qty', e.target.value)} style={{ ...inp, width:'70px', textAlign:'right' }} />
@@ -11689,10 +11703,10 @@ function EndringsmeldingPage() {
                             <input value={p.unit} onChange={e => updatePost(p.id, 'unit', e.target.value)} placeholder="stk" style={{ ...inp, width:'60px' }} />
                           </td>
                           <td style={{ padding:'6px 4px' }}>
-                            <input type="number" value={p.unitPriceWork} onChange={e => updatePost(p.id, 'unitPriceWork', e.target.value)} placeholder="0" style={{ ...inp, width:'100px', textAlign:'right' }} />
+                            <input type="number" value={p.unitPriceWork} onChange={e => updatePost(p.id, 'unitPriceWork', e.target.value)} placeholder="0" style={{ ...inp, width:'90px', textAlign:'right' }} />
                           </td>
                           <td style={{ padding:'6px 4px' }}>
-                            <input type="number" value={p.unitPriceMaterial} onChange={e => updatePost(p.id, 'unitPriceMaterial', e.target.value)} placeholder="0" style={{ ...inp, width:'100px', textAlign:'right' }} />
+                            <input type="number" value={p.unitPriceMaterial} onChange={e => updatePost(p.id, 'unitPriceMaterial', e.target.value)} placeholder="0" style={{ ...inp, width:'90px', textAlign:'right' }} />
                           </td>
                           <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>
                             {Math.round(sum).toLocaleString('nb-NO')} kr
@@ -11713,7 +11727,6 @@ function EndringsmeldingPage() {
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'10px', flexWrap:'wrap', gap:'8px' }}>
                 <button type="button" onClick={addPost}
                   style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
-                <div style={{ fontSize:'11px', color:'#94a3b8' }}>Scroll tabellen horisontalt på mobil</div>
               </div>
             </div>
 
@@ -11777,13 +11790,34 @@ function EndringsmeldingPage() {
               </label>
             </div>
 
-            <div>{lbl('E-post til kunde (for utsendelse)')}<input type="email" value={form.customer_email} onChange={e=>set('customer_email',e.target.value)} placeholder="kunde@firma.no" style={inp} /></div>
+            <div>{lbl('Send til kunde (e-post)')}
+              <CustomerSelect
+                value={form.customer_email}
+                onChange={v => set('customer_email', v)}
+                onSelect={c => {
+                  if (c.email) set('customer_email', c.email)
+                }}
+                placeholder="Søk kunde eller skriv inn e-post..."
+              />
+              <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>
+                Autofylles fra prosjektet, eller søk etter eksisterende kunde. Kan også skrives inn manuelt.
+              </p>
+            </div>
             <div>{lbl('Interne notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Interne merknader (vises ikke for kunde)" style={{ ...inp, resize:'none', fontFamily:'system-ui,sans-serif' }} /></div>
           </form>
 
-          <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', justifyContent:'flex-end', flexShrink:0 }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>{saving ? 'Lagrer...' : isEdit ? 'Oppdater' : 'Opprett'}</button>
+          <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', justifyContent:'flex-end', flexShrink:0, flexWrap:'wrap' }}>
+            <button onClick={onClose} disabled={saving} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: saving?'not-allowed':'pointer', fontSize:'14px' }}>Avbryt</button>
+            <button onClick={() => handleSave(false)} disabled={saving}
+              style={{ padding:'10px 20px', background: saving?'#86efac':'white', color: saving?'white':'#059669', border:'1px solid #059669', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor: saving?'not-allowed':'pointer' }}>
+              {saving ? 'Lagrer...' : isEdit ? '💾 Oppdater' : '💾 Opprett som utkast'}
+            </button>
+            {!isEdit && form.customer_email && (
+              <button onClick={() => handleSave(true)} disabled={saving}
+                style={{ padding:'10px 20px', background: saving?'#86efac':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor: saving?'not-allowed':'pointer' }}>
+                {saving ? 'Lagrer...' : '📧 Opprett og send'}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -12207,7 +12241,17 @@ function EndringsmeldingPage() {
         </div>
       </div>
 
-      {showForm && <EmForm initial={editEm} onClose={() => { setShowForm(false); setEditEm(null) }} onSaved={() => { setShowForm(false); setEditEm(null); load() }} />}
+      {showForm && <EmForm 
+        initial={editEm} 
+        onClose={() => { setShowForm(false); setEditEm(null) }} 
+        onSaved={() => { setShowForm(false); setEditEm(null); load() }}
+        onSaveAndSend={(savedEm) => { 
+          setShowForm(false); setEditEm(null); 
+          load(); 
+          // Åpne send-dialog med den nylig opprettede EM-en
+          setSendDialogEm(savedEm)
+        }}
+      />}
 
       {/* Send-dialog med frist-valg */}
       {sendDialogEm && (
