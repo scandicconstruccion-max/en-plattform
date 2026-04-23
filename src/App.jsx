@@ -5548,6 +5548,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
 
 function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [dev, setDev] = useState(deviation)
   const [showClose, setShowClose] = useState(false)
   const [closeComment, setCloseComment] = useState('')
@@ -5609,7 +5610,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       if (dev.project_id) {
         await notifyProjectManager(dev.project_id, `Avvik ${newStatus.toLowerCase()}: ${dev.title}`, `Status endret til ${newStatus}${dev.location ? ' · Sted: '+dev.location : ''}`, newStatus === 'Lukket' ? 'success' : 'info', 'avvik')
       }
-    } catch (e) { alert('Feil: ' + e.message) }
+    } catch (e) { appAlert({ message: 'Kunne ikke oppdatere status', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -5869,7 +5870,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       pdf.drawFooters()
 
       doc.save(`Avviksrapport - ${dev.title || 'Avvik'}.pdf`)
-    } catch(e) { console.error(e); alert('Feil ved PDF-generering: ' + e.message) }
+    } catch(e) { console.error(e); appAlert({ message: 'Feil ved PDF-generering', subMessage: e.message, kind: 'error' }) }
     finally { setExporting(false) }
   }
 
