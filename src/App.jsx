@@ -5360,8 +5360,13 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
       const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
       const initialLog = [{ at: now, by: user?.id || null, by_name: userName, action: 'Avvik opprettet', meta: {} }]
 
+      // Generér unikt avviksnummer (AV-NNNN) ved opprettelse
+      const { data: existingDevs } = await supabase.from('deviations').select('deviation_number')
+      const devNr = nextSequenceNumber(existingDevs || [], 'AV', 'deviation_number')
+
       const { error } = await supabase.from('deviations').insert({
         title: form.title.trim(),
+        deviation_number: devNr,
         description: form.description,
         location: form.location,
         severity: form.severity,
@@ -5623,8 +5628,9 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   // ── PDF-eksport ────────────────────────────────────────────────────────
   const [exporting, setExporting] = useState(false)
 
-  const exportAvvikPDF = async () => {
-    setExporting(true)
+  const exportAvvikPDF = async (mode = 'download') => {
+    // mode: 'download' → lagrer fila (standard), 'base64' → returnerer { base64, filename }
+    if (mode === 'download') setExporting(true)
     try {
       const pdf = await createBrandedPdf()
       const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
@@ -5869,9 +5875,16 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       }
       pdf.drawFooters()
 
-      doc.save(`Avviksrapport - ${dev.title || 'Avvik'}.pdf`)
-    } catch(e) { console.error(e); appAlert({ message: 'Feil ved PDF-generering', subMessage: e.message, kind: 'error' }) }
-    finally { setExporting(false) }
+      const filename = `Avviksrapport - ${dev.title || 'Avvik'}.pdf`
+      if (mode === 'base64') {
+        // Returner PDF som base64 (uten "data:application/pdf;base64," prefiks) for vedlegg
+        const dataUri = doc.output('datauristring')
+        const base64 = dataUri.split(',')[1] || dataUri
+        return { base64, filename }
+      }
+      doc.save(filename)
+    } catch(e) { console.error(e); if (mode === 'download') appAlert({ message: 'Feil ved PDF-generering', subMessage: e.message, kind: 'error' }); throw e }
+    finally { if (mode === 'download') setExporting(false) }
   }
 
   const statusFlow = ['Åpen', 'Under behandling', 'Lukket']
@@ -6113,6 +6126,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
           dev={dev}
           project={proj}
           user={user}
+          generatePdfBase64={() => exportAvvikPDF('base64')}
           onClose={() => setShowSend(false)}
           onSent={async () => {
             setShowSend(false)
@@ -6276,7 +6290,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
 }
 
 // ─── SEND AVVIK MODAL ─────────────────────────────────────────────────────────
-function SendAvvikModal({ dev, project, onClose, onSent, user }) {
+function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64 }) {
   const appAlert = useAppAlert()
   const [recipientType, setRecipientType] = useState('intern') // 'intern' | 'ue' | 'byggherre'
   const [email, setEmail] = useState('')
@@ -6359,41 +6373,54 @@ function SendAvvikModal({ dev, project, onClose, onSent, user }) {
 
       // ─── 1. Send e-post (hvis valgt) ────────────────────────────────
       if (wantEmail) {
-        const sevColor = { 'Lav':'#059669','Medium':'#d97706','Høy':'#dc2626','Kritisk':'#991b1b' }[dev.severity] || '#64748b'
-        const sevBg    = { 'Lav':'#ecfdf5','Medium':'#fffbeb','Høy':'#fef2f2','Kritisk':'#fef2f2' }[dev.severity] || '#f8fafc'
+        // Generér PDF som base64 for vedlegg
+        let pdfBase64 = null
+        let pdfFilename = `Avvik.pdf`
+        try {
+          const pdfResult = await generatePdfBase64?.()
+          if (pdfResult) {
+            pdfBase64 = pdfResult.base64
+            pdfFilename = pdfResult.filename
+          }
+        } catch (pdfErr) {
+          console.error('PDF-generering feilet:', pdfErr)
+          // Fortsett uten vedlegg om PDF feiler
+        }
 
-        // Bygg HTML-e-post
+        // Kort HTML-e-post: bare melding + info om at avvik er vedlagt
+        const avvikNr = dev.deviation_number || dev.id?.slice(0, 8) || 'Uten nummer'
         const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px;color:#0f172a">' +
-          '<h1 style="color:#0f172a;font-size:22px;margin:0 0 4px">Avviksrapport</h1>' +
-          '<p style="color:#64748b;font-size:13px;margin:0 0 24px">Sendt fra En Plattform</p>' +
-          (customMessage ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px 16px;margin-bottom:20px"><div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:4px">MELDING</div><div style="color:#1e3a8a;font-size:14px;white-space:pre-wrap">' + customMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' : '') +
-          '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
-            '<div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>' +
-            '<div style="font-weight:700;font-size:15px">' + (project?.name || '—') + '</div>' +
-            (dev.location ? '<div style="font-size:13px;color:#64748b;margin-top:4px">Sted: ' + dev.location + '</div>' : '') +
+          '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">Hei,</p>' +
+          '<p style="font-size:15px;line-height:1.6;margin:0 0 16px">Se vedlagt PDF for avviksrapporten.</p>' +
+          (customMessage ? '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;margin:16px 0 20px"><div style="font-size:12px;color:#1e40af;font-weight:700;margin-bottom:6px">MELDING FRA AVSENDER</div><div style="color:#1e3a8a;font-size:14px;line-height:1.5;white-space:pre-wrap">' + customMessage.replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div></div>' : '') +
+          '<div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin:16px 0;font-size:13px;color:#475569">' +
+            '<div style="margin-bottom:4px"><strong>Avvik:</strong> ' + (dev.title || '—').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' +
+            '<div style="margin-bottom:4px"><strong>Nummer:</strong> ' + avvikNr + '</div>' +
+            '<div style="margin-bottom:4px"><strong>Prosjekt:</strong> ' + (project?.name || '—') + '</div>' +
+            '<div><strong>Alvorlighet:</strong> ' + (dev.severity || 'Medium') + '</div>' +
           '</div>' +
-          '<div style="background:white;border-radius:12px;padding:16px;margin-bottom:16px;border-left:4px solid ' + sevColor + ';border:1px solid #e2e8f0">' +
-            '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">' +
-              '<span style="background:' + sevBg + ';color:' + sevColor + ';padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">' + (dev.severity || 'Medium') + '</span>' +
-              '<span style="background:#f1f5f9;color:#475569;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600">' + (dev.status || 'Åpen') + '</span>' +
-            '</div>' +
-            '<div style="font-weight:700;font-size:16px;margin-bottom:10px">' + (dev.title || '') + '</div>' +
-            (dev.description ? '<div style="font-size:14px;color:#374151;line-height:1.5;white-space:pre-wrap">' + (dev.description || '').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
-          '</div>' +
-          (dev.has_cost_impact || dev.has_time_impact
-            ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:16px">' +
-              '<div style="font-size:12px;color:#92400e;font-weight:700;margin-bottom:8px">KONSEKVENSER</div>' +
-              (dev.has_cost_impact ? '<div style="font-size:14px;color:#374151;margin-bottom:4px"><strong>Priskonsekvens:</strong> ' + (dev.cost_impact_amount ? Math.round(parseFloat(dev.cost_impact_amount)).toLocaleString('nb-NO') + ' kr' : 'Ja (beløp ikke spesifisert)') + '</div>' : '') +
-              (dev.has_time_impact ? '<div style="font-size:14px;color:#374151"><strong>Tidforlengelse:</strong> ' + (dev.time_impact_days ? dev.time_impact_days + ' dag' + (parseInt(dev.time_impact_days) === 1 ? '' : 'er') : 'Ja (antall dager ikke spesifisert)') + '</div>' : '') +
-            '</div>'
-            : '') +
-          '<p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9">Avviket er sendt via En Plattform</p>' +
+          '<p style="font-size:13px;color:#64748b;line-height:1.6;margin:24px 0 0">Med vennlig hilsen,<br><strong>' + userName + '</strong></p>' +
+          '<p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9">Sendt via En Plattform</p>' +
         '</div>'
+
+        // Bygg Resend-payload med vedlegg (hvis PDF lyktes)
+        const payload = {
+          to: email,
+          subject: `Avvik ${avvikNr}: ${dev.title || 'Uten tittel'}`,
+          html,
+        }
+        if (pdfBase64) {
+          payload.attachments = [{
+            filename: pdfFilename,
+            content: pdfBase64,
+            type: 'application/pdf',
+          }]
+        }
 
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-          body: JSON.stringify({ to: email, subject: `Avvik: ${dev.title} (${dev.severity || 'Medium'})`, html })
+          body: JSON.stringify(payload)
         })
         if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
       }
