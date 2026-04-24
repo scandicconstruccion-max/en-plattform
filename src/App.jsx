@@ -13735,8 +13735,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               description: (chapterLabel ? `[${chapterLabel}] ` : '') + (p.description || 'Uten beskrivelse'),
               qty: qty || 1,
               unit: p.unit || 'stk',
-              unit_price: unitPrice,
-              mva_rate: 25,
+              unitPrice: unitPrice, // MERK: invoice-koden bruker camelCase (l.unitPrice)
+              mvaRate: 0.25, // MERK: mvaRate lagres som desimal (0.25), ikke prosent (25)
             })
           }
         })
