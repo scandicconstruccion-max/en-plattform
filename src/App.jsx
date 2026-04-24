@@ -13320,6 +13320,7 @@ function OrdrePage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [showFromQuote, setShowFromQuote] = useState(false)
+  const [sendAfterSaveOrder, setSendAfterSaveOrder] = useState(null) // Ordre som skal sendes etter lagring
   const [selected, setSelected] = useState(null)
   React.useEffect(() => {
     if (selected && window.__enterDetailView) {
@@ -13440,7 +13441,14 @@ function OrdrePage() {
         )}
       </div>
 
-      {showNew && <OrdreEditorModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+      {showNew && <OrdreEditorModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={(savedOrder, alsoSend)=>{
+        setShowNew(false)
+        load()
+        if (alsoSend && savedOrder) {
+          setSendAfterSaveOrder(savedOrder)
+        }
+      }} />}
+      {sendAfterSaveOrder && <SendOrdreModal order={sendAfterSaveOrder} user={user} onClose={()=>setSendAfterSaveOrder(null)} onSent={()=>{setSendAfterSaveOrder(null);load()}} />}
       {showFromQuote && <FraIlbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowFromQuote(false)} onSaved={()=>{setShowFromQuote(false);load()}} />}
     </div>
   )
@@ -13774,7 +13782,13 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         </div>
       </div>
 
-      {editing && <OrdreEditorModal projects={projects} user={user} initial={o} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
+      {editing && <OrdreEditorModal projects={projects} user={user} initial={o} onClose={()=>setEditing(false)} onSaved={(_savedOrder, alsoSend)=>{
+        setEditing(false)
+        refresh()
+        if (alsoSend) {
+          setShowSend(true)
+        }
+      }} />}
       {showSend && <SendOrdreModal order={o} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
       {showNewChange && <EndringsmeldingModal order={o} user={user} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
       {showUpsellInvoice && <FakturaUpsellModal onClose={()=>setShowUpsellInvoice(false)} />}
@@ -13877,7 +13891,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
   const removePost = (chId,pId) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.filter(p=>p.id!==pId)}:x))
   const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
 
-  const handleSave = async () => {
+  const handleSave = async (alsoSend = false) => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
@@ -13888,9 +13902,26 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
         statusOnCreate: 'ordre_bekreftet',
       })
       const payload = sanitizeDbPayload({ ...form, chapters, project_id:form.project_id||null, customer_id: customerId, updated_at:new Date().toISOString() })
-      if (isEdit) { const {error}=await supabase.from('orders').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('orders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
-      onSaved()
+
+      let savedOrder = null
+      if (isEdit) {
+        const existingLog = Array.isArray(initial.activity_log) ? initial.activity_log : []
+        const newLog = [...existingLog, { action: 'Endret', by: user?.email, at: new Date().toISOString() }]
+        const { data, error } = await supabase.from('orders').update({ ...payload, activity_log: newLog }).eq('id', initial.id).select().single()
+        if (error) throw error
+        savedOrder = data
+      } else {
+        const createdLog = [{ action: 'Opprettet', by: user?.email, at: new Date().toISOString() }]
+        const { data, error } = await supabase.from('orders').insert({
+          ...payload,
+          status: 'Utkast',
+          activity_log: createdLog,
+          created_by: user?.id,
+        }).select().single()
+        if (error) throw error
+        savedOrder = data
+      }
+      onSaved(savedOrder, alsoSend)
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
   }
@@ -14003,7 +14034,8 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
           {isMobOE && <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>{fmtO(grandTotal)}</span>}
           <div style={{ display:'flex', gap: isMobOE ? '6px' : '10px' }}>
             {step===1&&<button onClick={()=>setStep(2)} style={{ padding: isMobOE ? '8px 14px' : '10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{isMobOE ? 'Neste →' : 'Neste: Linjer →'}</button>}
-            {step===2&&<button onClick={handleSave} disabled={saving} style={{ padding: isMobOE ? '8px 14px' : '10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>}
+            {step===2&&<button onClick={()=>handleSave(false)} disabled={saving} style={{ padding: isMobOE ? '8px 14px' : '10px 20px', background:saving?'#6ee7b7':'white', color: saving ? 'white' : '#059669', border: saving ? 'none' : '1px solid #059669', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{saving?'Lagrer...':(isEdit?'💾 Lagre':'💾 Lagre utkast')}</button>}
+            {step===2 && form.customer_email && <button onClick={()=>handleSave(true)} disabled={saving} style={{ padding: isMobOE ? '8px 14px' : '10px 20px', background:saving?'#93c5fd':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize: isMobOE ? '12px' : '14px', fontWeight:'600' }}>{saving?'...':(isMobOE?'📧 Send':'📧 Lagre og send til kunde')}</button>}
           </div>
         </div>
       </div>
@@ -14074,13 +14106,14 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
 }
 
 function SendOrdreModal({ order, user, onClose, onSent }) {
+  const appAlert = useAppAlert()
   const [email, setEmail] = useState(order.customer_email||'')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const { grandTotal } = calcOrder(order.chapters||[], order.global_markup)
 
   const handleSend = async () => {
-    if (!email) return alert('E-postadresse er påkrevd')
+    if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
     setSending(true)
     try {
       const approvalUrl = await createApprovalToken({ module:'order', recordId:order.id, recipientEmail:email, createdBy:user?.id })
@@ -14108,9 +14141,32 @@ function SendOrdreModal({ order, user, onClose, onSent }) {
       })
       const d = await fnRes.json()
       if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
-      await supabase.from('orders').update({ status:'Sendt', updated_at:new Date().toISOString(), customer_email:email }).eq('id',order.id)
-      setSent(true); setTimeout(()=>onSent(),1500)
-    } catch(e) { alert('Kunne ikke sende: '+e.message) }
+
+      // Oppdater aktivitetslogg med send-hendelse
+      const existingLog = Array.isArray(order.activity_log) ? order.activity_log : []
+      const newLog = [...existingLog, { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: email }]
+
+      await supabase.from('orders').update({
+        status: 'Sendt',
+        customer_email: email,
+        activity_log: newLog,
+        updated_at: new Date().toISOString(),
+      }).eq('id', order.id)
+
+      setSent(true)
+      // Kort ventetid for animasjon, så popup + lukk
+      setTimeout(async () => {
+        onClose()
+        await appAlert({
+          message: 'Ordrebekreftelse sendt',
+          subMessage: `Sendt til ${email}. Kunden får bekreftelsesknapp i e-posten.`,
+          kind: 'success',
+        })
+        onSent()
+      }, 600)
+    } catch(e) {
+      await appAlert({ message: 'Kunne ikke sende', subMessage: e.message, kind: 'error' })
+    }
     finally { setSending(false) }
   }
 
