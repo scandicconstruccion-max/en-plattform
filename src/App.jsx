@@ -13360,6 +13360,120 @@ function VersionViewerModal({ em, version, totalVersions, projects, onClose }) {
 
 function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
 
+// Global PDF-eksport for ordrer — kan kalles fra hvor som helst
+async function exportOrderPDFGlobal(order, projects = [], mode = 'download') {
+  const pdf = await createBrandedPdf()
+  const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
+  const projOrder = (projects || []).find(p => p.id === order.project_id)
+
+  pdf.drawHeader('ORDREBEKREFTELSE', order.order_number || order.title || '')
+  let y = pdf.y
+  const addPage = () => { doc.addPage(); y = 14 }
+  const checkSpace = (n) => { if (y + n > ph - 18) addPage() }
+
+  setC(hex('#0f172a')); doc.setFontSize(16); doc.setFont('helvetica', 'bold')
+  const titleLines = doc.splitTextToSize(order.title || 'Uten tittel', cw)
+  doc.text(titleLines, ml, y)
+  y += titleLines.length * 7 + 2
+
+  const { grandTotal: gt } = calcOrder(order.chapters || [], order.global_markup)
+  const st = ORDER_STATUS[order.status] || ORDER_STATUS['Utkast']
+  setF(hex(st.bg)); doc.roundedRect(ml, y - 3, doc.getTextWidth(order.status || '') + 10, 6, 1.5, 1.5, 'F')
+  setC(hex(st.color)); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+  doc.text(order.status || '—', ml + 5, y + 1)
+  if (gt) {
+    setC(hex('#059669')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+    doc.text(Math.round(gt).toLocaleString('nb-NO') + ' kr', pw - mr, y + 1, { align: 'right' })
+    setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+    doc.text('eks. mva', pw - mr, y + 5, { align: 'right' })
+  }
+  y += 12
+
+  setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+  const infoH = 30
+  doc.roundedRect(ml, y, cw, infoH, 2, 2, 'FD')
+  setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+  doc.text('KUNDE', ml + 4, y + 5)
+  setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+  doc.text(order.customer_name || '—', ml + 4, y + 10)
+  if (order.customer_address) doc.text(order.customer_address, ml + 4, y + 14)
+  if (order.customer_email) doc.text(order.customer_email, ml + 4, y + 18)
+
+  setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+  doc.text('PROSJEKT', ml + cw/2 + 2, y + 5)
+  setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+  doc.text(projOrder?.name || '—', ml + cw/2 + 2, y + 10)
+  if (order.delivery_date) doc.text(`Levering: ${order.delivery_date}`, ml + cw/2 + 2, y + 14)
+  if (order.payment_terms) doc.text(`Bet.vilkår: ${order.payment_terms}`, ml + cw/2 + 2, y + 18)
+  y += infoH + 6
+
+  if (order.intro_text) {
+    checkSpace(20)
+    setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+    doc.text('BESKRIVELSE', ml, y); y += 5
+    setC(hex('#374151')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+    const introLines = doc.splitTextToSize(order.intro_text, cw)
+    doc.text(introLines, ml, y)
+    y += introLines.length * 4 + 6
+  }
+
+  ;(order.chapters || []).forEach((ch, chIdx) => {
+    checkSpace(14)
+    setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+    doc.text(`${String(chIdx + 1).padStart(2, '0')}. ${ch.name || 'Kapittel'}`, ml, y); y += 5
+
+    setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+    doc.text('BESKRIVELSE', ml, y)
+    doc.text('MENGDE', ml + cw * 0.55, y, { align:'right' })
+    doc.text('ENH', ml + cw * 0.62, y)
+    doc.text('ARB.', ml + cw * 0.75, y, { align:'right' })
+    doc.text('MAT.', ml + cw * 0.88, y, { align:'right' })
+    doc.text('SUM', ml + cw, y, { align:'right' })
+    y += 4
+    setD(hex('#e2e8f0')); doc.line(ml, y, ml + cw, y); y += 2
+
+    ;(ch.posts || []).forEach(p => {
+      checkSpace(6)
+      const qty = parseFloat(p.qty) || 0
+      const pw2 = parseFloat(p.unitPriceWork) || 0
+      const pm = parseFloat(p.unitPriceMaterial) || 0
+      const sum = qty * (pw2 + pm)
+      setC(hex('#0f172a')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+      const descLines = doc.splitTextToSize(p.description || '—', cw * 0.5)
+      doc.text(descLines, ml, y + 3)
+      doc.text(String(qty), ml + cw * 0.55, y + 3, { align:'right' })
+      doc.text(p.unit || 'stk', ml + cw * 0.62, y + 3)
+      doc.text(Math.round(pw2).toLocaleString('nb-NO'), ml + cw * 0.75, y + 3, { align:'right' })
+      doc.text(Math.round(pm).toLocaleString('nb-NO'), ml + cw * 0.88, y + 3, { align:'right' })
+      setC(hex('#059669')); doc.setFont('helvetica', 'bold')
+      doc.text(Math.round(sum).toLocaleString('nb-NO') + ' kr', ml + cw, y + 3, { align:'right' })
+      y += Math.max(descLines.length * 3, 5) + 1
+    })
+    y += 4
+  })
+
+  checkSpace(14)
+  setD(hex('#059669')); doc.line(ml, y, ml + cw, y); y += 5
+  setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+  doc.text('Total eks. mva:', ml, y)
+  setC(hex('#059669')); doc.setFontSize(13)
+  doc.text(Math.round(gt).toLocaleString('nb-NO') + ' kr', ml + cw, y, { align:'right' })
+  y += 6
+  setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+  doc.text('Inkl. 25% mva:', ml, y)
+  doc.text(Math.round(gt * 1.25).toLocaleString('nb-NO') + ' kr', ml + cw, y, { align:'right' })
+
+  pdf.drawFooters()
+  const safeTitle = (order.title || 'ordre').replace(/[^\wæøåÆØÅ-]/g, '_').substring(0, 40)
+  const filename = `${order.order_number || 'Ordre'}_${safeTitle}.pdf`
+  if (mode === 'base64') {
+    const dataUri = doc.output('datauristring')
+    const base64 = dataUri.split(',')[1] || dataUri
+    return { base64, filename }
+  }
+  doc.save(filename)
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function OrdrePage() {
   const { user } = useAuth()
@@ -13499,7 +13613,7 @@ function OrdrePage() {
           setSendAfterSaveOrder(savedOrder)
         }
       }} />}
-      {sendAfterSaveOrder && <SendOrdreModal order={sendAfterSaveOrder} user={user} onClose={()=>setSendAfterSaveOrder(null)} onSent={()=>{setSendAfterSaveOrder(null);load()}} />}
+      {sendAfterSaveOrder && <SendOrdreModal order={sendAfterSaveOrder} user={user} getPdfBase64={(ord) => exportOrderPDFGlobal(ord, projects, 'base64')} onClose={()=>setSendAfterSaveOrder(null)} onSent={()=>{setSendAfterSaveOrder(null);load()}} />}
       {showFromQuote && <FraIlbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowFromQuote(false)} onSaved={()=>{setShowFromQuote(false);load()}} />}
     </div>
   )
@@ -13528,7 +13642,9 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   useEffect(() => { loadChanges() }, [])
 
   const updateStatus = async (status) => {
-    const updates = { status, updated_at: new Date().toISOString() }
+    const existingLog = Array.isArray(o.activity_log) ? o.activity_log : []
+    const newLog = [...existingLog, { action: `Status endret til ${status}`, by: user?.email, at: new Date().toISOString() }]
+    const updates = { status, activity_log: newLog, updated_at: new Date().toISOString() }
     if (status==='Bekreftet') updates.confirmed_at = new Date().toISOString()
     if (status==='Fullført') updates.completed_at = new Date().toISOString()
     await supabase.from('orders').update(updates).eq('id',o.id)
@@ -13539,6 +13655,21 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     if (!(await confirm({ message: 'Slett denne ordren?', subMessage: 'Ordren og alle endringsmeldinger slettes permanent.', danger: true }))) return
     await supabase.from('orders').delete().eq('id',o.id)
     onBack()
+  }
+
+  // ── PDF-eksport ────────────────────────────────────────────────────────────
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const exportOrderPDF = async (order, mode = 'download') => {
+    if (mode === 'download') setExportingPdf(true)
+    try {
+      return await exportOrderPDFGlobal(order, projects, mode)
+    } catch(e) {
+      console.error(e)
+      if (mode === 'download') await appAlert({ message: 'Feil ved PDF-generering', subMessage: e.message, kind: 'error' })
+      throw e
+    } finally {
+      if (mode === 'download') setExportingPdf(false)
+    }
   }
 
   const [showUpsellInvoice, setShowUpsellInvoice] = useState(false)
@@ -13830,6 +13961,33 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               </div>
             ))}
           </div>
+
+          {/* Aktivitetslogg */}
+          <div style={oCard}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
+            {Array.isArray(o.activity_log) && o.activity_log.length > 0 ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'2px', maxHeight:'280px', overflowY:'auto' }}>
+                {[...o.activity_log].reverse().map((log, i) => (
+                  <div key={i} style={{ padding:'8px 10px', borderBottom: i < o.activity_log.length - 1 ? '1px solid #f8fafc' : 'none', fontSize:'13px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px', flexWrap:'wrap' }}>
+                      <span style={{ color:'#0f172a', fontWeight:'500' }}>{log.action}</span>
+                      <span style={{ color:'#94a3b8', fontSize:'11px', whiteSpace:'nowrap' }}>
+                        {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                      </span>
+                    </div>
+                    {(log.by || log.to) && (
+                      <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
+                        {log.by && <span>{log.by}</span>}
+                        {log.to && <span> → {log.to}</span>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Ingen aktivitet registrert</p>
+            )}
+          </div>
         </div>
       </div>
 
@@ -13840,7 +13998,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           setShowSend(true)
         }
       }} />}
-      {showSend && <SendOrdreModal order={o} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
+      {showSend && <SendOrdreModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
       {showNewChange && <EndringsmeldingModal order={o} user={user} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
       {showUpsellInvoice && <FakturaUpsellModal onClose={()=>setShowUpsellInvoice(false)} />}
     </div>
@@ -14156,7 +14314,7 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
   )
 }
 
-function SendOrdreModal({ order, user, onClose, onSent }) {
+function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
   const appAlert = useAppAlert()
   const [email, setEmail] = useState(order.customer_email||'')
   const [sending, setSending] = useState(false)
@@ -14167,31 +14325,122 @@ function SendOrdreModal({ order, user, onClose, onSent }) {
     if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
     setSending(true)
     try {
-      const approvalUrl = await createApprovalToken({ module:'order', recordId:order.id, recipientEmail:email, createdBy:user?.id })
-      const html = `
-        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-          <h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Ordrebekreftelse: ${order.title}</h1>
-          <p style="color:#64748b;font-size:14px">Ordrenummer: <strong>${order.order_number}</strong></p>
-          ${order.intro_text?`<p style="color:#475569;line-height:1.6">${order.intro_text}</p>`:''}
-          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0">
-            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM EKS. MVA</div>
-            <div style="font-size:28px;font-weight:800;color:#0f172a">${fmtO(grandTotal)}</div>
-            <div style="font-size:13px;color:#64748b;margin-top:4px">Inkl. mva: ${fmtO(grandTotal*1.25)}</div>
-          </div>
-          ${order.delivery_date?`<p style="color:#64748b;font-size:13px">Leveringsdato: <strong>${order.delivery_date}</strong></p>`:''}
-          ${order.payment_terms?`<p style="color:#64748b;font-size:13px">Betalingsbetingelser: <strong>${order.payment_terms}</strong></p>`:''}
-          <div style="text-align:center;margin:32px 0">
-            <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Bekreft ordre</a>
-          </div>
-          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-          <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
-        </div>`
+      // Hent eller lag view_token for "Se full ordre"-lenken
+      const viewToken = order.view_token || crypto.randomUUID()
+      const viewUrl = `${window.location.origin}/ordre-view?token=${viewToken}`
+      if (!order.view_token) {
+        await supabase.from('orders').update({ view_token: viewToken }).eq('id', order.id)
+      }
+
+      // Bygg poster-tabell for e-post
+      const postsHtml = (() => {
+        const rows = []
+        ;(order.chapters || []).forEach((ch, chIdx) => {
+          ;(ch.posts || []).forEach(p => {
+            const qty = parseFloat(p.qty) || 0
+            const pw = parseFloat(p.unitPriceWork) || 0
+            const pm = parseFloat(p.unitPriceMaterial) || 0
+            const sum = qty * (pw + pm)
+            if (qty > 0 || p.description) {
+              rows.push('<tr style="border-bottom:1px solid #f1f5f9">' +
+                '<td style="padding:8px;font-size:13px">' +
+                  (ch.name ? `<span style="color:#94a3b8;font-size:11px">[${ch.name}]</span> ` : '') +
+                  (p.description || '—').replace(/</g,'&lt;').replace(/>/g,'&gt;') +
+                '</td>' +
+                '<td style="padding:8px;font-size:13px;text-align:right">' + qty + ' ' + (p.unit || 'stk') + '</td>' +
+                '<td style="padding:8px;font-size:13px;text-align:right">' + Math.round(pw).toLocaleString('nb-NO') + '</td>' +
+                '<td style="padding:8px;font-size:13px;text-align:right">' + Math.round(pm).toLocaleString('nb-NO') + '</td>' +
+                '<td style="padding:8px;font-size:13px;font-weight:700;text-align:right">' + Math.round(sum).toLocaleString('nb-NO') + ' kr</td>' +
+              '</tr>')
+            }
+          })
+        })
+        if (rows.length === 0) return ''
+        return '<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:16px;overflow-x:auto">' +
+          '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px">📋 Poster</div>' +
+          '<table style="width:100%;border-collapse:collapse">' +
+            '<thead><tr style="border-bottom:2px solid #e2e8f0">' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:left">Beskrivelse</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Mengde</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Arb./enh</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Mat./enh</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Sum</th>' +
+            '</tr></thead>' +
+            '<tbody>' + rows.join('') + '</tbody>' +
+          '</table>' +
+        '</div>'
+      })()
+
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        '<h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Ordrebekreftelse</h1>' +
+        '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px">' + order.order_number + '</p>' +
+        '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:8px">' + (order.title || '') + '</div>' +
+          (order.intro_text ? '<div style="font-size:14px;color:#374151">' + String(order.intro_text).replace(/\n/g, '<br>') + '</div>' : '') +
+        '</div>' +
+        postsHtml +
+        '<div style="background:#f0fdf4;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bbf7d0">' +
+          '<div style="font-size:24px;font-weight:800;color:#059669;text-align:center">' + Math.round(grandTotal || 0).toLocaleString('nb-NO') + ' kr</div>' +
+          '<div style="font-size:12px;color:#64748b;text-align:center">Total eks. mva</div>' +
+          '<div style="font-size:12px;color:#64748b;text-align:center;margin-top:4px">Inkl. mva: ' + Math.round(grandTotal * 1.25).toLocaleString('nb-NO') + ' kr</div>' +
+        '</div>' +
+        (order.delivery_date ? '<div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#475569"><strong>Leveringsdato:</strong> ' + order.delivery_date + '</div>' : '') +
+        (order.payment_terms ? '<div style="background:#f8fafc;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#475569"><strong>Betalingsbetingelser:</strong> ' + order.payment_terms + '</div>' : '') +
+        // CTA-knapper (Godkjenn/Avvis) — Outlook-kompatibel struktur
+        '<div style="margin:32px 0 16px">' +
+          '<p style="color:#0f172a;font-size:16px;font-weight:700;text-align:center;margin:0 0 20px">Gi ditt svar</p>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">' +
+            '<tr>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#059669;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=godkjent" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✓&nbsp;&nbsp;Godkjenn</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#dc2626;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=avvist" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✗&nbsp;&nbsp;Avvis</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+            '</tr>' +
+          '</table>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px auto 0">' +
+            '<tr><td style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 20px;text-align:center">' +
+              '<a href="' + viewUrl + '" style="color:#475569;text-decoration:none;font-size:13px;font-weight:600">📄 Se full ordre først</a>' +
+            '</td></tr>' +
+          '</table>' +
+        '</div>' +
+        '<p style="color:#94a3b8;font-size:12px">Ordrebekreftelse sendt via En Plattform</p>' +
+      '</div>'
+
+      // Generer PDF-vedlegg
+      let pdfBase64 = null
+      let pdfFilename = 'Ordrebekreftelse.pdf'
+      if (getPdfBase64) {
+        try {
+          const pdfResult = await getPdfBase64(order)
+          if (pdfResult) { pdfBase64 = pdfResult.base64; pdfFilename = pdfResult.filename }
+        } catch (pdfErr) { console.error('PDF-generering feilet:', pdfErr) }
+      }
+
+      const payload = {
+        to: email,
+        subject: `Ordrebekreftelse ${order.order_number} – ${order.title}`,
+        html,
+      }
+      if (pdfBase64) {
+        payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
+      }
+
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
-        method:'POST', headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
-        body: JSON.stringify({ to:email, subject:`Ordrebekreftelse ${order.order_number} – ${order.title}`, html })
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
+        body: JSON.stringify(payload)
       })
-      const d = await fnRes.json()
-      if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
+      if (!fnRes.ok) { const d = await fnRes.json().catch(() => ({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
 
       // Oppdater aktivitetslogg med send-hendelse
       const existingLog = Array.isArray(order.activity_log) ? order.activity_log : []
@@ -14201,16 +14450,16 @@ function SendOrdreModal({ order, user, onClose, onSent }) {
         status: 'Sendt',
         customer_email: email,
         activity_log: newLog,
+        view_token: viewToken,
         updated_at: new Date().toISOString(),
       }).eq('id', order.id)
 
       setSent(true)
-      // Kort ventetid for animasjon, så popup + lukk
       setTimeout(async () => {
         onClose()
         await appAlert({
           message: 'Ordrebekreftelse sendt',
-          subMessage: `Sendt til ${email}. Kunden får bekreftelsesknapp i e-posten.`,
+          subMessage: `Sendt til ${email}. Kunden får PDF-vedlegg + knapper for å godkjenne/avvise.`,
           kind: 'success',
         })
         onSent()
@@ -37246,6 +37495,251 @@ function EMViewPage() {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// OrdreViewPage — Kundevisning av ordre via e-postlenke
+// ═══════════════════════════════════════════════════════════════════
+function OrdreViewPage() {
+  const [order, setOrder] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [responded, setResponded] = useState(false)
+  const [showRejectForm, setShowRejectForm] = useState(false)
+  const [rejectReason, setRejectReason] = useState('')
+  const [submittingReject, setSubmittingReject] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    const action = params.get('action')
+    if (!token) { setError('Ugyldig lenke'); setLoading(false); return }
+
+    supabase.from('orders').select('*').eq('view_token', token).single()
+      .then(async ({ data, error: e }) => {
+        if (e || !data) { setError('Ordren ble ikke funnet'); setLoading(false); return }
+        setOrder(data)
+
+        // Logg at kunde åpnet (kun første gang)
+        const log = [...(data.activity_log || [])]
+        const alreadyOpened = log.some(l => l.action === 'Åpnet av kunde')
+        if (!alreadyOpened) {
+          log.push({ action: 'Åpnet av kunde', at: new Date().toISOString() })
+          await supabase.from('orders').update({ activity_log: log }).eq('id', data.id)
+        }
+
+        // Håndter godkjenn fra e-post-knapp
+        if (action === 'godkjent' && (data.status === 'Sendt' || data.status === 'Utkast')) {
+          const newLog = [...log, { action: 'Godkjent av kunde (digitalt)', at: new Date().toISOString() }]
+          await supabase.from('orders').update({
+            status: 'Bekreftet',
+            activity_log: newLog,
+            confirmed_at: new Date().toISOString(),
+            confirmed_via_view: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }).eq('id', data.id)
+          if (data.created_by) {
+            await supabase.from('notifications').insert({
+              user_id: data.created_by,
+              title: `✅ Ordre bekreftet: ${data.title}`,
+              message: `${data.order_number} er bekreftet av kunde`,
+              type: 'success',
+              link_page: 'ordre',
+            })
+          }
+          setOrder(prev => ({ ...prev, status: 'Bekreftet' }))
+          setResponded(true)
+        } else if (action === 'avvist' && (data.status === 'Sendt' || data.status === 'Utkast')) {
+          // Viser avvis-skjema i stedet for å avvise direkte
+          setShowRejectForm(true)
+        }
+
+        setLoading(false)
+      })
+  }, [])
+
+  const handleApprove = async () => {
+    const log = [...(order.activity_log || []), { action: 'Godkjent av kunde (digitalt)', at: new Date().toISOString() }]
+    await supabase.from('orders').update({
+      status: 'Bekreftet',
+      activity_log: log,
+      confirmed_at: new Date().toISOString(),
+      confirmed_via_view: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }).eq('id', order.id)
+    if (order.created_by) {
+      await supabase.from('notifications').insert({
+        user_id: order.created_by,
+        title: `✅ Ordre bekreftet: ${order.title}`,
+        message: `${order.order_number} er bekreftet av kunde`,
+        type: 'success',
+        link_page: 'ordre',
+      })
+    }
+    setOrder(prev => ({ ...prev, status: 'Bekreftet' }))
+    setResponded(true)
+  }
+
+  const handleReject = async () => {
+    setSubmittingReject(true)
+    try {
+      const log = [...(order.activity_log || []), {
+        action: 'Avvist av kunde (digitalt)',
+        at: new Date().toISOString(),
+        reason: rejectReason || null,
+      }]
+      await supabase.from('orders').update({
+        status: 'Avvist',
+        activity_log: log,
+        rejected_at: new Date().toISOString(),
+        rejected_reason: rejectReason || null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', order.id)
+      if (order.created_by) {
+        await supabase.from('notifications').insert({
+          user_id: order.created_by,
+          title: `❌ Ordre avvist: ${order.title}`,
+          message: `${order.order_number} ble avvist av kunde${rejectReason ? `. Årsak: ${rejectReason}` : ''}`,
+          type: 'warning',
+          link_page: 'ordre',
+        })
+      }
+      setOrder(prev => ({ ...prev, status: 'Avvist' }))
+      setShowRejectForm(false)
+      setResponded(true)
+    } finally {
+      setSubmittingReject(false)
+    }
+  }
+
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><p>Laster...</p></div>
+  if (error) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>⚠️</div><h2>{error}</h2></div></div>
+
+  const { grandTotal } = calcOrder(order.chapters || [], order.global_markup)
+  const statusColor = order.status === 'Bekreftet' ? '#059669' : order.status === 'Avvist' ? '#dc2626' : '#2563eb'
+  const isFinal = order.status === 'Bekreftet' || order.status === 'Avvist' || order.status === 'Fullført' || order.status === 'Fakturert'
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#f8fafc', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ maxWidth:'760px', margin:'0 auto', padding:'24px 16px' }}>
+        <div style={{ background:'white', borderRadius:'20px', border:'1px solid #f1f5f9', boxShadow:'0 4px 20px rgba(0,0,0,0.08)', overflow:'hidden' }}>
+          {/* Header */}
+          <div style={{ background:'linear-gradient(135deg, #059669, #10b981)', padding:'24px', color:'white' }}>
+            <div style={{ fontSize:'13px', opacity:0.8, marginBottom:'4px' }}>ORDREBEKREFTELSE</div>
+            <h1 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'700' }}>{order.title}</h1>
+            <div style={{ fontSize:'14px', opacity:0.9 }}>{order.order_number}</div>
+          </div>
+
+          <div style={{ padding:'24px' }}>
+            {/* Respons-status */}
+            {responded && (
+              <div style={{ background: order.status === 'Bekreftet' ? '#f0fdf4' : '#fef2f2', border:`1px solid ${order.status === 'Bekreftet' ? '#bbf7d0' : '#fecaca'}`, borderRadius:'12px', padding:'16px', textAlign:'center', marginBottom:'20px' }}>
+                <div style={{ fontSize:'28px', marginBottom:'6px' }}>{order.status === 'Bekreftet' ? '✅' : '❌'}</div>
+                <div style={{ fontWeight:'700', fontSize:'16px', color: statusColor }}>Ordren er {order.status === 'Bekreftet' ? 'bekreftet' : 'avvist'}</div>
+                <div style={{ fontSize:'13px', color:'#64748b', marginTop:'4px' }}>Svaret ditt er registrert — {new Date().toLocaleString('nb-NO')}</div>
+              </div>
+            )}
+
+            {/* Avvis-skjema */}
+            {showRejectForm && !responded && (
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'18px', marginBottom:'20px' }}>
+                <h3 style={{ margin:'0 0 10px', fontSize:'16px', color:'#dc2626' }}>❌ Avvis ordren</h3>
+                <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#64748b' }}>Kan du fortelle oss kort hvorfor? (valgfritt — hjelper oss å tilpasse)</p>
+                <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} placeholder="Skriv en begrunnelse her..." style={{ width:'100%', minHeight:'80px', padding:'10px', border:'1px solid #fecaca', borderRadius:'8px', fontSize:'13px', fontFamily:'inherit', boxSizing:'border-box', resize:'vertical' }} />
+                <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end', marginTop:'12px' }}>
+                  <button onClick={() => setShowRejectForm(false)} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                  <button onClick={handleReject} disabled={submittingReject} style={{ padding:'9px 18px', border:'none', borderRadius:'8px', background: submittingReject ? '#fca5a5' : '#dc2626', color:'white', cursor: submittingReject ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'600' }}>{submittingReject ? 'Sender...' : 'Send avvisning'}</button>
+                </div>
+              </div>
+            )}
+
+            {/* Intro */}
+            {order.intro_text && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', fontSize:'14px', color:'#374151', whiteSpace:'pre-wrap' }}>
+                {order.intro_text}
+              </div>
+            )}
+
+            {/* Info-kort */}
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'20px' }}>
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
+                <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Kunde</div>
+                <div style={{ fontSize:'13px', color:'#0f172a' }}>{order.customer_name || '—'}</div>
+              </div>
+              {order.delivery_date && (
+                <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Leveringsdato</div>
+                  <div style={{ fontSize:'13px', color:'#0f172a' }}>{order.delivery_date}</div>
+                </div>
+              )}
+              {order.payment_terms && (
+                <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', gridColumn:'span 2' }}>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Betalingsbetingelser</div>
+                  <div style={{ fontSize:'13px', color:'#0f172a' }}>{order.payment_terms}</div>
+                </div>
+              )}
+            </div>
+
+            {/* Poster-tabell */}
+            {(order.chapters || []).map((ch, chIdx) => (
+              <div key={ch.id || chIdx} style={{ marginBottom:'16px' }}>
+                <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
+                  {String(chIdx + 1).padStart(2, '0')}. {ch.name || 'Kapittel'}
+                </h3>
+                <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+                  <div style={{ background:'#f8fafc', padding:'8px 12px', display:'grid', gridTemplateColumns:'2fr 60px 70px 70px 80px', gap:'8px', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>
+                    <div>Beskrivelse</div>
+                    <div style={{ textAlign:'right' }}>Mengde</div>
+                    <div style={{ textAlign:'right' }}>Arb.</div>
+                    <div style={{ textAlign:'right' }}>Mat.</div>
+                    <div style={{ textAlign:'right' }}>Sum</div>
+                  </div>
+                  {(ch.posts || []).map((p, pIdx) => {
+                    const qty = parseFloat(p.qty) || 0
+                    const pw = parseFloat(p.unitPriceWork) || 0
+                    const pm = parseFloat(p.unitPriceMaterial) || 0
+                    const sum = qty * (pw + pm)
+                    return (
+                      <div key={p.id || pIdx} style={{ padding:'10px 12px', display:'grid', gridTemplateColumns:'2fr 60px 70px 70px 80px', gap:'8px', fontSize:'13px', borderTop: pIdx === 0 ? '1px solid #e2e8f0' : '1px solid #f8fafc' }}>
+                        <div style={{ color:'#0f172a' }}>{p.description || '—'}</div>
+                        <div style={{ textAlign:'right', color:'#64748b' }}>{qty} {p.unit || 'stk'}</div>
+                        <div style={{ textAlign:'right', color:'#64748b' }}>{Math.round(pw).toLocaleString('nb-NO')}</div>
+                        <div style={{ textAlign:'right', color:'#64748b' }}>{Math.round(pm).toLocaleString('nb-NO')}</div>
+                        <div style={{ textAlign:'right', fontWeight:'700', color:'#059669' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+
+            {/* Total */}
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'18px', marginTop:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'12px', color:'#16a34a', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>Total eks. mva</div>
+              <div style={{ fontSize:'28px', fontWeight:'800', color:'#059669' }}>{Math.round(grandTotal).toLocaleString('nb-NO')} kr</div>
+              <div style={{ fontSize:'13px', color:'#64748b', marginTop:'4px' }}>Inkl. 25% mva: {Math.round(grandTotal * 1.25).toLocaleString('nb-NO')} kr</div>
+            </div>
+
+            {/* Action buttons - hvis ikke ferdig besvart */}
+            {!responded && !showRejectForm && !isFinal && (
+              <div style={{ marginTop:'24px', display:'flex', flexDirection:'column', gap:'10px' }}>
+                <p style={{ margin:'0 0 4px', textAlign:'center', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Gi ditt svar</p>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                  <button onClick={handleApprove} style={{ padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700' }}>✓ Godkjenn</button>
+                  <button onClick={() => setShowRejectForm(true)} style={{ padding:'14px', background:'#dc2626', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700' }}>✗ Avvis</button>
+                </div>
+              </div>
+            )}
+
+            {/* Footer */}
+            <div style={{ marginTop:'24px', paddingTop:'16px', borderTop:'1px solid #f1f5f9', textAlign:'center', fontSize:'11px', color:'#94a3b8' }}>
+              Sendt via En Plattform KS-system
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function AppContent() {
   const { user, loading, supabase, displayName, isPlatformOwner } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
@@ -37451,6 +37945,7 @@ function AppContent() {
   if (window.location.pathname === '/anbud-pris') return <UEPrisingsPage />
   if (window.location.pathname === '/ue-svar') return <UESvarPage />
   if (window.location.pathname === '/em-view') return <EMViewPage />
+  if (window.location.pathname === '/ordre-view') return <OrdreViewPage />
 
   if (loading) {
     return (
