@@ -11302,6 +11302,11 @@ function EndringsmeldingPage() {
     }
     setRoute({ view: 'list' })
   }
+  // Variant som erstatter siste historikk-oppføring (for lagring-flyt)
+  const navListReplace = () => {
+    window.history.replaceState({ emRoute: 'list' }, '', '#endringsmelding')
+    setRoute({ view: 'list' })
+  }
   const navDetail = (id) => {
     window.history.pushState({ emRoute: 'detail', id }, '', `#endringsmelding/${id}`)
     setRoute({ view: 'detail', id })
@@ -12919,9 +12924,9 @@ function EndringsmeldingPage() {
       {showForm && <EmForm 
         initial={editEm} 
         onClose={() => navList()} 
-        onSaved={() => { navList(); load() }}
+        onSaved={() => { navListReplace(); load() }}
         onSaveAndSend={(savedEm) => { 
-          navList();
+          navListReplace();
           load(); 
           // Åpne send-dialog med den nylig opprettede EM-en
           setSendDialogEm(savedEm)
