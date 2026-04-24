@@ -13430,8 +13430,100 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     onBack()
   }
 
+  const [showUpsellInvoice, setShowUpsellInvoice] = useState(false)
+  const [creatingInvoice, setCreatingInvoice] = useState(false)
+  const appAlert = useAppAlert()
+
   const createInvoice = async () => {
-    alert('Gå til Faktura-modulen og velg "Fra ordre" for å opprette faktura.')
+    try {
+      // Sjekk om faktura-modulen er aktivert
+      const { data: settings } = await supabase.from('company_settings').select('active_modules').limit(1).single()
+      const activeModules = settings?.active_modules || []
+      const fakturaActive = activeModules.includes('faktura')
+
+      // Sjekk trial-status (alle moduler aktive ved aktiv trial)
+      const { data: companySettings } = await supabase.from('company_settings').select('trial_status, trial_ends_at').limit(1).single()
+      const isTrialActive = companySettings?.trial_status === 'trial' && companySettings?.trial_ends_at && new Date(companySettings.trial_ends_at) > new Date()
+
+      if (!fakturaActive && !isTrialActive) {
+        setShowUpsellInvoice(true)
+        return
+      }
+
+      // Opprett forhåndsutfylt faktura-utkast
+      setCreatingInvoice(true)
+
+      // Hent eksisterende fakturaer for å generere nytt nummer
+      const { data: existingInvoices } = await supabase.from('invoices').select('invoice_number')
+      const newInvoiceNumber = nextInvoiceNumber(existingInvoices || [])
+
+      // Bygg fakturalinjer fra ordrens kapitler
+      const lines = []
+      ;(o.chapters || []).forEach(ch => {
+        ;(ch.lines || []).forEach(l => {
+          const qty = parseFloat(l.qty) || 0
+          const priceWork = parseFloat(l.unitPriceWork) || 0
+          const priceMat = parseFloat(l.unitPriceMaterial) || 0
+          const unitPrice = priceWork + priceMat
+          if (qty > 0 && unitPrice > 0) {
+            lines.push({
+              description: (ch.name ? `[${ch.name}] ` : '') + (l.description || ''),
+              qty, unit: l.unit || 'stk',
+              unit_price: unitPrice,
+              mva_rate: 25,
+            })
+          }
+        })
+      })
+
+      // Hent selskapsinfo
+      const { data: cs } = await supabase.from('company_settings').select('name,address,orgnr,bank_account').limit(1).single()
+
+      const today = new Date().toISOString().split('T')[0]
+      const dueDate = new Date()
+      dueDate.setDate(dueDate.getDate() + 14)
+
+      const { data: newInvoice, error } = await supabase.from('invoices').insert({
+        title: o.title || `Faktura for ${o.order_number}`,
+        invoice_number: newInvoiceNumber,
+        project_id: o.project_id,
+        customer_id: o.customer_id || null,
+        customer_name: o.customer_name,
+        customer_email: o.customer_email,
+        customer_address: o.customer_address,
+        customer_orgnr: o.customer_orgnr,
+        our_name: cs?.name || '',
+        our_address: cs?.address || '',
+        our_orgnr: cs?.orgnr || '',
+        bank_account: cs?.bank_account || '',
+        invoice_date: today,
+        due_date: dueDate.toISOString().split('T')[0],
+        payment_terms: o.payment_terms || '14 dager netto',
+        lines,
+        notes: `Faktura basert på ordre ${o.order_number}`,
+        status: 'Utkast',
+        created_by: user?.id,
+      }).select().single()
+
+      if (error) throw error
+
+      // Oppdater ordrestatus til 'Fakturert'
+      await supabase.from('orders').update({ status: 'Fakturert', updated_at: new Date().toISOString() }).eq('id', o.id)
+      setO(prev => ({ ...prev, status: 'Fakturert' }))
+
+      await appAlert({ message: 'Faktura opprettet som utkast', subMessage: `Faktura ${newInvoiceNumber} klar til redigering`, kind: 'success' })
+
+      // Naviger til den nye fakturaen
+      window.location.hash = '#faktura'
+      // Liten forsinkelse for å la hash-navigasjon fullføre, så åpne fakturaen
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openInvoice', { detail: { invoiceId: newInvoice.id } }))
+      }, 150)
+    } catch(e) {
+      await appAlert({ message: 'Kunne ikke opprette faktura', subMessage: e.message, kind: 'error' })
+    } finally {
+      setCreatingInvoice(false)
+    }
   }
 
   const isMobOD = typeof window !== 'undefined' && window.innerWidth < 768
@@ -13458,8 +13550,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap: isMobOD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
             {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '📧 Send' : '📧 Send bekreftelse'}</button>}
-            {!isMobOD && o.status==='Fullført' && <button onClick={createInvoice} style={{ padding:'9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🧾 Faktura</button>}
-            {!isMobOD && <button onClick={()=>setShowNewChange(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px' }}>🔄</button>}
+            {o.status !== 'Fakturert' && o.status !== 'Avslått' && <button onClick={createInvoice} disabled={creatingInvoice} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background: creatingInvoice ? '#86efac' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: creatingInvoice ? 'wait' : 'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{creatingInvoice ? '⏳' : (isMobOD ? '🧾 Faktura' : '🧾 Send til faktura')}</button>}
             <button onClick={()=>setEditing(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobOD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobOD ? '12px' : '13px' }}>🗑️</button>
           </div>
@@ -13614,9 +13705,72 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       {editing && <OrdreEditorModal projects={projects} user={user} initial={o} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
       {showSend && <SendOrdreModal order={o} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
       {showNewChange && <EndringsmeldingModal order={o} user={user} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
+      {showUpsellInvoice && <FakturaUpsellModal onClose={()=>setShowUpsellInvoice(false)} />}
     </div>
   )
 }
+
+// ─── FAKTURA UPSELL MODAL ────────────────────────────────────────────────────
+function FakturaUpsellModal({ onClose }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        {/* Header med gradient */}
+        <div style={{ background:'linear-gradient(135deg, #059669 0%, #10b981 100%)', padding: isMob ? '24px 20px' : '32px 28px', color:'white', borderRadius:'20px 20px 0 0' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'14px' }}>
+            <div style={{ fontSize:'36px' }}>🧾</div>
+            <button onClick={onClose} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'white', fontSize:'18px', cursor:'pointer', width:'32px', height:'32px', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          </div>
+          <h2 style={{ margin:'0 0 8px', fontSize: isMob ? '20px' : '24px', fontWeight:'800' }}>Lås opp Faktura-modulen</h2>
+          <p style={{ margin:0, fontSize:'14px', opacity:0.95, lineHeight:1.5 }}>
+            Få ordre til faktura med ett klikk — ingen manuell inntasting, ingen glemte detaljer.
+          </p>
+        </div>
+
+        {/* Fordeler */}
+        <div style={{ padding: isMob ? '20px' : '28px' }}>
+          <div style={{ fontSize:'13px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'14px' }}>Hva du får</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:'14px', marginBottom:'24px' }}>
+            {[
+              { icon:'⚡', title:'Ett-klikks fakturering', text:'Send ordre og endringsmeldinger direkte til faktura — alle data overføres automatisk' },
+              { icon:'📋', title:'Profesjonelle fakturaer', text:'KID-nummer, bankkonto, forfallsdatoer og betalingsbetingelser ferdig utfylt' },
+              { icon:'🔔', title:'Automatisk purring', text:'Få varsel ved forfall og send purring med ett trykk' },
+              { icon:'📊', title:'Full oversikt', text:'Se utestående, purrede og betalte fakturaer i én oversikt' },
+              { icon:'💳', title:'Kreditnotaer', text:'Opprett kreditnota direkte fra en eksisterende faktura hvis noe må justeres' },
+            ].map((f, i) => (
+              <div key={i} style={{ display:'flex', gap:'12px', alignItems:'flex-start' }}>
+                <div style={{ fontSize:'20px', flexShrink:0, width:'36px', height:'36px', background:'#f0fdf4', borderRadius:'10px', display:'flex', alignItems:'center', justifyContent:'center' }}>{f.icon}</div>
+                <div>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>{f.title}</div>
+                  <div style={{ fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>{f.text}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* CTA-knapper */}
+          <div style={{ display:'flex', flexDirection: isMob ? 'column' : 'row', gap:'10px' }}>
+            <button onClick={() => { onClose(); window.location.hash = '#minbedrift' }}
+              style={{ flex:1, padding:'14px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'15px', fontWeight:'700', cursor:'pointer', boxShadow:'0 4px 12px rgba(5,150,105,0.25)' }}>
+              Aktiver Faktura-modulen →
+            </button>
+            <button onClick={onClose}
+              style={{ padding:'14px 20px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'12px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+              Ikke nå
+            </button>
+          </div>
+
+          <div style={{ marginTop:'16px', textAlign:'center', fontSize:'12px', color:'#94a3b8' }}>
+            💡 Alle moduler kan prøves gratis i prøveperioden
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+// ─── END FAKTURA UPSELL MODAL ────────────────────────────────────────────────
 
 function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit = !!initial
