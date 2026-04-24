@@ -12514,6 +12514,41 @@ function EndringsmeldingPage() {
             {(!em.activity_log || em.activity_log.length === 0) && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert</p>}
           </div>
         </div>
+
+        {/* Modaler også i detaljvisning */}
+        {sendDialogEm && (
+          <SendEmDialog
+            em={sendDialogEm}
+            sendType="send"
+            onClose={() => setSendDialogEm(null)}
+            onConfirm={async (reminderDays) => {
+              const em = sendDialogEm
+              setSendDialogEm(null)
+              await sendToCustomer(em, reminderDays)
+            }}
+          />
+        )}
+        {resendDialogEm && (
+          <SendEmDialog
+            em={resendDialogEm.em}
+            sendType={resendDialogEm.type}
+            onClose={() => setResendDialogEm(null)}
+            onConfirm={async (reminderDays) => {
+              const { em, type } = resendDialogEm
+              setResendDialogEm(null)
+              await resendToCustomer(em, type, reminderDays)
+            }}
+          />
+        )}
+        {viewingVersion && (
+          <VersionViewerModal
+            em={viewingVersion.em}
+            version={viewingVersion.version}
+            totalVersions={(viewingVersion.em.versions || []).length}
+            projects={projects}
+            onClose={() => setViewingVersion(null)}
+          />
+        )}
       </div>
     )
   }
