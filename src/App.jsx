@@ -11276,6 +11276,7 @@ function EndringsmeldingPage() {
   const confirm = useConfirm()
   const [endringer, setEndringer] = useState([])
   const [sendDialogEm, setSendDialogEm] = useState(null) // EM for som skal sendes (åpner frist-modal)
+  const [resendDialogEm, setResendDialogEm] = useState(null) // EM for re-send/revisjon/kopi
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -11520,6 +11521,29 @@ function EndringsmeldingPage() {
     if (!(await confirm({ message: 'Slett denne endringsmeldingen?', subMessage: `"${em.title}" slettes permanent. Denne handlingen kan ikke angres.`, danger: true }))) return
     await supabase.from('endringsmeldinger').delete().eq('id', em.id)
     load()
+  }
+
+  // ── Helper: Bestem type re-send basert på aktivitetslogg og status ────────
+  // Returnerer: 'send' (første gang), 'resend' (uendret), 'revision' (redigert), 'copy' (godkjent/avvist)
+  const getEmSendType = (em) => {
+    if (em.status === 'Utkast') return 'send'
+    if (em.status === 'Godkjent' || em.status === 'Avvist') return 'copy'
+    if (em.status !== 'Sendt') return 'resend'
+
+    // Status = 'Sendt': sjekk om redigert etter siste utsendelse
+    const log = Array.isArray(em.activity_log) ? em.activity_log : []
+    let lastSentIdx = -1
+    for (let i = log.length - 1; i >= 0; i--) {
+      const action = log[i].action || ''
+      if (action === 'Sendt til kunde' || action.startsWith('Sendt på nytt') || action.startsWith('Sendt revisjon')) {
+        lastSentIdx = i
+        break
+      }
+    }
+    if (lastSentIdx === -1) return 'resend' // Ingen send-hendelse funnet, fallback
+    // Er det en "Endret"-hendelse etter siste sending?
+    const editedAfterSend = log.slice(lastSentIdx + 1).some(l => (l.action || '') === 'Endret')
+    return editedAfterSend ? 'revision' : 'resend'
   }
 
   // ── Form Component ─────────────────────────────────────────────────────────
@@ -12118,6 +12142,176 @@ function EndringsmeldingPage() {
     } catch(e) { await appAlert({ message: 'Kunne ikke sende purring', subMessage: e.message, kind: 'error' }) }
   }
 
+  // ── Send på nytt / Revisjon / Kopi ─────────────────────────────────────────
+  const resendToCustomer = async (em, sendType, reminderDays = null) => {
+    // sendType: 'resend' | 'revision' | 'copy'
+    if (!em.customer_email) return appAlert({ message: 'Kundens e-post mangler', kind: 'warn' })
+    try {
+      const proj = projects.find(p => p.id === em.project_id)
+      const viewToken = em.view_token || crypto.randomUUID()
+      const viewUrl = `${window.location.origin}/em-view?token=${viewToken}`
+      if (!em.view_token) await supabase.from('endringsmeldinger').update({ view_token: viewToken }).eq('id', em.id)
+
+      // Definer banner-tekst og emne-prefiks basert på type
+      const typeConfig = {
+        resend: {
+          bannerBg: '#fffbeb', bannerBorder: '#fde68a', bannerColor: '#92400e',
+          bannerTitle: '🔄 Sendt på nytt',
+          bannerText: 'Denne endringsmeldingen er sendt på nytt. Innholdet er uendret fra forrige utsendelse.',
+          subjectPrefix: '[Sendt på nytt] ',
+          logAction: 'Sendt på nytt',
+          successMsg: 'Endringsmelding sendt på nytt',
+        },
+        revision: {
+          bannerBg: '#eff6ff', bannerBorder: '#bfdbfe', bannerColor: '#1e40af',
+          bannerTitle: '📝 Revidert versjon',
+          bannerText: 'Ny versjon sendt — vennligst se vedlagt oppdatert versjon. Tidligere svar kan ha blitt erstattet.',
+          subjectPrefix: '[Revidert] ',
+          logAction: 'Sendt revisjon',
+          successMsg: 'Revidert endringsmelding sendt',
+        },
+        copy: {
+          bannerBg: '#f0fdf4', bannerBorder: '#bbf7d0', bannerColor: '#065f46',
+          bannerTitle: '📄 Kopi til arkivering',
+          bannerText: `Dette er en kopi av endringsmeldingen til din arkivering. Status: ${em.status}.`,
+          subjectPrefix: '[Kopi] ',
+          logAction: 'Kopi sendt',
+          successMsg: 'Kopi sendt',
+        },
+      }
+      const cfg = typeConfig[sendType] || typeConfig.resend
+
+      const imgHtml = (em.images||[]).length > 0 ? '<div style="margin:16px 0">' + em.images.map(img => `<img src="${img.url}" style="max-width:280px;border-radius:8px;margin:4px" />`).join('') + '</div>' : ''
+      const vedleggHtml = (em.vedlegg||[]).length > 0 ? '<div style="margin:12px 0"><strong>Vedlegg:</strong><br>' + em.vedlegg.map(v => `<a href="${v.url}" style="color:#2563eb">${v.name}</a>`).join('<br>') + '</div>' : ''
+
+      // Bygg poster-tabell (samme som vanlig send)
+      const postsHtml = (() => {
+        const validPosts = Array.isArray(em.posts) ? em.posts.filter(p => p.description || parseFloat(p.qty) > 0) : []
+        if (validPosts.length === 0) return ''
+        const rows = validPosts.map(p => {
+          const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+          return '<tr style="border-bottom:1px solid #f1f5f9">' +
+            '<td style="padding:8px;font-size:13px">' + (p.description || '—').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</td>' +
+            '<td style="padding:8px;font-size:13px;text-align:right">' + (p.qty || 0) + ' ' + (p.unit || 'stk') + '</td>' +
+            '<td style="padding:8px;font-size:13px;text-align:right">' + Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO') + '</td>' +
+            '<td style="padding:8px;font-size:13px;text-align:right">' + Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO') + '</td>' +
+            '<td style="padding:8px;font-size:13px;font-weight:700;text-align:right">' + Math.round(sum).toLocaleString('nb-NO') + ' kr</td>' +
+          '</tr>'
+        }).join('')
+        return '<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;margin-bottom:16px;overflow-x:auto">' +
+          '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:10px">💰 Poster</div>' +
+          '<table style="width:100%;border-collapse:collapse">' +
+            '<thead><tr style="border-bottom:2px solid #e2e8f0">' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:left">Beskrivelse</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Mengde</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Arb./enh</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Mat./enh</th>' +
+              '<th style="padding:8px;font-size:11px;font-weight:600;color:#94a3b8;text-transform:uppercase;text-align:right">Sum</th>' +
+            '</tr></thead>' +
+            '<tbody>' + rows + '</tbody>' +
+          '</table>' +
+        '</div>'
+      })()
+
+      // Godkjenn/Avvis-knapper vises kun hvis ikke 'copy'
+      const ctaHtml = sendType === 'copy' ? '' :
+        '<div style="margin:32px 0 16px">' +
+          '<p style="color:#0f172a;font-size:16px;font-weight:700;text-align:center;margin:0 0 20px">Gi ditt svar</p>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">' +
+            '<tr>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#059669;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=godkjent" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✓&nbsp;&nbsp;Godkjenn</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#dc2626;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=avvist" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✗&nbsp;&nbsp;Avvis</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+            '</tr>' +
+          '</table>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px auto 0">' +
+            '<tr><td style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 20px;text-align:center">' +
+              '<a href="' + viewUrl + '" style="color:#475569;text-decoration:none;font-size:13px;font-weight:600">📄 Se full endringsmelding først</a>' +
+            '</td></tr>' +
+          '</table>' +
+        '</div>'
+
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        // Banner øverst som viser typen
+        '<div style="background:' + cfg.bannerBg + ';border:1px solid ' + cfg.bannerBorder + ';border-radius:12px;padding:14px 16px;margin-bottom:20px">' +
+          '<div style="font-size:14px;font-weight:700;color:' + cfg.bannerColor + ';margin-bottom:4px">' + cfg.bannerTitle + '</div>' +
+          '<div style="font-size:13px;color:' + cfg.bannerColor + '">' + cfg.bannerText + '</div>' +
+        '</div>' +
+        '<h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Endringsmelding</h1>' +
+        '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px">' + em.em_number + '</p>' +
+        '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:12px;color:#64748b;margin-bottom:2px">PROSJEKT</div>' +
+          '<div style="font-weight:700">' + (proj?.name || '—') + '</div>' +
+        '</div>' +
+        '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:8px">' + (em.title || '') + '</div>' +
+          (em.reason ? '<div style="font-size:13px;color:#92400e;margin-bottom:8px">Årsak: ' + em.reason + '</div>' : '') +
+          '<div style="font-size:14px;color:#374151">' + (em.description || '').replace(/\n/g, '<br>') + '</div>' +
+          imgHtml +
+        '</div>' +
+        postsHtml +
+        '<div style="background:#f0fdf4;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #bbf7d0">' +
+          '<div style="font-size:24px;font-weight:800;color:#059669;text-align:center">' + Math.round(em.amount || 0).toLocaleString('nb-NO') + ' kr</div>' +
+          '<div style="font-size:12px;color:#64748b;text-align:center">Total eks. mva</div>' +
+          (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
+        '</div>' + vedleggHtml +
+        ctaHtml +
+        '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
+
+      // Generer PDF-vedlegg
+      let pdfBase64 = null
+      let pdfFilename = 'Endringsmelding.pdf'
+      try {
+        const pdfResult = await exportSingleEmPDF(em, 'base64')
+        if (pdfResult) { pdfBase64 = pdfResult.base64; pdfFilename = pdfResult.filename }
+      } catch (pdfErr) { console.error('PDF-generering feilet:', pdfErr) }
+
+      const payload = {
+        to: em.customer_email,
+        subject: `${cfg.subjectPrefix}Endringsmelding ${em.em_number} – ${em.title}`,
+        html,
+      }
+      if (pdfBase64) {
+        payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
+      }
+
+      const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify(payload)
+      })
+      if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
+
+      // Oppdater aktivitetslogg + evt. ny purringsfrist (ikke for 'copy')
+      const log = [...(em.activity_log || []), { action: cfg.logAction, by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
+      const updates = { activity_log: log, updated_at: new Date().toISOString() }
+
+      if (sendType !== 'copy' && reminderDays && reminderDays > 0) {
+        const dueDate = new Date()
+        dueDate.setDate(dueDate.getDate() + parseInt(reminderDays))
+        updates.reminder_days = parseInt(reminderDays)
+        updates.reminder_due_date = dueDate.toISOString()
+        updates.last_reminder_sent_at = null
+      }
+
+      await supabase.from('endringsmeldinger').update(updates).eq('id', em.id)
+
+      const reminderText = sendType !== 'copy' && reminderDays ? ` · Ny purringsfrist: ${reminderDays} dager` : ''
+      await appAlert({ message: cfg.successMsg, subMessage: `Sendt til ${em.customer_email}${reminderText}`, kind: 'success' })
+      load()
+    } catch(e) { await appAlert({ message: 'Kunne ikke sende', subMessage: e.message, kind: 'error' }) }
+  }
+
   // ── Detail View ────────────────────────────────────────────────────────────
   if (viewEm) {
     const em = viewEm
@@ -12135,8 +12329,18 @@ function EndringsmeldingPage() {
               </div>
               <p style={{ margin:0, color:'#94a3b8', fontSize: isMobEM ? '11px' : '13px' }}>{em.em_number} · {proj?.name || '—'} · {new Date(em.created_at).toLocaleDateString('nb-NO')}</p>
             </div>
-            <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+            <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap' }}>
               {em.status === 'Utkast' && <button onClick={() => setSendDialogEm(em)} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📧 Send' : '📧 Send til kunde'}</button>}
+              {em.status === 'Sendt' && (() => {
+                const t = getEmSendType(em)
+                if (t === 'revision') {
+                  return <button onClick={() => setResendDialogEm({ em, type: 'revision' })} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📝 Revisjon' : '📝 Send revisjon'}</button>
+                }
+                return <button onClick={() => setResendDialogEm({ em, type: 'resend' })} style={{ background:'#f1f5f9', color:'#1e293b', border:'1px solid #cbd5e1', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '🔄 På nytt' : '🔄 Send på nytt'}</button>
+              })()}
+              {(em.status === 'Godkjent' || em.status === 'Avvist') && (
+                <button onClick={() => setResendDialogEm({ em, type: 'copy' })} style={{ background:'#f0fdf4', color:'#065f46', border:'1px solid #bbf7d0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📄 Kopi' : '📄 Send kopi'}</button>
+              )}
               <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '12px' : '14px', cursor:'pointer' }}>✏️</button>
             </div>
           </div>
@@ -12325,9 +12529,26 @@ function EndringsmeldingPage() {
                       <button onClick={(e) => { e.stopPropagation(); setSendDialogEm(em) }} title="Send til kunde"
                         style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
                     )}
+                    {!isMobEM && em.status === 'Sendt' && (() => {
+                      const t = getEmSendType(em)
+                      if (t === 'revision') {
+                        return (
+                          <button onClick={(e) => { e.stopPropagation(); setResendDialogEm({ em, type: 'revision' }) }} title="Send revidert versjon"
+                            style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📝 Send revisjon</button>
+                        )
+                      }
+                      return (
+                        <button onClick={(e) => { e.stopPropagation(); setResendDialogEm({ em, type: 'resend' }) }} title="Send på nytt"
+                          style={{ background:'#f1f5f9', color:'#1e293b', border:'1px solid #cbd5e1', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>🔄 Send på nytt</button>
+                      )
+                    })()}
                     {!isMobEM && em.status === 'Sendt' && (
                       <button onClick={(e) => { e.stopPropagation(); sendReminder(em) }} title="Send påminnelse"
                         style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📩 Purr</button>
+                    )}
+                    {!isMobEM && (em.status === 'Godkjent' || em.status === 'Avvist') && (
+                      <button onClick={(e) => { e.stopPropagation(); setResendDialogEm({ em, type: 'copy' }) }} title="Send kopi til kunde"
+                        style={{ background:'#f0fdf4', color:'#065f46', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📄 Send kopi</button>
                     )}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); exportSingleEmPDF(em) }} disabled={exportingPdf} title="Last ned som PDF" style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor: exportingPdf?'not-allowed':'pointer', fontSize:'13px', color:'#374151' }}>📄</button>}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
@@ -12416,6 +12637,7 @@ function EndringsmeldingPage() {
       {sendDialogEm && (
         <SendEmDialog
           em={sendDialogEm}
+          sendType="send"
           onClose={() => setSendDialogEm(null)}
           onConfirm={async (reminderDays) => {
             const em = sendDialogEm
@@ -12424,18 +12646,53 @@ function EndringsmeldingPage() {
           }}
         />
       )}
+
+      {/* Send-på-nytt / Revisjon / Kopi dialog */}
+      {resendDialogEm && (
+        <SendEmDialog
+          em={resendDialogEm.em}
+          sendType={resendDialogEm.type}
+          onClose={() => setResendDialogEm(null)}
+          onConfirm={async (reminderDays) => {
+            const { em, type } = resendDialogEm
+            setResendDialogEm(null)
+            await resendToCustomer(em, type, reminderDays)
+          }}
+        />
+      )}
     </div>
   )
 }
 
 // ─── SEND-EM-DIALOG ───────────────────────────────────────────────────────────
-function SendEmDialog({ em, onClose, onConfirm }) {
+function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
+  // sendType: 'send' (første), 'resend', 'revision', 'copy'
   const [reminderDays, setReminderDays] = useState(7) // Standard 7 dager
   const [sending, setSending] = useState(false)
 
+  const isCopy = sendType === 'copy'
+  const showReminder = !isCopy // Kopi har ikke purringsfrist
+
+  const typeLabels = {
+    send: { title: '📧 Send endringsmelding', button: '📧 Send', banner: null },
+    resend: { title: '🔄 Send på nytt', button: '🔄 Send på nytt', banner: {
+      bg: '#fffbeb', border: '#fde68a', color: '#92400e',
+      text: 'Denne endringsmeldingen sendes på nytt med identisk innhold som forrige utsendelse.'
+    }},
+    revision: { title: '📝 Send revisjon', button: '📝 Send revisjon', banner: {
+      bg: '#eff6ff', border: '#bfdbfe', color: '#1e40af',
+      text: 'Endringsmeldingen er redigert siden forrige utsendelse. Kunden får beskjed om at dette er en revidert versjon.'
+    }},
+    copy: { title: '📄 Send kopi', button: '📄 Send kopi', banner: {
+      bg: '#f0fdf4', border: '#bbf7d0', color: '#065f46',
+      text: `Status er "${em.status}". Kunden får en kopi til arkivering — ingen svar forventes.`
+    }},
+  }
+  const cfg = typeLabels[sendType] || typeLabels.send
+
   const handleConfirm = async () => {
     setSending(true)
-    try { await onConfirm(reminderDays) }
+    try { await onConfirm(showReminder ? reminderDays : null) }
     finally { setSending(false) }
   }
 
@@ -12447,50 +12704,62 @@ function SendEmDialog({ em, onClose, onConfirm }) {
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send endringsmelding</h2>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{cfg.title}</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
 
         <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+          {cfg.banner && (
+            <div style={{ background: cfg.banner.bg, border: `1px solid ${cfg.banner.border}`, borderRadius:'10px', padding:'12px 14px' }}>
+              <div style={{ fontSize:'13px', color: cfg.banner.color, lineHeight:1.5 }}>{cfg.banner.text}</div>
+            </div>
+          )}
+
           <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
             <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER</div>
             <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{em.customer_email || '—'}</div>
           </div>
 
-          <div>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>
-              Purringsfrist — hvor mange dager har kunden på å svare?
-            </label>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px', marginBottom:'8px' }}>
-              {[3, 7, 14, 30].map(d => (
-                <button key={d} type="button" onClick={() => setReminderDays(d)}
-                  style={{ padding:'9px 6px', borderRadius:'10px', border: `2px solid ${parseInt(reminderDays) === d ? '#2563eb' : '#e2e8f0'}`, background: parseInt(reminderDays) === d ? '#eff6ff' : 'white', color: parseInt(reminderDays) === d ? '#2563eb' : '#64748b', fontWeight: parseInt(reminderDays) === d ? '700' : '500', fontSize:'13px', cursor:'pointer' }}>
-                  {d} dager
-                </button>
-              ))}
-            </div>
-            <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-              <label style={{ fontSize:'12px', color:'#64748b', flexShrink:0 }}>Egendefinert:</label>
-              <input type="number" min="1" max="365" value={reminderDays} onChange={e => setReminderDays(e.target.value)}
-                style={{ flex:1, padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', boxSizing:'border-box' }} />
-              <span style={{ fontSize:'12px', color:'#94a3b8' }}>dager</span>
-            </div>
-          </div>
+          {showReminder && (
+            <>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'8px' }}>
+                  Purringsfrist — hvor mange dager har kunden på å svare?
+                </label>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'6px', marginBottom:'8px' }}>
+                  {[3, 7, 14, 30].map(d => (
+                    <button key={d} type="button" onClick={() => setReminderDays(d)}
+                      style={{ padding:'9px 6px', borderRadius:'10px', border: `2px solid ${parseInt(reminderDays) === d ? '#2563eb' : '#e2e8f0'}`, background: parseInt(reminderDays) === d ? '#eff6ff' : 'white', color: parseInt(reminderDays) === d ? '#2563eb' : '#64748b', fontWeight: parseInt(reminderDays) === d ? '700' : '500', fontSize:'13px', cursor:'pointer' }}>
+                      {d} dager
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <label style={{ fontSize:'12px', color:'#64748b', flexShrink:0 }}>Egendefinert:</label>
+                  <input type="number" min="1" max="365" value={reminderDays} onChange={e => setReminderDays(e.target.value)}
+                    style={{ flex:1, padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'13px', outline:'none', boxSizing:'border-box' }} />
+                  <span style={{ fontSize:'12px', color:'#94a3b8' }}>dager</span>
+                </div>
+              </div>
 
-          {reminderDays > 0 && (
-            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px' }}>
-              <div style={{ fontSize:'12px', color:'#92400e', marginBottom:'2px' }}>⏰ PURRING TRIGGES</div>
-              <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600' }}>
-                {dueDate.toLocaleDateString('nb-NO', { weekday:'long', day:'2-digit', month:'long', year:'numeric' })}
-              </div>
-              <div style={{ fontSize:'11px', color:'#92400e', marginTop:'4px' }}>
-                Hvis kunden ikke har svart innen denne datoen, får du varsel i bjellen og kan sende purring med ett klikk.
-              </div>
-            </div>
+              {reminderDays > 0 && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px' }}>
+                  <div style={{ fontSize:'12px', color:'#92400e', marginBottom:'2px' }}>⏰ PURRING TRIGGES</div>
+                  <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600' }}>
+                    {dueDate.toLocaleDateString('nb-NO', { weekday:'long', day:'2-digit', month:'long', year:'numeric' })}
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#92400e', marginTop:'4px' }}>
+                    Hvis kunden ikke har svart innen denne datoen, får du varsel i bjellen og kan sende purring med ett klikk.
+                  </div>
+                </div>
+              )}
+            </>
           )}
 
           <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'10px 14px', fontSize:'12px', color:'#059669' }}>
-            <strong>Kunde får:</strong> E-post med alle detaljer og knapp for å godkjenne/avvise endringsmeldingen.
+            <strong>Kunde får:</strong> {isCopy
+              ? 'E-post med alle detaljer og PDF-vedlegg til arkivering.'
+              : 'E-post med alle detaljer, PDF-vedlegg og knapper for å godkjenne/avvise endringsmeldingen.'}
           </div>
         </div>
 
@@ -12498,7 +12767,7 @@ function SendEmDialog({ em, onClose, onConfirm }) {
           <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
           <button type="button" onClick={handleConfirm} disabled={sending || !em.customer_email}
             style={{ padding:'10px 20px', background: sending ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
-            {sending ? 'Sender...' : '📧 Send'}
+            {sending ? 'Sender...' : cfg.button}
           </button>
         </div>
       </div>
