@@ -13587,6 +13587,9 @@ function OrdrePage() {
                       {!isMobO && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{o.order_number}</span>}
                       <OrderStatusBadge status={o.status} />
                       {o.quote_id && <span style={{ background:'#f5f3ff', color:'#7c3aed', fontSize:'11px', fontWeight:'600', padding:'2px 8px', borderRadius:'999px', border:'1px solid #ddd6fe' }}>Fra tilbud</span>}
+                      {o.status === 'Sendt' && o.reminder_due_date && new Date(o.reminder_due_date) <= new Date() && (
+                        <span title="Purring-frist passert" style={{ background:'#fef2f2', color:'#dc2626', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>⏰ Forfalt</span>
+                      )}
                     </div>
                     <div style={{ display:'flex', gap: isMobO ? '6px' : '12px', flexWrap:'wrap' }}>
                       {o.customer_name && <span style={{ fontSize: isMobO ? '11px' : '12px', color:'#64748b' }}>👤 {o.customer_name}</span>}
@@ -13621,10 +13624,13 @@ function OrdrePage() {
 
 function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [o, setO] = useState(init)
   const [changes, setChanges] = useState([])
   const [editing, setEditing] = useState(false)
   const [showSend, setShowSend] = useState(false)
+  const [showReminder, setShowReminder] = useState(false)
+  const [showResend, setShowResend] = useState(false)
   const [showNewChange, setShowNewChange] = useState(false)
   const cfg = ORDER_STATUS[o.status] || ORDER_STATUS['Utkast']
   const proj = projects.find(p=>p.id===o.project_id)
@@ -13674,7 +13680,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
 
   const [showUpsellInvoice, setShowUpsellInvoice] = useState(false)
   const [creatingInvoice, setCreatingInvoice] = useState(false)
-  const appAlert = useAppAlert()
 
   const createInvoice = async () => {
     try {
@@ -13812,6 +13817,15 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap: isMobOD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap' }}>
             {o.status==='Utkast' && <button onClick={()=>setShowSend(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '📧 Send' : '📧 Send bekreftelse'}</button>}
+            {o.status === 'Sendt' && (() => {
+              const isOverdue = o.reminder_due_date && new Date(o.reminder_due_date) <= new Date()
+              return (
+                <>
+                  {isOverdue && <button onClick={()=>setShowReminder(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '⚠️ Purr' : '⚠️ Send purring'}</button>}
+                  <button onClick={()=>setShowResend(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '🔁 Ny' : '🔁 Send på nytt'}</button>
+                </>
+              )
+            })()}
             {o.status !== 'Fakturert' && o.status !== 'Avslått' && <button onClick={createInvoice} disabled={creatingInvoice} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background: creatingInvoice ? '#86efac' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: creatingInvoice ? 'wait' : 'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{creatingInvoice ? '⏳' : (isMobOD ? '🧾 Faktura' : '🧾 Send til faktura')}</button>}
             <button onClick={()=>setEditing(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobOD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobOD ? '12px' : '13px' }}>🗑️</button>
@@ -13999,6 +14013,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         }
       }} />}
       {showSend && <SendOrdreModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
+      {showReminder && <SendOrderReminderModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowReminder(false)} onSent={()=>{setShowReminder(false);refresh()}} />}
+      {showResend && <ResendOrderModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowResend(false)} onSent={()=>{setShowResend(false);refresh()}} />}
       {showNewChange && <EndringsmeldingModal order={o} user={user} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
       {showUpsellInvoice && <FakturaUpsellModal onClose={()=>setShowUpsellInvoice(false)} />}
     </div>
@@ -14317,6 +14333,9 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
 function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
   const appAlert = useAppAlert()
   const [email, setEmail] = useState(order.customer_email||'')
+  const [ccEmails, setCcEmails] = useState('') // komma-separert liste
+  const [showCc, setShowCc] = useState(false)
+  const [reminderDays, setReminderDays] = useState(order.reminder_days || 7) // default 7 dager
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const { grandTotal } = calcOrder(order.chapters||[], order.global_markup)
@@ -14426,11 +14445,20 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
         } catch (pdfErr) { console.error('PDF-generering feilet:', pdfErr) }
       }
 
+      // Parse kopi-mottakere (komma-separert)
+      const ccList = ccEmails
+        .split(/[,;]/)
+        .map(e => e.trim())
+        .filter(e => e && e.includes('@'))
+
+      const allRecipients = [email, ...ccList]
+
       const payload = {
         to: email,
         subject: `Ordrebekreftelse ${order.order_number} – ${order.title}`,
         html,
       }
+      if (ccList.length > 0) payload.cc = ccList
       if (pdfBase64) {
         payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
       }
@@ -14442,15 +14470,30 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
       })
       if (!fnRes.ok) { const d = await fnRes.json().catch(() => ({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
 
+      // Beregn reminder_due_date basert på valgte dager
+      const now = new Date()
+      const reminderDue = new Date(now)
+      reminderDue.setDate(reminderDue.getDate() + (parseInt(reminderDays) || 7))
+
       // Oppdater aktivitetslogg med send-hendelse
       const existingLog = Array.isArray(order.activity_log) ? order.activity_log : []
-      const newLog = [...existingLog, { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: email }]
+      const sendActionLabel = ccList.length > 0 ? 'Sendt til kunde (med kopi)' : 'Sendt til kunde'
+      const newLog = [...existingLog, {
+        action: sendActionLabel,
+        by: user?.email,
+        at: now.toISOString(),
+        to: email,
+        cc: ccList.length > 0 ? ccList : undefined,
+      }]
 
       await supabase.from('orders').update({
         status: 'Sendt',
         customer_email: email,
         activity_log: newLog,
         view_token: viewToken,
+        sent_to: allRecipients,
+        reminder_days: parseInt(reminderDays) || 7,
+        reminder_due_date: reminderDue.toISOString().split('T')[0],
         updated_at: new Date().toISOString(),
       }).eq('id', order.id)
 
@@ -14491,14 +14534,359 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
                 <div style={{ fontSize:'13px', color:'#16a34a', fontWeight:'600' }}>Ordre: {order.title}</div>
                 <div style={{ fontSize:'20px', fontWeight:'800', color:'#0f172a', marginTop:'4px' }}>{fmtO(grandTotal)}</div>
               </div>
-              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="kunde@epost.no" style={oInp} /></div>
-              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e' }}>⚠️ Kunden mottar en e-post med en <strong>bekreftelsesknapp</strong>. Ordren settes til «Bekreftet» og du får varsel.</div>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>E-postadresse til kunde *</label>
+                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="kunde@epost.no" style={oInp} />
+              </div>
+
+              {/* Send kopi */}
+              {!showCc ? (
+                <button type="button" onClick={() => setShowCc(true)} style={{ background:'none', border:'none', color:'#2563eb', fontSize:'13px', fontWeight:'600', cursor:'pointer', padding:0, textAlign:'left' }}>
+                  + Send kopi til andre
+                </button>
+              ) : (
+                <div>
+                  <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>
+                    Send kopi til (komma-separert)
+                    <button type="button" onClick={() => { setShowCc(false); setCcEmails('') }} style={{ marginLeft:'8px', background:'none', border:'none', color:'#94a3b8', fontSize:'12px', cursor:'pointer', padding:0 }}>fjern</button>
+                  </label>
+                  <input type="text" value={ccEmails} onChange={e => setCcEmails(e.target.value)} placeholder="prosjektleder@..., bokføring@..." style={oInp} />
+                  <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>Kopi-mottakere ser samme e-post, men kan også klikke Godkjenn/Avvis</p>
+                </div>
+              )}
+
+              {/* Påminnelses-frist */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>
+                  Varsle meg hvis ikke besvart innen
+                </label>
+                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                  {[3, 7, 14, 30].map(d => (
+                    <button key={d} type="button" onClick={() => setReminderDays(d)} style={{
+                      padding:'8px 14px',
+                      borderRadius:'10px',
+                      border: reminderDays === d ? '2px solid #059669' : '1px solid #e2e8f0',
+                      background: reminderDays === d ? '#f0fdf4' : 'white',
+                      color: reminderDays === d ? '#059669' : '#374151',
+                      fontSize:'13px',
+                      fontWeight:'600',
+                      cursor:'pointer',
+                    }}>
+                      {d} dager
+                    </button>
+                  ))}
+                  <input type="number" min="1" max="365" value={reminderDays} onChange={e => setReminderDays(parseInt(e.target.value) || 1)} style={{ width:'80px', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px' }} />
+                </div>
+                <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>
+                  Etter {reminderDays} dager får du en Purr-knapp i ordre-detaljene
+                </p>
+              </div>
+
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'12px 14px', border:'1px solid #fde68a', fontSize:'13px', color:'#92400e' }}>
+                ⚠️ Kunden mottar en e-post med <strong>Godkjenn/Avvis-knapper</strong> og PDF-vedlegg.
+              </div>
+
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
                 <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
                 <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send nå'}</button>
               </div>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SendOrderReminderModal — Send purring til kunde som ikke har svart
+// ═══════════════════════════════════════════════════════════════════
+function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) {
+  const appAlert = useAppAlert()
+  const [email, setEmail] = useState(order.customer_email || '')
+  const [customMessage, setCustomMessage] = useState('')
+  const [extendDays, setExtendDays] = useState(7)
+  const [sending, setSending] = useState(false)
+  const { grandTotal } = calcOrder(order.chapters || [], order.global_markup)
+
+  // Beregn hvor mange dager siden første sending
+  const lastSent = order.activity_log?.filter(l => l.action?.includes('Sendt'))?.pop()?.at
+  const daysSince = lastSent ? Math.floor((Date.now() - new Date(lastSent).getTime()) / (1000 * 60 * 60 * 24)) : null
+
+  const handleSend = async () => {
+    if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
+    setSending(true)
+    try {
+      const viewToken = order.view_token || crypto.randomUUID()
+      const viewUrl = `${window.location.origin}/ordre-view?token=${viewToken}`
+      if (!order.view_token) await supabase.from('orders').update({ view_token: viewToken }).eq('id', order.id)
+
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        '<div style="background:#fef3c7;border:2px solid #fbbf24;border-radius:12px;padding:16px;margin-bottom:20px;text-align:center">' +
+          '<div style="font-size:24px;margin-bottom:4px">⏰</div>' +
+          '<div style="font-size:16px;font-weight:700;color:#92400e">Påminnelse</div>' +
+          '<div style="font-size:13px;color:#92400e;margin-top:4px">Vi mangler fortsatt svar fra deg på ordren under</div>' +
+        '</div>' +
+        '<h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Ordrebekreftelse</h1>' +
+        '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px">' + order.order_number + '</p>' +
+        '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:8px">' + (order.title || '') + '</div>' +
+          '<div style="font-size:20px;font-weight:800;color:#059669">' + Math.round(grandTotal || 0).toLocaleString('nb-NO') + ' kr</div>' +
+          '<div style="font-size:11px;color:#64748b;margin-top:2px">Total eks. mva</div>' +
+        '</div>' +
+        (customMessage ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:14px;color:#374151;white-space:pre-wrap">' + String(customMessage).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
+        '<div style="margin:32px 0 16px">' +
+          '<p style="color:#0f172a;font-size:16px;font-weight:700;text-align:center;margin:0 0 20px">Vennligst gi ditt svar</p>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto"><tr>' +
+            '<td style="padding:0 10px"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#059669;border-radius:12px"><tr><td style="padding:18px 36px;text-align:center">' +
+              '<a href="' + viewUrl + '&action=godkjent" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✓&nbsp;&nbsp;Godkjenn</a>' +
+            '</td></tr></table></td>' +
+            '<td style="padding:0 10px"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#dc2626;border-radius:12px"><tr><td style="padding:18px 36px;text-align:center">' +
+              '<a href="' + viewUrl + '&action=avvist" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✗&nbsp;&nbsp;Avvis</a>' +
+            '</td></tr></table></td>' +
+          '</tr></table>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px auto 0">' +
+            '<tr><td style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 20px;text-align:center">' +
+              '<a href="' + viewUrl + '" style="color:#475569;text-decoration:none;font-size:13px;font-weight:600">📄 Se full ordre</a>' +
+            '</td></tr>' +
+          '</table>' +
+        '</div>' +
+        '<p style="color:#94a3b8;font-size:12px;text-align:center">Påminnelse sendt via En Plattform</p>' +
+      '</div>'
+
+      let pdfBase64 = null, pdfFilename = 'Ordrebekreftelse.pdf'
+      if (getPdfBase64) {
+        try {
+          const pdfResult = await getPdfBase64(order)
+          if (pdfResult) { pdfBase64 = pdfResult.base64; pdfFilename = pdfResult.filename }
+        } catch(e) { console.error('PDF-gen feilet:', e) }
+      }
+
+      const payload = {
+        to: email,
+        subject: `Påminnelse: Ordre ${order.order_number} venter på svar`,
+        html,
+      }
+      if (pdfBase64) payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
+
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
+        body: JSON.stringify(payload)
+      })
+      if (!fnRes.ok) { const d = await fnRes.json().catch(()=>({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
+
+      // Ny frist = i dag + extendDays
+      const newDue = new Date()
+      newDue.setDate(newDue.getDate() + (parseInt(extendDays) || 7))
+
+      const existingLog = Array.isArray(order.activity_log) ? order.activity_log : []
+      const newLog = [...existingLog, {
+        action: 'Purring sendt',
+        by: user?.email,
+        at: new Date().toISOString(),
+        to: email,
+        message: customMessage || undefined,
+      }]
+
+      await supabase.from('orders').update({
+        activity_log: newLog,
+        last_reminder_sent_at: new Date().toISOString(),
+        reminder_due_date: newDue.toISOString().split('T')[0],
+        view_token: viewToken,
+        updated_at: new Date().toISOString(),
+      }).eq('id', order.id)
+
+      onClose()
+      await appAlert({ message: 'Purring sendt', subMessage: `Sendt til ${email}. Ny frist: ${newDue.toLocaleDateString('nb-NO')}`, kind: 'success' })
+      onSent()
+    } catch(e) {
+      await appAlert({ message: 'Kunne ikke sende purring', subMessage: e.message, kind: 'error' })
+    } finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>⚠️ Send purring</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div style={{ background:'#fef3c7', border:'1px solid #fbbf24', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#92400e' }}>
+            {daysSince !== null
+              ? `Sist sendt for ${daysSince} dager siden. Purring inneholder samme innhold som opprinnelig ordre.`
+              : `Purring inneholder samme innhold som opprinnelig ordre.`
+            }
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Send til</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={oInp} />
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Personlig melding (valgfritt)</label>
+            <textarea value={customMessage} onChange={e => setCustomMessage(e.target.value)} placeholder="Hei, vi venter fortsatt på svar fra deg på ordren..." style={{ ...oInp, minHeight:'80px', fontFamily:'inherit', resize:'vertical' }} />
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Ny frist (dager)</label>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              {[3, 7, 14].map(d => (
+                <button key={d} type="button" onClick={() => setExtendDays(d)} style={{
+                  padding:'8px 14px',
+                  borderRadius:'10px',
+                  border: extendDays === d ? '2px solid #059669' : '1px solid #e2e8f0',
+                  background: extendDays === d ? '#f0fdf4' : 'white',
+                  color: extendDays === d ? '#059669' : '#374151',
+                  fontSize:'13px',
+                  fontWeight:'600',
+                  cursor:'pointer',
+                }}>{d} dager</button>
+              ))}
+              <input type="number" min="1" max="365" value={extendDays} onChange={e => setExtendDays(parseInt(e.target.value) || 1)} style={{ width:'80px', padding:'8px 10px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px' }} />
+            </div>
+          </div>
+
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#fca5a5':'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'⚠️ Send purring'}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// ResendOrderModal — Send ordre på nytt (samme innhold) til samme/ny mottaker
+// ═══════════════════════════════════════════════════════════════════
+function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
+  const appAlert = useAppAlert()
+  const [email, setEmail] = useState(order.customer_email || '')
+  const [reason, setReason] = useState('') // f.eks. "Kunde mistet forrige e-post"
+  const [sending, setSending] = useState(false)
+  const { grandTotal } = calcOrder(order.chapters || [], order.global_markup)
+
+  const handleSend = async () => {
+    if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
+    setSending(true)
+    try {
+      const viewToken = order.view_token || crypto.randomUUID()
+      const viewUrl = `${window.location.origin}/ordre-view?token=${viewToken}`
+      if (!order.view_token) await supabase.from('orders').update({ view_token: viewToken }).eq('id', order.id)
+
+      const html = '<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">' +
+        '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:14px;margin-bottom:16px;text-align:center">' +
+          '<div style="font-size:14px;font-weight:700;color:#1e40af">🔁 Sendt på nytt</div>' +
+          (reason ? '<div style="font-size:12px;color:#475569;margin-top:4px">' + String(reason).replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '') +
+        '</div>' +
+        '<h1 style="color:#0f172a;font-size:20px;margin:0 0 4px">Ordrebekreftelse</h1>' +
+        '<p style="color:#94a3b8;font-size:13px;margin:0 0 20px">' + order.order_number + '</p>' +
+        '<div style="background:#f8fafc;border-radius:12px;padding:16px;margin-bottom:16px">' +
+          '<div style="font-size:13px;font-weight:700;color:#0f172a;margin-bottom:8px">' + (order.title || '') + '</div>' +
+          '<div style="font-size:20px;font-weight:800;color:#059669">' + Math.round(grandTotal || 0).toLocaleString('nb-NO') + ' kr</div>' +
+          '<div style="font-size:11px;color:#64748b;margin-top:2px">Total eks. mva</div>' +
+        '</div>' +
+        '<div style="margin:32px 0 16px">' +
+          '<p style="color:#0f172a;font-size:16px;font-weight:700;text-align:center;margin:0 0 20px">Gi ditt svar</p>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto"><tr>' +
+            '<td style="padding:0 10px"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#059669;border-radius:12px"><tr><td style="padding:18px 36px;text-align:center">' +
+              '<a href="' + viewUrl + '&action=godkjent" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✓&nbsp;&nbsp;Godkjenn</a>' +
+            '</td></tr></table></td>' +
+            '<td style="padding:0 10px"><table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#dc2626;border-radius:12px"><tr><td style="padding:18px 36px;text-align:center">' +
+              '<a href="' + viewUrl + '&action=avvist" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✗&nbsp;&nbsp;Avvis</a>' +
+            '</td></tr></table></td>' +
+          '</tr></table>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px auto 0">' +
+            '<tr><td style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 20px;text-align:center">' +
+              '<a href="' + viewUrl + '" style="color:#475569;text-decoration:none;font-size:13px;font-weight:600">📄 Se full ordre</a>' +
+            '</td></tr>' +
+          '</table>' +
+        '</div>' +
+        '<p style="color:#94a3b8;font-size:12px;text-align:center">Sendt på nytt via En Plattform</p>' +
+      '</div>'
+
+      let pdfBase64 = null, pdfFilename = 'Ordrebekreftelse.pdf'
+      if (getPdfBase64) {
+        try {
+          const pdfResult = await getPdfBase64(order)
+          if (pdfResult) { pdfBase64 = pdfResult.base64; pdfFilename = pdfResult.filename }
+        } catch(e) { console.error('PDF-gen feilet:', e) }
+      }
+
+      const payload = {
+        to: email,
+        subject: `Ordrebekreftelse ${order.order_number} (sendt på nytt)`,
+        html,
+      }
+      if (pdfBase64) payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
+
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method:'POST',
+        headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
+        body: JSON.stringify(payload)
+      })
+      if (!fnRes.ok) { const d = await fnRes.json().catch(()=>({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
+
+      const existingLog = Array.isArray(order.activity_log) ? order.activity_log : []
+      const newLog = [...existingLog, {
+        action: 'Sendt på nytt',
+        by: user?.email,
+        at: new Date().toISOString(),
+        to: email,
+        reason: reason || undefined,
+      }]
+
+      // Forleng reminder_due_date — telles fra nå
+      const newDue = new Date()
+      newDue.setDate(newDue.getDate() + (order.reminder_days || 7))
+
+      await supabase.from('orders').update({
+        customer_email: email,
+        activity_log: newLog,
+        view_token: viewToken,
+        reminder_due_date: newDue.toISOString().split('T')[0],
+        updated_at: new Date().toISOString(),
+      }).eq('id', order.id)
+
+      onClose()
+      await appAlert({ message: 'Ordre sendt på nytt', subMessage: `Sendt til ${email}`, kind: 'success' })
+      onSent()
+    } catch(e) {
+      await appAlert({ message: 'Kunne ikke sende', subMessage: e.message, kind: 'error' })
+    } finally { setSending(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔁 Send på nytt</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#1e40af' }}>
+            Sender samme ordre på nytt. Innholdet er uendret. Godkjenn/Avvis-knappene fungerer som før.
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Send til</label>
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} style={oInp} />
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Grunn for resend (valgfritt)</label>
+            <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="F.eks. 'Opprinnelig e-post ble ikke mottatt'" style={oInp} />
+          </div>
+
+          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#c4b5fd':'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'🔁 Send på nytt'}</button>
+          </div>
         </div>
       </div>
     </div>
@@ -37814,7 +38202,43 @@ function AppContent() {
       } catch (e) { console.error('[Purringssjekk feilet]', e) }
     }
 
+    const checkOverdueOrders = async () => {
+      try {
+        const today = new Date().toISOString().split('T')[0]
+        const { data: overdue } = await supabase
+          .from('orders')
+          .select('id, title, order_number, customer_email, reminder_due_date, last_reminder_sent_at')
+          .eq('status', 'Sendt')
+          .lt('reminder_due_date', today)
+          .or('last_reminder_sent_at.is.null,last_reminder_sent_at.lt.reminder_due_date')
+
+        if (!overdue || overdue.length === 0) return
+
+        for (const o of overdue) {
+          const { data: existing } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('user_id', user.id)
+            .eq('link_page', 'ordre')
+            .ilike('title', `%${o.order_number}%`)
+            .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+            .limit(1)
+
+          if (existing && existing.length > 0) continue
+
+          await supabase.from('notifications').insert({
+            user_id: user.id,
+            title: `⏰ Purring: ${o.order_number}`,
+            message: `Kunden (${o.customer_email || 'ukjent'}) har ikke svart på ordren "${o.title}". Vurder å sende purring.`,
+            type: 'warning',
+            link_page: 'ordre',
+          })
+        }
+      } catch (e) { console.error('[Ordre-purringssjekk feilet]', e) }
+    }
+
     checkOverdueEMs()
+    checkOverdueOrders()
   }, [user?.id])
 
   React.useEffect(() => {
