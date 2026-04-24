@@ -11228,12 +11228,13 @@ function UEPrisingsPage() {
 // ─── ORDRE MODULE ─────────────────────────────────────────────────────────────
 
 const ORDER_STATUS = {
-  'Utkast':   { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
-  'Sendt':    { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📤' },
-  'Bekreftet':{ bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', emoji:'✅' },
-  'Pågår':    { bg:'#fffbeb', color:'#d97706', border:'#fde68a', emoji:'⚙️' },
-  'Fullført': { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'🏁' },
-  'Avslått':  { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'❌' },
+  'Utkast':    { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', emoji:'📝' },
+  'Sendt':     { bg:'#eff6ff', color:'#2563eb', border:'#bfdbfe', emoji:'📤' },
+  'Bekreftet': { bg:'#f5f3ff', color:'#7c3aed', border:'#ddd6fe', emoji:'✅' },
+  'Pågår':     { bg:'#fffbeb', color:'#d97706', border:'#fde68a', emoji:'⚙️' },
+  'Fullført':  { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0', emoji:'🏁' },
+  'Fakturert': { bg:'#ecfdf5', color:'#059669', border:'#a7f3d0', emoji:'🧾' },
+  'Avslått':   { bg:'#fef2f2', color:'#dc2626', border:'#fecaca', emoji:'❌' },
 }
 
 const oInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui, sans-serif' }
@@ -13355,7 +13356,7 @@ function OrdrePage() {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {filtered.map(o => {
-              const cfg = ORDER_STATUS[o.status]
+              const cfg = ORDER_STATUS[o.status] || ORDER_STATUS['Utkast']
               const proj = projects.find(p=>p.id===o.project_id)
               const { grandTotal } = calcOrder(o.chapters||[], o.global_markup)
               return (
@@ -13401,7 +13402,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const [editing, setEditing] = useState(false)
   const [showSend, setShowSend] = useState(false)
   const [showNewChange, setShowNewChange] = useState(false)
-  const cfg = ORDER_STATUS[o.status]
+  const cfg = ORDER_STATUS[o.status] || ORDER_STATUS['Utkast']
   const proj = projects.find(p=>p.id===o.project_id)
   const { grandTotal, chapterTotals } = calcOrder(o.chapters||[], o.global_markup)
   const changesTotal = changes.filter(c=>c.status==='Godkjent').reduce((acc,c)=>acc+(c.amount||0),0)
@@ -13435,27 +13436,31 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const appAlert = useAppAlert()
 
   const createInvoice = async () => {
+    console.log('[createInvoice] Starting. Order status:', o.status, 'Order ID:', o.id)
     try {
       // Sjekk om faktura-modulen er aktivert
-      const { data: settings } = await supabase.from('company_settings').select('active_modules').limit(1).single()
+      console.log('[createInvoice] Checking module status...')
+      const { data: settings, error: settingsError } = await supabase.from('company_settings').select('active_modules, trial_status, trial_ends_at').limit(1).single()
+      console.log('[createInvoice] Settings:', settings, 'Error:', settingsError)
       const activeModules = settings?.active_modules || []
       const fakturaActive = activeModules.includes('faktura')
-
-      // Sjekk trial-status (alle moduler aktive ved aktiv trial)
-      const { data: companySettings } = await supabase.from('company_settings').select('trial_status, trial_ends_at').limit(1).single()
-      const isTrialActive = companySettings?.trial_status === 'trial' && companySettings?.trial_ends_at && new Date(companySettings.trial_ends_at) > new Date()
+      const isTrialActive = settings?.trial_status === 'trial' && settings?.trial_ends_at && new Date(settings.trial_ends_at) > new Date()
+      console.log('[createInvoice] fakturaActive:', fakturaActive, 'isTrialActive:', isTrialActive)
 
       if (!fakturaActive && !isTrialActive) {
+        console.log('[createInvoice] Module not active — showing upsell')
         setShowUpsellInvoice(true)
         return
       }
 
       // Opprett forhåndsutfylt faktura-utkast
+      console.log('[createInvoice] Creating invoice...')
       setCreatingInvoice(true)
 
       // Hent eksisterende fakturaer for å generere nytt nummer
       const { data: existingInvoices } = await supabase.from('invoices').select('invoice_number')
       const newInvoiceNumber = nextInvoiceNumber(existingInvoices || [])
+      console.log('[createInvoice] New invoice number:', newInvoiceNumber)
 
       // Bygg fakturalinjer fra ordrens kapitler
       const lines = []
@@ -13475,6 +13480,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           }
         })
       })
+      console.log('[createInvoice] Lines built:', lines.length)
 
       // Hent selskapsinfo
       const { data: cs } = await supabase.from('company_settings').select('name,address,orgnr,bank_account').limit(1).single()
@@ -13483,6 +13489,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       const dueDate = new Date()
       dueDate.setDate(dueDate.getDate() + 14)
 
+      console.log('[createInvoice] Inserting invoice into DB...')
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: o.title || `Faktura for ${o.order_number}`,
         invoice_number: newInvoiceNumber,
@@ -13504,22 +13511,30 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         status: 'Utkast',
         created_by: user?.id,
       }).select().single()
+      console.log('[createInvoice] Invoice insert result:', newInvoice, 'Error:', error)
 
       if (error) throw error
 
       // Oppdater ordrestatus til 'Fakturert'
-      await supabase.from('orders').update({ status: 'Fakturert', updated_at: new Date().toISOString() }).eq('id', o.id)
-      setO(prev => ({ ...prev, status: 'Fakturert' }))
+      console.log('[createInvoice] Updating order status to Fakturert...')
+      const { error: orderErr } = await supabase.from('orders').update({ status: 'Fakturert', updated_at: new Date().toISOString() }).eq('id', o.id)
+      console.log('[createInvoice] Order update error:', orderErr)
 
-      await appAlert({ message: 'Faktura opprettet som utkast', subMessage: `Faktura ${newInvoiceNumber} klar til redigering`, kind: 'success' })
+      if (orderErr) {
+        // Database kanskje ikke tillater 'Fakturert' — ikke knekk hele flyten
+        console.warn('[createInvoice] Could not update order status, but invoice was created')
+        await appAlert({ message: 'Faktura opprettet', subMessage: `Faktura ${newInvoiceNumber} er opprettet som utkast. Du kan oppdatere ordrestatus manuelt.`, kind: 'success' })
+      } else {
+        setO(prev => ({ ...prev, status: 'Fakturert' }))
+        await appAlert({ message: 'Faktura opprettet som utkast', subMessage: `Faktura ${newInvoiceNumber} klar til redigering`, kind: 'success' })
+      }
 
-      // Naviger til den nye fakturaen
-      window.location.hash = '#faktura'
-      // Liten forsinkelse for å la hash-navigasjon fullføre, så åpne fakturaen
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('openInvoice', { detail: { invoiceId: newInvoice.id } }))
-      }, 150)
+      console.log('[createInvoice] Done — navigating to faktura')
+      // Naviger til faktura-modulen
+      window.history.pushState({ page: 'faktura' }, '', '#faktura')
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura' } }))
     } catch(e) {
+      console.error('[createInvoice] FEIL:', e)
       await appAlert({ message: 'Kunne ikke opprette faktura', subMessage: e.message, kind: 'error' })
     } finally {
       setCreatingInvoice(false)
@@ -14474,7 +14489,7 @@ function FakturaPage() {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {filtered.map(inv => {
-              const cfg=INV_STATUS[inv.status]
+              const cfg=INV_STATUS[inv.status] || INV_STATUS['Utkast']
               const { net, gross } = calcLines(inv.lines)
               const overdue = isOverdue(inv)
               const proj = projects.find(p=>p.id===inv.project_id)
@@ -14528,7 +14543,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const [kreditReason, setKreditReason] = useState('')
   const [kreditLines, setKreditLines] = useState([]) // hvilke linjer å kreditere
   const [kreditMode, setKreditMode] = useState('full') // 'full' | 'partial'
-  const cfg = INV_STATUS[inv.status]
+  const cfg = INV_STATUS[inv.status] || INV_STATUS['Utkast']
   const proj = projects.find(p=>p.id===inv.project_id)
   const ord = orders.find(o=>o.id===inv.order_id)
   const { net, mva, gross } = calcLines(inv.lines)
