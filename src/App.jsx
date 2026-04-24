@@ -11961,18 +11961,32 @@ function EndringsmeldingPage() {
           '<div style="font-size:12px;color:#64748b;text-align:center">Total eks. mva</div>' +
           (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
         '</div>' + vedleggHtml +
-        '<p style="color:#475569;font-size:14px">Vurder endringsmeldingen og gi svar:</p>' +
-        '<table cellspacing="0" cellpadding="0" style="margin:28px auto;border-collapse:separate;border-spacing:12px 0">' +
-          '<tr>' +
-            '<td>' +
-              '<a href="' + viewUrl + '&action=godkjent" style="display:inline-block;background:#059669;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(5,150,105,0.25);text-align:center;min-width:160px">✓ Godkjenn</a>' +
-            '</td>' +
-            '<td>' +
-              '<a href="' + viewUrl + '&action=avvist" style="display:inline-block;background:#dc2626;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(220,38,38,0.25);text-align:center;min-width:160px">✗ Avvis</a>' +
-            '</td>' +
-          '</tr>' +
-        '</table>' +
-        '<p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0"><a href="' + viewUrl + '" style="color:#64748b;text-decoration:underline">Eller se full endringsmelding først →</a></p>' +
+        '<div style="margin:32px 0 16px">' +
+          '<p style="color:#0f172a;font-size:16px;font-weight:700;text-align:center;margin:0 0 20px">Gi ditt svar</p>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">' +
+            '<tr>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#059669;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=godkjent" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✓&nbsp;&nbsp;Godkjenn</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#dc2626;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=avvist" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✗&nbsp;&nbsp;Avvis</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+            '</tr>' +
+          '</table>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px auto 0">' +
+            '<tr><td style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 20px;text-align:center">' +
+              '<a href="' + viewUrl + '" style="color:#475569;text-decoration:none;font-size:13px;font-weight:600">📄 Se full endringsmelding først</a>' +
+            '</td></tr>' +
+          '</table>' +
+        '</div>' +
         '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
 
       // Generer PDF som base64 for vedlegg
@@ -12039,18 +12053,32 @@ function EndringsmeldingPage() {
           '<div style="font-weight:700;font-size:15px;color:#0f172a;margin-bottom:4px">' + em.title + '</div>' +
           (proj ? '<div style="font-size:13px;color:#64748b">Prosjekt: ' + proj.name + '</div>' : '') +
         '</div>' +
-        '<p style="color:#475569;font-size:14px">Vennligst godkjenn eller avvis endringsmeldingen slik at vi kan fortsette arbeidet:</p>' +
-        '<table cellspacing="0" cellpadding="0" style="margin:28px auto;border-collapse:separate;border-spacing:12px 0">' +
-          '<tr>' +
-            '<td>' +
-              '<a href="' + viewUrl + '&action=godkjent" style="display:inline-block;background:#059669;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(5,150,105,0.25);text-align:center;min-width:160px">✓ Godkjenn</a>' +
-            '</td>' +
-            '<td>' +
-              '<a href="' + viewUrl + '&action=avvist" style="display:inline-block;background:#dc2626;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(220,38,38,0.25);text-align:center;min-width:160px">✗ Avvis</a>' +
-            '</td>' +
-          '</tr>' +
-        '</table>' +
-        '<p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0"><a href="' + viewUrl + '" style="color:#64748b;text-decoration:underline">Eller se full endringsmelding først →</a></p>' +
+        '<div style="margin:32px 0 16px">' +
+          '<p style="color:#0f172a;font-size:16px;font-weight:700;text-align:center;margin:0 0 20px">Gi ditt svar nå</p>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 auto">' +
+            '<tr>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#059669;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=godkjent" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✓&nbsp;&nbsp;Godkjenn</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+              '<td style="padding:0 10px">' +
+                '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="background:#dc2626;border-radius:12px">' +
+                  '<tr><td style="padding:18px 36px;text-align:center">' +
+                    '<a href="' + viewUrl + '&action=avvist" style="color:#ffffff;text-decoration:none;font-weight:700;font-size:18px;display:block;white-space:nowrap">✗&nbsp;&nbsp;Avvis</a>' +
+                  '</td></tr>' +
+                '</table>' +
+              '</td>' +
+            '</tr>' +
+          '</table>' +
+          '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px auto 0">' +
+            '<tr><td style="border:1px solid #cbd5e1;border-radius:10px;padding:10px 20px;text-align:center">' +
+              '<a href="' + viewUrl + '" style="color:#475569;text-decoration:none;font-size:13px;font-weight:600">📄 Se full endringsmelding først</a>' +
+            '</td></tr>' +
+          '</table>' +
+        '</div>' +
         '<p style="color:#94a3b8;font-size:12px">Påminnelse sendt via En Plattform</p></div>'
 
       // Generer PDF som base64 for vedlegg
