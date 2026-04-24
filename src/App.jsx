@@ -16405,16 +16405,25 @@ function SendFakturaModal({ invoice, user, onClose, onSent }) {
 
       // Hvis denne fakturaen ble opprettet fra en ordre, oppdater ordrestatus til 'Fakturert' nå
       if (invoice.from_order_id) {
-        try {
-          await supabase.from('orders').update({
-            status: 'Fakturert',
-            invoiced_at: new Date().toISOString(),
-            invoice_id: invoice.id,
-            updated_at: new Date().toISOString(),
-          }).eq('id', invoice.from_order_id)
-        } catch(orderErr) {
-          console.warn('Kunne ikke oppdatere tilknyttet ordre:', orderErr)
-          // Ikke knekk send-flyten hvis ordre-oppdatering feiler
+        // Prøv først med alle koblings-felter, fall tilbake til bare status hvis noen kolonner mangler
+        const fullUpdate = {
+          status: 'Fakturert',
+          invoiced_at: new Date().toISOString(),
+          invoice_id: invoice.id,
+          updated_at: new Date().toISOString(),
+        }
+        let { error: ordErr } = await supabase.from('orders').update(fullUpdate).eq('id', invoice.from_order_id)
+        if (ordErr) {
+          console.warn('[Send faktura] Full ordre-oppdatering feilet, prøver bare status:', ordErr.message)
+          const basicUpdate = { status: 'Fakturert', updated_at: new Date().toISOString() }
+          const { error: basicOrdErr } = await supabase.from('orders').update(basicUpdate).eq('id', invoice.from_order_id)
+          if (basicOrdErr) {
+            console.error('[Send faktura] Kunne ikke oppdatere ordrestatus:', basicOrdErr)
+          } else {
+            console.log('[Send faktura] Ordrestatus satt til Fakturert (uten kobling)')
+          }
+        } else {
+          console.log('[Send faktura] Ordre oppdatert med kobling + status Fakturert')
         }
       }
 
