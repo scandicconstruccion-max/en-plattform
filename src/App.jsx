@@ -1074,6 +1074,8 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
   const [showDrop, setShowDrop] = useState(false)
   const [searchText, setSearchText] = useState('')
   const [rect, setRect] = useState(null)
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const { user } = useAuth()
   const wrapperRef = React.useRef(null)
 
   // Filtrer på type hvis angitt
@@ -1239,20 +1241,61 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
     </div>
   )
 
+  // Håndterer lagring fra inline-modalen: auto-velg den nye kunden
+  const handleCreated = (newId, newCustomer) => {
+    setShowCreateModal(false)
+    if (newId && newCustomer) {
+      // Auto-velg den nye kunden som om bruker klikket i lista
+      if (valueAsId) {
+        onChange(newId)
+      } else {
+        onChange(newCustomer.name || '')
+      }
+      if (onSelect) onSelect({ ...newCustomer, id: newId })
+    }
+    setShowDrop(false)
+    setSearchText('')
+  }
+
   return (
     <div ref={wrapperRef} style={{ position:'relative' }}>
-      <input
-        value={inputVal}
-        onChange={e => {
-          setSearchText(e.target.value)
-          if (!showDrop) openDrop()
-          if (!valueAsId && allowFreeText) onChange(e.target.value)
-          if (valueAsId && !e.target.value) onChange('')
-        }}
-        onFocus={openDrop}
-        onBlur={() => setTimeout(() => setShowDrop(false), 200)}
-        placeholder={placeholder || 'Søk etter kunde (navn, nr, orgnr, e-post)...'}
-        style={selStyle} />
+      <div style={{ position:'relative', display:'flex', alignItems:'stretch' }}>
+        <input
+          value={inputVal}
+          onChange={e => {
+            setSearchText(e.target.value)
+            if (!showDrop) openDrop()
+            if (!valueAsId && allowFreeText) onChange(e.target.value)
+            if (valueAsId && !e.target.value) onChange('')
+          }}
+          onFocus={openDrop}
+          onBlur={() => setTimeout(() => setShowDrop(false), 200)}
+          placeholder={placeholder || 'Søk etter kunde (navn, nr, orgnr, e-post)...'}
+          style={{ ...selStyle, paddingRight:'44px' }} />
+        <button
+          type="button"
+          onMouseDown={(e) => { e.preventDefault(); setShowCreateModal(true); setShowDrop(false) }}
+          title="Opprett ny kunde"
+          style={{
+            position:'absolute',
+            right:'4px',
+            top:'50%',
+            transform:'translateY(-50%)',
+            width:'32px',
+            height:'32px',
+            background:'#059669',
+            color:'white',
+            border:'none',
+            borderRadius:'8px',
+            cursor:'pointer',
+            fontSize:'18px',
+            fontWeight:'700',
+            display:'flex',
+            alignItems:'center',
+            justifyContent:'center',
+            lineHeight:1,
+          }}>+</button>
+      </div>
       {selectedDuplicateWarning && (
         <div style={{ marginTop:'6px', padding:'8px 10px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:'8px', fontSize:'12px', color:'#92400e', lineHeight:1.4 }}>
           <strong>⚠ OBS:</strong> {selectedDuplicateWarning.count} privatkunder har identisk navn. Sjekk at du har valgt riktig person:
@@ -1268,6 +1311,14 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
         </div>
       )}
       {typeof document !== 'undefined' && dropdown ? createPortal(dropdown, document.body) : null}
+      {showCreateModal && (
+        <KundeModal
+          user={user}
+          existingKunder={allCustomers}
+          onClose={() => setShowCreateModal(false)}
+          onSaved={handleCreated}
+        />
+      )}
     </div>
   )
 }
@@ -25206,7 +25257,8 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
 
       // Invalider cache slik at dropdown-komponenter henter oppdatert liste
       invalidateCustomerCache()
-      onSaved()
+      // Send med customerId og hele kundedata slik at inline-flows (f.eks. fra CustomerSelect) kan auto-velge
+      onSaved(customerId, { ...form, id: customerId })
     } catch(e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
   }
