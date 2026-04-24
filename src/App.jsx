@@ -13436,31 +13436,36 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const appAlert = useAppAlert()
 
   const createInvoice = async () => {
-    console.log('[createInvoice] Starting. Order status:', o.status, 'Order ID:', o.id)
     try {
       // Sjekk om faktura-modulen er aktivert
-      console.log('[createInvoice] Checking module status...')
-      const { data: settings, error: settingsError } = await supabase.from('company_settings').select('active_modules, trial_status, trial_ends_at').limit(1).single()
-      console.log('[createInvoice] Settings:', settings, 'Error:', settingsError)
+      const { data: settings } = await supabase.from('company_settings').select('active_modules, subscription_status, trial_ends_at').limit(1).single()
       const activeModules = settings?.active_modules || []
-      const fakturaActive = activeModules.includes('faktura')
-      const isTrialActive = settings?.trial_status === 'trial' && settings?.trial_ends_at && new Date(settings.trial_ends_at) > new Date()
-      console.log('[createInvoice] fakturaActive:', fakturaActive, 'isTrialActive:', isTrialActive)
+      const fakturaInModules = activeModules.includes('faktura')
+      const isTrialActive = settings?.subscription_status === 'trial' && settings?.trial_ends_at && new Date(settings.trial_ends_at) > new Date()
+      const isAdmin = user?.email?.endsWith('@enplattform.no') || false
+      const hasAccess = fakturaInModules || isTrialActive || isAdmin
 
-      if (!fakturaActive && !isTrialActive) {
-        console.log('[createInvoice] Module not active — showing upsell')
+      if (!hasAccess) {
         setShowUpsellInvoice(true)
         return
       }
 
-      // Opprett forhåndsutfylt faktura-utkast
-      console.log('[createInvoice] Creating invoice...')
+      // Bekreftelsesdialog hvis ordren ikke er fullført
+      if (o.status !== 'Fullført') {
+        const ok = await confirm({
+          message: 'Fakturere før ordren er fullført?',
+          subMessage: `Ordren har status "${o.status}". Vanligvis sendes faktura etter at arbeidet er utført. Vil du fortsette med faktureringen likevel?`,
+          confirmText: 'Ja, fakturer',
+          cancelText: 'Avbryt',
+        })
+        if (!ok) return
+      }
+
       setCreatingInvoice(true)
 
       // Hent eksisterende fakturaer for å generere nytt nummer
       const { data: existingInvoices } = await supabase.from('invoices').select('invoice_number')
       const newInvoiceNumber = nextInvoiceNumber(existingInvoices || [])
-      console.log('[createInvoice] New invoice number:', newInvoiceNumber)
 
       // Bygg fakturalinjer fra ordrens kapitler
       const lines = []
@@ -13480,7 +13485,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           }
         })
       })
-      console.log('[createInvoice] Lines built:', lines.length)
 
       // Hent selskapsinfo
       const { data: cs } = await supabase.from('company_settings').select('name,address,orgnr,bank_account').limit(1).single()
@@ -13489,7 +13493,6 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       const dueDate = new Date()
       dueDate.setDate(dueDate.getDate() + 14)
 
-      console.log('[createInvoice] Inserting invoice into DB...')
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: o.title || `Faktura for ${o.order_number}`,
         invoice_number: newInvoiceNumber,
@@ -13511,30 +13514,25 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         status: 'Utkast',
         created_by: user?.id,
       }).select().single()
-      console.log('[createInvoice] Invoice insert result:', newInvoice, 'Error:', error)
 
       if (error) throw error
 
-      // Oppdater ordrestatus til 'Fakturert'
-      console.log('[createInvoice] Updating order status to Fakturert...')
+      // Oppdater ordrestatus til 'Fakturert' (fang eventuell constraint-feil)
       const { error: orderErr } = await supabase.from('orders').update({ status: 'Fakturert', updated_at: new Date().toISOString() }).eq('id', o.id)
-      console.log('[createInvoice] Order update error:', orderErr)
 
       if (orderErr) {
-        // Database kanskje ikke tillater 'Fakturert' — ikke knekk hele flyten
-        console.warn('[createInvoice] Could not update order status, but invoice was created')
-        await appAlert({ message: 'Faktura opprettet', subMessage: `Faktura ${newInvoiceNumber} er opprettet som utkast. Du kan oppdatere ordrestatus manuelt.`, kind: 'success' })
+        console.warn('Kunne ikke oppdatere ordrestatus:', orderErr)
+        await appAlert({ message: 'Faktura opprettet', subMessage: `Faktura ${newInvoiceNumber} er opprettet som utkast. Ordrestatus kunne ikke oppdateres automatisk.`, kind: 'success' })
       } else {
         setO(prev => ({ ...prev, status: 'Fakturert' }))
-        await appAlert({ message: 'Faktura opprettet som utkast', subMessage: `Faktura ${newInvoiceNumber} klar til redigering`, kind: 'success' })
+        await appAlert({ message: 'Faktura opprettet', subMessage: `Faktura ${newInvoiceNumber} er klar i Faktura-modulen`, kind: 'success' })
       }
 
-      console.log('[createInvoice] Done — navigating to faktura')
       // Naviger til faktura-modulen
       window.history.pushState({ page: 'faktura' }, '', '#faktura')
       window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura' } }))
     } catch(e) {
-      console.error('[createInvoice] FEIL:', e)
+      console.error('[createInvoice] Feil:', e)
       await appAlert({ message: 'Kunne ikke opprette faktura', subMessage: e.message, kind: 'error' })
     } finally {
       setCreatingInvoice(false)
