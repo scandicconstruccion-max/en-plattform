@@ -13714,23 +13714,26 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       const newInvoiceNumber = nextInvoiceNumber(existingInvoices || [])
 
       // Bygg fakturalinjer fra ordrens kapitler
+      // MERK: Ordrer bruker ch.posts (ikke ch.lines)
       const lines = []
       ;(o.chapters || []).forEach(ch => {
-        ;(ch.lines || []).forEach(l => {
-          const qty = parseFloat(l.qty) || 0
-          const priceWork = parseFloat(l.unitPriceWork) || 0
-          const priceMat = parseFloat(l.unitPriceMaterial) || 0
+        ;(ch.posts || []).forEach(p => {
+          const qty = parseFloat(p.qty) || 0
+          const priceWork = parseFloat(p.unitPriceWork) || 0
+          const priceMat = parseFloat(p.unitPriceMaterial) || 0
           const unitPrice = priceWork + priceMat
           if (qty > 0 && unitPrice > 0) {
             lines.push({
-              description: (ch.name ? `[${ch.name}] ` : '') + (l.description || ''),
-              qty, unit: l.unit || 'stk',
+              description: (ch.name ? `[${ch.name}] ` : '') + (p.description || ''),
+              qty,
+              unit: p.unit || 'stk',
               unit_price: unitPrice,
               mva_rate: 25,
             })
           }
         })
       })
+      console.log('[createInvoice] Bygde', lines.length, 'fakturalinjer fra ordren')
 
       // Hent selskapsinfo
       const { data: cs } = await supabase.from('company_settings').select('name,address,orgnr,bank_account').limit(1).single()
@@ -13769,9 +13772,15 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       // Bruk sessionStorage som "drop-off": FakturaPage leser dette når den mounter
       sessionStorage.setItem('openInvoiceId', newInvoice.id)
 
-      // Naviger til faktura
-      window.history.pushState({ page: 'faktura' }, '', '#faktura')
-      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura' } }))
+      // Naviger til faktura-modulen via den globale navigate-funksjonen
+      // Denne rydder opp detail-cleanup og setter page korrekt
+      if (window.__navigate) {
+        window.__navigate('faktura')
+      } else {
+        // Fallback hvis navigate ikke er tilgjengelig
+        window.history.pushState({ page: 'faktura' }, '', '#faktura')
+        window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura' } }))
+      }
 
       // Gi FakturaPage tid til å mount og lese sessionStorage
       await new Promise(resolve => setTimeout(resolve, 300))
@@ -38320,9 +38329,12 @@ function AppContent() {
     setPage(p)
     setProjectId(null)
     setSubPage(null)
+    detailCleanupRef.current = null // rydd opp fra eventuell detaljvisning
     setMobileMenuOpen(false)
     window.scrollTo(0, 0)
   }
+  // Gjør navigate globalt tilgjengelig (for child-komponenter som vil navigere direkte)
+  window.__navigate = navigate
 
   // Push a sub-page state (detail view within a module)
   const pushSubPage = (parentPage, detail) => {
