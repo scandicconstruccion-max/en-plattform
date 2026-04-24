@@ -11275,6 +11275,66 @@ function EndringsmeldingPage() {
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const [endringer, setEndringer] = useState([])
+
+  // ── Navigasjonssystem: URL-basert historikk ──────────────────────────────
+  // URL-format:
+  //   #endringsmelding               → liste
+  //   #endringsmelding/em_abc123     → detaljvisning av EM
+  //   #endringsmelding/new           → opprett-ny skjema
+  //   #endringsmelding/edit/em_abc123 → rediger EM
+  const parseSubRoute = () => {
+    if (typeof window === 'undefined') return { view: 'list' }
+    const hash = window.location.hash.replace('#', '')
+    const parts = hash.split('/').filter(Boolean)
+    if (parts[0] !== 'endringsmelding') return { view: 'list' }
+    if (!parts[1]) return { view: 'list' }
+    if (parts[1] === 'new') return { view: 'new' }
+    if (parts[1] === 'edit' && parts[2]) return { view: 'edit', id: parts[2] }
+    return { view: 'detail', id: parts[1] }
+  }
+
+  const [route, setRoute] = useState(parseSubRoute)
+
+  // Nav helpers — disse oppdaterer BÅDE URL og state
+  const navList = () => {
+    if (window.location.hash !== '#endringsmelding') {
+      window.history.pushState({ emRoute: 'list' }, '', '#endringsmelding')
+    }
+    setRoute({ view: 'list' })
+  }
+  const navDetail = (id) => {
+    window.history.pushState({ emRoute: 'detail', id }, '', `#endringsmelding/${id}`)
+    setRoute({ view: 'detail', id })
+  }
+  const navNew = () => {
+    window.history.pushState({ emRoute: 'new' }, '', '#endringsmelding/new')
+    setRoute({ view: 'new' })
+  }
+  const navEdit = (id) => {
+    window.history.pushState({ emRoute: 'edit', id }, '', `#endringsmelding/edit/${id}`)
+    setRoute({ view: 'edit', id })
+  }
+
+  // Lytt på tilbake/frem-navigasjon (popstate)
+  useEffect(() => {
+    const onPop = () => setRoute(parseSubRoute())
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  // ESC-lukker for modaler (siden modaler ikke er i historikken)
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      // Prioritet: viewingVersion → sendDialogEm → resendDialogEm
+      if (viewingVersion) { setViewingVersion(null); return }
+      if (sendDialogEm) { setSendDialogEm(null); return }
+      if (resendDialogEm) { setResendDialogEm(null); return }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  })
+
   const [sendDialogEm, setSendDialogEm] = useState(null) // EM for som skal sendes (åpner frist-modal)
   const [resendDialogEm, setResendDialogEm] = useState(null) // EM for re-send/revisjon/kopi
   const [viewingVersion, setViewingVersion] = useState(null) // { em, version } - viser historisk versjon
@@ -11284,10 +11344,14 @@ function EndringsmeldingPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [projectFilter, setProjectFilter] = useState('all')
-  const [showForm, setShowForm] = useState(false)
-  const [editEm, setEditEm] = useState(null)
-  const [viewEm, setViewEm] = useState(null)
   const [expandedEm, setExpandedEm] = useState(null)
+
+  // Computed "virtuelle" state basert på route — erstatter gamle viewEm/showForm/editEm
+  const viewEmId = route.view === 'detail' ? route.id : null
+  const viewEm = viewEmId ? endringer.find(e => e.id === viewEmId) : null
+  const showForm = route.view === 'new' || route.view === 'edit'
+  const editEmId = route.view === 'edit' ? route.id : null
+  const editEm = editEmId ? endringer.find(e => e.id === editEmId) : null
   const f = { fontFamily:'system-ui,sans-serif' }
   const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
 
@@ -12398,15 +12462,30 @@ function EndringsmeldingPage() {
     } catch(e) { await appAlert({ message: 'Kunne ikke sende', subMessage: e.message, kind: 'error' }) }
   }
 
+  // Redirect til liste hvis viewEmId finnes men EM ikke eksisterer (etter lasting)
+  useEffect(() => {
+    if (viewEmId && !loading && !viewEm) {
+      navList()
+    }
+  }, [viewEmId, loading, viewEm])
+
   // ── Detail View ────────────────────────────────────────────────────────────
-  if (viewEm) {
+  if (viewEmId) {
+    // Vis loading mens endringer lastes
+    if (loading) {
+      return <div style={{ padding:'60px', textAlign:'center', color:'#94a3b8', fontFamily:'system-ui, sans-serif' }}>Laster endringsmelding...</div>
+    }
+    // EM ikke funnet → vis feilmelding (effect over vil redirecte)
+    if (!viewEm) {
+      return <div style={{ padding:'60px', textAlign:'center', color:'#dc2626', fontFamily:'system-ui, sans-serif' }}>Endringsmeldingen ble ikke funnet.</div>
+    }
     const em = viewEm
     const st = EM_STATUS[em.status] || EM_STATUS['Utkast']
     const proj = projects.find(p => p.id === em.project_id)
     return (
       <div style={{ ...f, overflowX:'hidden', maxWidth:'100vw' }}>
         <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobEM ? '14px' : '20px 32px' }}>
-          <button onClick={() => setViewEm(null)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'13px', color:'#64748b', marginBottom:'10px' }}>← Tilbake til oversikt</button>
+          <button onClick={() => navList()} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'13px', color:'#64748b', marginBottom:'10px' }}>← Tilbake til oversikt</button>
           <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap: isMobEM ? '8px' : '16px', flexWrap: isMobEM ? 'wrap' : 'nowrap' }}>
             <div style={{ minWidth:0, flex:1 }}>
               <div style={{ display:'flex', alignItems:'center', gap: isMobEM ? '6px' : '10px', marginBottom:'4px', flexWrap:'wrap' }}>
@@ -12427,7 +12506,7 @@ function EndringsmeldingPage() {
               {(em.status === 'Godkjent' || em.status === 'Avvist') && (
                 <button onClick={() => setResendDialogEm({ em, type: 'copy' })} style={{ background:'#f0fdf4', color:'#065f46', border:'1px solid #bbf7d0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '11px' : '14px', fontWeight:'600', cursor:'pointer' }}>{isMobEM ? '📄 Kopi' : '📄 Send kopi'}</button>
               )}
-              <button onClick={() => { setEditEm(em); setShowForm(true); setViewEm(null) }} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '12px' : '14px', cursor:'pointer' }}>✏️</button>
+              <button onClick={() => navEdit(em.id)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobEM ? '7px 10px' : '10px 18px', fontSize: isMobEM ? '12px' : '14px', cursor:'pointer' }}>✏️</button>
             </div>
           </div>
         </div>
@@ -12639,7 +12718,7 @@ function EndringsmeldingPage() {
             {!isMobEM && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            <button onClick={() => { setEditEm(null); setShowForm(true) }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>
+            <button onClick={() => navNew()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>
           </div>
         </div>
       </div>
@@ -12702,7 +12781,7 @@ function EndringsmeldingPage() {
                 {/* Hovedrad */}
                 <div style={{ padding: isMobEM ? '10px 12px' : '14px 20px', display:'flex', alignItems:'center', gap: isMobEM ? '8px' : '12px' }}>
                   {!isMobEM && <div style={{ width:'40px', height:'40px', borderRadius:'10px', background:st.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>{st.emoji}</div>}
-                  <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setViewEm(em)}>
+                  <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => navDetail(em.id)}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px', flexWrap:'wrap' }}>
                       <span style={{ fontWeight:'600', fontSize: isMobEM ? '13px' : '14px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobEM ? 'calc(100vw - 160px)' : 'none' }}>{em.title}</span>
                       <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'600' }}>{em.status}</span>
@@ -12767,9 +12846,9 @@ function EndringsmeldingPage() {
                         style={{ background:'#f0fdf4', color:'#065f46', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'7px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>📄 Send kopi</button>
                     )}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); exportSingleEmPDF(em) }} disabled={exportingPdf} title="Last ned som PDF" style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor: exportingPdf?'not-allowed':'pointer', fontSize:'13px', color:'#374151' }}>📄</button>}
-                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); setEditEm(em); setShowForm(true) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
+                    {!isMobEM && <button onClick={(e) => { e.stopPropagation(); navEdit(em.id) }} title="Rediger" style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>✏️</button>}
                     {!isMobEM && <button onClick={(e) => { e.stopPropagation(); handleDelete(em) }} title="Slett" style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px' }}>🗑️</button>}
-                    <button onClick={(e) => { e.stopPropagation(); isMobEM ? setViewEm(em) : setExpandedEm(isExpanded ? null : em.id) }} title={isMobEM ? "Vis" : "Vis historikk"}
+                    <button onClick={(e) => { e.stopPropagation(); isMobEM ? navDetail(em.id) : setExpandedEm(isExpanded ? null : em.id) }} title={isMobEM ? "Vis" : "Vis historikk"}
                       style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize: isMobEM ? '12px' : '14px', color:'#64748b', fontWeight:'700' }}>{isMobEM ? '›' : isExpanded ? '▲' : '▼'}</button>
                   </div>
                 </div>
@@ -12839,10 +12918,10 @@ function EndringsmeldingPage() {
 
       {showForm && <EmForm 
         initial={editEm} 
-        onClose={() => { setShowForm(false); setEditEm(null) }} 
-        onSaved={() => { setShowForm(false); setEditEm(null); load() }}
+        onClose={() => navList()} 
+        onSaved={() => { navList(); load() }}
         onSaveAndSend={(savedEm) => { 
-          setShowForm(false); setEditEm(null); 
+          navList();
           load(); 
           // Åpne send-dialog med den nylig opprettede EM-en
           setSendDialogEm(savedEm)
@@ -36920,7 +36999,9 @@ function AppContent() {
   const getPageFromHash = () => {
     const hash = window.location.hash.replace('#', '')
     if (!hash || hash === 'godkjenn' || hash === 'anbud-pris') return 'dashboard'
-    return hash
+    // Hvis hash har subroute (f.eks. 'endringsmelding/em_abc123'), returner bare hovedsiden
+    const mainPage = hash.split('/')[0]
+    return mainPage || 'dashboard'
   }
 
   const [page, setPage] = React.useState(getPageFromHash)
