@@ -13527,13 +13527,18 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         kind: 'success',
       })
 
-      // Naviger direkte til den nye fakturaen (detaljvisning)
+      // Etter at brukeren har bekreftet popup → naviger til faktura-modulen
       window.history.pushState({ page: 'faktura', openInvoiceId: newInvoice.id }, '', '#faktura')
       window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura', openInvoiceId: newInvoice.id } }))
-      // Dispatch custom event som FakturaPage lytter på
-      setTimeout(() => {
+      // Vent til FakturaPage har rukket å mount og registrere event-lytter, så åpne fakturaen
+      // Bruker lengre timeout og retry for å være sikker
+      const tryOpenInvoice = (attempts = 0) => {
         window.dispatchEvent(new CustomEvent('openInvoice', { detail: { invoiceId: newInvoice.id } }))
-      }, 50)
+        if (attempts < 5) {
+          setTimeout(() => tryOpenInvoice(attempts + 1), 100)
+        }
+      }
+      setTimeout(() => tryOpenInvoice(), 150)
     } catch(e) {
       console.error('[createInvoice] Feil:', e)
       await appAlert({ message: 'Kunne ikke opprette faktura', subMessage: e.message, kind: 'error' })
@@ -14204,6 +14209,8 @@ function FakturaPage() {
     const onOpenInvoice = async (e) => {
       const invoiceId = e.detail?.invoiceId
       if (!invoiceId) return
+      // Unngå dobbel-opening hvis eventen dispatches flere ganger
+      if (selected?.id === invoiceId) return
       try {
         const { data } = await supabase.from('invoices').select('*').eq('id', invoiceId).single()
         if (data) setSelected(data)
@@ -14211,7 +14218,7 @@ function FakturaPage() {
     }
     window.addEventListener('openInvoice', onOpenInvoice)
     return () => window.removeEventListener('openInvoice', onOpenInvoice)
-  }, [])
+  }, [selected?.id])
   const [calculations, setCalculations] = useState([])
 
   const load = async () => {
