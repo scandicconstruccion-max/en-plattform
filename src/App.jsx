@@ -13493,6 +13493,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       const dueDate = new Date()
       dueDate.setDate(dueDate.getDate() + 14)
 
+      // Opprett faktura som Utkast — med kobling til ordren
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: o.title || `Faktura for ${o.order_number}`,
         invoice_number: newInvoiceNumber,
@@ -13512,25 +13513,27 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         lines,
         notes: `Faktura basert på ordre ${o.order_number}`,
         status: 'Utkast',
+        from_order_id: o.id,
+        from_order_number: o.order_number,
         created_by: user?.id,
       }).select().single()
 
       if (error) throw error
 
-      // Oppdater ordrestatus til 'Fakturert' (fang eventuell constraint-feil)
-      const { error: orderErr } = await supabase.from('orders').update({ status: 'Fakturert', updated_at: new Date().toISOString() }).eq('id', o.id)
+      // IKKE oppdater ordrestatus her — det skjer først når fakturaen faktisk sendes
+      await appAlert({
+        message: 'Faktura opprettet som utkast',
+        subMessage: `Faktura ${newInvoiceNumber} er klar til gjennomgang. Ordrestatus oppdateres først når fakturaen er sendt.`,
+        kind: 'success',
+      })
 
-      if (orderErr) {
-        console.warn('Kunne ikke oppdatere ordrestatus:', orderErr)
-        await appAlert({ message: 'Faktura opprettet', subMessage: `Faktura ${newInvoiceNumber} er opprettet som utkast. Ordrestatus kunne ikke oppdateres automatisk.`, kind: 'success' })
-      } else {
-        setO(prev => ({ ...prev, status: 'Fakturert' }))
-        await appAlert({ message: 'Faktura opprettet', subMessage: `Faktura ${newInvoiceNumber} er klar i Faktura-modulen`, kind: 'success' })
-      }
-
-      // Naviger til faktura-modulen
-      window.history.pushState({ page: 'faktura' }, '', '#faktura')
-      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura' } }))
+      // Naviger direkte til den nye fakturaen (detaljvisning)
+      window.history.pushState({ page: 'faktura', openInvoiceId: newInvoice.id }, '', '#faktura')
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura', openInvoiceId: newInvoice.id } }))
+      // Dispatch custom event som FakturaPage lytter på
+      setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openInvoice', { detail: { invoiceId: newInvoice.id } }))
+      }, 50)
     } catch(e) {
       console.error('[createInvoice] Feil:', e)
       await appAlert({ message: 'Kunne ikke opprette faktura', subMessage: e.message, kind: 'error' })
@@ -14194,6 +14197,21 @@ function FakturaPage() {
       window.__enterDetailView(() => setSelected(null))
     }
   }, [selected])
+
+  // Lytt på event fra andre moduler som vil åpne en spesifikk faktura direkte
+  // (f.eks. når bruker klikker "Send til faktura" på en ordre)
+  React.useEffect(() => {
+    const onOpenInvoice = async (e) => {
+      const invoiceId = e.detail?.invoiceId
+      if (!invoiceId) return
+      try {
+        const { data } = await supabase.from('invoices').select('*').eq('id', invoiceId).single()
+        if (data) setSelected(data)
+      } catch(err) { console.error('Kunne ikke åpne faktura:', err) }
+    }
+    window.addEventListener('openInvoice', onOpenInvoice)
+    return () => window.removeEventListener('openInvoice', onOpenInvoice)
+  }, [])
   const [calculations, setCalculations] = useState([])
 
   const load = async () => {
@@ -15536,6 +15554,22 @@ function SendFakturaModal({ invoice, user, onClose, onSent }) {
       const d = await fnRes.json()
       if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
       await supabase.from('invoices').update({status:'Sendt',sent_at:new Date().toISOString(),customer_email:email,updated_at:new Date().toISOString()}).eq('id',invoice.id)
+
+      // Hvis denne fakturaen ble opprettet fra en ordre, oppdater ordrestatus til 'Fakturert' nå
+      if (invoice.from_order_id) {
+        try {
+          await supabase.from('orders').update({
+            status: 'Fakturert',
+            invoiced_at: new Date().toISOString(),
+            invoice_id: invoice.id,
+            updated_at: new Date().toISOString(),
+          }).eq('id', invoice.from_order_id)
+        } catch(orderErr) {
+          console.warn('Kunne ikke oppdatere tilknyttet ordre:', orderErr)
+          // Ikke knekk send-flyten hvis ordre-oppdatering feiler
+        }
+      }
+
       if (user?.id) await supabase.from('notifications').insert({user_id:user.id,title:`Faktura sendt: ${invoice.title}`,message:`Sendt til ${email}`,type:'info',link_page:'faktura'})
       setSent(true); setTimeout(()=>onSent(),1500)
     } catch(e) { alert('Feil: '+e.message) }
