@@ -11277,6 +11277,8 @@ function EndringsmeldingPage() {
   const [endringer, setEndringer] = useState([])
   const [sendDialogEm, setSendDialogEm] = useState(null) // EM for som skal sendes (åpner frist-modal)
   const [resendDialogEm, setResendDialogEm] = useState(null) // EM for re-send/revisjon/kopi
+  const [viewingVersion, setViewingVersion] = useState(null) // { em, version } - viser historisk versjon
+  const [showVersionsPanel, setShowVersionsPanel] = useState(false)
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -11544,6 +11546,31 @@ function EndringsmeldingPage() {
     // Er det en "Endret"-hendelse etter siste sending?
     const editedAfterSend = log.slice(lastSentIdx + 1).some(l => (l.action || '') === 'Endret')
     return editedAfterSend ? 'revision' : 'resend'
+  }
+
+  // ── Helper: Lag snapshot av EM-tilstand for versjonshistorikk ──────────────
+  const buildEmSnapshot = (em, sendType) => {
+    const existingVersions = Array.isArray(em.versions) ? em.versions : []
+    return {
+      version_number: existingVersions.length + 1,
+      sent_at: new Date().toISOString(),
+      sent_type: sendType,
+      sent_by: user?.email || null,
+      // Selve innholdet som skal bevares
+      snapshot: {
+        title: em.title,
+        em_number: em.em_number,
+        description: em.description,
+        reason: em.reason,
+        amount: em.amount,
+        posts: em.posts || [],
+        time_consequence: em.time_consequence,
+        images: em.images || [],
+        vedlegg: em.vedlegg || [],
+        status: em.status,
+        customer_email: em.customer_email,
+      },
+    }
   }
 
   // ── Form Component ─────────────────────────────────────────────────────────
@@ -12044,8 +12071,12 @@ function EndringsmeldingPage() {
 
       const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
 
+      // Lag snapshot av nåværende tilstand for versjonshistorikk
+      const newVersion = buildEmSnapshot(em, 'send')
+      const versions = [...(Array.isArray(em.versions) ? em.versions : []), newVersion]
+
       // Beregn purringsfrist hvis bruker valgte antall dager
-      const updates = { status: 'Sendt', activity_log: log, view_token: viewToken, updated_at: new Date().toISOString() }
+      const updates = { status: 'Sendt', activity_log: log, view_token: viewToken, versions, updated_at: new Date().toISOString() }
       if (reminderDays && reminderDays > 0) {
         const dueDate = new Date()
         dueDate.setDate(dueDate.getDate() + parseInt(reminderDays))
@@ -12294,7 +12325,12 @@ function EndringsmeldingPage() {
 
       // Oppdater aktivitetslogg + evt. ny purringsfrist (ikke for 'copy')
       const log = [...(em.activity_log || []), { action: cfg.logAction, by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
-      const updates = { activity_log: log, updated_at: new Date().toISOString() }
+
+      // Lag snapshot for versjonshistorikk
+      const newVersion = buildEmSnapshot(em, sendType)
+      const versions = [...(Array.isArray(em.versions) ? em.versions : []), newVersion]
+
+      const updates = { activity_log: log, versions, updated_at: new Date().toISOString() }
 
       if (sendType !== 'copy' && reminderDays && reminderDays > 0) {
         const dueDate = new Date()
@@ -12346,6 +12382,54 @@ function EndringsmeldingPage() {
           </div>
         </div>
         <div style={{ padding: isMobEM ? '12px' : '24px 32px', maxWidth:'800px' }}>
+          {/* Versjoner-seksjon */}
+          {Array.isArray(em.versions) && em.versions.length > 0 && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', marginBottom:'16px', overflow:'hidden' }}>
+              <button onClick={() => setShowVersionsPanel(!showVersionsPanel)}
+                style={{ width:'100%', padding:'12px 16px', background:'none', border:'none', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', textAlign:'left' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                  <span style={{ fontSize:'14px' }}>📚</span>
+                  <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>Versjoner ({em.versions.length})</span>
+                  <span style={{ fontSize:'11px', color:'#94a3b8' }}>Nåværende versjon er v{em.versions.length}</span>
+                </div>
+                <span style={{ fontSize:'12px', color:'#64748b' }}>{showVersionsPanel ? '▲ Skjul' : '▼ Vis'}</span>
+              </button>
+              {showVersionsPanel && (
+                <div style={{ borderTop:'1px solid #f1f5f9', background:'#fafbfc' }}>
+                  {em.versions.slice().reverse().map((v, idx) => {
+                    const isCurrent = idx === 0 // Nyeste er først etter reverse
+                    const typeLabel = { send: '📧 Første utsendelse', resend: '🔄 Sendt på nytt', revision: '📝 Revisjon', copy: '📄 Kopi' }[v.sent_type] || '📧 Sendt'
+                    const typeColor = { send: '#2563eb', resend: '#64748b', revision: '#1e40af', copy: '#065f46' }[v.sent_type] || '#64748b'
+                    return (
+                      <div key={idx} style={{ padding:'12px 16px', borderBottom: idx < em.versions.length - 1 ? '1px solid #f1f5f9' : 'none', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap' }}>
+                        <div style={{ flex:1, minWidth:'200px' }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'2px', flexWrap:'wrap' }}>
+                            <span style={{ background: isCurrent ? '#dcfce7' : '#f1f5f9', color: isCurrent ? '#065f46' : '#475569', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>v{v.version_number}{isCurrent ? ' (nåværende)' : ''}</span>
+                            <span style={{ color: typeColor, fontSize:'12px', fontWeight:'600' }}>{typeLabel}</span>
+                          </div>
+                          <div style={{ fontSize:'12px', color:'#64748b' }}>
+                            {new Date(v.sent_at).toLocaleString('nb-NO', { weekday:'short', day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                            {v.sent_by && ` · ${v.sent_by}`}
+                          </div>
+                          {v.snapshot && (
+                            <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
+                              {Math.round(v.snapshot.amount || 0).toLocaleString('nb-NO')} kr eks. mva
+                              {v.snapshot.time_consequence ? ` · ⏱️ ${v.snapshot.time_consequence}` : ''}
+                            </div>
+                          )}
+                        </div>
+                        <button onClick={() => setViewingVersion({ em, version: v })}
+                          style={{ background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'6px 12px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>
+                          👁️ Vis versjon
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {em.reason && <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 16px', marginBottom:'16px', fontSize:'13px', color:'#92400e' }}>🏷️ Årsak: <strong>{em.reason}</strong></div>}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px', marginBottom:'16px' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
@@ -12660,6 +12744,17 @@ function EndringsmeldingPage() {
           }}
         />
       )}
+
+      {/* Versjon-viewer modal */}
+      {viewingVersion && (
+        <VersionViewerModal
+          em={viewingVersion.em}
+          version={viewingVersion.version}
+          totalVersions={(viewingVersion.em.versions || []).length}
+          projects={projects}
+          onClose={() => setViewingVersion(null)}
+        />
+      )}
     </div>
   )
 }
@@ -12775,6 +12870,151 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   )
 }
 // ─── END SEND-EM-DIALOG ───────────────────────────────────────────────────────
+
+// ─── VERSION-VIEWER-MODAL ─────────────────────────────────────────────────────
+function VersionViewerModal({ em, version, totalVersions, projects, onClose }) {
+  const s = version.snapshot || {}
+  const proj = (projects || []).find(p => p.id === em.project_id)
+  const isCurrent = version.version_number === totalVersions
+
+  const typeLabel = {
+    send: '📧 Første utsendelse',
+    resend: '🔄 Sendt på nytt',
+    revision: '📝 Revisjon',
+    copy: '📄 Kopi',
+  }[version.sent_type] || '📧 Sendt'
+
+  const typeColor = {
+    send: '#2563eb',
+    resend: '#64748b',
+    revision: '#1e40af',
+    copy: '#065f46',
+  }[version.sent_type] || '#64748b'
+
+  const validPosts = Array.isArray(s.posts) ? s.posts.filter(p => p.description || parseFloat(p.qty) > 0) : []
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'700px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        {/* Header */}
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'6px', flexWrap:'wrap' }}>
+              <span style={{ background: isCurrent ? '#dcfce7' : '#f1f5f9', color: isCurrent ? '#065f46' : '#475569', padding:'3px 10px', borderRadius:'6px', fontSize:'12px', fontWeight:'700' }}>
+                Versjon {version.version_number}{isCurrent ? ' (nåværende)' : ' (historisk)'}
+              </span>
+              <span style={{ color: typeColor, fontSize:'12px', fontWeight:'600' }}>{typeLabel}</span>
+            </div>
+            <h2 style={{ margin:'0 0 4px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{s.title || em.title}</h2>
+            <div style={{ fontSize:'12px', color:'#64748b' }}>
+              {s.em_number || em.em_number} · Sendt {new Date(version.sent_at).toLocaleString('nb-NO', { day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+              {version.sent_by && ` · av ${version.sent_by}`}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', padding:0, flexShrink:0 }}>×</button>
+        </div>
+
+        {/* Scrollbart innhold */}
+        <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
+          {!isCurrent && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 14px', marginBottom:'16px' }}>
+              <div style={{ fontSize:'12px', color:'#92400e' }}>
+                ⚠️ Dette er en <strong>historisk versjon</strong> av endringsmeldingen. Innholdet kan være annerledes fra nåværende versjon.
+              </div>
+            </div>
+          )}
+
+          {/* Prosjekt */}
+          <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
+            <div style={{ fontSize:'11px', color:'#64748b', marginBottom:'2px', textTransform:'uppercase', fontWeight:'600' }}>Prosjekt</div>
+            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{proj?.name || '—'}</div>
+          </div>
+
+          {/* Årsak */}
+          {s.reason && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'600', textTransform:'uppercase', marginBottom:'2px' }}>Årsak</div>
+              <div style={{ fontSize:'13px', color:'#0f172a' }}>{s.reason}</div>
+            </div>
+          )}
+
+          {/* Beskrivelse */}
+          {s.description && (
+            <div style={{ background:'white', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'14px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600', textTransform:'uppercase', marginBottom:'6px' }}>Beskrivelse</div>
+              <div style={{ fontSize:'14px', color:'#374151', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{s.description}</div>
+            </div>
+          )}
+
+          {/* Poster-tabell */}
+          {validPosts.length > 0 && (
+            <div style={{ background:'white', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'14px', marginBottom:'14px', overflowX:'auto' }}>
+              <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>💰 Poster</div>
+              <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'440px' }}>
+                <thead>
+                  <tr style={{ borderBottom:'1px solid #e2e8f0' }}>
+                    <th style={{ padding:'6px 8px', textAlign:'left', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Beskrivelse</th>
+                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Mengde</th>
+                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Arb./enh</th>
+                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Mat./enh</th>
+                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Sum</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {validPosts.map((p, idx) => {
+                    const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                    return (
+                      <tr key={idx} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                        <td style={{ padding:'6px 8px', fontSize:'13px', color:'#0f172a' }}>{p.description || '—'}</td>
+                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{p.qty || 0} {p.unit || 'stk'}</td>
+                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')}</td>
+                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')}</td>
+                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* Total */}
+          <div style={{ display:'grid', gridTemplateColumns: s.time_consequence ? '1fr 1fr' : '1fr', gap:'10px' }}>
+            <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center' }}>
+              <div style={{ fontSize:'20px', fontWeight:'800', color:'#059669' }}>{Math.round(s.amount || 0).toLocaleString('nb-NO')} kr</div>
+              <div style={{ fontSize:'11px', color:'#64748b' }}>Total eks. mva</div>
+            </div>
+            {s.time_consequence && (
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'14px', textAlign:'center' }}>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#d97706' }}>{s.time_consequence}</div>
+                <div style={{ fontSize:'11px', color:'#64748b' }}>Tidskonsekvens</div>
+              </div>
+            )}
+          </div>
+
+          {/* Bilder hvis finnes */}
+          {Array.isArray(s.images) && s.images.length > 0 && (
+            <div style={{ marginTop:'14px', background:'white', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'14px' }}>
+              <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>📸 Bilder</div>
+              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                {s.images.map((img, i) => (
+                  <img key={i} src={img.url} alt={img.name} style={{ width:'80px', height:'80px', objectFit:'cover', borderRadius:'8px', border:'1px solid #e2e8f0', cursor:'pointer' }} onClick={() => window.open(img.url, '_blank')} />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'9px 20px', background:'#f1f5f9', color:'#0f172a', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>Lukk</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+// ─── END VERSION-VIEWER-MODAL ─────────────────────────────────────────────────
 
 function fmtO(n) { return (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO') + ' kr' }
 
