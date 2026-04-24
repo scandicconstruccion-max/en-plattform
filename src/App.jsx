@@ -13766,25 +13766,22 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
 
       if (error) throw error
 
-      // IKKE oppdater ordrestatus her — det skjer først når fakturaen faktisk sendes
+      // Bruk sessionStorage som "drop-off": FakturaPage leser dette når den mounter
+      sessionStorage.setItem('openInvoiceId', newInvoice.id)
+
+      // Naviger til faktura
+      window.history.pushState({ page: 'faktura' }, '', '#faktura')
+      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura' } }))
+
+      // Gi FakturaPage tid til å mount og lese sessionStorage
+      await new Promise(resolve => setTimeout(resolve, 300))
+
+      // Vis popup — brukeren ser fakturautkastet BAK popupen
       await appAlert({
         message: 'Faktura opprettet som utkast',
         subMessage: `Faktura ${newInvoiceNumber} er klar til gjennomgang. Ordrestatus oppdateres først når fakturaen er sendt.`,
         kind: 'success',
       })
-
-      // Etter at brukeren har bekreftet popup → naviger til faktura-modulen
-      window.history.pushState({ page: 'faktura', openInvoiceId: newInvoice.id }, '', '#faktura')
-      window.dispatchEvent(new PopStateEvent('popstate', { state: { page: 'faktura', openInvoiceId: newInvoice.id } }))
-      // Vent til FakturaPage har rukket å mount og registrere event-lytter, så åpne fakturaen
-      // Bruker lengre timeout og retry for å være sikker
-      const tryOpenInvoice = (attempts = 0) => {
-        window.dispatchEvent(new CustomEvent('openInvoice', { detail: { invoiceId: newInvoice.id } }))
-        if (attempts < 5) {
-          setTimeout(() => tryOpenInvoice(attempts + 1), 100)
-        }
-      }
-      setTimeout(() => tryOpenInvoice(), 150)
     } catch(e) {
       console.error('[createInvoice] Feil:', e)
       await appAlert({ message: 'Kunne ikke opprette faktura', subMessage: e.message, kind: 'error' })
@@ -15001,15 +14998,25 @@ function FakturaPage() {
   // Lytt på event fra andre moduler som vil åpne en spesifikk faktura direkte
   // (f.eks. når bruker klikker "Send til faktura" på en ordre)
   React.useEffect(() => {
-    const onOpenInvoice = async (e) => {
-      const invoiceId = e.detail?.invoiceId
+    const openInvoiceById = async (invoiceId) => {
       if (!invoiceId) return
-      // Unngå dobbel-opening hvis eventen dispatches flere ganger
       if (selected?.id === invoiceId) return
       try {
         const { data } = await supabase.from('invoices').select('*').eq('id', invoiceId).single()
         if (data) setSelected(data)
       } catch(err) { console.error('Kunne ikke åpne faktura:', err) }
+    }
+
+    // Sjekk sessionStorage ved mount — dette fanger opp ordre→faktura-flyt
+    const pendingInvoiceId = sessionStorage.getItem('openInvoiceId')
+    if (pendingInvoiceId) {
+      sessionStorage.removeItem('openInvoiceId') // fjern etter bruk
+      openInvoiceById(pendingInvoiceId)
+    }
+
+    const onOpenInvoice = async (e) => {
+      const invoiceId = e.detail?.invoiceId
+      if (invoiceId) openInvoiceById(invoiceId)
     }
     window.addEventListener('openInvoice', onOpenInvoice)
     return () => window.removeEventListener('openInvoice', onOpenInvoice)
