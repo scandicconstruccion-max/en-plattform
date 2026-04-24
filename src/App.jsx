@@ -1075,8 +1075,11 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
   const [searchText, setSearchText] = useState('')
   const [rect, setRect] = useState(null)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [highlightedIndex, setHighlightedIndex] = useState(0)
   const { user } = useAuth()
   const wrapperRef = React.useRef(null)
+  const inputRef = React.useRef(null)
+  const itemRefs = React.useRef({})
 
   // Filtrer på type hvis angitt
   const customers = React.useMemo(() => {
@@ -1130,6 +1133,49 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
            (c.email || '').toLowerCase().includes(q) ||
            (c.phone || '').toLowerCase().includes(q)
   })
+
+  // Reset til første treff hver gang søket endres eller dropdown åpnes
+  useEffect(() => {
+    setHighlightedIndex(0)
+  }, [searchText, showDrop])
+
+  // Auto-scroll slik at merket rad alltid er synlig
+  useEffect(() => {
+    if (!showDrop) return
+    const highlighted = filtered[highlightedIndex]
+    if (!highlighted) return
+    const el = itemRefs.current[highlighted.id]
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest', behavior: 'auto' })
+    }
+  }, [highlightedIndex, showDrop, filtered])
+
+  const handleKeyDown = (e) => {
+    if (!showDrop) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        openDrop()
+      }
+      return
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlightedIndex(i => Math.min(i + 1, Math.max(filtered.length - 1, 0)))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlightedIndex(i => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      if (filtered.length > 0) {
+        e.preventDefault()
+        handleSelect(filtered[highlightedIndex])
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setShowDrop(false)
+      setSearchText('')
+      if (inputRef.current) inputRef.current.blur()
+    }
+  }
 
   const handleSelect = (c) => {
     if (valueAsId) {
@@ -1209,13 +1255,16 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
             <div style={{ padding:'12px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
               Ingen treff{searchText ? ` for "${searchText}"` : ''}{allowFreeText && !valueAsId ? ' — skriv fritt' : ''}
             </div>
-          ) : filtered.map(c => {
+          ) : filtered.map((c, idx) => {
             const typeCfg = KUNDE_TYPE_LOCAL[c.type] || KUNDE_TYPE_LOCAL.bedrift
             const isDup = c.type === 'privat' && duplicateNames.has(normalizeCustomerName(c.name))
+            const isHighlighted = idx === highlightedIndex
             return (
-              <div key={c.id} onMouseDown={(e) => { e.preventDefault(); handleSelect(c) }}
-                style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a', display:'flex', flexDirection:'column', gap:'2px' }}
-                onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e => e.currentTarget.style.background='white'}>
+              <div key={c.id}
+                ref={el => { if (el) itemRefs.current[c.id] = el; else delete itemRefs.current[c.id] }}
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(c) }}
+                onMouseEnter={() => setHighlightedIndex(idx)}
+                style={{ padding:'10px 14px', cursor:'pointer', fontSize:'14px', borderBottom:'1px solid #f8fafc', color:'#0f172a', display:'flex', flexDirection:'column', gap:'2px', background: isHighlighted ? '#dcfce7' : 'white' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
                   {c.customer_number && <span style={{ fontFamily:'ui-monospace, monospace', fontSize:'12px', color:'#64748b', fontWeight:'600' }}>{c.customer_number}</span>}
                   <span style={{ fontWeight:'600' }}>{c.name || '(uten navn)'}</span>
@@ -1261,6 +1310,7 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
     <div ref={wrapperRef} style={{ position:'relative' }}>
       <div style={{ position:'relative', display:'flex', alignItems:'stretch' }}>
         <input
+          ref={inputRef}
           value={inputVal}
           onChange={e => {
             setSearchText(e.target.value)
@@ -1268,6 +1318,7 @@ function CustomerSelect({ value, onChange, onSelect, placeholder, style, valueAs
             if (!valueAsId && allowFreeText) onChange(e.target.value)
             if (valueAsId && !e.target.value) onChange('')
           }}
+          onKeyDown={handleKeyDown}
           onFocus={openDrop}
           onBlur={() => setTimeout(() => setShowDrop(false), 200)}
           placeholder={placeholder || 'Søk etter kunde (navn, nr, orgnr, e-post)...'}
