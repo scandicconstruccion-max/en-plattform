@@ -11761,8 +11761,9 @@ function EndringsmeldingPage() {
                 <div style={{ fontSize:'12px', color:'#64748b' }}>Total: <strong style={{ color:'#059669' }}>{Math.round(calcTotal()).toLocaleString('nb-NO')} kr eks. mva</strong></div>
               </div>
 
-              <div style={{ overflowX:'auto', WebkitOverflowScrolling:'touch', marginLeft:'-14px', marginRight:'-14px', paddingLeft:'14px', paddingRight:'14px' }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', minWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '640px' : 'auto' }}>
+              {/* Desktop: tabell — Mobil: kort */}
+              {typeof window !== 'undefined' && window.innerWidth >= 768 ? (
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
                   <thead>
                     <tr>
                       {['Beskrivelse', 'Mengde', 'Enhet', 'Arbeid kr/enh', 'Material kr/enh', 'Sum', ''].map((h, i) => (
@@ -11804,11 +11805,60 @@ function EndringsmeldingPage() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                  {posts.map((p, idx) => {
+                    const sum = calcPostSum(p)
+                    return (
+                      <div key={p.id} style={{ background:'white', borderRadius:'10px', padding:'10px', border:'1px solid #e2e8f0' }}>
+                        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+                          <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>POST {idx + 1}</span>
+                          {posts.length > 1 && (
+                            <button type="button" onClick={() => removePost(p.id)}
+                              style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>× Fjern</button>
+                          )}
+                        </div>
 
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'10px', flexWrap:'wrap', gap:'8px' }}>
+                        <div style={{ marginBottom:'8px' }}>
+                          <label style={{ display:'block', fontSize:'11px', color:'#64748b', marginBottom:'3px', fontWeight:'600' }}>Beskrivelse</label>
+                          <input value={p.description} onChange={e => updatePost(p.id, 'description', e.target.value)} placeholder="F.eks. Ekstra kjøkken" style={{ ...inp, width:'100%', fontSize:'14px' }} />
+                        </div>
+
+                        <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr', gap:'8px', marginBottom:'8px' }}>
+                          <div>
+                            <label style={{ display:'block', fontSize:'11px', color:'#64748b', marginBottom:'3px', fontWeight:'600' }}>Mengde</label>
+                            <input type="number" inputMode="decimal" value={p.qty} onChange={e => updatePost(p.id, 'qty', e.target.value)} style={{ ...inp, width:'100%', textAlign:'right', fontSize:'15px' }} />
+                          </div>
+                          <div>
+                            <label style={{ display:'block', fontSize:'11px', color:'#64748b', marginBottom:'3px', fontWeight:'600' }}>Enhet</label>
+                            <input value={p.unit} onChange={e => updatePost(p.id, 'unit', e.target.value)} placeholder="stk" style={{ ...inp, width:'100%', fontSize:'14px' }} />
+                          </div>
+                        </div>
+
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'10px' }}>
+                          <div>
+                            <label style={{ display:'block', fontSize:'11px', color:'#64748b', marginBottom:'3px', fontWeight:'600' }}>Arbeid kr/enh</label>
+                            <input type="number" inputMode="decimal" value={p.unitPriceWork} onChange={e => updatePost(p.id, 'unitPriceWork', e.target.value)} placeholder="0" style={{ ...inp, width:'100%', textAlign:'right', fontSize:'15px' }} />
+                          </div>
+                          <div>
+                            <label style={{ display:'block', fontSize:'11px', color:'#64748b', marginBottom:'3px', fontWeight:'600' }}>Material kr/enh</label>
+                            <input type="number" inputMode="decimal" value={p.unitPriceMaterial} onChange={e => updatePost(p.id, 'unitPriceMaterial', e.target.value)} placeholder="0" style={{ ...inp, width:'100%', textAlign:'right', fontSize:'15px' }} />
+                          </div>
+                        </div>
+
+                        <div style={{ background:'#f0fdf4', borderRadius:'8px', padding:'8px 12px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                          <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Sum denne posten:</span>
+                          <span style={{ fontSize:'16px', fontWeight:'800', color:'#059669' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div style={{ display:'flex', justifyContent:'center', alignItems:'center', marginTop:'12px' }}>
                 <button type="button" onClick={addPost}
-                  style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
+                  style={{ background:'#f0fdf4', color:'#059669', border:'1px dashed #86efac', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer', width:'100%' }}>+ Legg til post</button>
               </div>
             </div>
 
@@ -12446,43 +12496,69 @@ function EndringsmeldingPage() {
             </div>}
           </div>
 
-          {/* Poster-tabell */}
+          {/* Poster */}
           {Array.isArray(em.posts) && em.posts.length > 0 && em.posts.some(p => p.description || parseFloat(p.qty) > 0) && (
-            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px', overflowX:'auto' }}>
+            <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px', marginBottom:'16px' }}>
               <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600' }}>💰 Poster</h3>
-              <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'500px' }}>
-                <thead>
-                  <tr style={{ borderBottom:'1px solid #e2e8f0' }}>
-                    <th style={{ padding:'8px', textAlign:'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Beskrivelse</th>
-                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Mengde</th>
-                    <th style={{ padding:'8px', textAlign:'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Enhet</th>
-                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Arbeid/enh</th>
-                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Mat./enh</th>
-                    <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Sum</th>
-                  </tr>
-                </thead>
-                <tbody>
+              {!isMobEM ? (
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom:'1px solid #e2e8f0' }}>
+                      <th style={{ padding:'8px', textAlign:'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Beskrivelse</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Mengde</th>
+                      <th style={{ padding:'8px', textAlign:'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Enhet</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Arbeid/enh</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Mat./enh</th>
+                      <th style={{ padding:'8px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase' }}>Sum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {em.posts.filter(p => p.description || parseFloat(p.qty) > 0).map(p => {
+                      const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <tr key={p.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                          <td style={{ padding:'8px', fontSize:'13px', color:'#0f172a' }}>{p.description || '—'}</td>
+                          <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{p.qty || 0}</td>
+                          <td style={{ padding:'8px', fontSize:'13px', color:'#475569' }}>{p.unit || 'stk'}</td>
+                          <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')} kr</td>
+                          <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')} kr</td>
+                          <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={5} style={{ padding:'10px 8px', fontSize:'13px', fontWeight:'700', color:'#0f172a', textAlign:'right', borderTop:'2px solid #e2e8f0' }}>Total eks. mva:</td>
+                      <td style={{ padding:'10px 8px', fontSize:'15px', fontWeight:'800', color:'#059669', textAlign:'right', borderTop:'2px solid #e2e8f0' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {em.posts.filter(p => p.description || parseFloat(p.qty) > 0).map(p => {
                     const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
                     return (
-                      <tr key={p.id} style={{ borderBottom:'1px solid #f1f5f9' }}>
-                        <td style={{ padding:'8px', fontSize:'13px', color:'#0f172a' }}>{p.description || '—'}</td>
-                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{p.qty || 0}</td>
-                        <td style={{ padding:'8px', fontSize:'13px', color:'#475569' }}>{p.unit || 'stk'}</td>
-                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')} kr</td>
-                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')} kr</td>
-                        <td style={{ padding:'8px', fontSize:'13px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</td>
-                      </tr>
+                      <div key={p.id} style={{ background:'#fafbfc', borderRadius:'8px', padding:'10px', border:'1px solid #e2e8f0' }}>
+                        <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', marginBottom:'6px' }}>{p.description || '—'}</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px 10px', fontSize:'12px', color:'#475569', marginBottom:'8px' }}>
+                          <div><span style={{ color:'#94a3b8' }}>Mengde: </span>{p.qty || 0} {p.unit || 'stk'}</div>
+                          <div style={{ textAlign:'right' }}><span style={{ color:'#94a3b8' }}>Arbeid: </span>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')} kr/enh</div>
+                          <div style={{ gridColumn:'1/-1', textAlign:'right' }}><span style={{ color:'#94a3b8' }}>Material: </span>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')} kr/enh</div>
+                        </div>
+                        <div style={{ background:'#f0fdf4', borderRadius:'6px', padding:'6px 10px', display:'flex', justifyContent:'space-between' }}>
+                          <span style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>Sum:</span>
+                          <span style={{ fontSize:'14px', fontWeight:'800', color:'#059669' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</span>
+                        </div>
+                      </div>
                     )
                   })}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={5} style={{ padding:'10px 8px', fontSize:'13px', fontWeight:'700', color:'#0f172a', textAlign:'right', borderTop:'2px solid #e2e8f0' }}>Total eks. mva:</td>
-                    <td style={{ padding:'10px 8px', fontSize:'15px', fontWeight:'800', color:'#059669', textAlign:'right', borderTop:'2px solid #e2e8f0' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</td>
-                  </tr>
-                </tfoot>
-              </table>
+                  <div style={{ background:'#f0fdf4', border:'2px solid #86efac', borderRadius:'10px', padding:'12px', display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'4px' }}>
+                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>Total eks. mva:</span>
+                    <span style={{ fontSize:'17px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</span>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {/* Bilder */}
@@ -12644,6 +12720,27 @@ function EndringsmeldingPage() {
                     {em.time_consequence && <div style={{ fontSize:'11px', color:'#d97706' }}>⏱️ {em.time_consequence}</div>}
                   </div>}
                   <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'center' }}>
+                    {/* Mobil: vis kun ÉN primær handlingsknapp basert på status */}
+                    {isMobEM && (() => {
+                      if (em.status === 'Utkast' || em.status === 'Under forhandling') {
+                        return <button onClick={(e) => { e.stopPropagation(); setSendDialogEm(em) }} title="Send til kunde"
+                          style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📧</button>
+                      }
+                      if (em.status === 'Sendt') {
+                        const t = getEmSendType(em)
+                        if (t === 'revision') {
+                          return <button onClick={(e) => { e.stopPropagation(); setResendDialogEm({ em, type: 'revision' }) }} title="Send revisjon"
+                            style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📝</button>
+                        }
+                        return <button onClick={(e) => { e.stopPropagation(); setResendDialogEm({ em, type: 'resend' }) }} title="Send på nytt"
+                          style={{ background:'#f1f5f9', color:'#1e293b', border:'1px solid #cbd5e1', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>🔄</button>
+                      }
+                      if (em.status === 'Godkjent' || em.status === 'Avvist') {
+                        return <button onClick={(e) => { e.stopPropagation(); setResendDialogEm({ em, type: 'copy' }) }} title="Send kopi"
+                          style={{ background:'#f0fdf4', color:'#065f46', border:'1px solid #bbf7d0', borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📄</button>
+                      }
+                      return null
+                    })()}
                     {!isMobEM && (em.status === 'Utkast' || em.status === 'Under forhandling') && (
                       <button onClick={(e) => { e.stopPropagation(); setSendDialogEm(em) }} title="Send til kunde"
                         style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'7px 14px', cursor:'pointer', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'4px', whiteSpace:'nowrap' }}>📧 Send</button>
@@ -12908,6 +13005,7 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
 
 // ─── VERSION-VIEWER-MODAL ─────────────────────────────────────────────────────
 function VersionViewerModal({ em, version, totalVersions, projects, onClose }) {
+  const isMobVV = typeof window !== 'undefined' && window.innerWidth < 768
   const s = version.snapshot || {}
   const proj = (projects || []).find(p => p.id === em.project_id)
   const isCurrent = version.version_number === totalVersions
@@ -12982,35 +13080,57 @@ function VersionViewerModal({ em, version, totalVersions, projects, onClose }) {
             </div>
           )}
 
-          {/* Poster-tabell */}
+          {/* Poster */}
           {validPosts.length > 0 && (
-            <div style={{ background:'white', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'14px', marginBottom:'14px', overflowX:'auto' }}>
+            <div style={{ background:'white', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'14px', marginBottom:'14px' }}>
               <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600', textTransform:'uppercase', marginBottom:'8px' }}>💰 Poster</div>
-              <table style={{ width:'100%', borderCollapse:'collapse', minWidth:'440px' }}>
-                <thead>
-                  <tr style={{ borderBottom:'1px solid #e2e8f0' }}>
-                    <th style={{ padding:'6px 8px', textAlign:'left', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Beskrivelse</th>
-                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Mengde</th>
-                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Arb./enh</th>
-                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Mat./enh</th>
-                    <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Sum</th>
-                  </tr>
-                </thead>
-                <tbody>
+              {!isMobVV ? (
+                <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                  <thead>
+                    <tr style={{ borderBottom:'1px solid #e2e8f0' }}>
+                      <th style={{ padding:'6px 8px', textAlign:'left', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Beskrivelse</th>
+                      <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Mengde</th>
+                      <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Arb./enh</th>
+                      <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Mat./enh</th>
+                      <th style={{ padding:'6px 8px', textAlign:'right', fontSize:'11px', color:'#94a3b8', textTransform:'uppercase' }}>Sum</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {validPosts.map((p, idx) => {
+                      const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                      return (
+                        <tr key={idx} style={{ borderBottom:'1px solid #f1f5f9' }}>
+                          <td style={{ padding:'6px 8px', fontSize:'13px', color:'#0f172a' }}>{p.description || '—'}</td>
+                          <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{p.qty || 0} {p.unit || 'stk'}</td>
+                          <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')}</td>
+                          <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')}</td>
+                          <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {validPosts.map((p, idx) => {
                     const sum = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
                     return (
-                      <tr key={idx} style={{ borderBottom:'1px solid #f1f5f9' }}>
-                        <td style={{ padding:'6px 8px', fontSize:'13px', color:'#0f172a' }}>{p.description || '—'}</td>
-                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{p.qty || 0} {p.unit || 'stk'}</td>
-                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')}</td>
-                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', color:'#475569' }}>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')}</td>
-                        <td style={{ padding:'6px 8px', fontSize:'13px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</td>
-                      </tr>
+                      <div key={idx} style={{ background:'#fafbfc', borderRadius:'8px', padding:'10px', border:'1px solid #e2e8f0' }}>
+                        <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'6px' }}>{p.description || '—'}</div>
+                        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'6px', fontSize:'12px', color:'#475569', marginBottom:'8px' }}>
+                          <div><span style={{ color:'#94a3b8' }}>Mengde: </span>{p.qty || 0} {p.unit || 'stk'}</div>
+                          <div style={{ textAlign:'right' }}><span style={{ color:'#94a3b8' }}>Arbeid: </span>{Math.round(parseFloat(p.unitPriceWork)||0).toLocaleString('nb-NO')} kr/enh</div>
+                          <div><span style={{ color:'#94a3b8' }}>Material: </span>{Math.round(parseFloat(p.unitPriceMaterial)||0).toLocaleString('nb-NO')} kr/enh</div>
+                        </div>
+                        <div style={{ background:'#f0fdf4', borderRadius:'6px', padding:'6px 10px', display:'flex', justifyContent:'space-between' }}>
+                          <span style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>Sum:</span>
+                          <span style={{ fontSize:'14px', fontWeight:'800', color:'#059669' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</span>
+                        </div>
+                      </div>
                     )
                   })}
-                </tbody>
-              </table>
+                </div>
+              )}
             </div>
           )}
 
