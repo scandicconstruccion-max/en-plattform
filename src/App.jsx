@@ -11273,6 +11273,7 @@ function EndringsmeldingPage() {
   const isMobBild = typeof window !== 'undefined' && window.innerWidth < 768
   const { user } = useAuth()
   const appAlert = useAppAlert()
+  const confirm = useConfirm()
   const [endringer, setEndringer] = useState([])
   const [sendDialogEm, setSendDialogEm] = useState(null) // EM for som skal sendes (åpner frist-modal)
   const [projects, setProjects] = useState([])
@@ -11508,7 +11509,7 @@ function EndringsmeldingPage() {
   }
 
   const handleDelete = async (em) => {
-    if (!window.confirm(`Slette endringsmelding "${em.title}"?`)) return
+    if (!(await confirm({ message: 'Slett denne endringsmeldingen?', subMessage: `"${em.title}" slettes permanent. Denne handlingen kan ikke angres.`, danger: true }))) return
     await supabase.from('endringsmeldinger').delete().eq('id', em.id)
     load()
   }
@@ -11545,6 +11546,16 @@ function EndringsmeldingPage() {
     })
     const [images, setImages] = useState(initial?.images || [])
     const [vedlegg, setVedlegg] = useState(initial?.vedlegg || [])
+    const [internalRecipients, setInternalRecipients] = useState([])
+    const [employees, setEmployees] = useState([])
+
+    // Last inn ansatte for intern-varsling
+    useEffect(() => {
+      supabase.from('employees').select('first_name, last_name, email, user_id').then(({ data }) => {
+        setEmployees((data || []).filter(e => e.email && e.user_id)) // Kun med brukerkonto
+      })
+    }, [])
+
     const [posts, setPosts] = useState(() => {
       // Bruk eksisterende poster hvis det finnes
       const existing = initial?.posts
@@ -11602,6 +11613,18 @@ function EndringsmeldingPage() {
           }).select().single()
           if (error) throw error
           savedEm = data
+
+          // Varsle interne mottakere (kun ved opprettelse)
+          for (const r of internalRecipients) {
+            if (r.user_id === user?.id) continue // Ikke varsle seg selv
+            await supabase.from('notifications').insert({
+              user_id: r.user_id,
+              title: `📝 Endringsmelding: ${payload.title}`,
+              message: `${payload.em_number} · ${Math.round(payload.amount || 0).toLocaleString('nb-NO')} kr eks. mva${payload.time_consequence ? ' · ⏱️ ' + payload.time_consequence : ''}`,
+              type: 'info',
+              link_page: 'endringsmelding',
+            })
+          }
         }
         // Hvis "Opprett og send" ble valgt, åpne send-dialog
         if (alsoSend && savedEm) {
@@ -11803,6 +11826,50 @@ function EndringsmeldingPage() {
                 Autofylles fra prosjektet, eller søk etter eksisterende kunde. Kan også skrives inn manuelt.
               </p>
             </div>
+
+            <div>{lbl('🔔 Varsle internt (kollegaer får varsel i bjellen)')}
+              <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px' }}>
+                {internalRecipients.length > 0 && (
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'10px' }}>
+                    {internalRecipients.map(r => (
+                      <span key={r.user_id} style={{ background:'#dcfce7', color:'#065f46', padding:'5px 10px', borderRadius:'6px', fontSize:'12px', fontWeight:'600', display:'inline-flex', alignItems:'center', gap:'6px' }}>
+                        👤 {r.name}
+                        <button type="button" onClick={() => setInternalRecipients(prev => prev.filter(x => x.user_id !== r.user_id))}
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#065f46', padding:0, fontSize:'14px', lineHeight:1 }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <select
+                  value=""
+                  onChange={e => {
+                    const selectedId = e.target.value
+                    if (!selectedId) return
+                    const emp = employees.find(emp => emp.user_id === selectedId)
+                    if (!emp) return
+                    if (internalRecipients.some(r => r.user_id === emp.user_id)) return // Allerede valgt
+                    setInternalRecipients(prev => [...prev, {
+                      user_id: emp.user_id,
+                      name: `${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email,
+                      email: emp.email,
+                    }])
+                    e.target.value = ''
+                  }}
+                  style={{ ...inp, background:'white', fontSize:'13px' }}>
+                  <option value="">+ Velg kollega å varsle...</option>
+                  {employees
+                    .filter(emp => !internalRecipients.some(r => r.user_id === emp.user_id))
+                    .map(emp => (
+                      <option key={emp.user_id} value={emp.user_id}>
+                        {`${emp.first_name || ''} ${emp.last_name || ''}`.trim() || emp.email}
+                      </option>
+                    ))}
+                </select>
+                <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>
+                  Kun ansatte med brukerkonto vises. Valgte kollegaer får varsel i bjellen når endringsmeldingen lagres.
+                </p>
+              </div>
+            </div>
             <div>{lbl('Interne notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Interne merknader (vises ikke for kunde)" style={{ ...inp, resize:'none', fontFamily:'system-ui,sans-serif' }} /></div>
           </form>
 
@@ -11887,9 +11954,17 @@ function EndringsmeldingPage() {
           (em.time_consequence ? '<div style="font-size:13px;color:#64748b;text-align:center;margin-top:4px">⏱️ ' + em.time_consequence + '</div>' : '') +
         '</div>' + vedleggHtml +
         '<p style="color:#475569;font-size:14px">Vurder endringsmeldingen og gi svar:</p>' +
-        '<div style="text-align:center;margin:24px 0">' +
-          '<a href="' + viewUrl + '" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Godkjenn / Avvis endringsmelding →</a>' +
-        '</div>' +
+        '<table cellspacing="0" cellpadding="0" style="margin:28px auto;border-collapse:separate;border-spacing:12px 0">' +
+          '<tr>' +
+            '<td>' +
+              '<a href="' + viewUrl + '&action=godkjent" style="display:inline-block;background:#059669;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(5,150,105,0.25);text-align:center;min-width:160px">✓ Godkjenn</a>' +
+            '</td>' +
+            '<td>' +
+              '<a href="' + viewUrl + '&action=avvist" style="display:inline-block;background:#dc2626;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(220,38,38,0.25);text-align:center;min-width:160px">✗ Avvis</a>' +
+            '</td>' +
+          '</tr>' +
+        '</table>' +
+        '<p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0"><a href="' + viewUrl + '" style="color:#64748b;text-decoration:underline">Eller se full endringsmelding først →</a></p>' +
         '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
 
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
@@ -11934,9 +12009,17 @@ function EndringsmeldingPage() {
           (proj ? '<div style="font-size:13px;color:#64748b">Prosjekt: ' + proj.name + '</div>' : '') +
         '</div>' +
         '<p style="color:#475569;font-size:14px">Vennligst godkjenn eller avvis endringsmeldingen slik at vi kan fortsette arbeidet:</p>' +
-        '<div style="text-align:center;margin:24px 0">' +
-          '<a href="' + viewUrl + '" style="background:#d97706;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Godkjenn / Avvis endringsmelding →</a>' +
-        '</div>' +
+        '<table cellspacing="0" cellpadding="0" style="margin:28px auto;border-collapse:separate;border-spacing:12px 0">' +
+          '<tr>' +
+            '<td>' +
+              '<a href="' + viewUrl + '&action=godkjent" style="display:inline-block;background:#059669;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(5,150,105,0.25);text-align:center;min-width:160px">✓ Godkjenn</a>' +
+            '</td>' +
+            '<td>' +
+              '<a href="' + viewUrl + '&action=avvist" style="display:inline-block;background:#dc2626;color:white;padding:20px 40px;border-radius:14px;text-decoration:none;font-weight:700;font-size:17px;box-shadow:0 4px 12px rgba(220,38,38,0.25);text-align:center;min-width:160px">✗ Avvis</a>' +
+            '</td>' +
+          '</tr>' +
+        '</table>' +
+        '<p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0"><a href="' + viewUrl + '" style="color:#64748b;text-decoration:underline">Eller se full endringsmelding først →</a></p>' +
         '<p style="color:#94a3b8;font-size:12px">Påminnelse sendt via En Plattform</p></div>'
 
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
