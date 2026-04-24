@@ -13715,17 +13715,25 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
 
       // Bygg fakturalinjer fra ordrens kapitler
       // MERK: Ordrer bruker ch.posts (ikke ch.lines)
+      console.log('[createInvoice] Ordrens chapters:', o.chapters)
       const lines = []
-      ;(o.chapters || []).forEach(ch => {
-        ;(ch.posts || []).forEach(p => {
+      ;(o.chapters || []).forEach((ch, chIdx) => {
+        // Støtt både 'posts' (ny struktur) og 'lines' (evt. gammel struktur) — bakoverkompatibelt
+        const items = ch.posts || ch.lines || []
+        console.log(`[createInvoice] Kapittel ${chIdx} "${ch.name || ch.title || ''}" har ${items.length} linjer`)
+        items.forEach((p, pIdx) => {
           const qty = parseFloat(p.qty) || 0
-          const priceWork = parseFloat(p.unitPriceWork) || 0
-          const priceMat = parseFloat(p.unitPriceMaterial) || 0
+          const priceWork = parseFloat(p.unitPriceWork ?? p.unit_price_work) || 0
+          const priceMat = parseFloat(p.unitPriceMaterial ?? p.unit_price_material) || 0
           const unitPrice = priceWork + priceMat
-          if (qty > 0 && unitPrice > 0) {
+          console.log(`[createInvoice]   Post ${pIdx}: qty=${qty}, work=${priceWork}, mat=${priceMat}, total=${unitPrice}`, p)
+
+          // Legg til linjen selv om pris er 0 — bruker kan justere i fakturautkastet
+          if (p.description || qty > 0 || unitPrice > 0) {
+            const chapterLabel = ch.name || ch.title || ''
             lines.push({
-              description: (ch.name ? `[${ch.name}] ` : '') + (p.description || ''),
-              qty,
+              description: (chapterLabel ? `[${chapterLabel}] ` : '') + (p.description || 'Uten beskrivelse'),
+              qty: qty || 1,
               unit: p.unit || 'stk',
               unit_price: unitPrice,
               mva_rate: 25,
@@ -13733,10 +13741,17 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
           }
         })
       })
-      console.log('[createInvoice] Bygde', lines.length, 'fakturalinjer fra ordren')
+      console.log('[createInvoice] Bygde', lines.length, 'fakturalinjer fra ordren:', lines)
 
-      // Hent selskapsinfo
-      const { data: cs } = await supabase.from('company_settings').select('name,address,orgnr,bank_account').limit(1).single()
+      // Hent selskapsinfo — gjør dette feiltolerant for å unngå at manglende kolonner
+      // sprengaerhele createInvoice-flyten
+      let cs = null
+      try {
+        const { data } = await supabase.from('company_settings').select('*').limit(1).single()
+        cs = data
+      } catch(settingsErr) {
+        console.warn('[createInvoice] Kunne ikke hente company_settings:', settingsErr)
+      }
 
       const today = new Date().toISOString().split('T')[0]
       const dueDate = new Date()
@@ -14492,7 +14507,9 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
         cc: ccList.length > 0 ? ccList : undefined,
       }]
 
-      await supabase.from('orders').update({
+      // Prøv først med Fase B-felter (reminder_days, reminder_due_date, sent_to)
+      // Hvis kolonnene ikke finnes (Fase B-migrasjon ikke kjørt), fall tilbake til basisfelter
+      const fullUpdate = {
         status: 'Sendt',
         customer_email: email,
         activity_log: newLog,
@@ -14501,7 +14518,20 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
         reminder_days: parseInt(reminderDays) || 7,
         reminder_due_date: reminderDue.toISOString().split('T')[0],
         updated_at: new Date().toISOString(),
-      }).eq('id', order.id)
+      }
+      let { error: updErr } = await supabase.from('orders').update(fullUpdate).eq('id', order.id)
+      if (updErr) {
+        console.warn('[SendOrdreModal] Fullt update feilet, prøver basisfelter:', updErr.message)
+        const basicUpdate = {
+          status: 'Sendt',
+          customer_email: email,
+          activity_log: newLog,
+          view_token: viewToken,
+          updated_at: new Date().toISOString(),
+        }
+        const { error: basicErr } = await supabase.from('orders').update(basicUpdate).eq('id', order.id)
+        if (basicErr) throw basicErr
+      }
 
       setSent(true)
       setTimeout(async () => {
@@ -38221,12 +38251,18 @@ function AppContent() {
     const checkOverdueOrders = async () => {
       try {
         const today = new Date().toISOString().split('T')[0]
-        const { data: overdue } = await supabase
+        const { data: overdue, error: ordErr } = await supabase
           .from('orders')
           .select('id, title, order_number, customer_email, reminder_due_date, last_reminder_sent_at')
           .eq('status', 'Sendt')
           .lt('reminder_due_date', today)
           .or('last_reminder_sent_at.is.null,last_reminder_sent_at.lt.reminder_due_date')
+
+        // Hvis spørringen feiler (f.eks. fordi reminder_due_date-kolonnen ikke finnes ennå) — bare avslutt stille
+        if (ordErr) {
+          console.warn('[Ordre-purringssjekk hoppet over]:', ordErr.message)
+          return
+        }
 
         if (!overdue || overdue.length === 0) return
 
