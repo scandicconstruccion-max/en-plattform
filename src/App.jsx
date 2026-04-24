@@ -11317,8 +11317,9 @@ function EndringsmeldingPage() {
   const [showPdfPicker, setShowPdfPicker] = useState(false)
   const [exportingPdf, setExportingPdf] = useState(false)
 
-  const exportSingleEmPDF = async (em) => {
-    setExportingPdf(true)
+  const exportSingleEmPDF = async (em, mode = 'download') => {
+    // mode: 'download' → lagrer fila (standard), 'base64' → returnerer { base64, filename }
+    if (mode === 'download') setExportingPdf(true)
     try {
       const pdf = await createBrandedPdf()
       const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
@@ -11503,9 +11504,16 @@ function EndringsmeldingPage() {
       pdf.drawFooters()
 
       const safeName = (em.em_number || em.title || 'EM').replace(/[^a-zA-Z0-9_-]/g, '_')
-      doc.save(`Endringsmelding - ${safeName}.pdf`)
-    } catch(e) { console.error(e); alert('Feil ved PDF: ' + e.message) }
-    finally { setExportingPdf(false) }
+      const filename = `Endringsmelding - ${safeName}.pdf`
+      if (mode === 'base64') {
+        // Returner PDF som base64 (uten prefiks) for e-postvedlegg
+        const dataUri = doc.output('datauristring')
+        const base64 = dataUri.split(',')[1] || dataUri
+        return { base64, filename }
+      }
+      doc.save(filename)
+    } catch(e) { console.error(e); if (mode === 'download') await appAlert({ message: 'Feil ved PDF-generering', subMessage: e.message, kind: 'error' }); throw e }
+    finally { if (mode === 'download') setExportingPdf(false) }
   }
 
   const handleDelete = async (em) => {
@@ -11967,9 +11975,32 @@ function EndringsmeldingPage() {
         '<p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0"><a href="' + viewUrl + '" style="color:#64748b;text-decoration:underline">Eller se full endringsmelding først →</a></p>' +
         '<p style="color:#94a3b8;font-size:12px">Endringsmelding sendt via En Plattform</p></div>'
 
+      // Generer PDF som base64 for vedlegg
+      let pdfBase64 = null
+      let pdfFilename = 'Endringsmelding.pdf'
+      try {
+        const pdfResult = await exportSingleEmPDF(em, 'base64')
+        if (pdfResult) {
+          pdfBase64 = pdfResult.base64
+          pdfFilename = pdfResult.filename
+        }
+      } catch (pdfErr) {
+        console.error('PDF-generering feilet:', pdfErr)
+        // Fortsett uten vedlegg om PDF feiler
+      }
+
+      const payload = {
+        to: em.customer_email,
+        subject: `Endringsmelding ${em.em_number} – ${em.title}`,
+        html,
+      }
+      if (pdfBase64) {
+        payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
+      }
+
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: em.customer_email, subject: `Endringsmelding ${em.em_number} – ${em.title}`, html })
+        body: JSON.stringify(payload)
       })
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
@@ -12022,10 +12053,27 @@ function EndringsmeldingPage() {
         '<p style="color:#94a3b8;font-size:12px;text-align:center;margin:12px 0"><a href="' + viewUrl + '" style="color:#64748b;text-decoration:underline">Eller se full endringsmelding først →</a></p>' +
         '<p style="color:#94a3b8;font-size:12px">Påminnelse sendt via En Plattform</p></div>'
 
+      // Generer PDF som base64 for vedlegg
+      let pdfBase64 = null
+      let pdfFilename = 'Endringsmelding.pdf'
+      try {
+        const pdfResult = await exportSingleEmPDF(em, 'base64')
+        if (pdfResult) { pdfBase64 = pdfResult.base64; pdfFilename = pdfResult.filename }
+      } catch (pdfErr) { console.error('PDF-generering feilet:', pdfErr) }
+
+      const payload = {
+        to: em.customer_email,
+        subject: `Påminnelse: ${em.em_number} venter på svar`,
+        html,
+      }
+      if (pdfBase64) {
+        payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
+      }
+
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: em.customer_email, subject: `Påminnelse: ${em.em_number} venter på svar`, html })
+        body: JSON.stringify(payload)
       })
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
