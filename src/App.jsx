@@ -27257,16 +27257,28 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
 // ─── END CRM MODULE ───────────────────────────────────────────────────────────
 
 // ─── BEFARING MODULE ──────────────────────────────────────────────────────────
+// Hovedmodul for befaringer. To modeller side om side:
+//   1) Sjekkpunkter (inspection_items) — for HMS, sluttkontroll, garantibefaring
+//      med forhåndsdefinerte kontrollpunkter.
+//   2) Observasjoner (inspection_observations) — for tilbudsbefaring,
+//      gjennomgang, overtakelse: foto-først, tale-til-tekst, mobil-fokusert.
+//
+// Mobil-flyten er den primære. Brukeren skal kunne registrere punkter,
+// transkribere stemme, og sende til UE/kollega — alt fra telefonen.
 
 const BEFARING_TYPES = [
-  { id:'hms', label:'HMS', emoji:'🦺' },
-  { id:'kvalitet', label:'Kvalitet', emoji:'✅' },
-  { id:'sluttkontroll', label:'Sluttkontroll', emoji:'🔍' },
-  { id:'overtakelse', label:'Overtakelse', emoji:'🤝' },
-  { id:'garanti', label:'Garantibefaring', emoji:'🛡️' },
-  { id:'tilbud', label:'Tilbudsbefaring', emoji:'📋' },
-  { id:'annet', label:'Annet', emoji:'📝' },
+  { id:'hms',           label:'HMS',              emoji:'🦺' },
+  { id:'kvalitet',      label:'Kvalitet',         emoji:'✅' },
+  { id:'sluttkontroll', label:'Sluttkontroll',    emoji:'🔍' },
+  { id:'overtakelse',   label:'Overtakelse',      emoji:'🤝' },
+  { id:'garanti',       label:'Garantibefaring',  emoji:'🛡️' },
+  { id:'tilbud',        label:'Tilbudsbefaring',  emoji:'📋' },
+  { id:'annet',         label:'Annet',            emoji:'📝' },
 ]
+
+// Hvilke befaringstyper bruker observasjons-modellen som primær?
+// (Sjekkpunkt-modellen er fortsatt tilgjengelig som ekstra fane for alle.)
+const OBSERVATION_FIRST_TYPES = ['tilbud', 'kvalitet', 'overtakelse', 'annet']
 
 const INS_STATUS = {
   planlagt:     { label:'Planlagt',     emoji:'📅', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
@@ -27289,8 +27301,155 @@ const getRoleLabel = (id) => {
   return r ? `${r.emoji} ${r.label}` : '👤 Annen'
 }
 
+// ── Observasjons-konfigurasjon ──
+const OBS_CATEGORY = {
+  observasjon:  { label:'Observasjon', emoji:'👁️', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+  avvik:        { label:'Avvik',       emoji:'⚠️', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+  tilbud_onske: { label:'Ønske',       emoji:'💭', color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe' },
+  mal:          { label:'Mål',         emoji:'📏', color:'#059669', bg:'#f0fdf4', border:'#bbf7d0' },
+  note:         { label:'Notat',       emoji:'📝', color:'#64748b', bg:'#f8fafc', border:'#e2e8f0' },
+}
+
+const OBS_STATUS = {
+  apen:      { label:'Åpen',      emoji:'⏳', color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
+  pagar:     { label:'Pågår',     emoji:'🔧', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+  utbedret:  { label:'Utbedret',  emoji:'✅', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
+  godkjent:  { label:'Godkjent',  emoji:'✔️', color:'#059669', bg:'#ecfdf5', border:'#a7f3d0' },
+  avvist:    { label:'Avvist',    emoji:'❌', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+}
+
+const OBS_SEVERITY = {
+  lav:     { label:'Lav',     color:'#64748b', bg:'#f8fafc' },
+  middels: { label:'Middels', color:'#d97706', bg:'#fffbeb' },
+  hoy:     { label:'Høy',     color:'#dc2626', bg:'#fef2f2' },
+}
+
 const bInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const bCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HOOK: useSpeechRecognition (Web Speech API)
+// ═══════════════════════════════════════════════════════════════════════════
+// Tynn wrapper rundt nettleserens innebygde SpeechRecognition (Web Speech API).
+// Klar for å erstattes med Whisper via Edge Function senere — kun denne hooken
+// må endres, callsites er uendret.
+//
+// Returnerer:
+//   { isSupported, isListening, transcript, interimTranscript,
+//     start(), stop(), reset() }
+//
+// Norsk språk er hardkodet ('nb-NO'). Continuous mode på, så bruker kan
+// snakke i pauser uten å miste sesjon. interimTranscript viser foreløpig
+// gjenkjenning live.
+
+function useSpeechRecognition() {
+  const [isListening, setIsListening] = React.useState(false)
+  const [transcript, setTranscript] = React.useState('')
+  const [interimTranscript, setInterimTranscript] = React.useState('')
+  const recognitionRef = React.useRef(null)
+  const finalTranscriptRef = React.useRef('')
+
+  const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
+  const isSupported = !!SR
+
+  React.useEffect(() => {
+    if (!isSupported) return
+    const recognition = new SR()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'nb-NO'
+
+    recognition.onresult = (event) => {
+      let interim = ''
+      let final = finalTranscriptRef.current
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          final += (final && !final.endsWith(' ') ? ' ' : '') + result[0].transcript.trim()
+        } else {
+          interim += result[0].transcript
+        }
+      }
+      finalTranscriptRef.current = final
+      setTranscript(final)
+      setInterimTranscript(interim)
+    }
+
+    recognition.onerror = (event) => {
+      console.warn('Speech recognition error:', event.error)
+      setIsListening(false)
+    }
+
+    recognition.onend = () => {
+      setIsListening(false)
+      setInterimTranscript('')
+    }
+
+    recognitionRef.current = recognition
+    return () => { try { recognition.stop() } catch(e){} }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const start = React.useCallback(() => {
+    if (!recognitionRef.current || isListening) return
+    try {
+      recognitionRef.current.start()
+      setIsListening(true)
+    } catch(e) { console.warn('Could not start recognition:', e) }
+  }, [isListening])
+
+  const stop = React.useCallback(() => {
+    if (!recognitionRef.current) return
+    try { recognitionRef.current.stop() } catch(e){}
+    setIsListening(false)
+  }, [])
+
+  const reset = React.useCallback(() => {
+    finalTranscriptRef.current = ''
+    setTranscript('')
+    setInterimTranscript('')
+  }, [])
+
+  return { isSupported, isListening, transcript, interimTranscript, start, stop, reset }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HJELPER: compressImage
+// ═══════════════════════════════════════════════════════════════════════════
+// Komprimerer bilde klient-side med canvas. Reduserer typisk
+// 3-5MB iPhone-bilder til 200-400KB. Ingen ekstern dependency.
+// Returnerer Blob (jpeg).
+
+async function compressImage(file, { maxDim = 1600, quality = 0.82 } = {}) {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      try {
+        let { width, height } = img
+        if (width > maxDim || height > maxDim) {
+          if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
+          else                { width  = Math.round(width  * maxDim / height); height = maxDim }
+        }
+        const canvas = document.createElement('canvas')
+        canvas.width = width; canvas.height = height
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(img, 0, 0, width, height)
+        canvas.toBlob(blob => {
+          URL.revokeObjectURL(url)
+          if (!blob) return reject(new Error('Komprimering feilet'))
+          resolve(blob)
+        }, 'image/jpeg', quality)
+      } catch(e) { URL.revokeObjectURL(url); reject(e) }
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Kunne ikke lese bilde')) }
+    img.src = url
+  })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BefaringPage — listevisning
+// ═══════════════════════════════════════════════════════════════════════════
 
 function BefaringPage() {
   const { user } = useAuth()
@@ -27306,7 +27465,7 @@ function BefaringPage() {
   const load = async () => {
     try {
       const [ins, proj] = await Promise.all([
-        supabase.from('inspections').select('*, inspection_items(*), inspection_followups(*), inspection_files(*)').order('date',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status)').order('date',{ascending:false}).then(r=>r.data||[]),
         supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setInspections(ins); setProjects(proj)
@@ -27323,11 +27482,18 @@ function BefaringPage() {
   })
 
   const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
+  const openObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.status==='apen'||o.status==='pagar').length,0)
 
   const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
-  if (selected) return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  if (selected) {
+    const useObs = OBSERVATION_FIRST_TYPES.includes(selected.inspection_type)
+    if (useObs && isMobB) {
+      return <BefaringMobileDetalj inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+    }
+    return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+  }
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -27344,7 +27510,7 @@ function BefaringPage() {
             { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
             { label:'Planlagt', value:inspections.filter(i=>i.status==='planlagt').length, emoji:'📅', bg:'#eff6ff', color:'#2563eb' },
             { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
-            { label:'Åpne oppfølg.', value:openFollowups, emoji:'⏰', bg:openFollowups>0?'#fffbeb':'#f8fafc', color:openFollowups>0?'#d97706':'#64748b' },
+            { label:'Åpne punkter', value:openObservations+openFollowups, emoji:'⏰', bg:(openObservations+openFollowups)>0?'#fffbeb':'#f8fafc', color:(openObservations+openFollowups)>0?'#d97706':'#64748b' },
           ].map(s=>(
             <div key={s.label} style={{ background:s.bg, borderRadius: isMobB ? '10px' : '12px', padding: isMobB ? '10px' : '14px 16px' }}>
               <div style={{ fontSize: isMobB ? '14px' : '18px', marginBottom: isMobB ? '2px' : '4px' }}>{s.emoji}</div>
@@ -27380,8 +27546,11 @@ function BefaringPage() {
               const proj=projects.find(p=>p.id===ins.project_id)
               const items=ins.inspection_items||[]
               const followups=ins.inspection_followups||[]
+              const observations=ins.inspection_observations||[]
               const openF=followups.filter(f=>!f.completed).length
-              const avvik=items.filter(i=>i.status==='avvik').length
+              const avvik=items.filter(i=>i.status==='avvik').length + observations.filter(o=>o.category==='avvik').length
+              const openObs=observations.filter(o=>o.status==='apen'||o.status==='pagar').length
+              const useObs = OBSERVATION_FIRST_TYPES.includes(ins.inspection_type)
               return (
                 <div key={ins.id} onClick={()=>setSelected(ins)}
                   style={{ background:'white', borderRadius: isMobB ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobB ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobB ? 'flex-start' : 'center', gap: isMobB ? '10px' : '16px', transition:'box-shadow 0.15s' }}
@@ -27392,13 +27561,15 @@ function BefaringPage() {
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobB ? '13px' : '15px' }}>{ins.title}</span>
                       <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
                       {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
+                      {openObs>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openObs} åpne</span>}
                       {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
                     </div>
                     <div style={{ display:'flex', gap: isMobB ? '6px' : '12px', flexWrap:'wrap' }}>
                       <span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📅 {ins.date}</span>
                       {ins.location&&<span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📍 {ins.location}</span>}
                       {!isMobB && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {!isMobB && items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} punkter</span>}
+                      {!isMobB && useObs && observations.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>📷 {observations.length} punkter</span>}
+                      {!isMobB && !useObs && items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} sjekkpunkter</span>}
                     </div>
                   </div>
                   {!isMobB && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
@@ -27413,28 +27584,915 @@ function BefaringPage() {
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BefaringMobileDetalj — primær mobilflyt for observasjons-befaringer
+// ═══════════════════════════════════════════════════════════════════════════
+// Optimert for håndverker på byggeplass:
+//   - Stor 📷-knapp som åpner kamera direkte (ny observasjon)
+//   - Kortlayout for punkter med tap-to-edit
+//   - Multi-select via "Velg"-modus → bunnbar med "Send"
+//   - Send-flyt fullt tilgjengelig fra mobil
+//   - Tilbake-knapp øverst, lagring/sync alltid synlig
+
+function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
+  const confirm = useConfirm()
+  const [ins, setIns] = useState(init)
+  const [observations, setObservations] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showCapture, setShowCapture] = useState(false)
+  const [editObs, setEditObs] = useState(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [showSend, setShowSend] = useState(false)
+  const [tab, setTab] = useState('punkter')
+  const [showInfo, setShowInfo] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+
+  const proj = projects.find(p => p.id === ins.project_id)
+  const cfg = INS_STATUS[ins.status]
+
+  const load = async () => {
+    try {
+      const { data } = await supabase
+        .from('inspection_observations')
+        .select('*')
+        .eq('inspection_id', ins.id)
+        .order('sequence_number', { ascending: true })
+      setObservations(data || [])
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const refresh = async () => {
+    const { data } = await supabase.from('inspections').select('*').eq('id', ins.id).single()
+    if (data) setIns(data)
+  }
+
+  const openObs = observations.filter(o => o.status === 'apen' || o.status === 'pagar').length
+  const totalObs = observations.length
+
+  const toggleSelect = (id) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const startSelectMode = (firstId) => {
+    setSelectMode(true)
+    setSelected(new Set([firstId]))
+  }
+
+  const cancelSelect = () => {
+    setSelectMode(false)
+    setSelected(new Set())
+  }
+
+  const selectAll = () => setSelected(new Set(observations.map(o => o.id)))
+
+  const deleteSelected = async () => {
+    if (selected.size === 0) return
+    if (!(await confirm({ message: `Slett ${selected.size} punkt${selected.size>1?'er':''}?`, danger: true }))) return
+    await supabase.from('inspection_observations').delete().in('id', Array.from(selected))
+    cancelSelect()
+    load()
+  }
+
+  const handleObsSaved = () => {
+    setShowCapture(false)
+    setEditObs(null)
+    load()
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc', paddingBottom: selectMode ? '88px' : '96px' }}>
+      {/* Sticky topp-header */}
+      <div style={{ position:'sticky', top:0, zIndex:50, background:'white', borderBottom:'1px solid #e2e8f0', padding:'12px 14px' }}>
+        {selectMode ? (
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <button onClick={cancelSelect} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#0f172a',padding:0 }}>×</button>
+            <span style={{ flex:1, fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{selected.size} valgt</span>
+            <button onClick={selectAll} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'6px 12px',fontSize:'12px',fontWeight:'600',color:'#0f172a',cursor:'pointer' }}>Velg alle</button>
+          </div>
+        ) : (
+          <>
+            <button onClick={onBack} style={{ background:'none',border:'none',cursor:'pointer',color:'#64748b',fontSize:'13px',marginBottom:'6px',display:'flex',alignItems:'center',gap:'6px',padding:0 }}>← Tilbake</button>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:'8px' }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <h1 style={{ margin:0, fontSize:'16px', fontWeight:'800', color:'#0f172a', lineHeight:1.3 }}>{ins.title}</h1>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'4px', flexWrap:'wrap' }}>
+                  <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 7px',borderRadius:'999px',fontSize:'10px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
+                  <span style={{ fontSize:'11px', color:'#64748b' }}>📅 {ins.date}</span>
+                  {ins.location && <span style={{ fontSize:'11px', color:'#64748b' }}>📍 {ins.location}</span>}
+                </div>
+              </div>
+              <button onClick={() => setShowEdit(true)} style={{ background:'#f8fafc',border:'1px solid #e2e8f0',borderRadius:'8px',padding:'7px 10px',cursor:'pointer',fontSize:'14px' }}>✏️</button>
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Faner */}
+      {!selectMode && (
+        <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding:'0 14px', display:'flex', gap:'4px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          {[['punkter', `📷 Punkter (${totalObs})`], ['info', 'ℹ️ Info']].map(([id, l]) => (
+            <button key={id} onClick={() => setTab(id)} style={{ padding:'10px 14px', borderRadius:0, border:'none', background:'transparent', color:tab===id?'#059669':'#64748b', fontWeight:tab===id?'700':'500', fontSize:'13px', cursor:'pointer', whiteSpace:'nowrap', borderBottom:tab===id?'2px solid #059669':'2px solid transparent' }}>{l}</button>
+          ))}
+        </div>
+      )}
+
+      {/* Innhold */}
+      <div style={{ padding:'12px' }}>
+        {tab === 'punkter' && (
+          loading ? (
+            <div style={{ textAlign:'center', padding:'40px 0', color:'#94a3b8', fontSize:'13px' }}>Laster punkter...</div>
+          ) : observations.length === 0 ? (
+            <div style={{ background:'white', borderRadius:'14px', padding:'40px 20px', textAlign:'center', border:'1px dashed #e2e8f0' }}>
+              <div style={{ fontSize:'40px', marginBottom:'10px' }}>📷</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a', fontSize:'15px' }}>Ingen punkter ennå</h3>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Trykk på 📷-knappen nederst for å registrere første punkt.</p>
+            </div>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+              {observations.map(obs => (
+                <ObservationCardMobile
+                  key={obs.id}
+                  obs={obs}
+                  selectMode={selectMode}
+                  isSelected={selected.has(obs.id)}
+                  onTap={() => selectMode ? toggleSelect(obs.id) : setEditObs(obs)}
+                  onLongPress={() => !selectMode && startSelectMode(obs.id)}
+                />
+              ))}
+            </div>
+          )
+        )}
+
+        {tab === 'info' && (
+          <BefaringInfoPanel ins={ins} proj={proj} />
+        )}
+      </div>
+
+      {/* Bunnbar — kontekstuell */}
+      {!selectMode ? (
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'white', borderTop:'1px solid #e2e8f0', padding:'10px 14px env(safe-area-inset-bottom)', display:'flex', gap:'10px', zIndex:40 }}>
+          {observations.length > 0 && (
+            <button onClick={() => setSelectMode(true)} style={{ flex:'0 0 auto', background:'#f1f5f9',border:'none',borderRadius:'12px',padding:'14px 16px',fontSize:'14px',fontWeight:'700',color:'#0f172a',cursor:'pointer' }}>☑ Velg</button>
+          )}
+          <button onClick={() => setShowCapture(true)} style={{ flex:1, background:'#059669',border:'none',borderRadius:'12px',padding:'14px',fontSize:'15px',fontWeight:'800',color:'white',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',boxShadow:'0 4px 12px rgba(5,150,105,0.3)' }}>
+            <span style={{ fontSize:'20px' }}>📷</span>
+            <span>Nytt punkt</span>
+          </button>
+        </div>
+      ) : (
+        <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'white', borderTop:'1px solid #e2e8f0', padding:'10px 14px env(safe-area-inset-bottom)', display:'flex', gap:'8px', zIndex:40 }}>
+          <button onClick={deleteSelected} disabled={selected.size===0} style={{ flex:'0 0 auto', background:selected.size===0?'#f8fafc':'#fef2f2',border:'1px solid '+(selected.size===0?'#e2e8f0':'#fecaca'),borderRadius:'12px',padding:'12px 14px',fontSize:'13px',fontWeight:'700',color:selected.size===0?'#cbd5e1':'#dc2626',cursor:selected.size===0?'not-allowed':'pointer' }}>🗑️</button>
+          <button onClick={() => selected.size > 0 && setShowSend(true)} disabled={selected.size===0} style={{ flex:1, background:selected.size===0?'#cbd5e1':'#7c3aed',border:'none',borderRadius:'12px',padding:'14px',fontSize:'15px',fontWeight:'800',color:'white',cursor:selected.size===0?'not-allowed':'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'8px' }}>
+            <span>📧</span>
+            <span>Send {selected.size} punkt{selected.size!==1?'er':''}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Modaler */}
+      {(showCapture || editObs) && (
+        <ObservationCaptureSheet
+          inspection={ins}
+          observation={editObs}
+          user={user}
+          onClose={() => { setShowCapture(false); setEditObs(null) }}
+          onSaved={handleObsSaved}
+        />
+      )}
+
+      {showSend && (
+        <SendObservationsSheet
+          inspection={ins}
+          observations={observations.filter(o => selected.has(o.id))}
+          proj={proj}
+          user={user}
+          onClose={() => setShowSend(false)}
+          onSent={() => { setShowSend(false); cancelSelect(); load() }}
+        />
+      )}
+
+      {showEdit && <BefaringModal projects={projects} user={user} initial={ins} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); refresh() }} />}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ObservationCardMobile — punkt-kort i mobil-listen
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ObservationCardMobile({ obs, selectMode, isSelected, onTap, onLongPress }) {
+  const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
+  const st = OBS_STATUS[obs.status] || OBS_STATUS.apen
+  const firstImage = Array.isArray(obs.images) && obs.images.length > 0 ? obs.images[0] : null
+  const longPressTimer = React.useRef(null)
+
+  const handleTouchStart = () => {
+    if (selectMode) return
+    longPressTimer.current = setTimeout(() => onLongPress?.(), 500)
+  }
+  const handleTouchEnd = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }
+
+  return (
+    <div
+      onClick={onTap}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchEnd}
+      style={{
+        background:'white',
+        borderRadius:'14px',
+        border: `2px solid ${isSelected ? '#7c3aed' : '#f1f5f9'}`,
+        padding:'10px',
+        display:'flex',
+        gap:'10px',
+        cursor:'pointer',
+        position:'relative',
+        boxShadow: isSelected ? '0 2px 8px rgba(124,58,237,0.15)' : 'none',
+      }}
+    >
+      {selectMode && (
+        <div style={{ position:'absolute', top:'8px', right:'8px', width:'24px', height:'24px', borderRadius:'50%', background:isSelected?'#7c3aed':'white', border:'2px solid '+(isSelected?'#7c3aed':'#cbd5e1'), display:'flex', alignItems:'center', justifyContent:'center', color:'white', fontSize:'14px', fontWeight:'700' }}>
+          {isSelected ? '✓' : ''}
+        </div>
+      )}
+
+      <div style={{ width:'72px', height:'72px', borderRadius:'10px', background:'#f1f5f9', flexShrink:0, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+        {firstImage ? (
+          <img src={firstImage.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+        ) : (
+          <span style={{ fontSize:'24px', opacity:0.5 }}>📝</span>
+        )}
+        {Array.isArray(obs.images) && obs.images.length > 1 && (
+          <span style={{ position:'absolute', bottom:'3px', right:'3px', background:'rgba(0,0,0,0.7)', color:'white', fontSize:'10px', fontWeight:'700', padding:'1px 5px', borderRadius:'6px' }}>+{obs.images.length-1}</span>
+        )}
+      </div>
+
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'3px', flexWrap:'wrap' }}>
+          <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{obs.sequence_number}</span>
+          <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+          <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>{st.label}</span>
+        </div>
+        <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+          {obs.title || obs.description || '(uten tekst)'}
+        </div>
+        {(obs.location_ref || obs.assigned_email || obs.assigned_role) && (
+          <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap' }}>
+            {obs.location_ref && <span style={{ fontSize:'10px', color:'#2563eb' }}>📍 {obs.location_ref}</span>}
+            {obs.assigned_role && <span style={{ fontSize:'10px', color:'#64748b' }}>🔧 {obs.assigned_role}</span>}
+            {obs.assigned_email && <span style={{ fontSize:'10px', color:'#64748b', maxWidth:'120px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>✉️ {obs.assigned_email}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ObservationCaptureSheet — registrere/redigere ett punkt
+// ═══════════════════════════════════════════════════════════════════════════
+// Mobil-først full-screen ark. Flyt:
+//   1. Bilde først (kamera-trigger automatisk for nye punkt)
+//   2. Tale-til-tekst eller skriv tekst
+//   3. (valgfritt) kategori, plassering, tildeling
+//   4. Lagre
+// Kan også brukes på desktop — samme komponent, samme felter.
+
+function ObservationCaptureSheet({ inspection, observation, user, onClose, onSaved }) {
+  const isEdit = !!observation
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  const cameraInputRef = React.useRef(null)
+  const galleryInputRef = React.useRef(null)
+  const [employees, setEmployees] = React.useState([])
+  const speech = useSpeechRecognition()
+
+  const [form, setForm] = React.useState({
+    title: observation?.title || '',
+    description: observation?.description || '',
+    voice_transcript: observation?.voice_transcript || '',
+    location_ref: observation?.location_ref || '',
+    category: observation?.category || 'observasjon',
+    severity: observation?.severity || '',
+    assigned_to_user_id: observation?.assigned_to_user_id || '',
+    assigned_email: observation?.assigned_email || '',
+    assigned_role: observation?.assigned_role || '',
+    due_date: observation?.due_date || '',
+    images: Array.isArray(observation?.images) ? observation.images : [],
+  })
+  const [uploading, setUploading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+  const [showAdvanced, setShowAdvanced] = React.useState(!!isEdit)
+
+  // Last ansatte for delegering
+  React.useEffect(() => {
+    supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
+      .then(r => setEmployees(r.data || []))
+  }, [])
+
+  // Auto-trigger kamera ved nye punkt og ingen bilder ennå
+  React.useEffect(() => {
+    if (!isEdit && form.images.length === 0 && cameraInputRef.current) {
+      const t = setTimeout(() => { try { cameraInputRef.current?.click() } catch(e){} }, 200)
+      return () => clearTimeout(t)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Sett description fra speech transcript (når bruker stopper)
+  React.useEffect(() => {
+    if (!speech.isListening && speech.transcript) {
+      // Append til eksisterende, ikke overskriv (i tilfelle bruker har skrevet noe)
+      setForm(f => {
+        const existing = (f.description || '').trim()
+        const incoming = speech.transcript.trim()
+        if (!incoming) return f
+        if (existing && existing.endsWith(incoming)) return f
+        return { ...f, description: existing ? existing + ' ' + incoming : incoming, voice_transcript: (f.voice_transcript ? f.voice_transcript + ' ' : '') + incoming }
+      })
+      speech.reset()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [speech.isListening])
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const uploadFile = async (file) => {
+    const blob = await compressImage(file).catch(() => file)
+    const ext = (file.name?.split('.').pop() || 'jpg').toLowerCase()
+    const id = crypto.randomUUID()
+    const obsFolder = observation?.id || 'pending'
+    const path = `befaring/${inspection.id}/observations/${obsFolder}/${id}.${ext}`
+    const { error } = await supabase.storage.from('plattform-files').upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+    if (error) throw error
+    const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+    return { url: publicUrl, uploaded_at: new Date().toISOString() }
+  }
+
+  const handleFiles = async (files) => {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    try {
+      const arr = Array.from(files)
+      const uploaded = []
+      for (const f of arr) {
+        try { uploaded.push(await uploadFile(f)) }
+        catch(e) { console.warn('Upload feilet:', e); alert('Kunne ikke laste opp ' + f.name + ': ' + e.message) }
+      }
+      setForm(f => ({ ...f, images: [...f.images, ...uploaded] }))
+    } finally { setUploading(false) }
+  }
+
+  const removeImage = (idx) => {
+    setForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))
+  }
+
+  const handleSave = async () => {
+    if (!form.description?.trim() && form.images.length === 0) {
+      return alert('Legg til bilde eller beskrivelse')
+    }
+    setSaving(true)
+    try {
+      const payload = {
+        title: form.title?.trim() || null,
+        description: form.description?.trim() || null,
+        voice_transcript: form.voice_transcript || null,
+        location_ref: form.location_ref?.trim() || null,
+        category: form.category,
+        severity: form.severity || null,
+        assigned_to_user_id: form.assigned_to_user_id || null,
+        assigned_email: form.assigned_email?.trim() || null,
+        assigned_role: form.assigned_role?.trim() || null,
+        due_date: form.due_date || null,
+        images: form.images,
+      }
+      if (isEdit) {
+        const { error } = await supabase.from('inspection_observations').update(payload).eq('id', observation.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('inspection_observations').insert({
+          ...payload,
+          inspection_id: inspection.id,
+          created_by: user?.id,
+        })
+        if (error) throw error
+      }
+      onSaved()
+    } catch(e) {
+      alert('Lagring feilet: ' + e.message)
+    } finally { setSaving(false) }
+  }
+
+  const handleDelete = async () => {
+    if (!isEdit) return
+    if (!confirm('Slett dette punktet?')) return
+    await supabase.from('inspection_observations').delete().eq('id', observation.id)
+    onSaved()
+  }
+
+  const toggleMic = () => {
+    if (speech.isListening) speech.stop()
+    else { speech.reset(); speech.start() }
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+      <div style={{
+        position:'fixed',
+        inset: isMob ? 0 : 'auto',
+        top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
+        transform: isMob ? 'none' : 'translate(-50%,-50%)',
+        background:'white',
+        borderRadius: isMob ? 0 : '20px',
+        width: isMob ? '100%' : 'min(640px, calc(100vw - 32px))',
+        height: isMob ? '100vh' : 'auto',
+        maxHeight: isMob ? '100vh' : '92vh',
+        zIndex:101,
+        boxShadow:'0 20px 60px rgba(0,0,0,0.2)',
+        fontFamily:'system-ui,sans-serif',
+        display:'flex', flexDirection:'column'
+      }}>
+        {/* Header */}
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'24px',cursor:'pointer',color:'#64748b',padding:0,lineHeight:1 }}>×</button>
+          <h2 style={{ margin:0, flex:1, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>
+            {isEdit ? `Punkt #${observation.sequence_number}` : '📷 Nytt punkt'}
+          </h2>
+          {isEdit && <button onClick={handleDelete} style={{ background:'none',border:'1px solid #fecaca',borderRadius:'8px',padding:'5px 10px',color:'#dc2626',cursor:'pointer',fontSize:'13px' }}>Slett</button>}
+        </div>
+
+        {/* Innhold (scrollbar) */}
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 18px', display:'flex', flexDirection:'column', gap:'14px', WebkitOverflowScrolling:'touch' }}>
+
+          {/* Bilder */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>📷 Bilder</label>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:'8px' }}>
+              {form.images.map((img, idx) => (
+                <div key={idx} style={{ position:'relative', aspectRatio:'1/1', borderRadius:'10px', overflow:'hidden', background:'#f1f5f9' }}>
+                  <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  <button onClick={() => removeImage(idx)} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
+                </div>
+              ))}
+              <button onClick={() => cameraInputRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #cbd5e1', borderRadius:'10px', background:'#f8fafc', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#64748b', fontSize:'11px', fontWeight:'600' }}>
+                <span style={{ fontSize:'22px' }}>📷</span>
+                {uploading ? 'Laster...' : 'Kamera'}
+              </button>
+              <button onClick={() => galleryInputRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #cbd5e1', borderRadius:'10px', background:'#f8fafc', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#64748b', fontSize:'11px', fontWeight:'600' }}>
+                <span style={{ fontSize:'22px' }}>🖼️</span>
+                Galleri
+              </button>
+            </div>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple style={{ display:'none' }} onChange={e => { handleFiles(e.target.files); e.target.value=''; }} />
+            <input ref={galleryInputRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { handleFiles(e.target.files); e.target.value=''; }} />
+          </div>
+
+          {/* Beskrivelse + tale */}
+          <div>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+              <label style={{ fontSize:'13px', fontWeight:'700', color:'#374151' }}>📝 Beskrivelse</label>
+              {speech.isSupported && (
+                <button onClick={toggleMic} style={{
+                  background: speech.isListening ? '#dc2626' : '#059669',
+                  color:'white', border:'none', borderRadius:'10px',
+                  padding:'8px 14px', fontSize:'13px', fontWeight:'700', cursor:'pointer',
+                  display:'flex', alignItems:'center', gap:'6px',
+                  animation: speech.isListening ? 'pulse 1.5s infinite' : 'none'
+                }}>
+                  <span style={{ fontSize:'16px' }}>{speech.isListening ? '⏹' : '🎤'}</span>
+                  <span>{speech.isListening ? 'Stopp' : 'Snakk'}</span>
+                </button>
+              )}
+            </div>
+            <textarea
+              value={form.description + (speech.interimTranscript ? ' ' + speech.interimTranscript : '')}
+              onChange={e => set('description', e.target.value)}
+              rows={isMob ? 4 : 3}
+              placeholder={speech.isSupported ? 'Trykk 🎤 og snakk, eller skriv direkte...' : 'Beskriv det du ser...'}
+              style={{ ...bInp, resize:'vertical', minHeight:'90px', lineHeight:1.5 }}
+            />
+            {!speech.isSupported && (
+              <p style={{ fontSize:'11px', color:'#94a3b8', margin:'4px 0 0' }}>💡 Tale-til-tekst støttes ikke i denne nettleseren.</p>
+            )}
+            {speech.isListening && (
+              <p style={{ fontSize:'11px', color:'#dc2626', margin:'4px 0 0', fontWeight:'600' }}>🔴 Lytter... snakk fritt</p>
+            )}
+          </div>
+
+          {/* Kategori — alltid synlig */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>Kategori</label>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              {Object.entries(OBS_CATEGORY).map(([k, v]) => (
+                <button key={k} onClick={() => set('category', k)} style={{
+                  padding:'8px 12px',
+                  background: form.category === k ? v.bg : 'white',
+                  color: form.category === k ? v.color : '#64748b',
+                  border: `2px solid ${form.category === k ? v.border : '#e2e8f0'}`,
+                  borderRadius:'10px', fontSize:'12px', fontWeight:'700', cursor:'pointer'
+                }}>{v.emoji} {v.label}</button>
+              ))}
+            </div>
+          </div>
+
+          {/* Avansert (skjult bak knapp på mobil) */}
+          {!showAdvanced ? (
+            <button onClick={() => setShowAdvanced(true)} style={{ background:'none', border:'1px dashed #cbd5e1', borderRadius:'10px', padding:'10px', color:'#64748b', fontSize:'13px', cursor:'pointer', fontWeight:'600' }}>
+              + Plassering, tildeling, frist...
+            </button>
+          ) : (
+            <>
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>📍 Plassering / rom</label>
+                <input value={form.location_ref} onChange={e => set('location_ref', e.target.value)} placeholder="F.eks. Soverom 2, sørøstre hjørne" style={bInp} />
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>👤 Tildel til (intern)</label>
+                <select value={form.assigned_to_user_id} onChange={e => {
+                  const emp = employees.find(em => em.user_id === e.target.value)
+                  setForm(f => ({ ...f, assigned_to_user_id: e.target.value, assigned_email: emp?.email || f.assigned_email, assigned_role: emp?.role || f.assigned_role }))
+                }} style={bInp}>
+                  <option value="">— Ingen —</option>
+                  {employees.filter(em => em.user_id).map(em => (
+                    <option key={em.id} value={em.user_id}>{em.first_name} {em.last_name}{em.role ? ' · ' + em.role : ''}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>✉️ Eller e-post (UE/ekstern)</label>
+                <input value={form.assigned_email} onChange={e => set('assigned_email', e.target.value)} type="email" placeholder="kontakt@ue.no" style={bInp} />
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>🔧 Fagrolle</label>
+                <input value={form.assigned_role} onChange={e => set('assigned_role', e.target.value)} placeholder="F.eks. Elektriker, Rørlegger, Maler" style={bInp} />
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div>
+                  <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>📅 Frist</label>
+                  <input type="date" value={form.due_date} onChange={e => set('due_date', e.target.value)} style={bInp} />
+                </div>
+                {form.category === 'avvik' && (
+                  <div>
+                    <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>⚠️ Alvorlighet</label>
+                    <select value={form.severity} onChange={e => set('severity', e.target.value)} style={bInp}>
+                      <option value="">—</option>
+                      {Object.entries(OBS_SEVERITY).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Lagre-knapp (sticky bunn) */}
+        <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
+          <button onClick={handleSave} disabled={saving || uploading} style={{
+            width:'100%', padding:'14px',
+            background: (saving || uploading) ? '#94a3b8' : '#059669',
+            color:'white', border:'none', borderRadius:'12px',
+            fontSize:'15px', fontWeight:'800',
+            cursor: (saving || uploading) ? 'not-allowed' : 'pointer'
+          }}>{saving ? 'Lagrer...' : uploading ? 'Laster opp bilder...' : (isEdit ? '💾 Oppdater punkt' : '✓ Lagre punkt')}</button>
+        </div>
+      </div>
+      <style>{`@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.6 } }`}</style>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SendObservationsSheet — send valgte punkter på e-post
+// ═══════════════════════════════════════════════════════════════════════════
+// Mobil-vennlig send-flyt: velg mottaker (kollega eller fritekst e-post),
+// skriv kort melding, send som HTML-e-post via send-quote Edge Function.
+
+function SendObservationsSheet({ inspection, observations, proj, user, onClose, onSent }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  const [employees, setEmployees] = React.useState([])
+  const [externalParticipants, setExternalParticipants] = React.useState([])
+  const [recipientMode, setRecipientMode] = React.useState('intern') // intern | ekstern | epost
+  const [internRecipient, setInternRecipient] = React.useState('')
+  const [externalRecipient, setExternalRecipient] = React.useState('')
+  const [emailRecipient, setEmailRecipient] = React.useState('')
+  const [recipientName, setRecipientName] = React.useState('')
+  const [message, setMessage] = React.useState('')
+  const [sending, setSending] = React.useState(false)
+
+  // Forsøk auto-utfylling: hvis alle valgte punkter er tildelt samme person/e-post
+  React.useEffect(() => {
+    supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
+      .then(r => setEmployees(r.data || []))
+    setExternalParticipants(Array.isArray(inspection.external_participants) ? inspection.external_participants : [])
+
+    const emails = [...new Set(observations.map(o => o.assigned_email).filter(Boolean))]
+    const userIds = [...new Set(observations.map(o => o.assigned_to_user_id).filter(Boolean))]
+    if (userIds.length === 1) {
+      setRecipientMode('intern')
+      setInternRecipient(userIds[0])
+    } else if (emails.length === 1) {
+      setRecipientMode('epost')
+      setEmailRecipient(emails[0])
+    }
+  }, [])
+
+  const buildEmailHtml = () => {
+    const items = observations.map(obs => {
+      const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
+      const imgs = (Array.isArray(obs.images) ? obs.images : []).slice(0, 4)
+      return `
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:10px">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+            <span style="background:${cat.bg};color:${cat.color};border:1px solid ${cat.border};padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">${cat.emoji} ${cat.label}</span>
+            <span style="font-weight:800;color:#0f172a">Punkt ${obs.sequence_number}</span>
+            ${obs.location_ref ? `<span style="color:#2563eb;font-size:12px">📍 ${obs.location_ref}</span>` : ''}
+          </div>
+          ${obs.description ? `<p style="margin:0 0 10px;color:#0f172a;font-size:14px;line-height:1.5">${obs.description.replace(/</g,'&lt;')}</p>` : ''}
+          ${imgs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${imgs.map(im => `<img src="${im.url}" style="width:140px;height:105px;object-fit:cover;border-radius:8px" />`).join('')}</div>` : ''}
+          ${obs.due_date ? `<p style="margin:8px 0 0;color:#d97706;font-size:12px;font-weight:600">📅 Frist: ${obs.due_date}</p>` : ''}
+        </div>
+      `
+    }).join('')
+
+    return `
+<div style="font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:0 auto;padding:20px;background:#f8fafc">
+  <div style="background:#059669;color:white;padding:18px 24px;border-radius:12px 12px 0 0">
+    <h1 style="margin:0;font-size:20px">Befaring: ${inspection.title}</h1>
+    <p style="margin:6px 0 0;opacity:0.9;font-size:13px">📅 ${inspection.date}${inspection.location ? ' · 📍 ' + inspection.location : ''}${proj ? ' · 🏗️ ' + proj.name : ''}</p>
+  </div>
+  <div style="background:white;padding:18px 24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
+    ${message ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;color:#1e3a8a;font-size:14px;line-height:1.5">${message.replace(/\n/g,'<br>')}</div>` : ''}
+    <h2 style="margin:0 0 12px;font-size:16px;color:#0f172a">${observations.length} punkt${observations.length!==1?'er':''}</h2>
+    ${items}
+    <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
+    <p style="margin:0;color:#94a3b8;font-size:12px">Sendt fra En Plattform — KS-system for bygg og anlegg</p>
+  </div>
+</div>`
+  }
+
+  const getRecipientEmail = () => {
+    if (recipientMode === 'intern') {
+      const emp = employees.find(e => e.user_id === internRecipient)
+      return { email: emp?.email, name: emp ? `${emp.first_name} ${emp.last_name}` : '' }
+    }
+    if (recipientMode === 'ekstern') {
+      const ext = externalParticipants.find((_, i) => String(i) === externalRecipient)
+      return { email: ext?.email, name: ext?.name || '' }
+    }
+    return { email: emailRecipient, name: recipientName }
+  }
+
+  const handleSend = async () => {
+    const { email, name } = getRecipientEmail()
+    if (!email || !email.includes('@')) return alert('Velg eller skriv en gyldig e-post')
+    if (observations.length === 0) return alert('Ingen punkter å sende')
+
+    setSending(true)
+    try {
+      const html = buildEmailHtml()
+      const subject = `Befaring: ${inspection.title} — ${observations.length} punkt${observations.length!==1?'er':''}`
+      const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
+        body: JSON.stringify({ to: email, subject, html })
+      })
+      if (!fnRes.ok) throw new Error('Sending feilet (' + fnRes.status + ')')
+
+      // Logg send på hvert punkt
+      const sentEntry = { to: email, name: name || null, sent_at: new Date().toISOString(), sent_by: user?.id || null, message: message || null }
+      for (const obs of observations) {
+        const newLog = [...(Array.isArray(obs.sent_log) ? obs.sent_log : []), sentEntry]
+        await supabase.from('inspection_observations').update({ sent_log: newLog }).eq('id', obs.id)
+      }
+
+      alert(`✓ Sendt ${observations.length} punkt${observations.length!==1?'er':''} til ${email}`)
+      onSent()
+    } catch(e) {
+      alert('Feil: ' + e.message)
+    } finally { setSending(false) }
+  }
+
+  const internEmployees = employees.filter(e => e.user_id && e.email)
+  const externalsWithEmail = externalParticipants.map((p, i) => ({ ...p, _idx: i })).filter(p => p.email)
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
+      <div style={{
+        position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
+        transform: isMob ? 'none' : 'translate(-50%,-50%)',
+        background:'white', borderRadius: isMob ? 0 : '20px',
+        width: isMob ? '100%' : 'min(560px, calc(100vw - 32px))',
+        height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '92vh',
+        zIndex:201, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column'
+      }}>
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'24px',cursor:'pointer',color:'#64748b',padding:0,lineHeight:1 }}>×</button>
+          <h2 style={{ margin:0, flex:1, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📧 Send {observations.length} punkt{observations.length!==1?'er':''}</h2>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 18px', display:'flex', flexDirection:'column', gap:'14px' }}>
+
+          {/* Mottaker-velger */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Send til</label>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
+              {[
+                ['intern', '👥 Kollega', internEmployees.length === 0],
+                ['ekstern', '🤝 Deltaker', externalsWithEmail.length === 0],
+                ['epost', '✉️ E-post', false],
+              ].map(([k, l, disabled]) => (
+                <button key={k} onClick={() => !disabled && setRecipientMode(k)} disabled={disabled}
+                  style={{
+                    flex:1, padding:'10px',
+                    background: recipientMode === k ? '#059669' : (disabled ? '#f8fafc' : 'white'),
+                    color: recipientMode === k ? 'white' : (disabled ? '#cbd5e1' : '#0f172a'),
+                    border: `1px solid ${recipientMode === k ? '#059669' : '#e2e8f0'}`,
+                    borderRadius:'10px', fontSize:'12px', fontWeight:'700',
+                    cursor: disabled ? 'not-allowed' : 'pointer'
+                  }}>{l}</button>
+              ))}
+            </div>
+
+            {recipientMode === 'intern' && (
+              <select value={internRecipient} onChange={e => setInternRecipient(e.target.value)} style={bInp}>
+                <option value="">— Velg kollega —</option>
+                {internEmployees.map(e => (
+                  <option key={e.id} value={e.user_id}>{e.first_name} {e.last_name} · {e.email}</option>
+                ))}
+              </select>
+            )}
+
+            {recipientMode === 'ekstern' && (
+              <select value={externalRecipient} onChange={e => setExternalRecipient(e.target.value)} style={bInp}>
+                <option value="">— Velg deltaker —</option>
+                {externalsWithEmail.map(p => (
+                  <option key={p._idx} value={p._idx}>{getRoleLabel(p.role)} · {p.name} · {p.email}</option>
+                ))}
+              </select>
+            )}
+
+            {recipientMode === 'epost' && (
+              <>
+                <input value={emailRecipient} onChange={e => setEmailRecipient(e.target.value)} placeholder="epost@firma.no" type="email" style={{ ...bInp, marginBottom:'8px' }} />
+                <input value={recipientName} onChange={e => setRecipientName(e.target.value)} placeholder="Mottakers navn (valgfritt)" style={bInp} />
+              </>
+            )}
+          </div>
+
+          {/* Melding */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>💬 Melding (valgfritt)</label>
+            <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="F.eks. Vennligst utbedr disse punktene innen fredag..." style={{ ...bInp, resize:'vertical' }} />
+          </div>
+
+          {/* Sammendrag av valgte punkter */}
+          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 12px' }}>
+            <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>{observations.length} valgte punkter</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'4px', maxHeight:'150px', overflowY:'auto' }}>
+              {observations.map(obs => {
+                const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
+                return (
+                  <div key={obs.id} style={{ fontSize:'12px', color:'#0f172a', display:'flex', gap:'6px', alignItems:'center' }}>
+                    <span style={{ color:cat.color, fontWeight:'700' }}>#{obs.sequence_number}</span>
+                    <span style={{ flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{obs.title || obs.description || '(uten tekst)'}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+        </div>
+
+        <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
+          <button onClick={handleSend} disabled={sending} style={{
+            width:'100%', padding:'14px',
+            background: sending ? '#94a3b8' : '#7c3aed',
+            color:'white', border:'none', borderRadius:'12px',
+            fontSize:'15px', fontWeight:'800',
+            cursor: sending ? 'not-allowed' : 'pointer'
+          }}>{sending ? 'Sender...' : `📧 Send ${observations.length} punkt${observations.length!==1?'er':''}`}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BefaringInfoPanel — info-fane (delt mellom mobil og desktop)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BefaringInfoPanel({ ins, proj }) {
+  return (
+    <div style={bCard}>
+      <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Befaringsinfo</h3>
+      <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
+        {[
+          ['Tittel', ins.title],
+          ['Type', (BEFARING_TYPES.find(t=>t.id===ins.inspection_type)||{}).label || ins.inspection_type],
+          ['Dato', ins.date],
+          ['Sted', ins.location],
+          ['Prosjekt', proj?.name],
+          ['Status', INS_STATUS[ins.status]?.label],
+        ].filter(r => r[1]).map(([k, v]) => (
+          <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
+            <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
+            <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
+          </div>
+        ))}
+      </div>
+      {ins.purpose && (
+        <div style={{ marginTop:'12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 12px' }}>
+          <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'700', textTransform:'uppercase', marginBottom:'4px' }}>🎯 Hensikt</div>
+          <p style={{ margin:0, fontSize:'13px', color:'#78350f', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{ins.purpose}</p>
+        </div>
+      )}
+      {ins.participants?.length > 0 && (
+        <div style={{ marginTop:'12px' }}>
+          <div style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', marginBottom:'6px' }}>👥 Interne deltakere</div>
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+            {ins.participants.map((p, i) => <span key={i} style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'3px 10px', fontSize:'12px', fontWeight:'600' }}>{p}</span>)}
+          </div>
+        </div>
+      )}
+      {Array.isArray(ins.external_participants) && ins.external_participants.length > 0 && (
+        <div style={{ marginTop:'12px' }}>
+          <div style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', marginBottom:'6px' }}>🤝 Eksterne deltakere</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+            {ins.external_participants.map((p, i) => (
+              <div key={i} style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'10px', padding:'8px 10px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', background:'white', padding:'2px 8px', borderRadius:'8px', whiteSpace:'nowrap' }}>{getRoleLabel(p.role)}</span>
+                  <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
+                </div>
+                {(p.company || p.email) && (
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'3px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                    {p.company && <span>🏢 {p.company}</span>}
+                    {p.email && <span>✉️ {p.email}</span>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {ins.notes && (
+        <div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}>
+          <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600', marginBottom:'4px' }}>NOTATER</div>
+          <p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{ins.notes}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BefaringDetaljer — desktop / sjekkliste-modus (uendret fra før)
+// ═══════════════════════════════════════════════════════════════════════════
+// Beholder sjekkliste-flyt for befaringstyper som er forhåndsdefinerte
+// (HMS, sluttkontroll, garantibefaring). Får også en lenke til mobile-flow
+// for å registrere observasjoner hvis ønsket.
+
 function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const confirm = useConfirm()
   const [ins, setIns] = useState(init)
   const [items, setItems] = useState(init.inspection_items||[])
   const [followups, setFollowups] = useState(init.inspection_followups||[])
   const [files, setFiles] = useState(init.inspection_files||[])
-  const [tab, setTab] = useState('sjekkliste')
+  const [observations, setObservations] = useState([])
+  const [tab, setTab] = useState(OBSERVATION_FIRST_TYPES.includes(init.inspection_type) ? 'observasjoner' : 'sjekkliste')
   const [editing, setEditing] = useState(false)
   const [newItem, setNewItem] = useState('')
   const [newFollowup, setNewFollowup] = useState({ description:'', responsible:'', due_date:'' })
   const [saving, setSaving] = useState(false)
+  const [editObs, setEditObs] = useState(null)
+  const [showCapture, setShowCapture] = useState(false)
+  const [obsSelected, setObsSelected] = useState(new Set())
+  const [showSendObs, setShowSendObs] = useState(false)
   const fileInputRef = React.useRef(null)
   const proj = projects.find(p=>p.id===ins.project_id)
   const cfg = INS_STATUS[ins.status]
+  const useObsFirst = OBSERVATION_FIRST_TYPES.includes(ins.inspection_type)
 
   const loadDetails = async () => {
-    const [it, fu, fi] = await Promise.all([
+    const [it, fu, fi, obs] = await Promise.all([
       supabase.from('inspection_items').select('*').eq('inspection_id',ins.id).order('sort_order').then(r=>r.data||[]),
       supabase.from('inspection_followups').select('*').eq('inspection_id',ins.id).order('created_at').then(r=>r.data||[]),
-      supabase.from('inspection_files').select('*').eq('inspection_id',ins.id).order('created_at').then(r=>r.data||[])
+      supabase.from('inspection_files').select('*').eq('inspection_id',ins.id).order('created_at').then(r=>r.data||[]),
+      supabase.from('inspection_observations').select('*').eq('inspection_id',ins.id).order('sequence_number').then(r=>r.data||[]),
     ])
-    setItems(it); setFollowups(fu); setFiles(fi)
+    setItems(it); setFollowups(fu); setFiles(fi); setObservations(obs)
   }
   useEffect(()=>{ loadDetails() },[])
   const refresh = async () => { const {data}=await supabase.from('inspections').select('*').eq('id',ins.id).single(); if(data) setIns(data) }
@@ -27498,180 +28556,16 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const avvik=items.filter(i=>i.status==='avvik').length
   const ok=items.filter(i=>i.status==='ok').length
   const openF=followups.filter(f=>!f.completed).length
-  const today=new Date().toISOString().split('T')[0]
-  const [showConvert, setShowConvert] = useState(false)
-  const [showImportCL, setShowImportCL] = useState(false)
-  const [checklists, setChecklists] = useState([])
-  const [showSend, setShowSend] = useState(false)
-  const [sendItems, setSendItems] = useState([])
-  const [sendForm, setSendForm] = useState({ email:'', name:'', message:'' })
-  const [sendingEmail, setSendingEmail] = useState(false)
-  const cameraRef = React.useRef(null)
+  const obsAvvik = observations.filter(o => o.category==='avvik').length
+  const obsOpen = observations.filter(o => o.status==='apen' || o.status==='pagar').length
 
-  const loadChecklists = async () => {
-    try {
-      const [templates, lists] = await Promise.all([
-        supabase.from('checklist_templates').select('id,name,sections').order('name').then(r=>r.data||[]),
-        supabase.from('checklists').select('id,title,sections').order('created_at',{ascending:false}).then(r=>r.data||[])
-      ])
-      setChecklists([
-        ...templates.map(t=>({ id:t.id, title:'📁 '+t.name, sections:t.sections, isMal:true })),
-        ...lists.map(l=>({ id:l.id, title:l.title, sections:l.sections, isMal:false }))
-      ])
-    } catch(e) { console.error('Feil ved lasting av sjekklister:', e); setChecklists([]) }
-  }
-
-  const importFromChecklist = async (cl) => {
-    const allItems = (cl.sections||[]).flatMap(s=>(s.items||[]).map(i=>i.text||i.description||''))
-    if (!allItems.length) return alert('Sjekklisten har ingen punkter')
-    for (let i=0; i<allItems.length; i++) {
-      if (allItems[i].trim()) {
-        await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:allItems[i].trim(), sort_order:items.length+i })
-      }
-    }
-    setShowImportCL(false)
-    loadDetails()
-  }
-
-  const uploadCamera = async (e) => {
-    const file=e.target.files?.[0]; if(!file) return
-    setSaving(true)
-    try {
-      const path='befaring/'+ins.id+'/'+Date.now()+'_'+file.name
-      const {error}=await supabase.storage.from('plattform-files').upload(path,file)
-      if(error) throw error
-      const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
-      await supabase.from('inspection_files').insert({ inspection_id:ins.id, name:file.name, file_url:publicUrl, file_type:file.type })
-      loadDetails()
-    } catch(e) { alert('Feil: '+e.message) }
-    finally { setSaving(false); e.target.value='' }
-  }
-
-  const sendToRecipient = async () => {
-    if (!sendForm.email.trim()) return alert('E-post er påkrevd')
-    if (sendItems.length===0) return alert('Velg minst ett punkt å sende')
-    setSendingEmail(true)
-    try {
-      const selectedItemsList = items.filter(i=>sendItems.includes(i.id))
-      const selectedFiles = files.filter(f=>f.file_type?.startsWith('image/'))
-      const html = '<div style="font-family:system-ui,sans-serif;max-width:700px;margin:0 auto;padding:20px">' +
-        '<div style="background:#059669;color:white;padding:16px 24px;border-radius:12px 12px 0 0"><h1 style="margin:0;font-size:20px">Befaringsrapport</h1><p style="margin:6px 0 0;opacity:0.9;font-size:14px">'+ins.title+'</p></div>' +
-        '<div style="background:#f8fafc;padding:20px 24px;border:1px solid #e2e8f0;border-top:none">' +
-        '<p style="color:#64748b;font-size:13px;margin:0 0 4px">📅 '+ins.date+(ins.location?' · 📍 '+ins.location:'')+(proj?' · 🏗️ '+proj.name:'')+'</p>' +
-        (sendForm.message?'<div style="background:white;padding:12px;border-radius:8px;border:1px solid #e2e8f0;margin:12px 0;font-size:14px;color:#374151">'+sendForm.message+'</div>':'') +
-        '<h3 style="margin:16px 0 10px;font-size:15px;color:#0f172a">Punkter ('+selectedItemsList.length+')</h3>' +
-        selectedItemsList.map(item=>{
-          const st = item.status==='avvik'?{c:'#dc2626',bg:'#fef2f2',l:'Avvik'}:item.status==='ok'?{c:'#16a34a',bg:'#f0fdf4',l:'OK'}:{c:'#94a3b8',bg:'#f8fafc',l:'N/A'}
-          return '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:'+st.bg+';border-radius:8px;margin-bottom:6px;border:1px solid '+st.c+'30"><span style="background:'+st.c+';color:white;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700">'+st.l+'</span><span style="font-size:14px;color:#0f172a">'+item.description+'</span></div>'
-        }).join('') +
-        (selectedFiles.length>0?'<h3 style="margin:16px 0 10px;font-size:15px;color:#0f172a">Bilder</h3>'+selectedFiles.slice(0,6).map(f=>'<img src="'+f.file_url+'" style="width:200px;height:150px;object-fit:cover;border-radius:8px;margin:4px" />').join(''):'') +
-        '<hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">' +
-        '<p style="color:#94a3b8;font-size:12px">Sendt fra En Plattform KS-system</p></div></div>'
-      
-      const fnRes = await fetch(import.meta.env.VITE_SUPABASE_URL+'/functions/v1/send-quote',{
-        method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY},
-        body:JSON.stringify({to:sendForm.email,subject:'Befaring: '+ins.title+(sendForm.name?' – Til: '+sendForm.name:''),html})
-      })
-      if(!fnRes.ok) throw new Error('Sending feilet')
-      alert('Sendt til '+sendForm.email+'!')
-      setShowSend(false); setSendItems([]); setSendForm({email:'',name:'',message:''})
-    } catch(e) { alert('Feil: '+e.message) }
-    finally { setSendingEmail(false) }
-  }
-
-  // ── PDF-rapport ──
-  const exportPDF = async () => {
-    try {
-      const pdf = await createBrandedPdf()
-      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
-
-      // Slå opp hvem som opprettet befaringen
-      let createdByName = ''
-      if (ins.created_by) {
-        try {
-          const { data: up } = await supabase.from('user_profiles').select('full_name').eq('id', ins.created_by).single()
-          createdByName = up?.full_name || ''
-        } catch(e) { /* fallback til tom */ }
-      }
-
-      const befType = BEFARING_TYPES.find(t => t.id === ins.inspection_type)
-      const typeLabel = befType?.label || ins.inspection_type || 'Befaring'
-
-      pdf.drawHeader('BEFARINGSRAPPORT', ins.title || '')
-      let y = pdf.y
-      const addPage = () => { doc.addPage(); y = 14 }
-      const checkSpace = n => { if (y + n > ph - 18) addPage() }
-
-      // ── Info-kort: type, dato, sted, utført av ──
-      setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
-      const infoH = 24
-      doc.roundedRect(ml, y, cw, infoH, 2, 2, 'FD')
-      const infoCols = [
-        { label: 'BEFARINGSTYPE', value: typeLabel },
-        { label: 'DATO', value: ins.date ? new Date(ins.date+'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) : '—' },
-        { label: 'STED', value: ins.location || proj?.name || '—' },
-        { label: 'UTFØRT AV', value: createdByName || '—' },
-      ]
-      const colW = cw / infoCols.length
-      infoCols.forEach((c, i) => {
-        const cx = ml + 5 + i * colW
-        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-        doc.text(c.label, cx, y + 6)
-        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-        const lines = doc.splitTextToSize(c.value, colW - 6)
-        doc.text(lines.slice(0, 2), cx, y + 12)
-      })
-      y += infoH + 4
-
-      if(ins.participants?.length){
-        setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-        doc.text('Deltakere: '+ins.participants.join(', '), ml, y); y += 6
-      }
-      if(ins.notes){y+=2;setC(hex('#475569'));doc.setFontSize(9);const nl=doc.splitTextToSize(ins.notes,cw);doc.text(nl,ml,y);y+=nl.length*4}
-      y+=6
-
-      setF(hex('#f8fafc'));setD(hex('#e2e8f0'));doc.roundedRect(ml,y,cw,14,2,2,'FD')
-      const sItems=[{l:'Punkter',v:''+items.length},{l:'OK',v:''+ok,c:'#16a34a'},{l:'Avvik',v:''+avvik,c:'#dc2626'},{l:'Oppfolging',v:''+followups.length},{l:'Apne',v:''+openF,c:'#d97706'}]
-      sItems.forEach((s,i)=>{const sw=cw/sItems.length;setC(hex(s.c||'#0f172a'));doc.setFontSize(11);doc.setFont('helvetica','bold');doc.text(s.v,ml+6+i*sw,y+6);setC(hex('#94a3b8'));doc.setFontSize(7);doc.setFont('helvetica','normal');doc.text(s.l,ml+6+i*sw,y+11)})
-      y+=20
-
-      if(items.length>0){setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Sjekkpunkter',ml,y);y+=7
-        items.forEach(item=>{checkSpace(12);const st=ITEM_STATUS[item.status];setF(hex(st.bg));setD(hex(st.color+'40'));doc.roundedRect(ml,y,cw,8,1.5,1.5,'FD');setF(hex(st.color));doc.rect(ml,y+0.5,1.5,7,'F');setC(hex(st.color));doc.setFontSize(7);doc.setFont('helvetica','bold');doc.text(st.label,ml+5,y+5);setC(hex('#0f172a'));doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text(item.description||'',ml+20,y+5);if(item.location_ref){setC(hex('#2563eb'));doc.setFontSize(7);doc.text('Plassering: '+item.location_ref,pw-mr-4,y+5,{align:'right'})};y+=10})
-        y+=4}
-
-      if(followups.length>0){checkSpace(15);setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Oppfolgingspunkter',ml,y);y+=7
-        followups.forEach(fu=>{checkSpace(9);setF(hex(fu.completed?'#f0fdf4':'#fffbeb'));doc.roundedRect(ml,y,cw,7,1.5,1.5,'F');setC(hex(fu.completed?'#16a34a':'#d97706'));doc.setFontSize(8);doc.setFont('helvetica','bold');doc.text(fu.completed?'Fullfort':'Apen',ml+4,y+4.5);setC(hex('#0f172a'));doc.setFont('helvetica','normal');doc.text(fu.description,ml+22,y+4.5);if(fu.responsible||fu.due_date){setC(hex('#94a3b8'));doc.setFontSize(7);doc.text([fu.responsible,fu.due_date].filter(Boolean).join(' · '),pw-mr-4,y+4.5,{align:'right'})};y+=9})
-        y+=4}
-
-      const imgFiles=files.filter(f=>f.file_type?.startsWith('image/'))
-      if(imgFiles.length>0){checkSpace(20);setC(hex('#0f172a'));doc.setFontSize(12);doc.setFont('helvetica','bold');doc.text('Bilder',ml,y);y+=7
-        for(const f of imgFiles){try{checkSpace(55);const resp=await fetch(f.file_url);const blob=await resp.blob();const b64=await new Promise(r=>{const rd=new FileReader();rd.onload=()=>r(rd.result);rd.readAsDataURL(blob)});doc.addImage(b64,'JPEG',ml,y,60,45);setC(hex('#64748b'));doc.setFontSize(8);doc.setFont('helvetica','normal');doc.text(f.name,ml+64,y+6);y+=50}catch(e){console.warn(e)}}}
-
-      pdf.drawFooters()
-      doc.save('Befaring - '+ins.title+'.pdf')
-    } catch(e){alert('PDF-feil: '+e.message)}
-  }
-
-  // ── Konverter til avvik ──
+  // ── Konverter til avvik (eksisterende, beholdt) ──
   const convertToDeviation = async (item) => {
     try {
       const { data: ed } = await supabase.from('deviations').select('deviation_number')
       const devNr = nextSequenceNumber(ed||[], 'AV', 'deviation_number')
       await supabase.from('deviations').insert({ title:item.description, deviation_number:devNr, project_id:ins.project_id, description:'Opprettet fra befaring "'+ins.title+'" ('+ins.date+').\n\nSjekkpunkt: '+item.description, severity:'Middels', status:'Åpen', images:[], created_by:user?.id })
       alert('Avvik opprettet: '+devNr)
-    } catch(e){alert('Feil: '+e.message)}
-  }
-
-  // ── Konverter avvikspunkter til sjekkliste ──
-  const convertToChecklist = async () => {
-    const avvikItems=items.filter(i=>i.status==='avvik')
-    if(!avvikItems.length) return alert('Ingen avvikspunkter å konvertere')
-    try {
-      const { data: ec } = await supabase.from('checklists').select('checklist_number')
-      const clNr = nextSequenceNumber(ec||[], 'SL', 'checklist_number')
-      await supabase.from('checklists').insert({ title:'Utbedring etter befaring: '+ins.title, checklist_number:clNr, project_id:ins.project_id, sections:[{title:'Fra befaring: '+ins.title,items:avvikItems.map(i=>({text:i.description,checked:false,required:true,status:'Ikke kontrollert'}))}], status:'Under arbeid', created_by:user?.id })
-      alert('Sjekkliste opprettet: '+clNr+' med '+avvikItems.length+' punkter')
-      setShowConvert(false)
     } catch(e){alert('Feil: '+e.message)}
   }
 
@@ -27682,6 +28576,14 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   }
 
   const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
+
+  const toggleObsSelect = (id) => {
+    setObsSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
@@ -27694,7 +28596,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
               <div style={{ display:'flex', alignItems:'center', gap: isMobBD ? '6px' : '10px', flexWrap:'wrap', marginBottom:'6px' }}>
                 <h1 style={{ margin:0, fontSize: isMobBD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
                 <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
-                {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700',padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik}</span>}
+                {(avvik+obsAvvik)>0 && <span style={{ background:'#fef2f2',color:'#dc2626',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700',padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik+obsAvvik}</span>}
               </div>
               <div style={{ display:'flex', gap: isMobBD ? '6px' : '12px', flexWrap:'wrap' }}>
                 <span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📅 {ins.date}</span>
@@ -27704,15 +28606,19 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             </div>
           </div>
           <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap', width: isMobBD ? '100%' : 'auto' }}>
-            <button onClick={exportPDF} style={{ padding: isMobBD ? '7px 10px' : '10px 18px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize: isMobBD ? '12px' : '14px', fontWeight:'600', flex: isMobBD ? 1 : 'none', display:'flex', alignItems:'center', gap:'6px' }}>{isMobBD ? '📄 PDF' : '📄 PDF'}</button>
-            <button onClick={()=>{setSendItems(items.map(i=>i.id));setShowSend(true)}} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',background:'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '13px',fontWeight:'600',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📧 Send' : '📧 Send rapport'}</button>
-            {!isMobBD && <button onClick={()=>setShowConvert(true)} style={{ padding:'9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'13px',fontWeight:'600',color:'#7c3aed' }}>🔄 Konverter</button>}
+            <button onClick={() => setShowCapture(true)} style={{ padding: isMobBD ? '7px 10px' : '10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobBD ? '12px' : '14px', fontWeight:'700', flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '+ Punkt' : '📷 Nytt punkt'}</button>
             <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobBD ? '7px 10px' : '9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize: isMobBD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
         <div style={{ display:'flex', gap:'4px', marginTop: isMobBD ? '12px' : '16px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
-          {[['sjekkliste', isMobBD ? `☑️ Sjekk (${items.length})` : `☑️ Sjekkliste (${items.length})`],['oppfolging', isMobBD ? `⏰ Oppf. (${openF})` : `⏰ Oppfølging (${openF})`],['filer',`📎 Filer (${files.length})`],['info','ℹ️ Info']].map(([id,l])=>(
+          {[
+            ['observasjoner', `📷 Punkter (${observations.length})`],
+            ['sjekkliste', `☑️ Sjekkliste (${items.length})`],
+            ['oppfolging', `⏰ Oppfølging (${openF})`],
+            ['filer', `📎 Filer (${files.length})`],
+            ['info', 'ℹ️ Info'],
+          ].map(([id,l])=>(
             <button key={id} onClick={()=>setTab(id)} style={{ padding: isMobBD ? '7px 10px' : '8px 16px',borderRadius:'10px',border:'none',background:tab===id?'#059669':'#f8fafc',color:tab===id?'white':'#64748b',fontWeight:tab===id?'700':'500',fontSize: isMobBD ? '11px' : '13px',cursor:'pointer',whiteSpace:'nowrap' }}>{l}</button>
           ))}
         </div>
@@ -27721,425 +28627,337 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       <div style={{ padding: isMobBD ? '12px' : '24px 32px', display:'grid', gridTemplateColumns: isMobBD ? '1fr' : '2fr 1fr', gap: isMobBD ? '12px' : '20px' }}>
         <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
 
-          {tab==='sjekkliste'&&(
+          {tab === 'observasjoner' && (
+            <div style={bCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
+                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📷 Observasjoner</h3>
+                <div style={{ display:'flex', gap:'8px' }}>
+                  {obsSelected.size > 0 && (
+                    <button onClick={() => setShowSendObs(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>📧 Send {obsSelected.size}</button>
+                  )}
+                  <button onClick={() => setShowCapture(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>+ Nytt</button>
+                </div>
+              </div>
+              {observations.length === 0 ? (
+                <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'30px 0', margin:0 }}>Ingen observasjoner registrert ennå.</p>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {observations.map(obs => {
+                    const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
+                    const st = OBS_STATUS[obs.status] || OBS_STATUS.apen
+                    const isSel = obsSelected.has(obs.id)
+                    const firstImg = Array.isArray(obs.images) && obs.images.length > 0 ? obs.images[0] : null
+                    return (
+                      <div key={obs.id} style={{ background:'#f8fafc', border:`2px solid ${isSel ? '#7c3aed' : '#f1f5f9'}`, borderRadius:'10px', padding:'10px', display:'flex', gap:'10px' }}>
+                        <input type="checkbox" checked={isSel} onChange={() => toggleObsSelect(obs.id)} style={{ accentColor:'#7c3aed', width:'18px', height:'18px', flexShrink:0, marginTop:'2px' }} />
+                        <div style={{ width:'56px', height:'56px', borderRadius:'8px', background:'#e2e8f0', flexShrink:0, overflow:'hidden', cursor:'pointer' }} onClick={() => setEditObs(obs)}>
+                          {firstImg ? <img src={firstImg.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', fontSize:'20px', opacity:0.4 }}>📝</div>}
+                        </div>
+                        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setEditObs(obs)}>
+                          <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'3px', flexWrap:'wrap' }}>
+                            <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{obs.sequence_number}</span>
+                            <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+                            <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{st.label}</span>
+                          </div>
+                          <div style={{ fontSize:'13px', color:'#0f172a', lineHeight:1.4 }}>{obs.title || obs.description || '(uten tekst)'}</div>
+                          {(obs.location_ref || obs.assigned_email || obs.assigned_role) && (
+                            <div style={{ display:'flex', gap:'10px', marginTop:'4px', flexWrap:'wrap', fontSize:'11px', color:'#64748b' }}>
+                              {obs.location_ref && <span style={{ color:'#2563eb' }}>📍 {obs.location_ref}</span>}
+                              {obs.assigned_role && <span>🔧 {obs.assigned_role}</span>}
+                              {obs.assigned_email && <span>✉️ {obs.assigned_email}</span>}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {tab === 'sjekkliste' && (
             <div style={bCard}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: isMobBD ? '10px' : '14px', flexWrap:'wrap', gap:'8px' }}>
                 <h3 style={{ margin:0, fontSize: isMobBD ? '13px' : '14px', fontWeight:'700', color:'#0f172a' }}>☑️ Sjekkpunkter</h3>
-                {items.length>0&&(
+                {items.length > 0 && (
                   <div style={{ display:'flex', gap:'8px', fontSize:'12px' }}>
                     <span style={{ background:'#f0fdf4',color:'#16a34a',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>✅ {ok} OK</span>
-                    {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>⚠️ {avvik} avvik</span>}
+                    {avvik > 0 && <span style={{ background:'#fef2f2',color:'#dc2626',padding:'3px 8px',borderRadius:'6px',fontWeight:'600' }}>⚠️ {avvik} avvik</span>}
                   </div>
                 )}
               </div>
               <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
-                {items.map(item=>{
-                  const st=ITEM_STATUS[item.status]
+                {items.map(item => {
+                  const st = ITEM_STATUS[item.status]
                   return (
-                    <div key={item.id} style={{ display:'flex', alignItems: isMobBD ? 'flex-start' : 'center', gap: isMobBD ? '8px' : '10px', padding: isMobBD ? '8px 10px' : '10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9', flexWrap: isMobBD ? 'wrap' : 'nowrap' }}>
-                      <button onClick={()=>toggleItemStatus(item)} style={{ padding: isMobBD ? '3px 10px' : '4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth: isMobBD ? '42px' : '52px' }}>{st.label}</button>
+                    <div key={item.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 14px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #f1f5f9' }}>
+                      <button onClick={() => toggleItemStatus(item)} style={{ padding:'4px 12px',borderRadius:'8px',border:`2px solid ${st.color}30`,background:st.bg,color:st.color,fontWeight:'700',fontSize:'11px',cursor:'pointer',flexShrink:0,minWidth:'52px' }}>{st.label}</button>
                       <div style={{ flex:1, minWidth:0 }}>
-                        <span style={{ fontSize: isMobBD ? '12px' : '13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
+                        <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{item.description}</span>
                         {item.location_ref && <div style={{ fontSize:'11px', color:'#2563eb', marginTop:'2px' }}>📍 {item.location_ref}</div>}
                       </div>
                       <div style={{ display:'flex', gap:'4px', flexShrink:0 }}>
-                        {item.status==='avvik'&&<button onClick={()=>convertToDeviation(item)} title="Opprett avvik" style={{ background:'#fef2f2',color:'#dc2626',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer',fontWeight:'600' }}>⚠️</button>}
-                        {!isMobBD && <button onClick={async ()=>{const ref=prompt('Plassering / romreferanse:',item.location_ref||'');if(ref!==null){await supabase.from('inspection_items').update({location_ref:ref||null}).eq('id',item.id);loadDetails()}}} title="Koble til rom/tegning" style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer' }}>📍</button>}
-                        <button onClick={()=>deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
+                        {item.status === 'avvik' && <button onClick={() => convertToDeviation(item)} title="Opprett avvik" style={{ background:'#fef2f2',color:'#dc2626',border:'none',borderRadius:'6px',padding:'3px 8px',fontSize:'11px',cursor:'pointer',fontWeight:'600' }}>⚠️</button>}
+                        <button onClick={() => deleteItem(item.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#94a3b8',fontSize:'14px',padding:0 }}>×</button>
                       </div>
                     </div>
                   )
                 })}
+                {items.length === 0 && <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px 0', margin:0 }}>Ingen sjekkpunkter ennå.</p>}
               </div>
               <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-                <input value={newItem} onChange={e=>setNewItem(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex: isMobBD ? '1 1 100%' : '1 1 200px' }} />
-                <button onClick={addItem} style={{ padding: isMobBD ? '9px 12px' : '9px 16px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700',whiteSpace:'nowrap',flex: isMobBD ? 1 : 'none' }}>+ Legg til</button>
-                <button onClick={()=>{loadChecklists();setShowImportCL(true)}} style={{ padding: isMobBD ? '9px 12px' : '9px 14px',background:'#eff6ff',color:'#2563eb',border:'1px solid #bfdbfe',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '11px' : '12px',fontWeight:'600',whiteSpace:'nowrap',flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '📋 Importer' : '📋 Importer sjekkliste'}</button>
+                <input value={newItem} onChange={e => setNewItem(e.target.value)} onKeyDown={e => e.key === 'Enter' && addItem()} placeholder="Legg til sjekkpunkt..." style={{ ...bInp, flex:'1 1 200px' }} />
+                <button onClick={addItem} style={{ padding:'9px 18px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>+ Legg til</button>
               </div>
             </div>
           )}
 
-          {tab==='oppfolging'&&(
+          {tab === 'oppfolging' && (
             <div style={bCard}>
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>⏰ Oppfølgingspunkter</h3>
-              <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'16px' }}>
-                {followups.map(fu=>{
-                  const overdue=fu.due_date&&fu.due_date<today&&!fu.completed
-                  return (
-                    <div key={fu.id} style={{ display:'flex', alignItems: isMobBD ? 'flex-start' : 'center', gap: isMobBD ? '8px' : '10px', padding: isMobBD ? '10px' : '12px 14px', background:fu.completed?'#f8fafc':overdue?'#fef2f2':'#fffbeb', borderRadius:'10px', border:`1px solid ${fu.completed?'#f1f5f9':overdue?'#fecaca':'#fde68a'}` }}>
-                      <input type="checkbox" checked={fu.completed} onChange={()=>toggleFollowup(fu)} style={{ width:'16px',height:'16px',accentColor:'#059669',cursor:'pointer',flexShrink:0 }} />
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', textDecoration:fu.completed?'line-through':'none' }}>{fu.description}</div>
-                        <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
-                          {fu.responsible&&<span>👤 {fu.responsible}</span>}
-                          {fu.due_date&&<span style={{ color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 Frist: {fu.due_date}{overdue?' ⚠️ FORFALT':''}</span>}
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'14px' }}>
+                {followups.map(fu => (
+                  <div key={fu.id} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',background:fu.completed?'#f0fdf4':'#fffbeb',borderRadius:'10px',border:`1px solid ${fu.completed?'#bbf7d0':'#fde68a'}` }}>
+                    <input type="checkbox" checked={fu.completed} onChange={() => toggleFollowup(fu)} style={{ accentColor:'#059669', width:'18px', height:'18px' }} />
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500', textDecoration:fu.completed?'line-through':'none' }}>{fu.description}</span>
+                      {(fu.responsible || fu.due_date) && (
+                        <div style={{ display:'flex', gap:'8px', marginTop:'2px', fontSize:'11px', color:'#64748b' }}>
+                          {fu.responsible && <span>👤 {fu.responsible}</span>}
+                          {fu.due_date && <span>📅 {fu.due_date}</span>}
                         </div>
-                      </div>
+                      )}
                     </div>
-                  )
-                })}
-                {followups.length===0&&<p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen oppfølgingspunkter</p>}
-              </div>
-              <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px', border:'1px solid #f1f5f9', display:'flex', flexDirection:'column', gap:'10px' }}>
-                <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>+ Nytt oppfølgingspunkt</div>
-                <input value={newFollowup.description} onChange={e=>setNewFollowup(f=>({...f,description:e.target.value}))} placeholder="Beskrivelse av oppfølging..." style={bInp} />
-                <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
-                  <EmployeeNameSelect value={newFollowup.responsible} onChange={v=>setNewFollowup(f=>({...f,responsible:v}))} onSelect={emp => setNewFollowup(f=>({...f,responsible:`${emp.first_name||''} ${emp.last_name||''}`.trim()}))} placeholder="Ansvarlig person" style={{ padding:'8px 10px', fontSize:'13px' }} />
-                  <input type="date" value={newFollowup.due_date} onChange={e=>setNewFollowup(f=>({...f,due_date:e.target.value}))} style={bInp} />
-                </div>
-                <button onClick={addFollowup} style={{ padding: isMobBD ? '10px' : '9px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px',fontWeight:'700' }}>{isMobBD ? '+ Oppfølging' : 'Legg til oppfølging'}</button>
-              </div>
-            </div>
-          )}
-
-          {tab==='filer'&&(
-            <div style={bCard}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Bilder og dokumenter</h3>
-                <div style={{ display:'flex',gap:'6px' }}>
-                  <button onClick={()=>cameraRef.current?.click()} style={{ background:'#eff6ff',color:'#2563eb',border:'none',borderRadius:'8px',padding: isMobBD ? '7px 10px' : '7px 14px',fontSize: isMobBD ? '12px' : '13px',fontWeight:'600',cursor:'pointer' }}>📷 {isMobBD ? 'Bilde' : 'Ta bilde'}</button>
-                  <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',padding: isMobBD ? '7px 10px' : '7px 14px',fontSize: isMobBD ? '12px' : '13px',fontWeight:'600',cursor:'pointer' }}>📎 Last opp</button>
-                </div>
-                <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:'none' }} onChange={uploadCamera} />
-                <input ref={fileInputRef} type="file" style={{ display:'none' }} onChange={uploadFile} accept="image/*,.pdf,.doc,.docx" multiple />
-              </div>
-              {files.length===0 ? <p style={{ color:'#94a3b8',fontSize:'14px',fontStyle:'italic' }}>Ingen filer lastet opp</p> : (
-                <div style={{ display:'grid', gridTemplateColumns: isMobBD ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(140px,1fr))', gap: isMobBD ? '8px' : '10px' }}>
-                  {files.map(f=>{
-                    const isImg=f.file_type?.startsWith('image/')
-                    return (
-                      <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" style={{ textDecoration:'none' }}>
-                        <div style={{ borderRadius:'10px', border:'1px solid #f1f5f9', overflow:'hidden', background:'#f8fafc' }}>
-                          {isImg ? <img src={f.file_url} alt={f.name} style={{ width:'100%',height:'100px',objectFit:'cover' }} />
-                            : <div style={{ width:'100%',height:'100px',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'32px' }}>📄</div>}
-                          <div style={{ padding:'6px 8px', fontSize:'11px', color:'#475569', fontWeight:'500', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
-                        </div>
-                      </a>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {tab==='info'&&(
-            <div style={bCard}>
-              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Befaringsinfo</h3>
-              <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                {[['Tittel',ins.title],['Type',(BEFARING_TYPES.find(t=>t.id===ins.inspection_type)||{}).label||ins.inspection_type],['Dato',ins.date],['Sted',ins.location],['Prosjekt',proj?.name],['Status',INS_STATUS[ins.status]?.label]].filter(r=>r[1]).map(([k,v])=>(
-                  <div key={k} style={{ background:'#f8fafc',borderRadius:'8px',padding:'9px 12px' }}>
-                    <div style={{ fontSize:'11px',color:'#94a3b8',textTransform:'uppercase',fontWeight:'600' }}>{k}</div>
-                    <div style={{ fontSize:'13px',fontWeight:'600',color:'#0f172a',marginTop:'2px' }}>{v}</div>
                   </div>
                 ))}
+                {followups.length === 0 && <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px 0', margin:0 }}>Ingen oppfølgingspunkter.</p>}
               </div>
-              {ins.purpose && (
-                <div style={{ marginTop:'12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 12px' }}>
-                  <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'700', textTransform:'uppercase', marginBottom:'4px' }}>🎯 Hensikt</div>
-                  <p style={{ margin:0, fontSize:'13px', color:'#78350f', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{ins.purpose}</p>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                <input value={newFollowup.description} onChange={e => setNewFollowup(f => ({ ...f, description: e.target.value }))} placeholder="Beskrivelse..." style={bInp} />
+                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                  <input value={newFollowup.responsible} onChange={e => setNewFollowup(f => ({ ...f, responsible: e.target.value }))} placeholder="Ansvarlig" style={{ ...bInp, flex:'1 1 120px' }} />
+                  <input type="date" value={newFollowup.due_date} onChange={e => setNewFollowup(f => ({ ...f, due_date: e.target.value }))} style={{ ...bInp, flex:'1 1 130px' }} />
+                  <button onClick={addFollowup} style={{ padding:'9px 18px',background:'#059669',color:'white',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600' }}>+ Legg til</button>
                 </div>
-              )}
-              {ins.participants?.length>0&&<div style={{ marginTop:'12px' }}><div style={{ fontSize:'12px',color:'#64748b',fontWeight:'600',marginBottom:'6px' }}>👥 Interne deltakere</div><div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>{ins.participants.map((p,i)=><span key={i} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600' }}>{p}</span>)}</div></div>}
-              {Array.isArray(ins.external_participants) && ins.external_participants.length > 0 && (
-                <div style={{ marginTop:'12px' }}>
-                  <div style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', marginBottom:'6px' }}>🤝 Eksterne deltakere</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-                    {ins.external_participants.map((p, i) => (
-                      <div key={i} style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'10px', padding:'8px 10px' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
-                          <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', background:'white', padding:'2px 8px', borderRadius:'8px', whiteSpace:'nowrap' }}>{getRoleLabel(p.role)}</span>
-                          <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
-                        </div>
-                        {(p.company || p.email) && (
-                          <div style={{ fontSize:'11px', color:'#64748b', marginTop:'3px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                            {p.company && <span>🏢 {p.company}</span>}
-                            {p.email && <span>✉️ {p.email}</span>}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {ins.notes&&<div style={{ marginTop:'12px',background:'#f8fafc',borderRadius:'8px',padding:'10px 12px' }}><div style={{ fontSize:'11px',color:'#94a3b8',fontWeight:'600',marginBottom:'4px' }}>NOTATER</div><p style={{ margin:0,fontSize:'13px',color:'#475569',lineHeight:1.6 }}>{ins.notes}</p></div>}
+              </div>
             </div>
           )}
+
+          {tab === 'filer' && (
+            <div style={bCard}>
+              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📎 Vedlegg</h3>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(120px, 1fr))', gap:'10px', marginBottom:'14px' }}>
+                {files.map(f => (
+                  <a key={f.id} href={f.file_url} target="_blank" rel="noreferrer" style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'8px', textDecoration:'none', color:'#0f172a' }}>
+                    {f.file_type?.startsWith('image/') ? (
+                      <img src={f.file_url} alt={f.name} style={{ width:'100%', aspectRatio:'1/1', objectFit:'cover', borderRadius:'6px', marginBottom:'4px' }} />
+                    ) : (
+                      <div style={{ aspectRatio:'1/1', background:'#e2e8f0', borderRadius:'6px', marginBottom:'4px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>📄</div>
+                    )}
+                    <div style={{ fontSize:'11px', color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
+                  </a>
+                ))}
+              </div>
+              <input ref={fileInputRef} type="file" onChange={uploadFile} style={{ display:'none' }} />
+              <button onClick={() => fileInputRef.current?.click()} disabled={saving} style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>{saving ? 'Laster opp...' : '+ Last opp fil'}</button>
+            </div>
+          )}
+
+          {tab === 'info' && <BefaringInfoPanel ins={ins} proj={proj} />}
         </div>
 
         <div style={{ display:'flex', flexDirection:'column', gap:'14px' }}>
           <div style={bCard}>
-            <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
-            {Object.entries(INS_STATUS).map(([k,v])=>(
-              <button key={k} onClick={()=>updateStatus(k)} disabled={ins.status===k}
-                style={{ width:'100%',padding:'9px 14px',borderRadius:'10px',border:`1px solid ${ins.status===k?v.border:'#e2e8f0'}`,background:ins.status===k?v.bg:'white',color:ins.status===k?v.color:'#475569',fontWeight:ins.status===k?'700':'400',fontSize:'13px',cursor:ins.status===k?'default':'pointer',textAlign:'left',marginBottom:'5px' }}>
-                {ins.status===k?'✓ ':''}{v.emoji} {v.label}
-              </button>
-            ))}
+            <h3 style={{ margin:'0 0 12px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>Status</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.entries(INS_STATUS).map(([k, v]) => (
+                <button key={k} onClick={() => updateStatus(k)} style={{ padding:'9px 12px', background:ins.status === k ? v.bg : 'white', color:ins.status === k ? v.color : '#64748b', border:`1px solid ${ins.status === k ? v.border : '#e2e8f0'}`, borderRadius:'10px', fontSize:'12px', fontWeight:'700', cursor:'pointer', textAlign:'left' }}>{v.emoji} {v.label}</button>
+              ))}
+            </div>
           </div>
+
           <div style={bCard}>
-            <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Oppsummering</h3>
-            {[['Sjekkpunkter',items.length],['OK',ok],['Avvik',avvik],['N/A',items.filter(i=>i.status==='na').length],['Oppfølginger',followups.length],['Åpne',openF],['Filer',files.length]].map(([k,v],i)=>(
-              <div key={i} style={{ display:'flex',justifyContent:'space-between',padding:'5px 0',borderBottom:'1px solid #f8fafc',fontSize: isMobBD ? '12px' : '13px' }}>
-                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700',color:'#0f172a' }}>{v}</span>
-              </div>
-            ))}
+            <h3 style={{ margin:'0 0 12px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>Sammendrag</h3>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px', fontSize:'12px', color:'#64748b' }}>
+              <div>📷 {observations.length} observasjoner ({obsOpen} åpne)</div>
+              <div>☑️ {items.length} sjekkpunkter ({avvik} avvik)</div>
+              <div>⏰ {followups.length} oppfølging ({openF} åpne)</div>
+              <div>📎 {files.length} vedlegg</div>
+            </div>
           </div>
         </div>
       </div>
-      {/* Import sjekkliste modal */}
-      {showImportCL && (
-        <>
-          <div onClick={()=>setShowImportCL(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '80vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
-            <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-              <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📋 Importer sjekkliste</h2>
-              <button onClick={()=>setShowImportCL(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
-            </div>
-            <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'8px' }}>
-              {checklists.length===0?<p style={{ color:'#94a3b8',fontSize:'14px',textAlign:'center',padding:'24px' }}>Ingen maler eller sjekklister funnet. Opprett maler i Sjekkliste-modulen.</p>:(
-                <>
-                  {checklists.filter(c=>c.isMal).length>0 && (
-                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#7c3aed',textTransform:'uppercase',marginBottom:'2px',marginTop:'4px' }}>📁 Maler</div>
-                  )}
-                  {checklists.filter(c=>c.isMal).map(cl=>{
-                    const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
-                    return (
-                      <button key={'t-'+cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #e9d5ff',background:'#faf5ff',cursor:'pointer',width:'100%',textAlign:'left' }}
-                        onMouseEnter={e=>e.currentTarget.style.background='#f3e8ff'} onMouseLeave={e=>e.currentTarget.style.background='#faf5ff'}>
-                        <div>
-                          <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
-                          <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
-                        </div>
-                        <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
-                      </button>
-                    )
-                  })}
-                  {checklists.filter(c=>!c.isMal).length>0 && (
-                    <div style={{ fontSize:'11px',fontWeight:'700',color:'#059669',textTransform:'uppercase',marginBottom:'2px',marginTop:'8px' }}>📋 Eksisterende sjekklister</div>
-                  )}
-                  {checklists.filter(c=>!c.isMal).map(cl=>{
-                    const totalItems=(cl.sections||[]).reduce((a,s)=>a+(s.items||[]).length,0)
-                    return (
-                      <button key={'c-'+cl.id} onClick={()=>importFromChecklist(cl)} style={{ display:'flex',alignItems:'center',justifyContent:'space-between',padding:'14px 16px',borderRadius:'12px',border:'1px solid #f1f5f9',background:'white',cursor:'pointer',width:'100%',textAlign:'left' }}
-                        onMouseEnter={e=>e.currentTarget.style.background='#f0fdf4'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                        <div>
-                          <div style={{ fontWeight:'700',fontSize:'14px',color:'#0f172a' }}>{cl.title}</div>
-                          <div style={{ fontSize:'12px',color:'#64748b',marginTop:'2px' }}>{totalItems} punkter · {(cl.sections||[]).length} seksjoner</div>
-                        </div>
-                        <span style={{ background:'#f0fdf4',color:'#059669',padding:'4px 12px',borderRadius:'8px',fontSize:'12px',fontWeight:'600' }}>Importer</span>
-                      </button>
-                    )
-                  })}
-                </>
-              )}
-            </div>
-          </div>
-        </>
+
+      {/* Modaler */}
+      {(showCapture || editObs) && (
+        <ObservationCaptureSheet
+          inspection={ins}
+          observation={editObs}
+          user={user}
+          onClose={() => { setShowCapture(false); setEditObs(null) }}
+          onSaved={() => { setShowCapture(false); setEditObs(null); loadDetails() }}
+        />
       )}
 
-      {/* Send rapport modal */}
-      {showSend && (
-        <>
-          <div onClick={()=>setShowSend(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(560px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '90vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
-            <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-              <h2 style={{ margin:0,fontSize:'16px',fontWeight:'700',color:'#0f172a' }}>📧 Send befaringsrapport</h2>
-              <button onClick={()=>setShowSend(false)} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
-            </div>
-            <div style={{ overflowY:'auto',flex:1,padding:'16px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
-              <div style={{ background:'#eff6ff',borderRadius:'10px',padding:'12px',border:'1px solid #bfdbfe',fontSize:'13px',color:'#1e40af' }}>
-                Send utvalgte punkter med bilder til en kollega, UE eller andre. Mottaker trenger ikke tilgang til systemet.
-              </div>
-              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mottakers e-post *</label><input value={sendForm.email} onChange={e=>setSendForm(f=>({...f,email:e.target.value}))} placeholder="epost@firma.no" style={bInp} type="email" /></div>
-              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mottakers navn</label><input value={sendForm.name} onChange={e=>setSendForm(f=>({...f,name:e.target.value}))} placeholder="F.eks. Kontaktperson UE" style={bInp} /></div>
-              <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Melding (valgfritt)</label><textarea value={sendForm.message} onChange={e=>setSendForm(f=>({...f,message:e.target.value}))} rows={2} placeholder="F.eks. Vennligst utbedr følgende punkter innen fredag..." style={{ ...bInp,resize:'none' }} /></div>
-              
-              <div>
-                <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'8px' }}>
-                  <label style={{ fontSize:'13px',fontWeight:'600',color:'#374151' }}>Velg punkter å sende ({sendItems.length}/{items.length})</label>
-                  <button onClick={()=>setSendItems(sendItems.length===items.length?[]:items.map(i=>i.id))} style={{ background:'none',border:'none',fontSize:'12px',color:'#2563eb',cursor:'pointer',fontWeight:'600' }}>{sendItems.length===items.length?'Fjern alle':'Velg alle'}</button>
-                </div>
-                <div style={{ display:'flex',flexDirection:'column',gap:'4px',maxHeight:'200px',overflowY:'auto' }}>
-                  {items.map(item=>{
-                    const sel=sendItems.includes(item.id)
-                    const st=item.status==='avvik'?'#dc2626':item.status==='ok'?'#16a34a':'#94a3b8'
-                    return (
-                      <label key={item.id} style={{ display:'flex',alignItems:'center',gap:'8px',padding:'8px 10px',borderRadius:'8px',cursor:'pointer',background:sel?'#f0fdf4':'#f8fafc',border:sel?'1px solid #bbf7d0':'1px solid #f1f5f9' }}>
-                        <input type="checkbox" checked={sel} onChange={()=>setSendItems(s=>sel?s.filter(x=>x!==item.id):[...s,item.id])} style={{ accentColor:'#059669',width:'16px',height:'16px' }} />
-                        <span style={{ width:'6px',height:'6px',borderRadius:'50%',background:st,flexShrink:0 }} />
-                        <span style={{ fontSize:'13px',color:'#0f172a',flex:1 }}>{item.description}</span>
-                      </label>
-                    )
-                  })}
-                </div>
-              </div>
-
-              <button onClick={sendToRecipient} disabled={sendingEmail} style={{ padding:'12px',background:sendingEmail?'#94a3b8':'#7c3aed',color:'white',border:'none',borderRadius:'10px',cursor:sendingEmail?'not-allowed':'pointer',fontSize:'14px',fontWeight:'700',marginTop:'4px' }}>{sendingEmail?'Sender...':'📧 Send rapport'}</button>
-            </div>
-          </div>
-        </>
+      {showSendObs && (
+        <SendObservationsSheet
+          inspection={ins}
+          observations={observations.filter(o => obsSelected.has(o.id))}
+          proj={proj}
+          user={user}
+          onClose={() => setShowSendObs(false)}
+          onSent={() => { setShowSendObs(false); setObsSelected(new Set()); loadDetails() }}
+        />
       )}
 
-            {editing&&<BefaringModal projects={projects} user={user} initial={ins} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
-
-      {/* Konverter-modal */}
-      {showConvert && (
-        <>
-          <div onClick={()=>setShowConvert(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
-          <div style={{ position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%', transform: isMobBD ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobBD ? '0' : '20px', width: isMobBD ? '100%' : 'min(500px,calc(100vw - 32px))', height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '85vh', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column', overflow:'auto' }}>
-            <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9' }}>
-              <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>🔄 Konverter befaringspunkter</h2>
-            </div>
-            <div style={{ padding:'24px',display:'flex',flexDirection:'column',gap:'14px' }}>
-              <div style={{ background:'#eff6ff',borderRadius:'10px',padding:'12px 16px',border:'1px solid #bfdbfe',fontSize:'13px',color:'#1e40af' }}>
-                {items.length} sjekkpunkter · {avvik} avvik · {ok} OK
-              </div>
-
-              <button onClick={convertToChecklist} disabled={avvik===0}
-                style={{ padding:'14px',borderRadius:'12px',border:'1px solid #bbf7d0',background:'#f0fdf4',cursor:avvik>0?'pointer':'not-allowed',textAlign:'left',opacity:avvik>0?1:0.5 }}>
-                <div style={{ fontWeight:'700',fontSize:'14px',color:'#059669' }}>☑️ Opprett sjekkliste fra avvikspunkter</div>
-                <div style={{ fontSize:'12px',color:'#64748b',marginTop:'4px' }}>Alle {avvik} avvikspunkter konverteres til en ny sjekkliste for utbedring i prosjektet.</div>
-              </button>
-
-              <div style={{ fontSize:'13px',fontWeight:'600',color:'#374151',marginTop:'4px' }}>Eller konverter enkeltpunkter til avvik:</div>
-              <div style={{ display:'flex',flexDirection:'column',gap:'6px',maxHeight:'200px',overflowY:'auto' }}>
-                {items.filter(i=>i.status==='avvik').map(item=>(
-                  <div key={item.id} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'8px 12px',background:'#fef2f2',borderRadius:'8px',border:'1px solid #fecaca' }}>
-                    <span style={{ flex:1,fontSize:'13px',color:'#0f172a' }}>{item.description}</span>
-                    <button onClick={()=>convertToDeviation(item)} style={{ padding:'6px 12px',background:'#dc2626',color:'white',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'11px',fontWeight:'600',whiteSpace:'nowrap' }}>⚠️ Opprett avvik</button>
-                  </div>
-                ))}
-                {avvik===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic',textAlign:'center',padding:'12px' }}>Ingen avvikspunkter funnet — marker punkter som «Avvik» først</p>}
-              </div>
-
-              <button onClick={()=>setShowConvert(false)} style={{ padding:'10px',background:'#f1f5f9',border:'none',borderRadius:'10px',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#64748b',marginTop:'4px' }}>Lukk</button>
-            </div>
-          </div>
-        </>
-      )}
+      {editing && <BefaringModal projects={projects} user={user} initial={ins} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh() }} />}
     </div>
   )
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// BefaringModal — opprett/rediger befaring (uendret)
+// ═══════════════════════════════════════════════════════════════════════════
+
 function BefaringModal({ projects, user, initial, onClose, onSaved }) {
-  const isEdit=!!initial
+  const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title || '',
     purpose: initial?.purpose || '',
+    inspection_type: initial?.inspection_type || 'kvalitet',
+    project_id: initial?.project_id || '',
     date: initial?.date || new Date().toISOString().split('T')[0],
     location: initial?.location || '',
-    project_id: initial?.project_id || '',
     status: initial?.status || 'planlagt',
-    notes: initial?.notes || '',
-    participants: initial?.participants || [],
+    participants: Array.isArray(initial?.participants) ? initial.participants : [],
     external_participants: Array.isArray(initial?.external_participants) ? initial.external_participants : [],
-    inspection_type: initial?.inspection_type || 'kvalitet',
+    notes: initial?.notes || '',
   })
-  const [participantInput, setParticipantInput] = useState('')
-  const [extDraft, setExtDraft] = useState({ role:'byggherre', name:'', company:'', email:'' })
   const [saving, setSaving] = useState(false)
-  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
-  const isMobBM = typeof window !== 'undefined' && window.innerWidth < 768
+  const [newParticipant, setNewParticipant] = useState('')
+  const [newExt, setNewExt] = useState({ role:'ue', name:'', company:'', email:'' })
 
-  const addParticipant = () => { if(participantInput.trim()) { set('participants',[...form.participants,participantInput.trim()]); setParticipantInput('') } }
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const addExternal = () => {
-    if (!extDraft.name.trim()) return
-    set('external_participants', [...form.external_participants, { ...extDraft, name: extDraft.name.trim(), company: extDraft.company.trim(), email: extDraft.email.trim() }])
-    setExtDraft({ role: extDraft.role, name:'', company:'', email:'' }) // behold rolle, tøm resten
-  }
-  const removeExternal = (idx) => {
-    set('external_participants', form.external_participants.filter((_, i) => i !== idx))
-  }
-
-  const handleSave = async () => {
+  const save = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
     try {
-      const payload={...form,project_id:form.project_id||null,updated_at:new Date().toISOString()}
-      if (isEdit) { const {error}=await supabase.from('inspections').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('inspections').insert({...payload,created_by:user?.id}); if(error) throw error }
+      const payload = {
+        title: form.title.trim(),
+        purpose: form.purpose.trim() || null,
+        inspection_type: form.inspection_type,
+        project_id: form.project_id || null,
+        date: form.date,
+        location: form.location.trim() || null,
+        status: form.status,
+        participants: form.participants,
+        external_participants: form.external_participants,
+        notes: form.notes.trim() || null,
+      }
+      if (isEdit) { const { error } = await supabase.from('inspections').update(payload).eq('id', initial.id); if (error) throw error }
+      else        { const { error } = await supabase.from('inspections').insert({ ...payload, created_by: user?.id }); if (error) throw error }
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
   }
 
+  const addParticipant = () => {
+    if (!newParticipant.trim()) return
+    set('participants', [...form.participants, newParticipant.trim()])
+    setNewParticipant('')
+  }
+
+  const removeParticipant = (i) => {
+    set('participants', form.participants.filter((_, idx) => idx !== i))
+  }
+
+  const addExternal = () => {
+    if (!newExt.name.trim()) return
+    set('external_participants', [...form.external_participants, { ...newExt, name: newExt.name.trim(), company: newExt.company.trim(), email: newExt.email.trim() }])
+    setNewExt({ role:'ue', name:'', company:'', email:'' })
+  }
+
+  const removeExternal = (i) => {
+    set('external_participants', form.external_participants.filter((_, idx) => idx !== i))
+  }
+
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
-      <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '560px',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>{isEdit?'🔍 Rediger befaring':'🔍 Ny befaring'}</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'6px' }}>
-            <button onClick={handleSave} disabled={saving} style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '7px 14px' : '8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Opprett'}</button>
-            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-          </div>
+    <>
+      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+      <div style={{ position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%', transform: isMob ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMob ? 0 : '20px', width: isMob ? '100%' : 'min(640px, calc(100vw - 32px))', height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '92vh', zIndex:101, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: isMob ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>{isEdit ? '🔍 Rediger befaring' : '🔍 Ny befaring'}</h2>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. HMS-befaring uke 12" style={bInp} /></div>
-          <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>🎯 Hensikt med befaringen</label>
-            <textarea value={form.purpose} onChange={e=>set('purpose',e.target.value)} rows={2} style={{ ...bInp, resize:'vertical' }} placeholder="F.eks. Kvalitetssjekk av betongdekke og kontroll av sikkerhet på byggeplassen" />
-          </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Befaringstype</label><select value={form.inspection_type} onChange={e=>set('inspection_type',e.target.value)} style={bInp}>{BEFARING_TYPES.map(t=><option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}</select></div>
-          {[['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
-            <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
-          ))}
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={bInp} placeholder="Ingen" /></div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
-          <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Interne deltakere</label>
-            <EmployeeChipPicker values={form.participants || []} onChange={list => set('participants', list)} placeholder="Søk ansatt eller skriv navn" style={{ padding:'9px 12px', fontSize:'14px' }} />
+
+        <div style={{ overflowY:'auto', flex:1, padding:'16px 18px', display:'flex', flexDirection:'column', gap:'12px' }}>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Tittel *</label><input value={form.title} onChange={e => set('title', e.target.value)} placeholder="F.eks. HMS-befaring uke 12" style={bInp} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>🎯 Hensikt med befaringen</label><textarea value={form.purpose} onChange={e => set('purpose', e.target.value)} rows={2} placeholder="Hva er formålet?" style={{ ...bInp, resize:'none' }} /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Befaringstype</label><select value={form.inspection_type} onChange={e => set('inspection_type', e.target.value)} style={bInp}>{BEFARING_TYPES.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}</select></div>
+
+          <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'10px' }}>
+            <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Dato</label><input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={bInp} /></div>
+            <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e => set('status', e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           </div>
 
-          {/* Eksterne deltakere */}
-          <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>🤝 Eksterne deltakere</label>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} placeholder="Velg prosjekt" /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Sted</label><input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Adresse / lokasjon" style={bInp} /></div>
 
-            {/* Liste over allerede lagt til eksterne */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>👥 Interne deltakere</label>
+            <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
+              <input value={newParticipant} onChange={e => setNewParticipant(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addParticipant())} placeholder="Navn..." style={{ ...bInp, flex:1 }} />
+              <button onClick={addParticipant} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+</button>
+            </div>
+            {form.participants.length > 0 && (
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                {form.participants.map((p, i) => (
+                  <span key={i} style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'3px 10px', fontSize:'12px', fontWeight:'600', display:'flex', alignItems:'center', gap:'6px' }}>
+                    {p}
+                    <button onClick={() => removeParticipant(i)} style={{ background:'none', border:'none', color:'#059669', cursor:'pointer', padding:0, fontSize:'14px', lineHeight:1 }}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>🤝 Eksterne deltakere</label>
+            <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px', marginBottom:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'6px', marginBottom:'6px' }}>
+                <select value={newExt.role} onChange={e => setNewExt(x => ({ ...x, role: e.target.value }))} style={bInp}>{EXTERNAL_PARTICIPANT_ROLES.map(r => <option key={r.id} value={r.id}>{r.emoji} {r.label}</option>)}</select>
+                <input value={newExt.name} onChange={e => setNewExt(x => ({ ...x, name: e.target.value }))} placeholder="Navn *" style={bInp} />
+                <input value={newExt.company} onChange={e => setNewExt(x => ({ ...x, company: e.target.value }))} placeholder="Firma" style={bInp} />
+                <input value={newExt.email} onChange={e => setNewExt(x => ({ ...x, email: e.target.value }))} type="email" placeholder="E-post" style={bInp} />
+              </div>
+              <button onClick={addExternal} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'8px', padding:'8px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+            </div>
             {form.external_participants.length > 0 && (
-              <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'10px' }}>
-                {form.external_participants.map((p, idx) => (
-                  <div key={idx} style={{ display:'flex', alignItems:'center', gap:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 10px' }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
-                        <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', background:'#f5f3ff', padding:'2px 8px', borderRadius:'8px', whiteSpace:'nowrap' }}>{getRoleLabel(p.role)}</span>
-                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
-                      </div>
-                      {(p.company || p.email) && (
-                        <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
-                          {p.company && <span>🏢 {p.company}</span>}
-                          {p.email && <span>✉️ {p.email}</span>}
-                        </div>
-                      )}
-                    </div>
-                    <button type="button" onClick={() => removeExternal(idx)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 8px', cursor:'pointer', fontSize:'13px', flexShrink:0 }}>🗑️</button>
+              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                {form.external_participants.map((p, i) => (
+                  <div key={i} style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', whiteSpace:'nowrap' }}>{getRoleLabel(p.role)}</span>
+                    <span style={{ flex:1, fontSize:'13px', color:'#0f172a' }}>{p.name}{p.company ? ' · ' + p.company : ''}{p.email ? ' · ' + p.email : ''}</span>
+                    <button onClick={() => removeExternal(i)} style={{ background:'none', border:'none', color:'#7c3aed', cursor:'pointer', fontSize:'16px', padding:0 }}>×</button>
                   </div>
                 ))}
               </div>
             )}
-
-            {/* Add-form for ny ekstern */}
-            <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:'10px', padding:'10px', display:'flex', flexDirection:'column', gap:'8px' }}>
-              <div style={{ display:'grid', gridTemplateColumns: isMobBM ? '1fr' : '1fr 1fr', gap:'8px' }}>
-                <select value={extDraft.role} onChange={e => setExtDraft({...extDraft, role: e.target.value})} style={{ ...bInp, padding:'8px 10px' }}>
-                  {EXTERNAL_PARTICIPANT_ROLES.map(r => <option key={r.id} value={r.id}>{r.emoji} {r.label}</option>)}
-                </select>
-                <input value={extDraft.name} onChange={e => setExtDraft({...extDraft, name: e.target.value})} placeholder="Navn *" style={{ ...bInp, padding:'8px 10px' }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExternal() } }} />
-              </div>
-              <div style={{ display:'grid', gridTemplateColumns: isMobBM ? '1fr' : '1fr 1fr', gap:'8px' }}>
-                <input value={extDraft.company} onChange={e => setExtDraft({...extDraft, company: e.target.value})} placeholder="Firma (valgfritt)" style={{ ...bInp, padding:'8px 10px' }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExternal() } }} />
-                <input type="email" value={extDraft.email} onChange={e => setExtDraft({...extDraft, email: e.target.value})} placeholder="E-post (valgfritt)" style={{ ...bInp, padding:'8px 10px' }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExternal() } }} />
-              </div>
-              <button type="button" onClick={addExternal} disabled={!extDraft.name.trim()} style={{ background: extDraft.name.trim() ? '#7c3aed' : '#e2e8f0', color: extDraft.name.trim() ? 'white' : '#94a3b8', border:'none', borderRadius:'10px', padding:'9px 14px', fontSize:'13px', fontWeight:'700', cursor: extDraft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Legg til ekstern deltaker</button>
-            </div>
-            <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>E-post er nyttig hvis du senere vil sende rapport til alle deltakerne</p>
           </div>
-          <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notater</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...bInp,resize:'none' }} placeholder="Generelle notater fra befaringen..." /></div>
+
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Notater</label><textarea value={form.notes} onChange={e => set('notes', e.target.value)} rows={3} style={{ ...bInp, resize:'none' }} placeholder="Generelle notater..." /></div>
         </div>
 
+        <div style={{ padding:'12px 18px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'8px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ flex:1, padding:'12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Avbryt</button>
+          <button onClick={save} disabled={saving} style={{ flex:2, padding:'12px', background:saving?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor:saving?'not-allowed':'pointer' }}>{saving ? 'Lagrer...' : (isEdit ? '💾 Oppdater' : '✓ Opprett befaring')}</button>
+        </div>
       </div>
-    </div>
+    </>
   )
 }
 
