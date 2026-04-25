@@ -27448,13 +27448,17 @@ async function uploadObservationImages(files, inspectionId, observationId, subfo
   const uploaded = []
   for (const file of files) {
     try {
-      const blob = await compressImage(file).catch(() => file)
+      console.log('[uploadObservationImages] Processing file', { name: file.name, size: file.size, type: file.type, inspectionId, observationId, subfolder })
+      const blob = await compressImage(file).catch((err) => { console.warn('[uploadObservationImages] compress failed, using original:', err); return file })
+      console.log('[uploadObservationImages] Blob ready', { size: blob.size, type: blob.type })
       const id = crypto.randomUUID()
       const folder = observationId || 'pending'
       const path = `befaring/${inspectionId}/observations/${folder}${subfolder ? '/' + subfolder : ''}/${id}.jpg`
+      console.log('[uploadObservationImages] Uploading to path:', path)
       const { error } = await supabase.storage.from('plattform-files').upload(path, blob, { contentType: 'image/jpeg', upsert: false })
-      if (error) throw error
+      if (error) { console.error('[uploadObservationImages] Storage upload error:', error); throw error }
       const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      console.log('[uploadObservationImages] Public URL:', publicUrl)
       uploaded.push({ url: publicUrl, uploaded_at: new Date().toISOString() })
     } catch(e) {
       console.warn('Upload feilet:', e)
@@ -28437,13 +28441,17 @@ function ResolveObservationModal({ inspection, observation, user, onClose, onSav
   const [saving, setSaving] = React.useState(false)
 
   const handleFiles = async (files) => {
+    console.log('[ResolveModal] handleFiles called', { fileCount: files?.length, inspectionId: inspection?.id, observationId: observation?.id })
     if (!files || files.length === 0) return
     setUploading(true)
     try {
       const arr = Array.from(files)
+      console.log('[ResolveModal] Starting upload', arr.map(f => ({ name: f.name, size: f.size, type: f.type })))
       const uploaded = await uploadObservationImages(arr, inspection.id, observation.id, 'resolution')
+      console.log('[ResolveModal] Upload completed', uploaded)
       setImages(prev => [...prev, ...uploaded])
     } catch(e) {
+      console.error('[ResolveModal] Upload error:', e)
       alert('Kunne ikke laste opp: ' + e.message)
     } finally { setUploading(false) }
   }
