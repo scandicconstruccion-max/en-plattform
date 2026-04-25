@@ -27274,6 +27274,21 @@ const INS_STATUS = {
   avsluttet:    { label:'Avsluttet',    emoji:'🔒', color:'#64748b', bg:'#f8fafc', border:'#e2e8f0' },
 }
 
+const EXTERNAL_PARTICIPANT_ROLES = [
+  { id:'byggherre',   label:'Byggherre',                emoji:'🏢' },
+  { id:'ue',          label:'Underentreprenør (UE)',    emoji:'🔨' },
+  { id:'arkitekt',    label:'Arkitekt',                 emoji:'📐' },
+  { id:'radg_ing',    label:'Rådgivende ingeniør',      emoji:'🛠️' },
+  { id:'kommune',     label:'Kommune/myndighet',        emoji:'🏛️' },
+  { id:'leverandor',  label:'Leverandør',               emoji:'📦' },
+  { id:'annen',       label:'Annen',                    emoji:'👤' },
+]
+
+const getRoleLabel = (id) => {
+  const r = EXTERNAL_PARTICIPANT_ROLES.find(x => x.id === id)
+  return r ? `${r.emoji} ${r.label}` : '👤 Annen'
+}
+
 const bInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const bCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
@@ -27818,7 +27833,34 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                   </div>
                 ))}
               </div>
-              {ins.participants?.length>0&&<div style={{ marginTop:'12px' }}><div style={{ fontSize:'12px',color:'#64748b',fontWeight:'600',marginBottom:'6px' }}>👥 Deltakere</div><div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>{ins.participants.map((p,i)=><span key={i} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600' }}>{p}</span>)}</div></div>}
+              {ins.purpose && (
+                <div style={{ marginTop:'12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 12px' }}>
+                  <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'700', textTransform:'uppercase', marginBottom:'4px' }}>🎯 Hensikt</div>
+                  <p style={{ margin:0, fontSize:'13px', color:'#78350f', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{ins.purpose}</p>
+                </div>
+              )}
+              {ins.participants?.length>0&&<div style={{ marginTop:'12px' }}><div style={{ fontSize:'12px',color:'#64748b',fontWeight:'600',marginBottom:'6px' }}>👥 Interne deltakere</div><div style={{ display:'flex',flexWrap:'wrap',gap:'6px' }}>{ins.participants.map((p,i)=><span key={i} style={{ background:'#f0fdf4',color:'#059669',border:'1px solid #bbf7d0',borderRadius:'999px',padding:'3px 10px',fontSize:'12px',fontWeight:'600' }}>{p}</span>)}</div></div>}
+              {Array.isArray(ins.external_participants) && ins.external_participants.length > 0 && (
+                <div style={{ marginTop:'12px' }}>
+                  <div style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', marginBottom:'6px' }}>🤝 Eksterne deltakere</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                    {ins.external_participants.map((p, i) => (
+                      <div key={i} style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'10px', padding:'8px 10px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                          <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', background:'white', padding:'2px 8px', borderRadius:'8px', whiteSpace:'nowrap' }}>{getRoleLabel(p.role)}</span>
+                          <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
+                        </div>
+                        {(p.company || p.email) && (
+                          <div style={{ fontSize:'11px', color:'#64748b', marginTop:'3px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                            {p.company && <span>🏢 {p.company}</span>}
+                            {p.email && <span>✉️ {p.email}</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {ins.notes&&<div style={{ marginTop:'12px',background:'#f8fafc',borderRadius:'8px',padding:'10px 12px' }}><div style={{ fontSize:'11px',color:'#94a3b8',fontWeight:'600',marginBottom:'4px' }}>NOTATER</div><p style={{ margin:0,fontSize:'13px',color:'#475569',lineHeight:1.6 }}>{ins.notes}</p></div>}
             </div>
           )}
@@ -27981,12 +28023,34 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
 function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit=!!initial
-  const [form, setForm] = useState({ title:initial?.title||'', date:initial?.date||new Date().toISOString().split('T')[0], location:initial?.location||'', project_id:initial?.project_id||'', status:initial?.status||'planlagt', notes:initial?.notes||'', participants:initial?.participants||[], inspection_type:initial?.inspection_type||'kvalitet' })
+  const [form, setForm] = useState({
+    title: initial?.title || '',
+    purpose: initial?.purpose || '',
+    date: initial?.date || new Date().toISOString().split('T')[0],
+    location: initial?.location || '',
+    project_id: initial?.project_id || '',
+    status: initial?.status || 'planlagt',
+    notes: initial?.notes || '',
+    participants: initial?.participants || [],
+    external_participants: Array.isArray(initial?.external_participants) ? initial.external_participants : [],
+    inspection_type: initial?.inspection_type || 'kvalitet',
+  })
   const [participantInput, setParticipantInput] = useState('')
+  const [extDraft, setExtDraft] = useState({ role:'byggherre', name:'', company:'', email:'' })
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const isMobBM = typeof window !== 'undefined' && window.innerWidth < 768
 
   const addParticipant = () => { if(participantInput.trim()) { set('participants',[...form.participants,participantInput.trim()]); setParticipantInput('') } }
+
+  const addExternal = () => {
+    if (!extDraft.name.trim()) return
+    set('external_participants', [...form.external_participants, { ...extDraft, name: extDraft.name.trim(), company: extDraft.company.trim(), email: extDraft.email.trim() }])
+    setExtDraft({ role: extDraft.role, name:'', company:'', email:'' }) // behold rolle, tøm resten
+  }
+  const removeExternal = (idx) => {
+    set('external_participants', form.external_participants.filter((_, i) => i !== idx))
+  }
 
   const handleSave = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
@@ -28013,6 +28077,10 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
         </div>
         <div style={{ overflowY:'auto',flex:1,padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px' : '20px 24px',display:'flex',flexDirection:'column',gap:'12px',WebkitOverflowScrolling:'touch' }}>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. HMS-befaring uke 12" style={bInp} /></div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>🎯 Hensikt med befaringen</label>
+            <textarea value={form.purpose} onChange={e=>set('purpose',e.target.value)} rows={2} style={{ ...bInp, resize:'vertical' }} placeholder="F.eks. Kvalitetssjekk av betongdekke og kontroll av sikkerhet på byggeplassen" />
+          </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Befaringstype</label><select value={form.inspection_type} onChange={e=>set('inspection_type',e.target.value)} style={bInp}>{BEFARING_TYPES.map(t=><option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}</select></div>
           {[['Dato','date','date',''],['Sted / Lokasjon','location','text','F.eks. Bygning A, 3. etasje']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={bInp} /></div>
@@ -28020,8 +28088,52 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={bInp} placeholder="Ingen" /></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e=>set('status',e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>
-            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Deltakere</label>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>👥 Interne deltakere</label>
             <EmployeeChipPicker values={form.participants || []} onChange={list => set('participants', list)} placeholder="Søk ansatt eller skriv navn" style={{ padding:'9px 12px', fontSize:'14px' }} />
+          </div>
+
+          {/* Eksterne deltakere */}
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>🤝 Eksterne deltakere</label>
+
+            {/* Liste over allerede lagt til eksterne */}
+            {form.external_participants.length > 0 && (
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'10px' }}>
+                {form.external_participants.map((p, idx) => (
+                  <div key={idx} style={{ display:'flex', alignItems:'center', gap:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 10px' }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                        <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', background:'#f5f3ff', padding:'2px 8px', borderRadius:'8px', whiteSpace:'nowrap' }}>{getRoleLabel(p.role)}</span>
+                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{p.name}</span>
+                      </div>
+                      {(p.company || p.email) && (
+                        <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px', display:'flex', gap:'10px', flexWrap:'wrap' }}>
+                          {p.company && <span>🏢 {p.company}</span>}
+                          {p.email && <span>✉️ {p.email}</span>}
+                        </div>
+                      )}
+                    </div>
+                    <button type="button" onClick={() => removeExternal(idx)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'6px 8px', cursor:'pointer', fontSize:'13px', flexShrink:0 }}>🗑️</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add-form for ny ekstern */}
+            <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:'10px', padding:'10px', display:'flex', flexDirection:'column', gap:'8px' }}>
+              <div style={{ display:'grid', gridTemplateColumns: isMobBM ? '1fr' : '1fr 1fr', gap:'8px' }}>
+                <select value={extDraft.role} onChange={e => setExtDraft({...extDraft, role: e.target.value})} style={{ ...bInp, padding:'8px 10px' }}>
+                  {EXTERNAL_PARTICIPANT_ROLES.map(r => <option key={r.id} value={r.id}>{r.emoji} {r.label}</option>)}
+                </select>
+                <input value={extDraft.name} onChange={e => setExtDraft({...extDraft, name: e.target.value})} placeholder="Navn *" style={{ ...bInp, padding:'8px 10px' }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExternal() } }} />
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns: isMobBM ? '1fr' : '1fr 1fr', gap:'8px' }}>
+                <input value={extDraft.company} onChange={e => setExtDraft({...extDraft, company: e.target.value})} placeholder="Firma (valgfritt)" style={{ ...bInp, padding:'8px 10px' }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExternal() } }} />
+                <input type="email" value={extDraft.email} onChange={e => setExtDraft({...extDraft, email: e.target.value})} placeholder="E-post (valgfritt)" style={{ ...bInp, padding:'8px 10px' }} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addExternal() } }} />
+              </div>
+              <button type="button" onClick={addExternal} disabled={!extDraft.name.trim()} style={{ background: extDraft.name.trim() ? '#7c3aed' : '#e2e8f0', color: extDraft.name.trim() ? 'white' : '#94a3b8', border:'none', borderRadius:'10px', padding:'9px 14px', fontSize:'13px', fontWeight:'700', cursor: extDraft.name.trim() ? 'pointer' : 'not-allowed' }}>+ Legg til ekstern deltaker</button>
+            </div>
+            <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>E-post er nyttig hvis du senere vil sende rapport til alle deltakerne</p>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Notater</label><textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...bInp,resize:'none' }} placeholder="Generelle notater fra befaringen..." /></div>
         </div>
