@@ -14241,27 +14241,73 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
                       <span style={{ fontWeight:'700', color:'#059669', fontSize: isMobOE ? '12px' : '14px', whiteSpace:'nowrap' }}>{fmtO(sum)}</span>
                       {chapters.length>1&&<button onClick={()=>removeChapter(ch.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'5px 8px', cursor:'pointer', fontSize:'12px' }}>🗑️</button>}
                     </div>
-                    <div style={{ padding: isMobOE ? '10px' : '14px 18px', overflowX: isMobOE ? 'auto' : 'visible', WebkitOverflowScrolling:'touch' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse', minWidth: isMobOE ? '600px' : 'auto' }}>
-                        <thead><tr>{['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
-                        <tbody>
+                    <div style={{ padding: isMobOE ? '10px' : '14px 18px' }}>
+                      {isMobOE ? (
+                        // ─── Mobil: kort-basert layout for hver post ─────
+                        <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                           {ch.posts.map(p => {
-                            const ls=(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
-                            return <tr key={p.id}>
-                              <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...oInp, width:'55px' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
-                              <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtO(ls)}</td>
-                              <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
-                            </tr>
+                            const ls = (parseFloat(p.qty)||0) * ((parseFloat(p.unitPriceWork)||0) + (parseFloat(p.unitPriceMaterial)||0))
+                            return (
+                              <div key={p.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px', border:'1px solid #f1f5f9' }}>
+                                {/* Beskrivelse + slett-knapp */}
+                                <div style={{ display:'flex', gap:'6px', alignItems:'center', marginBottom:'8px' }}>
+                                  <input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, flex:1, fontWeight:'600' }} />
+                                  {ch.posts.length>1 && <button onClick={()=>removePost(ch.id,p.id)} style={{ background:'#fef2f2', border:'none', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', color:'#dc2626', fontSize:'14px', flexShrink:0 }}>🗑️</button>}
+                                </div>
+                                {/* Mengde + Enhet på samme rad */}
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'8px' }}>
+                                  <div>
+                                    <label style={{ display:'block', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'3px' }}>Mengde</label>
+                                    <input type="number" inputMode="decimal" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'100%', textAlign:'right' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ display:'block', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'3px' }}>Enhet</label>
+                                    <input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...oInp, width:'100%' }} />
+                                  </div>
+                                </div>
+                                {/* Arbeid + Material på samme rad */}
+                                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px', marginBottom:'8px' }}>
+                                  <div>
+                                    <label style={{ display:'block', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'3px' }}>Arbeid kr/enh</label>
+                                    <input type="number" inputMode="decimal" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100%', textAlign:'right' }} />
+                                  </div>
+                                  <div>
+                                    <label style={{ display:'block', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'3px' }}>Material kr/enh</label>
+                                    <input type="number" inputMode="decimal" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100%', textAlign:'right' }} />
+                                  </div>
+                                </div>
+                                {/* Sum-rad */}
+                                <div style={{ background:'#f0fdf4', borderRadius:'8px', padding:'8px 12px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                  <span style={{ fontSize:'11px', fontWeight:'700', color:'#16a34a', textTransform:'uppercase' }}>Sum</span>
+                                  <span style={{ fontSize:'15px', fontWeight:'800', color:'#059669' }}>{fmtO(ls)}</span>
+                                </div>
+                              </div>
+                            )
                           })}
-                        </tbody>
-                      </table>
-                      <div style={{ display:'flex', justifyContent:'space-between', marginTop:'10px' }}>
-                        <button onClick={()=>addPost(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til post</button>
-                        <div style={{ fontSize:'13px', color:'#64748b' }}>Sum: <strong>{fmtO(sum)}</strong></div>
+                        </div>
+                      ) : (
+                        // ─── Desktop: tabell-layout (som før) ─────
+                        <table style={{ width:'100%', borderCollapse:'collapse' }}>
+                          <thead><tr>{['Beskrivelse','Mengde','Enhet','Arbeid kr/enh','Material kr/enh','Sum',''].map((h,i)=><th key={i} style={{ padding:'6px 8px', textAlign:i>=3&&i<=5?'right':'left', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', borderBottom:'1px solid #f1f5f9' }}>{h}</th>)}</tr></thead>
+                          <tbody>
+                            {ch.posts.map(p => {
+                              const ls=(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))
+                              return <tr key={p.id}>
+                                <td style={{ padding:'6px 4px' }}><input value={p.description} onChange={e=>updatePost(ch.id,p.id,'description',e.target.value)} placeholder="Beskriv post" style={{ ...oInp, minWidth:'160px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={p.qty} onChange={e=>updatePost(ch.id,p.id,'qty',e.target.value)} style={{ ...oInp, width:'70px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...oInp, width:'55px' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceWork} onChange={e=>updatePost(ch.id,p.id,'unitPriceWork',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitPriceMaterial} onChange={e=>updatePost(ch.id,p.id,'unitPriceMaterial',e.target.value)} style={{ ...oInp, width:'100px', textAlign:'right' }} /></td>
+                                <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtO(ls)}</td>
+                                <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                              </tr>
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:'12px', flexWrap:'wrap', gap:'8px' }}>
+                        <button onClick={()=>addPost(ch.id)} style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'10px', padding: isMobOE ? '10px 14px' : '7px 14px', fontSize:'13px', fontWeight:'700', cursor:'pointer' }}>+ Legg til post</button>
+                        <div style={{ fontSize:'13px', color:'#64748b' }}>Kapittelsum: <strong style={{ color:'#0f172a' }}>{fmtO(sum)}</strong></div>
                       </div>
                     </div>
                   </div>
@@ -14359,6 +14405,7 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
   const [reminderDays, setReminderDays] = useState(order.reminder_days || 7) // default 7 dager
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
+  const isMobSO = typeof window !== 'undefined' && window.innerWidth < 768
   const { grandTotal } = calcOrder(order.chapters||[], order.global_markup)
 
   const handleSend = async () => {
@@ -14550,14 +14597,14 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMobSO ? 'stretch' : 'center', justifyContent:'center', padding: isMobSO ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send ordrebekreftelse</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobSO ? '0' : '20px', width:'100%', maxWidth: isMobSO ? '100%' : '480px', maxHeight: isMobSO ? '100vh' : '94vh', height: isMobSO ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobSO ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding: isMobSO ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: isMobSO ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>📧 Send ordrebekreftelse</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding: isMobSO ? '16px' : '24px', display:'flex', flexDirection:'column', gap: isMobSO ? '14px' : '16px', overflowY:'auto', flex:1 }}>
           {sent ? (
             <div style={{ textAlign:'center', padding:'20px 0' }}>
               <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
@@ -14622,9 +14669,9 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
                 ⚠️ Kunden mottar en e-post med <strong>Godkjenn/Avvis-knapper</strong> og PDF-vedlegg.
               </div>
 
-              <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-                <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-                <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'📧 Send nå'}</button>
+              <div style={{ display:'flex', justifyContent: isMobSO ? 'stretch' : 'flex-end', flexDirection: isMobSO ? 'column-reverse' : 'row', gap: isMobSO ? '10px' : '12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                <button onClick={onClose} style={{ padding: isMobSO ? '12px 20px' : '10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobSO ? '15px' : '14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+                <button onClick={handleSend} disabled={sending} style={{ padding: isMobSO ? '14px 24px' : '10px 24px', background:sending?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize: isMobSO ? '15px' : '14px', fontWeight:'700' }}>{sending?'Sender...':'📧 Send nå'}</button>
               </div>
             </>
           )}
@@ -14643,6 +14690,7 @@ function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) 
   const [customMessage, setCustomMessage] = useState('')
   const [extendDays, setExtendDays] = useState(7)
   const [sending, setSending] = useState(false)
+  const isMobSR = typeof window !== 'undefined' && window.innerWidth < 768
   const { grandTotal } = calcOrder(order.chapters || [], order.global_markup)
 
   // Beregn hvor mange dager siden første sending
@@ -14742,14 +14790,14 @@ function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) 
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMobSR ? 'stretch' : 'center', justifyContent:'center', padding: isMobSR ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>⚠️ Send purring</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobSR ? '0' : '20px', width:'100%', maxWidth: isMobSR ? '100%' : '520px', maxHeight: isMobSR ? '100vh' : '90vh', height: isMobSR ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobSR ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobSR ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: isMobSR ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>⚠️ Send purring</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+        <div style={{ padding: isMobSR ? '16px' : '24px', display:'flex', flexDirection:'column', gap: isMobSR ? '14px' : '14px', overflowY:'auto', flex:1 }}>
           <div style={{ background:'#fef3c7', border:'1px solid #fbbf24', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#92400e' }}>
             {daysSince !== null
               ? `Sist sendt for ${daysSince} dager siden. Purring inneholder samme innhold som opprinnelig ordre.`
@@ -14786,9 +14834,9 @@ function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) 
             </div>
           </div>
 
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#fca5a5':'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'⚠️ Send purring'}</button>
+          <div style={{ display:'flex', justifyContent: isMobSR ? 'stretch' : 'flex-end', flexDirection: isMobSR ? 'column-reverse' : 'row', gap: isMobSR ? '10px' : '12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding: isMobSR ? '12px 20px' : '10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobSR ? '15px' : '14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSend} disabled={sending} style={{ padding: isMobSR ? '14px 24px' : '10px 24px', background:sending?'#fca5a5':'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize: isMobSR ? '15px' : '14px', fontWeight:'700' }}>{sending?'Sender...':'⚠️ Send purring'}</button>
           </div>
         </div>
       </div>
@@ -14804,6 +14852,7 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
   const [email, setEmail] = useState(order.customer_email || '')
   const [reason, setReason] = useState('') // f.eks. "Kunde mistet forrige e-post"
   const [sending, setSending] = useState(false)
+  const isMobRO = typeof window !== 'undefined' && window.innerWidth < 768
   const { grandTotal } = calcOrder(order.chapters || [], order.global_markup)
 
   const handleSend = async () => {
@@ -14897,14 +14946,14 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
   }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMobRO ? 'stretch' : 'center', justifyContent:'center', padding: isMobRO ? '0' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔁 Send på nytt</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+      <div style={{ position:'relative', background:'white', borderRadius: isMobRO ? '0' : '20px', width:'100%', maxWidth: isMobRO ? '100%' : '480px', maxHeight: isMobRO ? '100vh' : '90vh', height: isMobRO ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobRO ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding: isMobRO ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize: isMobRO ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>🔁 Send på nytt</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+        <div style={{ padding: isMobRO ? '16px' : '24px', display:'flex', flexDirection:'column', gap:'14px', overflowY:'auto', flex:1 }}>
           <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#1e40af' }}>
             Sender samme ordre på nytt. Innholdet er uendret. Godkjenn/Avvis-knappene fungerer som før.
           </div>
@@ -14919,9 +14968,9 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
             <input type="text" value={reason} onChange={e => setReason(e.target.value)} placeholder="F.eks. 'Opprinnelig e-post ble ikke mottatt'" style={oInp} />
           </div>
 
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSend} disabled={sending} style={{ padding:'10px 24px', background:sending?'#c4b5fd':'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{sending?'Sender...':'🔁 Send på nytt'}</button>
+          <div style={{ display:'flex', justifyContent: isMobRO ? 'stretch' : 'flex-end', flexDirection: isMobRO ? 'column-reverse' : 'row', gap: isMobRO ? '10px' : '12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+            <button onClick={onClose} style={{ padding: isMobRO ? '12px 20px' : '10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobRO ? '15px' : '14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            <button onClick={handleSend} disabled={sending} style={{ padding: isMobRO ? '14px 24px' : '10px 24px', background:sending?'#c4b5fd':'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize: isMobRO ? '15px' : '14px', fontWeight:'700' }}>{sending?'Sender...':'🔁 Send på nytt'}</button>
           </div>
         </div>
       </div>
@@ -37949,6 +37998,7 @@ function OrdreViewPage() {
   const [showRejectForm, setShowRejectForm] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [submittingReject, setSubmittingReject] = useState(false)
+  const isMobV = typeof window !== 'undefined' && window.innerWidth < 768
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -38102,7 +38152,7 @@ function OrdreViewPage() {
             )}
 
             {/* Info-kort */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', marginBottom:'20px' }}>
+            <div style={{ display:'grid', gridTemplateColumns: isMobV ? '1fr' : '1fr 1fr', gap:'12px', marginBottom:'20px' }}>
               <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px' }}>
                 <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Kunde</div>
                 <div style={{ fontSize:'13px', color:'#0f172a' }}>{order.customer_name || '—'}</div>
@@ -38114,42 +38164,70 @@ function OrdreViewPage() {
                 </div>
               )}
               {order.payment_terms && (
-                <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', gridColumn:'span 2' }}>
+                <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px', gridColumn: isMobV ? 'auto' : 'span 2' }}>
                   <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Betalingsbetingelser</div>
                   <div style={{ fontSize:'13px', color:'#0f172a' }}>{order.payment_terms}</div>
                 </div>
               )}
             </div>
 
-            {/* Poster-tabell */}
+            {/* Poster — mobile: kort-stil, desktop: tabell */}
             {(order.chapters || []).map((ch, chIdx) => (
               <div key={ch.id || chIdx} style={{ marginBottom:'16px' }}>
                 <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
                   {String(chIdx + 1).padStart(2, '0')}. {ch.name || 'Kapittel'}
                 </h3>
                 <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                  <div style={{ background:'#f8fafc', padding:'8px 12px', display:'grid', gridTemplateColumns:'2fr 60px 70px 70px 80px', gap:'8px', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>
-                    <div>Beskrivelse</div>
-                    <div style={{ textAlign:'right' }}>Mengde</div>
-                    <div style={{ textAlign:'right' }}>Arb.</div>
-                    <div style={{ textAlign:'right' }}>Mat.</div>
-                    <div style={{ textAlign:'right' }}>Sum</div>
-                  </div>
-                  {(ch.posts || []).map((p, pIdx) => {
-                    const qty = parseFloat(p.qty) || 0
-                    const pw = parseFloat(p.unitPriceWork) || 0
-                    const pm = parseFloat(p.unitPriceMaterial) || 0
-                    const sum = qty * (pw + pm)
-                    return (
-                      <div key={p.id || pIdx} style={{ padding:'10px 12px', display:'grid', gridTemplateColumns:'2fr 60px 70px 70px 80px', gap:'8px', fontSize:'13px', borderTop: pIdx === 0 ? '1px solid #e2e8f0' : '1px solid #f8fafc' }}>
-                        <div style={{ color:'#0f172a' }}>{p.description || '—'}</div>
-                        <div style={{ textAlign:'right', color:'#64748b' }}>{qty} {p.unit || 'stk'}</div>
-                        <div style={{ textAlign:'right', color:'#64748b' }}>{Math.round(pw).toLocaleString('nb-NO')}</div>
-                        <div style={{ textAlign:'right', color:'#64748b' }}>{Math.round(pm).toLocaleString('nb-NO')}</div>
-                        <div style={{ textAlign:'right', fontWeight:'700', color:'#059669' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</div>
+                  {isMobV ? (
+                    // Mobil: kort per post
+                    <div style={{ display:'flex', flexDirection:'column' }}>
+                      {(ch.posts || []).map((p, pIdx) => {
+                        const qty = parseFloat(p.qty) || 0
+                        const pw = parseFloat(p.unitPriceWork) || 0
+                        const pm = parseFloat(p.unitPriceMaterial) || 0
+                        const sum = qty * (pw + pm)
+                        return (
+                          <div key={p.id || pIdx} style={{ padding:'12px', borderTop: pIdx === 0 ? 'none' : '1px solid #f1f5f9' }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'10px', marginBottom:'6px' }}>
+                              <span style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', flex:1 }}>{p.description || '—'}</span>
+                              <span style={{ fontSize:'14px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</span>
+                            </div>
+                            <div style={{ fontSize:'12px', color:'#64748b', display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                              <span>{qty} {p.unit || 'stk'}</span>
+                              {pw > 0 && <span>Arb: {Math.round(pw).toLocaleString('nb-NO')}</span>}
+                              {pm > 0 && <span>Mat: {Math.round(pm).toLocaleString('nb-NO')}</span>}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ) : (
+                    // Desktop: tabell
+                    <>
+                      <div style={{ background:'#f8fafc', padding:'8px 12px', display:'grid', gridTemplateColumns:'2fr 60px 70px 70px 80px', gap:'8px', fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>
+                        <div>Beskrivelse</div>
+                        <div style={{ textAlign:'right' }}>Mengde</div>
+                        <div style={{ textAlign:'right' }}>Arb.</div>
+                        <div style={{ textAlign:'right' }}>Mat.</div>
+                        <div style={{ textAlign:'right' }}>Sum</div>
                       </div>
-                    )
-                  })}
+                      {(ch.posts || []).map((p, pIdx) => {
+                        const qty = parseFloat(p.qty) || 0
+                        const pw = parseFloat(p.unitPriceWork) || 0
+                        const pm = parseFloat(p.unitPriceMaterial) || 0
+                        const sum = qty * (pw + pm)
+                        return (
+                          <div key={p.id || pIdx} style={{ padding:'10px 12px', display:'grid', gridTemplateColumns:'2fr 60px 70px 70px 80px', gap:'8px', fontSize:'13px', borderTop: pIdx === 0 ? '1px solid #e2e8f0' : '1px solid #f8fafc' }}>
+                            <div style={{ color:'#0f172a' }}>{p.description || '—'}</div>
+                            <div style={{ textAlign:'right', color:'#64748b' }}>{qty} {p.unit || 'stk'}</div>
+                            <div style={{ textAlign:'right', color:'#64748b' }}>{Math.round(pw).toLocaleString('nb-NO')}</div>
+                            <div style={{ textAlign:'right', color:'#64748b' }}>{Math.round(pm).toLocaleString('nb-NO')}</div>
+                            <div style={{ textAlign:'right', fontWeight:'700', color:'#059669' }}>{Math.round(sum).toLocaleString('nb-NO')} kr</div>
+                          </div>
+                        )
+                      })}
+                    </>
+                  )}
                 </div>
               </div>
             ))}
@@ -38166,8 +38244,8 @@ function OrdreViewPage() {
               <div style={{ marginTop:'24px', display:'flex', flexDirection:'column', gap:'10px' }}>
                 <p style={{ margin:'0 0 4px', textAlign:'center', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Gi ditt svar</p>
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
-                  <button onClick={handleApprove} style={{ padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700' }}>✓ Godkjenn</button>
-                  <button onClick={() => setShowRejectForm(true)} style={{ padding:'14px', background:'#dc2626', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'15px', fontWeight:'700' }}>✗ Avvis</button>
+                  <button onClick={handleApprove} style={{ padding: isMobV ? '18px' : '14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: isMobV ? '17px' : '15px', fontWeight:'700' }}>✓ Godkjenn</button>
+                  <button onClick={() => setShowRejectForm(true)} style={{ padding: isMobV ? '18px' : '14px', background:'#dc2626', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: isMobV ? '17px' : '15px', fontWeight:'700' }}>✗ Avvis</button>
                 </div>
               </div>
             )}
