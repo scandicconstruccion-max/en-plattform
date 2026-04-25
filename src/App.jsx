@@ -28703,7 +28703,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
     }
   }, [])
 
-  const buildEmailHtml = () => {
+  const buildEmailHtml = (linkUrl = null, recipientName = '') => {
     const items = observations.map(obs => {
       const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
       const imgs = (Array.isArray(obs.images) ? obs.images : []).slice(0, 4)
@@ -28721,6 +28721,14 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
       `
     }).join('')
 
+    const linkBlock = linkUrl ? `
+      <div style="background:#ecfdf5;border:2px solid #059669;border-radius:12px;padding:18px;margin:0 0 18px;text-align:center">
+        <p style="margin:0 0 12px;color:#064e3b;font-size:14px;font-weight:600">${recipientName ? recipientName + ' — k' : 'K'}likk her for å markere punkter som utbedret og laste opp dokumentasjon:</p>
+        <a href="${linkUrl}" style="display:inline-block;background:#059669;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">📋 Åpne befaring</a>
+        <p style="margin:12px 0 0;color:#065f46;font-size:11px">Lenken er gyldig i 15 dager. Ingen innlogging nødvendig.</p>
+      </div>
+    ` : ''
+
     return `
 <div style="font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:0 auto;padding:20px;background:#f8fafc">
   <div style="background:#059669;color:white;padding:18px 24px;border-radius:12px 12px 0 0">
@@ -28729,6 +28737,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
   </div>
   <div style="background:white;padding:18px 24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
     ${message ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;color:#1e3a8a;font-size:14px;line-height:1.5">${message.replace(/\n/g,'<br>')}</div>` : ''}
+    ${linkBlock}
     <h2 style="margin:0 0 12px;font-size:16px;color:#0f172a">${observations.length} punkt${observations.length!==1?'er':''}</h2>
     ${items}
     <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
@@ -28756,7 +28765,34 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
     setSending(true)
     try {
-      const html = buildEmailHtml()
+      const isExternal = recipientMode !== 'intern'
+      let viewLink = null
+      const normalizedEmail = email.trim().toLowerCase()
+
+      if (isExternal) {
+        // 1) Generer/forny view-token via DB-funksjon
+        const { data: tokenData, error: tokenErr } = await supabase
+          .rpc('ensure_inspection_view_token', { p_inspection_id: inspection.id })
+        if (tokenErr) throw new Error('Kunne ikke generere lenke: ' + tokenErr.message)
+        const token = tokenData
+
+        // 2) Tildel observasjonene til mottakers e-post (slik at view-filter fungerer)
+        // Bare overskriv assigned_email — la assigned_to_user_id stå urørt.
+        for (const obs of observations) {
+          if (!obs.assigned_email || obs.assigned_email.toLowerCase() !== normalizedEmail) {
+            await supabase
+              .from('inspection_observations')
+              .update({ assigned_email: normalizedEmail, assigned_role: obs.assigned_role || 'UE' })
+              .eq('id', obs.id)
+          }
+        }
+
+        // 3) Bygg lenke
+        const baseUrl = window.location.origin
+        viewLink = `${baseUrl}/befaring-view?token=${token}&email=${encodeURIComponent(normalizedEmail)}`
+      }
+
+      const html = buildEmailHtml(viewLink, name)
       const subject = `Befaring: ${inspection.title} — ${observations.length} punkt${observations.length!==1?'er':''}`
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
@@ -28765,13 +28801,13 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
       })
       if (!fnRes.ok) throw new Error('Sending feilet (' + fnRes.status + ')')
 
-      const sentEntry = { to: email, name: name || null, sent_at: new Date().toISOString(), sent_by: user?.id || null, message: message || null }
+      const sentEntry = { to: email, name: name || null, sent_at: new Date().toISOString(), sent_by: user?.id || null, message: message || null, link_sent: !!viewLink }
       for (const obs of observations) {
         const newLog = [...(Array.isArray(obs.sent_log) ? obs.sent_log : []), sentEntry]
         await supabase.from('inspection_observations').update({ sent_log: newLog }).eq('id', obs.id)
       }
 
-      alert(`✓ Sendt ${observations.length} punkt${observations.length!==1?'er':''} til ${email}`)
+      alert(`✓ Sendt ${observations.length} punkt${observations.length!==1?'er':''} til ${email}${viewLink ? ' (med lenke)' : ''}`)
       onSent()
     } catch(e) {
       alert('Feil: ' + e.message)
@@ -28848,6 +28884,17 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
             <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>💬 Melding (valgfritt)</label>
             <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="F.eks. Vennligst utbedr disse punktene innen fredag..." style={{ ...bInp, resize:'vertical' }} />
           </div>
+
+          {recipientMode !== 'intern' && (
+            <div style={{ background:'#ecfdf5', border:'1px solid #6ee7b7', borderRadius:'10px', padding:'10px 12px' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', gap:'8px' }}>
+                <span style={{ fontSize:'18px', flexShrink:0 }}>🔗</span>
+                <div style={{ fontSize:'12px', color:'#064e3b', lineHeight:1.5 }}>
+                  <strong>Mottaker får en lenke</strong> for å markere punkter som utbedret og laste opp dokumentasjon — uten å logge inn. Lenken er gyldig i 15 dager.
+                </div>
+              </div>
+            </div>
+          )}
 
           <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 12px' }}>
             <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>{observations.length} valgte punkter</div>
@@ -39775,6 +39822,544 @@ function OrdreViewPage() {
   )
 }
 
+// ─── BEFARING VIEW PAGE (ekstern UE-tilgang via token) ─────────────────────────
+// Mobil-først side for UE som har fått e-postlenke. Ingen innlogging.
+// Validering skjer via Edge Functions: befaring-view-fetch, befaring-view-resolve,
+// befaring-view-upload-url. Token + email i URL.
+// ───────────────────────────────────────────────────────────────────────────────
+
+const BV_OBS_CATEGORY = {
+  observasjon:    { label:'Observasjon',   emoji:'📝', color:'#0369a1', bg:'#e0f2fe', border:'#bae6fd' },
+  avvik:          { label:'Avvik',          emoji:'⚠️', color:'#b91c1c', bg:'#fef2f2', border:'#fecaca' },
+  tilbud_onske:   { label:'Tilbudsønske',  emoji:'💡', color:'#a16207', bg:'#fefce8', border:'#fde68a' },
+  mal:            { label:'Måling',         emoji:'📏', color:'#7c3aed', bg:'#f5f3ff', border:'#ddd6fe' },
+  note:           { label:'Notat',          emoji:'🗒️', color:'#475569', bg:'#f1f5f9', border:'#cbd5e1' },
+}
+
+const BV_STATUS = {
+  apen:     { label:'Åpen',         emoji:'🔵', color:'#2563eb', bg:'#eff6ff' },
+  pagar:    { label:'Pågår',        emoji:'🟡', color:'#d97706', bg:'#fffbeb' },
+  utbedret: { label:'Utbedret',     emoji:'🟢', color:'#059669', bg:'#ecfdf5' },
+  godkjent: { label:'Godkjent',     emoji:'✅', color:'#15803d', bg:'#dcfce7' },
+  avvist:   { label:'Avvist',       emoji:'🔴', color:'#dc2626', bg:'#fef2f2' },
+}
+
+function BefaringViewPage() {
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [data, setData] = useState(null)
+  const [token, setToken] = useState('')
+  const [email, setEmail] = useState('')
+  const [resolverName, setResolverName] = useState('')
+  const [activeObs, setActiveObs] = useState(null)
+  const [filter, setFilter] = useState('apen_pagar') // apen_pagar | utbedret | godkjent | alle
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const t = params.get('token')
+    const e = params.get('email')
+    if (!t || !e) { setError('Ugyldig lenke — mangler token eller e-post'); setLoading(false); return }
+    setToken(t)
+    setEmail(e)
+    fetchData(t, e)
+  }, [])
+
+  const fetchData = async (t, e) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-view-fetch`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ token: t, email: e }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Kunne ikke hente data')
+      setData(json)
+      // Last lagret navn fra localStorage
+      const savedName = localStorage.getItem(`bv-name-${e.toLowerCase()}`)
+      if (savedName) setResolverName(savedName)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const refresh = () => fetchData(token, email)
+
+  if (loading) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
+        <div style={{ textAlign:'center' }}>
+          <div style={{ width:'44px', height:'44px', border:'4px solid #e2e8f0', borderTop:'4px solid #059669', borderRadius:'50%', margin:'0 auto 16px', animation:'spin 1s linear infinite' }} />
+          <p style={{ color:'#64748b', fontSize:'14px' }}>Laster befaring...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', fontFamily:'system-ui,sans-serif', background:'#f8fafc', padding:'20px' }}>
+        <div style={{ background:'white', borderRadius:'16px', padding:'32px', maxWidth:'440px', textAlign:'center', boxShadow:'0 1px 3px rgba(0,0,0,0.08)' }}>
+          <div style={{ fontSize:'56px', marginBottom:'16px' }}>⚠️</div>
+          <h2 style={{ margin:'0 0 12px', color:'#0f172a', fontSize:'20px' }}>Kunne ikke åpne befaring</h2>
+          <p style={{ margin:0, color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>{error}</p>
+          <p style={{ margin:'16px 0 0', color:'#94a3b8', fontSize:'12px' }}>Kontakt byggleder for ny lenke.</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!data) return null
+
+  const { inspection, project, observations } = data
+
+  // Filter
+  const filteredObs = observations.filter(o => {
+    if (filter === 'alle') return true
+    if (filter === 'apen_pagar') return o.status === 'apen' || o.status === 'pagar' || o.status === 'avvist'
+    if (filter === 'utbedret') return o.status === 'utbedret'
+    if (filter === 'godkjent') return o.status === 'godkjent'
+    return true
+  })
+
+  const counts = {
+    apen_pagar: observations.filter(o => o.status === 'apen' || o.status === 'pagar' || o.status === 'avvist').length,
+    utbedret: observations.filter(o => o.status === 'utbedret').length,
+    godkjent: observations.filter(o => o.status === 'godkjent').length,
+    alle: observations.length,
+  }
+
+  return (
+    <div style={{ minHeight:'100vh', background:'#f8fafc', fontFamily:'system-ui,sans-serif', paddingBottom:'env(safe-area-inset-bottom)' }}>
+      {/* Header */}
+      <div style={{ background:'#059669', color:'white', padding:'20px 16px', position:'sticky', top:0, zIndex:10 }}>
+        <div style={{ maxWidth:'720px', margin:'0 auto' }}>
+          <p style={{ margin:'0 0 4px', fontSize:'11px', opacity:0.85, fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.5px' }}>Befaring</p>
+          <h1 style={{ margin:'0 0 6px', fontSize:'20px', fontWeight:'800', lineHeight:1.2 }}>{inspection.title || 'Uten tittel'}</h1>
+          <p style={{ margin:0, fontSize:'12px', opacity:0.9 }}>
+            📅 {inspection.date}
+            {inspection.location && ` · 📍 ${inspection.location}`}
+            {project && ` · 🏗️ ${project.name}`}
+          </p>
+          <p style={{ margin:'8px 0 0', fontSize:'11px', opacity:0.85 }}>👤 Innlogget som <strong>{email}</strong></p>
+        </div>
+      </div>
+
+      <div style={{ maxWidth:'720px', margin:'0 auto', padding:'14px' }}>
+
+        {/* Navn-felt */}
+        <div style={{ background:'white', borderRadius:'12px', padding:'14px', marginBottom:'14px', border:'1px solid #e2e8f0' }}>
+          <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#64748b', marginBottom:'6px', textTransform:'uppercase' }}>Ditt navn</label>
+          <input
+            value={resolverName}
+            onChange={e => { setResolverName(e.target.value); localStorage.setItem(`bv-name-${email.toLowerCase()}`, e.target.value) }}
+            placeholder="Skriv navnet ditt så byggleder ser hvem som har utbedret"
+            style={{ width:'100%', padding:'10px 12px', fontSize:'14px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'#f8fafc', boxSizing:'border-box' }}
+          />
+        </div>
+
+        {/* Filter-chips */}
+        <div style={{ display:'flex', gap:'6px', overflowX:'auto', marginBottom:'12px', paddingBottom:'4px', WebkitOverflowScrolling:'touch' }}>
+          {[
+            { id:'apen_pagar', label:'Skal utbedres', count:counts.apen_pagar, color:'#d97706', bg:'#fffbeb' },
+            { id:'utbedret',   label:'Sendt inn',     count:counts.utbedret,    color:'#059669', bg:'#ecfdf5' },
+            { id:'godkjent',   label:'Godkjent',      count:counts.godkjent,    color:'#15803d', bg:'#dcfce7' },
+            { id:'alle',       label:'Alle',          count:counts.alle,        color:'#475569', bg:'#f1f5f9' },
+          ].map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              padding:'8px 14px',
+              background: filter === f.id ? f.color : f.bg,
+              color: filter === f.id ? 'white' : f.color,
+              border: filter === f.id ? `1px solid ${f.color}` : `1px solid ${f.color}22`,
+              borderRadius:'20px',
+              fontSize:'12px',
+              fontWeight:'700',
+              cursor:'pointer',
+              whiteSpace:'nowrap',
+              flexShrink:0,
+            }}>
+              {f.label} <span style={{ opacity:0.85 }}>({f.count})</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Observasjons-liste */}
+        {filteredObs.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'12px', padding:'40px 20px', textAlign:'center', border:'1px solid #e2e8f0' }}>
+            <div style={{ fontSize:'40px', marginBottom:'8px' }}>📭</div>
+            <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Ingen punkter i denne kategorien.</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            {filteredObs.map(obs => (
+              <BefaringViewObsCard
+                key={obs.id}
+                observation={obs}
+                onOpen={() => setActiveObs(obs)}
+              />
+            ))}
+          </div>
+        )}
+
+        <p style={{ margin:'24px 0 8px', textAlign:'center', color:'#94a3b8', fontSize:'11px' }}>
+          🔒 Lenken er gyldig i 15 dager · En Plattform
+        </p>
+      </div>
+
+      {activeObs && (
+        <BefaringViewObsDetail
+          observation={activeObs}
+          token={token}
+          email={email}
+          resolverName={resolverName}
+          onClose={() => setActiveObs(null)}
+          onSaved={() => { setActiveObs(null); refresh() }}
+        />
+      )}
+    </div>
+  )
+}
+
+// Kort som viser én observasjon i listen
+function BefaringViewObsCard({ observation, onOpen }) {
+  const cat = BV_OBS_CATEGORY[observation.category] || BV_OBS_CATEGORY.observasjon
+  const statusCfg = BV_STATUS[observation.status] || BV_STATUS.apen
+  const firstImg = Array.isArray(observation.images) && observation.images[0]?.url
+  const canResolve = observation.status === 'apen' || observation.status === 'pagar' || observation.status === 'avvist'
+
+  return (
+    <div onClick={onOpen} style={{
+      background:'white',
+      borderRadius:'12px',
+      border:'1px solid #e2e8f0',
+      overflow:'hidden',
+      cursor:'pointer',
+      boxShadow:'0 1px 2px rgba(0,0,0,0.04)',
+    }}>
+      <div style={{ display:'flex', gap:'12px', padding:'12px' }}>
+        {firstImg && (
+          <div style={{ width:'80px', height:'80px', flexShrink:0, borderRadius:'8px', overflow:'hidden', background:'#f1f5f9' }}>
+            <img src={firstImg} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+          </div>
+        )}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{observation.sequence_number}</span>
+            <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+            <span style={{ background:statusCfg.bg, color:statusCfg.color, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{statusCfg.emoji} {statusCfg.label}</span>
+          </div>
+          <p style={{ margin:'0 0 4px', fontSize:'13px', fontWeight:'600', color:'#0f172a', lineHeight:1.4, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>
+            {observation.title || observation.description || '(uten tekst)'}
+          </p>
+          {observation.location_ref && (
+            <p style={{ margin:0, fontSize:'11px', color:'#2563eb' }}>📍 {observation.location_ref}</p>
+          )}
+          {observation.due_date && (
+            <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#d97706', fontWeight:'600' }}>📅 Frist: {observation.due_date}</p>
+          )}
+        </div>
+      </div>
+      {canResolve && (
+        <div style={{ padding:'8px 12px', background:'#f8fafc', borderTop:'1px solid #f1f5f9', fontSize:'12px', color:'#059669', fontWeight:'700', textAlign:'center' }}>
+          {observation.status === 'avvist' ? '🔄 Trykk for å sende inn på nytt' : '✓ Trykk for å markere som utbedret'}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Detalj-modal
+function BefaringViewObsDetail({ observation, token, email, resolverName, onClose, onSaved }) {
+  const [note, setNote] = useState('')
+  const [images, setImages] = useState([])
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const cameraRef = React.useRef(null)
+  const galleryRef = React.useRef(null)
+
+  const cat = BV_OBS_CATEGORY[observation.category] || BV_OBS_CATEGORY.observasjon
+  const statusCfg = BV_STATUS[observation.status] || BV_STATUS.apen
+  const canResolve = observation.status === 'apen' || observation.status === 'pagar' || observation.status === 'avvist'
+  const allImages = Array.isArray(observation.images) ? observation.images : []
+
+  // Hjelper: kompresjon
+  const compressImg = async (file) => {
+    return new Promise((resolve, reject) => {
+      const img = new Image()
+      const url = URL.createObjectURL(file)
+      img.onload = () => {
+        try {
+          let { width, height } = img
+          const maxDim = 1600
+          if (width > maxDim || height > maxDim) {
+            if (width > height) { height = Math.round(height * maxDim / width); width = maxDim }
+            else                { width = Math.round(width * maxDim / height); height = maxDim }
+          }
+          const canvas = document.createElement('canvas')
+          canvas.width = width; canvas.height = height
+          canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+          canvas.toBlob(blob => {
+            URL.revokeObjectURL(url)
+            blob ? resolve(blob) : reject(new Error('Komprimering feilet'))
+          }, 'image/jpeg', 0.82)
+        } catch(e) { URL.revokeObjectURL(url); reject(e) }
+      }
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Kunne ikke lese bilde')) }
+      img.src = url
+    })
+  }
+
+  const handleFiles = async (files) => {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    try {
+      const arr = Array.from(files)
+      const newImgs = []
+      for (const file of arr) {
+        const blob = await compressImg(file).catch(() => file)
+
+        // Hent signed upload URL fra Edge Function
+        const urlRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-view-upload-url`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            token,
+            email,
+            observation_id: observation.id,
+            filename: file.name || 'image.jpg',
+            content_type: 'image/jpeg',
+          }),
+        })
+        const urlJson = await urlRes.json()
+        if (!urlRes.ok) throw new Error(urlJson.error || 'Kunne ikke få opplastings-URL')
+
+        // Last opp direkte til signed URL
+        const upRes = await fetch(urlJson.signedUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/jpeg' },
+          body: blob,
+        })
+        if (!upRes.ok) throw new Error('Opplasting feilet (' + upRes.status + ')')
+
+        newImgs.push({ url: urlJson.publicUrl, uploaded_at: new Date().toISOString() })
+      }
+      setImages(prev => [...prev, ...newImgs])
+    } catch (e) {
+      alert('Kunne ikke laste opp: ' + e.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const removeImage = idx => setImages(prev => prev.filter((_, i) => i !== idx))
+
+  const handleSubmit = async () => {
+    if (images.length === 0) return alert('Du må legge til minst ett bilde av utbedringen.')
+    if (!note.trim()) return alert('Skriv en kort beskrivelse av hva som ble gjort.')
+    setSaving(true)
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-view-resolve`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({
+          token,
+          email,
+          observation_id: observation.id,
+          note: note.trim(),
+          images,
+          resolver_name: resolverName || null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || 'Kunne ikke registrere utbedring')
+      alert('✅ Sendt! Byggleder får varsel og vil godkjenne så snart som mulig.')
+      onSaved()
+    } catch (e) {
+      alert('Feil: ' + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100 }} />
+      <div style={{
+        position:'fixed', inset:0, background:'white', zIndex:101,
+        display:'flex', flexDirection:'column', fontFamily:'system-ui,sans-serif',
+      }}>
+        {/* Header */}
+        <div style={{ padding:'14px 16px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0, background:'white' }}>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'26px', cursor:'pointer', color:'#64748b', padding:0, lineHeight:1 }}>×</button>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{observation.sequence_number}</span>
+              <span style={{ background:cat.bg, color:cat.color, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+              <span style={{ background:statusCfg.bg, color:statusCfg.color, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{statusCfg.emoji} {statusCfg.label}</span>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ flex:1, overflowY:'auto', padding:'14px 16px' }}>
+          {/* Beskrivelse fra byggleder */}
+          <div style={{ marginBottom:'16px' }}>
+            <h3 style={{ margin:'0 0 8px', fontSize:'15px', fontWeight:'800', color:'#0f172a' }}>{observation.title || 'Punkt'}</h3>
+            {observation.description && (
+              <p style={{ margin:0, fontSize:'14px', color:'#334155', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{observation.description}</p>
+            )}
+            {observation.location_ref && (
+              <p style={{ margin:'8px 0 0', fontSize:'13px', color:'#2563eb', fontWeight:'600' }}>📍 {observation.location_ref}</p>
+            )}
+            {observation.due_date && (
+              <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#d97706', fontWeight:'600' }}>📅 Frist: {observation.due_date}</p>
+            )}
+          </div>
+
+          {/* Bilder fra byggleder */}
+          {allImages.length > 0 && (
+            <div style={{ marginBottom:'16px' }}>
+              <p style={{ margin:'0 0 8px', fontSize:'12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>📷 Bilder fra befaring</p>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(100px, 1fr))', gap:'6px' }}>
+                {allImages.map((img, idx) => (
+                  <a key={idx} href={img.url} target="_blank" rel="noopener noreferrer" style={{ aspectRatio:'1/1', borderRadius:'8px', overflow:'hidden', background:'#f1f5f9' }}>
+                    <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tidligere avvisning */}
+          {observation.status === 'avvist' && observation.rejection_note && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'12px', marginBottom:'16px' }}>
+              <p style={{ margin:'0 0 4px', fontSize:'12px', fontWeight:'700', color:'#991b1b', textTransform:'uppercase' }}>🔴 Tidligere avvist</p>
+              <p style={{ margin:0, fontSize:'13px', color:'#7f1d1d', lineHeight:1.5 }}>{observation.rejection_note}</p>
+            </div>
+          )}
+
+          {/* Tidligere utbedring */}
+          {observation.status === 'utbedret' && (
+            <div style={{ background:'#ecfdf5', border:'1px solid #86efac', borderRadius:'10px', padding:'12px', marginBottom:'16px' }}>
+              <p style={{ margin:'0 0 4px', fontSize:'12px', fontWeight:'700', color:'#15803d', textTransform:'uppercase' }}>🟢 Sendt inn — venter godkjenning</p>
+              {observation.resolution_note && <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#064e3b', lineHeight:1.5 }}>{observation.resolution_note}</p>}
+              {Array.isArray(observation.resolution_images) && observation.resolution_images.length > 0 && (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(80px, 1fr))', gap:'4px' }}>
+                  {observation.resolution_images.map((im, i) => (
+                    <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" style={{ aspectRatio:'1/1', borderRadius:'6px', overflow:'hidden' }}>
+                      <img src={im.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Godkjent */}
+          {observation.status === 'godkjent' && (
+            <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'10px', padding:'12px', marginBottom:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'32px', marginBottom:'4px' }}>✅</div>
+              <p style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#15803d' }}>Punktet er godkjent</p>
+              {observation.approval_note && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#166534' }}>{observation.approval_note}</p>}
+            </div>
+          )}
+
+          {/* Skjema for utbedring */}
+          {canResolve && (
+            <div style={{ background:'#f0fdf4', border:'2px solid #86efac', borderRadius:'12px', padding:'14px', marginBottom:'16px' }}>
+              <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'800', color:'#15803d' }}>
+                {observation.status === 'avvist' ? '🔄 Send inn på nytt' : '✅ Markér som utbedret'}
+              </h3>
+
+              {/* Bilder */}
+              <div style={{ marginBottom:'14px' }}>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+                  📷 Bilder av utbedringen <span style={{ color:'#dc2626' }}>*</span>
+                </label>
+                <p style={{ margin:'0 0 8px', fontSize:'11px', color:'#64748b' }}>Minst ett bilde påkrevd som dokumentasjon.</p>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:'8px' }}>
+                  {images.map((img, idx) => (
+                    <div key={idx} style={{ position:'relative', aspectRatio:'1/1', borderRadius:'10px', overflow:'hidden', background:'#f1f5f9' }}>
+                      <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                      <button onClick={() => removeImage(idx)} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
+                    </div>
+                  ))}
+                  <button onClick={() => cameraRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #86efac', borderRadius:'10px', background:'white', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#15803d', fontSize:'11px', fontWeight:'700' }}>
+                    <span style={{ fontSize:'24px' }}>📷</span>
+                    {uploading ? 'Laster...' : 'Kamera'}
+                  </button>
+                  <button onClick={() => galleryRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #86efac', borderRadius:'10px', background:'white', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#15803d', fontSize:'11px', fontWeight:'700' }}>
+                    <span style={{ fontSize:'24px' }}>🖼️</span>
+                    Galleri
+                  </button>
+                </div>
+                <input ref={cameraRef} type="file" accept="image/*" capture="environment" multiple style={{ display:'none' }} onChange={e => { handleFiles(e.target.files); e.target.value=''; }} />
+                <input ref={galleryRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { handleFiles(e.target.files); e.target.value=''; }} />
+              </div>
+
+              {/* Notat */}
+              <div>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+                  📝 Beskrivelse av utbedring <span style={{ color:'#dc2626' }}>*</span>
+                </label>
+                <textarea
+                  value={note}
+                  onChange={e => setNote(e.target.value)}
+                  rows={3}
+                  placeholder="Hva ble gjort for å utbedre..."
+                  style={{ width:'100%', padding:'10px 12px', fontSize:'14px', border:'1px solid #86efac', borderRadius:'8px', background:'white', boxSizing:'border-box', resize:'vertical', fontFamily:'inherit' }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        {canResolve && (
+          <div style={{ padding:'12px 16px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
+            {(images.length === 0 || !note.trim()) && !saving && !uploading && (
+              <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'8px 10px', marginBottom:'8px', fontSize:'12px', color:'#92400e', fontWeight:'600', display:'flex', alignItems:'center', gap:'6px' }}>
+                <span>⚠️</span>
+                <span>
+                  Mangler:
+                  {images.length === 0 && ' bilde'}
+                  {images.length === 0 && !note.trim() && ' og'}
+                  {!note.trim() && ' beskrivelse'}
+                </span>
+              </div>
+            )}
+            <button onClick={handleSubmit} disabled={saving || uploading || images.length === 0 || !note.trim()} style={{
+              width:'100%', padding:'14px',
+              background: (saving || uploading || images.length === 0 || !note.trim()) ? '#94a3b8' : '#16a34a',
+              color:'white', border:'none', borderRadius:'12px',
+              fontSize:'15px', fontWeight:'800',
+              cursor: (saving || uploading || images.length === 0 || !note.trim()) ? 'not-allowed' : 'pointer',
+            }}>
+              {saving ? 'Sender inn...' : uploading ? 'Laster opp...' : (observation.status === 'avvist' ? '🔄 Send inn på nytt' : '✅ Markér som utbedret')}
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// ─── END BEFARING VIEW PAGE ────────────────────────────────────────────────────
+
 function AppContent() {
   const { user, loading, supabase, displayName, isPlatformOwner } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
@@ -40044,6 +40629,7 @@ function AppContent() {
   if (window.location.pathname === '/godkjenn') return <GodkjenningsPage />
   if (window.location.pathname === '/anbud-pris') return <UEPrisingsPage />
   if (window.location.pathname === '/ue-svar') return <UESvarPage />
+  if (window.location.pathname === '/befaring-view') return <BefaringViewPage />
   if (window.location.pathname === '/em-view') return <EMViewPage />
   if (window.location.pathname === '/ordre-view') return <OrdreViewPage />
 
