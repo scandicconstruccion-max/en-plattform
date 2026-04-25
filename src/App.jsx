@@ -38220,18 +38220,30 @@ function AppContent() {
     const checkOverdueEMs = async () => {
       try {
         const now = new Date().toISOString()
-        // Finn forfalte EM-er som ikke har blitt purret ennå
-        const { data: overdue } = await supabase
+        // Finn forfalte EM-er som ikke har blitt purret ennå — filter i JS for kryss-kolonnesammenligning
+        const { data: overdue, error: emErr } = await supabase
           .from('endringsmeldinger')
           .select('id, title, em_number, customer_email, reminder_due_date, last_reminder_sent_at')
           .eq('status', 'Sendt')
           .lt('reminder_due_date', now)
-          .or('last_reminder_sent_at.is.null,last_reminder_sent_at.lt.reminder_due_date')
+
+        if (emErr) {
+          console.warn('[EM-purringssjekk hoppet over]:', emErr.message)
+          return
+        }
 
         if (!overdue || overdue.length === 0) return
 
+        // Filtrer ut de som allerede har fått purring etter at frist passerte
+        const needReminder = overdue.filter(em => {
+          if (!em.last_reminder_sent_at) return true
+          return new Date(em.last_reminder_sent_at) < new Date(em.reminder_due_date)
+        })
+
+        if (needReminder.length === 0) return
+
         // For hver forfalt EM: opprett varsel i bjellen (hvis ikke allerede finnes)
-        for (const em of overdue) {
+        for (const em of needReminder) {
           // Sjekk om vi allerede har sendt varsel for denne EM i dag
           const { data: existing } = await supabase
             .from('notifications')
@@ -38260,12 +38272,12 @@ function AppContent() {
     const checkOverdueOrders = async () => {
       try {
         const today = new Date().toISOString().split('T')[0]
+        // Hent forfalte ordrer — filter på kryss-kolonnesammenligning gjøres i JS
         const { data: overdue, error: ordErr } = await supabase
           .from('orders')
           .select('id, title, order_number, customer_email, reminder_due_date, last_reminder_sent_at')
           .eq('status', 'Sendt')
           .lt('reminder_due_date', today)
-          .or('last_reminder_sent_at.is.null,last_reminder_sent_at.lt.reminder_due_date')
 
         // Hvis spørringen feiler (f.eks. fordi reminder_due_date-kolonnen ikke finnes ennå) — bare avslutt stille
         if (ordErr) {
@@ -38275,7 +38287,15 @@ function AppContent() {
 
         if (!overdue || overdue.length === 0) return
 
-        for (const o of overdue) {
+        // Filtrer ut de som allerede har fått purring etter at frist passerte
+        const needReminder = overdue.filter(o => {
+          if (!o.last_reminder_sent_at) return true
+          return new Date(o.last_reminder_sent_at) < new Date(o.reminder_due_date)
+        })
+
+        if (needReminder.length === 0) return
+
+        for (const o of needReminder) {
           const { data: existing } = await supabase
             .from('notifications')
             .select('id')
