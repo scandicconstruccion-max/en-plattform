@@ -27264,7 +27264,8 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
 //      gjennomgang, overtakelse: foto-først, tale-til-tekst, mobil-fokusert.
 //
 // Mobil-flyten er den primære. Brukeren skal kunne registrere punkter,
-// transkribere stemme, og sende til UE/kollega — alt fra telefonen.
+// transkribere stemme, sende til UE/kollega, og følge utbedring/godkjenning
+// — alt fra telefonen.
 
 const BEFARING_TYPES = [
   { id:'hms',           label:'HMS',              emoji:'🦺' },
@@ -27276,8 +27277,6 @@ const BEFARING_TYPES = [
   { id:'annet',         label:'Annet',            emoji:'📝' },
 ]
 
-// Hvilke befaringstyper bruker observasjons-modellen som primær?
-// (Sjekkpunkt-modellen er fortsatt tilgjengelig som ekstra fane for alle.)
 const OBSERVATION_FIRST_TYPES = ['tilbud', 'kvalitet', 'overtakelse', 'annet']
 
 const INS_STATUS = {
@@ -27311,11 +27310,11 @@ const OBS_CATEGORY = {
 }
 
 const OBS_STATUS = {
-  apen:      { label:'Åpen',      emoji:'⏳', color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
-  pagar:     { label:'Pågår',     emoji:'🔧', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
-  utbedret:  { label:'Utbedret',  emoji:'✅', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
-  godkjent:  { label:'Godkjent',  emoji:'✔️', color:'#059669', bg:'#ecfdf5', border:'#a7f3d0' },
-  avvist:    { label:'Avvist',    emoji:'❌', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
+  apen:      { label:'Åpen',                emoji:'⏳', color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
+  pagar:     { label:'Pågår',               emoji:'🔧', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
+  utbedret:  { label:'Utbedret',            emoji:'✅', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
+  godkjent:  { label:'Godkjent',            emoji:'✔️', color:'#059669', bg:'#ecfdf5', border:'#a7f3d0' },
+  avvist:    { label:'Avvist',              emoji:'❌', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
 }
 
 const OBS_SEVERITY = {
@@ -27324,24 +27323,23 @@ const OBS_SEVERITY = {
   hoy:     { label:'Høy',     color:'#dc2626', bg:'#fef2f2' },
 }
 
+// Filterchips for punkt-listen
+const OBS_FILTERS = [
+  { id:'alle',     label:'Alle',     match:() => true },
+  { id:'mine',     label:'Mine',     needsUserId:true, match:(o, uid) => o.assigned_to_user_id === uid },
+  { id:'apen',     label:'Åpne',     match:o => o.status === 'apen' },
+  { id:'pagar',    label:'Pågår',    match:o => o.status === 'pagar' },
+  { id:'utbedret', label:'Utbedret', match:o => o.status === 'utbedret' },
+  { id:'godkjent', label:'Godkjent', match:o => o.status === 'godkjent' },
+  { id:'avvist',   label:'Avvist',   match:o => o.status === 'avvist' },
+]
+
 const bInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const bCard = { background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '16px', border:'1px solid #f1f5f9', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px' : '20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK: useSpeechRecognition (Web Speech API)
 // ═══════════════════════════════════════════════════════════════════════════
-// Tynn wrapper rundt nettleserens innebygde SpeechRecognition (Web Speech API).
-// Klar for å erstattes med Whisper via Edge Function senere — kun denne hooken
-// må endres, callsites er uendret.
-//
-// Returnerer:
-//   { isSupported, isListening, transcript, interimTranscript,
-//     start(), stop(), reset() }
-//
-// Norsk språk er hardkodet ('nb-NO'). Continuous mode på, så bruker kan
-// snakke i pauser uten å miste sesjon. interimTranscript viser foreløpig
-// gjenkjenning live.
-
 function useSpeechRecognition() {
   const [isListening, setIsListening] = React.useState(false)
   const [transcript, setTranscript] = React.useState('')
@@ -27416,10 +27414,6 @@ function useSpeechRecognition() {
 // ═══════════════════════════════════════════════════════════════════════════
 // HJELPER: compressImage
 // ═══════════════════════════════════════════════════════════════════════════
-// Komprimerer bilde klient-side med canvas. Reduserer typisk
-// 3-5MB iPhone-bilder til 200-400KB. Ingen ekstern dependency.
-// Returnerer Blob (jpeg).
-
 async function compressImage(file, { maxDim = 1600, quality = 0.82 } = {}) {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -27448,6 +27442,38 @@ async function compressImage(file, { maxDim = 1600, quality = 0.82 } = {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// HJELPER: uploadObservationImages
+// ═══════════════════════════════════════════════════════════════════════════
+async function uploadObservationImages(files, inspectionId, observationId, subfolder = '') {
+  const uploaded = []
+  for (const file of files) {
+    try {
+      const blob = await compressImage(file).catch(() => file)
+      const id = crypto.randomUUID()
+      const folder = observationId || 'pending'
+      const path = `befaring/${inspectionId}/observations/${folder}${subfolder ? '/' + subfolder : ''}/${id}.jpg`
+      const { error } = await supabase.storage.from('plattform-files').upload(path, blob, { contentType: 'image/jpeg', upsert: false })
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+      uploaded.push({ url: publicUrl, uploaded_at: new Date().toISOString() })
+    } catch(e) {
+      console.warn('Upload feilet:', e)
+      throw e
+    }
+  }
+  return uploaded
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HJELPER: norsk dato/tid-formatering
+// ═══════════════════════════════════════════════════════════════════════════
+function formatDateTime(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  return d.toLocaleDateString('nb-NO', { day:'numeric', month:'short' }) + ' kl. ' + d.toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' })
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // BefaringPage — listevisning
 // ═══════════════════════════════════════════════════════════════════════════
 
@@ -27465,7 +27491,7 @@ function BefaringPage() {
   const load = async () => {
     try {
       const [ins, proj] = await Promise.all([
-        supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status)').order('date',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date',{ascending:false}).then(r=>r.data||[]),
         supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
       ])
       setInspections(ins); setProjects(proj)
@@ -27482,7 +27508,8 @@ function BefaringPage() {
   })
 
   const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
-  const openObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.status==='apen'||o.status==='pagar').length,0)
+  const openObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.status==='apen'||o.status==='pagar'||o.status==='utbedret').length,0)
+  const myObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.assigned_to_user_id === user?.id && (o.status==='apen'||o.status==='pagar')).length,0)
 
   const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -27508,9 +27535,9 @@ function BefaringPage() {
         <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
           {[
             { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
-            { label:'Planlagt', value:inspections.filter(i=>i.status==='planlagt').length, emoji:'📅', bg:'#eff6ff', color:'#2563eb' },
+            { label:'Mine åpne', value:myObservations, emoji:'👤', bg:myObservations>0?'#eff6ff':'#f8fafc', color:myObservations>0?'#2563eb':'#64748b' },
+            { label:'Åpne punkter', value:openObservations, emoji:'⏰', bg:openObservations>0?'#fffbeb':'#f8fafc', color:openObservations>0?'#d97706':'#64748b' },
             { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
-            { label:'Åpne punkter', value:openObservations+openFollowups, emoji:'⏰', bg:(openObservations+openFollowups)>0?'#fffbeb':'#f8fafc', color:(openObservations+openFollowups)>0?'#d97706':'#64748b' },
           ].map(s=>(
             <div key={s.label} style={{ background:s.bg, borderRadius: isMobB ? '10px' : '12px', padding: isMobB ? '10px' : '14px 16px' }}>
               <div style={{ fontSize: isMobB ? '14px' : '18px', marginBottom: isMobB ? '2px' : '4px' }}>{s.emoji}</div>
@@ -27550,6 +27577,7 @@ function BefaringPage() {
               const openF=followups.filter(f=>!f.completed).length
               const avvik=items.filter(i=>i.status==='avvik').length + observations.filter(o=>o.category==='avvik').length
               const openObs=observations.filter(o=>o.status==='apen'||o.status==='pagar').length
+              const venterGodkjenn=observations.filter(o=>o.status==='utbedret').length
               const useObs = OBSERVATION_FIRST_TYPES.includes(ins.inspection_type)
               return (
                 <div key={ins.id} onClick={()=>setSelected(ins)}
@@ -27562,6 +27590,7 @@ function BefaringPage() {
                       <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
                       {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
                       {openObs>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openObs} åpne</span>}
+                      {venterGodkjenn>0&&<span style={{ background:'#f0fdf4',color:'#16a34a',border:'1px solid #bbf7d0',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>✅ {venterGodkjenn} venter godkjenn</span>}
                       {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
                     </div>
                     <div style={{ display:'flex', gap: isMobB ? '6px' : '12px', flexWrap:'wrap' }}>
@@ -27585,14 +27614,8 @@ function BefaringPage() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BefaringMobileDetalj — primær mobilflyt for observasjons-befaringer
+// BefaringMobileDetalj — primær mobilflyt
 // ═══════════════════════════════════════════════════════════════════════════
-// Optimert for håndverker på byggeplass:
-//   - Stor 📷-knapp som åpner kamera direkte (ny observasjon)
-//   - Kortlayout for punkter med tap-to-edit
-//   - Multi-select via "Velg"-modus → bunnbar med "Send"
-//   - Send-flyt fullt tilgjengelig fra mobil
-//   - Tilbake-knapp øverst, lagring/sync alltid synlig
 
 function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const confirm = useConfirm()
@@ -27601,11 +27624,14 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const [loading, setLoading] = useState(true)
   const [showCapture, setShowCapture] = useState(false)
   const [editObs, setEditObs] = useState(null)
+  const [resolveObs, setResolveObs] = useState(null)
+  const [approveObs, setApproveObs] = useState(null)
+  const [rejectObs, setRejectObs] = useState(null)
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState(new Set())
   const [showSend, setShowSend] = useState(false)
   const [tab, setTab] = useState('punkter')
-  const [showInfo, setShowInfo] = useState(false)
+  const [filter, setFilter] = useState('alle')
   const [showEdit, setShowEdit] = useState(false)
 
   const proj = projects.find(p => p.id === ins.project_id)
@@ -27629,8 +27655,23 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
     if (data) setIns(data)
   }
 
-  const openObs = observations.filter(o => o.status === 'apen' || o.status === 'pagar').length
-  const totalObs = observations.length
+  // Filter-logikk
+  const filteredObs = observations.filter(o => {
+    const filterDef = OBS_FILTERS.find(f => f.id === filter)
+    if (!filterDef) return true
+    return filterDef.match(o, user?.id)
+  })
+
+  // Tellinger per filter
+  const counts = {
+    alle: observations.length,
+    mine: observations.filter(o => o.assigned_to_user_id === user?.id).length,
+    apen: observations.filter(o => o.status === 'apen').length,
+    pagar: observations.filter(o => o.status === 'pagar').length,
+    utbedret: observations.filter(o => o.status === 'utbedret').length,
+    godkjent: observations.filter(o => o.status === 'godkjent').length,
+    avvist: observations.filter(o => o.status === 'avvist').length,
+  }
 
   const toggleSelect = (id) => {
     setSelected(prev => {
@@ -27650,19 +27691,13 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
     setSelected(new Set())
   }
 
-  const selectAll = () => setSelected(new Set(observations.map(o => o.id)))
+  const selectAll = () => setSelected(new Set(filteredObs.map(o => o.id)))
 
   const deleteSelected = async () => {
     if (selected.size === 0) return
     if (!(await confirm({ message: `Slett ${selected.size} punkt${selected.size>1?'er':''}?`, danger: true }))) return
     await supabase.from('inspection_observations').delete().in('id', Array.from(selected))
     cancelSelect()
-    load()
-  }
-
-  const handleObsSaved = () => {
-    setShowCapture(false)
-    setEditObs(null)
     load()
   }
 
@@ -27697,9 +27732,33 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
       {/* Faner */}
       {!selectMode && (
         <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding:'0 14px', display:'flex', gap:'4px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
-          {[['punkter', `📷 Punkter (${totalObs})`], ['info', 'ℹ️ Info']].map(([id, l]) => (
+          {[['punkter', `📷 Punkter (${observations.length})`], ['info', 'ℹ️ Info']].map(([id, l]) => (
             <button key={id} onClick={() => setTab(id)} style={{ padding:'10px 14px', borderRadius:0, border:'none', background:'transparent', color:tab===id?'#059669':'#64748b', fontWeight:tab===id?'700':'500', fontSize:'13px', cursor:'pointer', whiteSpace:'nowrap', borderBottom:tab===id?'2px solid #059669':'2px solid transparent' }}>{l}</button>
           ))}
+        </div>
+      )}
+
+      {/* Filter-chips */}
+      {!selectMode && tab === 'punkter' && observations.length > 0 && (
+        <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding:'8px 14px', display:'flex', gap:'6px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
+          {OBS_FILTERS.map(f => {
+            const count = counts[f.id] ?? 0
+            const isActive = filter === f.id
+            return (
+              <button key={f.id} onClick={() => setFilter(f.id)} style={{
+                flexShrink:0,
+                padding:'6px 12px',
+                background: isActive ? '#059669' : '#f8fafc',
+                color: isActive ? 'white' : '#64748b',
+                border:'none',
+                borderRadius:'999px',
+                fontSize:'12px',
+                fontWeight:'700',
+                cursor:'pointer',
+                whiteSpace:'nowrap',
+              }}>{f.label} ({count})</button>
+            )
+          })}
         </div>
       )}
 
@@ -27714,16 +27773,25 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
               <h3 style={{ margin:'0 0 6px', color:'#0f172a', fontSize:'15px' }}>Ingen punkter ennå</h3>
               <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Trykk på 📷-knappen nederst for å registrere første punkt.</p>
             </div>
+          ) : filteredObs.length === 0 ? (
+            <div style={{ background:'white', borderRadius:'14px', padding:'40px 20px', textAlign:'center', border:'1px dashed #e2e8f0' }}>
+              <div style={{ fontSize:'30px', marginBottom:'8px', opacity:0.5 }}>🔍</div>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen punkter matcher filteret.</p>
+            </div>
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-              {observations.map(obs => (
+              {filteredObs.map(obs => (
                 <ObservationCardMobile
                   key={obs.id}
                   obs={obs}
+                  user={user}
                   selectMode={selectMode}
                   isSelected={selected.has(obs.id)}
                   onTap={() => selectMode ? toggleSelect(obs.id) : setEditObs(obs)}
                   onLongPress={() => !selectMode && startSelectMode(obs.id)}
+                  onResolve={() => setResolveObs(obs)}
+                  onApprove={() => setApproveObs(obs)}
+                  onReject={() => setRejectObs(obs)}
                 />
               ))}
             </div>
@@ -27735,7 +27803,7 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
         )}
       </div>
 
-      {/* Bunnbar — kontekstuell */}
+      {/* Bunnbar */}
       {!selectMode ? (
         <div style={{ position:'fixed', bottom:0, left:0, right:0, background:'white', borderTop:'1px solid #e2e8f0', padding:'10px 14px env(safe-area-inset-bottom)', display:'flex', gap:'10px', zIndex:40 }}>
           {observations.length > 0 && (
@@ -27763,7 +27831,42 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
           observation={editObs}
           user={user}
           onClose={() => { setShowCapture(false); setEditObs(null) }}
-          onSaved={handleObsSaved}
+          onSaved={() => { setShowCapture(false); setEditObs(null); load() }}
+          onResolve={() => { const o = editObs; setEditObs(null); setResolveObs(o) }}
+          onApprove={() => { const o = editObs; setEditObs(null); setApproveObs(o) }}
+          onReject={() => { const o = editObs; setEditObs(null); setRejectObs(o) }}
+        />
+      )}
+
+      {resolveObs && (
+        <ResolveObservationModal
+          inspection={ins}
+          observation={resolveObs}
+          user={user}
+          onClose={() => setResolveObs(null)}
+          onSaved={() => { setResolveObs(null); load() }}
+        />
+      )}
+
+      {approveObs && (
+        <ApproveRejectModal
+          inspection={ins}
+          observation={approveObs}
+          user={user}
+          mode="approve"
+          onClose={() => setApproveObs(null)}
+          onSaved={() => { setApproveObs(null); load() }}
+        />
+      )}
+
+      {rejectObs && (
+        <ApproveRejectModal
+          inspection={ins}
+          observation={rejectObs}
+          user={user}
+          mode="reject"
+          onClose={() => setRejectObs(null)}
+          onSaved={() => { setRejectObs(null); load() }}
         />
       )}
 
@@ -27784,20 +27887,28 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ObservationCardMobile — punkt-kort i mobil-listen
+// ObservationCardMobile
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ObservationCardMobile({ obs, selectMode, isSelected, onTap, onLongPress }) {
+function ObservationCardMobile({ obs, user, selectMode, isSelected, onTap, onLongPress, onResolve, onApprove, onReject }) {
   const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
   const st = OBS_STATUS[obs.status] || OBS_STATUS.apen
   const firstImage = Array.isArray(obs.images) && obs.images.length > 0 ? obs.images[0] : null
   const longPressTimer = React.useRef(null)
+  const isAssignedToMe = obs.assigned_to_user_id === user?.id
+  const canResolve = obs.status === 'apen' || obs.status === 'pagar'
+  const canApprove = obs.status === 'utbedret'
 
   const handleTouchStart = () => {
     if (selectMode) return
     longPressTimer.current = setTimeout(() => onLongPress?.(), 500)
   }
   const handleTouchEnd = () => { if (longPressTimer.current) clearTimeout(longPressTimer.current) }
+
+  const handleQuickAction = (e, action) => {
+    e.stopPropagation()
+    action()
+  }
 
   return (
     <div
@@ -27810,8 +27921,6 @@ function ObservationCardMobile({ obs, selectMode, isSelected, onTap, onLongPress
         borderRadius:'14px',
         border: `2px solid ${isSelected ? '#7c3aed' : '#f1f5f9'}`,
         padding:'10px',
-        display:'flex',
-        gap:'10px',
         cursor:'pointer',
         position:'relative',
         boxShadow: isSelected ? '0 2px 8px rgba(124,58,237,0.15)' : 'none',
@@ -27823,34 +27932,67 @@ function ObservationCardMobile({ obs, selectMode, isSelected, onTap, onLongPress
         </div>
       )}
 
-      <div style={{ width:'72px', height:'72px', borderRadius:'10px', background:'#f1f5f9', flexShrink:0, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
-        {firstImage ? (
-          <img src={firstImage.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-        ) : (
-          <span style={{ fontSize:'24px', opacity:0.5 }}>📝</span>
-        )}
-        {Array.isArray(obs.images) && obs.images.length > 1 && (
-          <span style={{ position:'absolute', bottom:'3px', right:'3px', background:'rgba(0,0,0,0.7)', color:'white', fontSize:'10px', fontWeight:'700', padding:'1px 5px', borderRadius:'6px' }}>+{obs.images.length-1}</span>
-        )}
+      <div style={{ display:'flex', gap:'10px' }}>
+        <div style={{ width:'72px', height:'72px', borderRadius:'10px', background:'#f1f5f9', flexShrink:0, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+          {firstImage ? (
+            <img src={firstImage.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+          ) : (
+            <span style={{ fontSize:'24px', opacity:0.5 }}>📝</span>
+          )}
+          {Array.isArray(obs.images) && obs.images.length > 1 && (
+            <span style={{ position:'absolute', bottom:'3px', right:'3px', background:'rgba(0,0,0,0.7)', color:'white', fontSize:'10px', fontWeight:'700', padding:'1px 5px', borderRadius:'6px' }}>+{obs.images.length-1}</span>
+          )}
+        </div>
+
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'3px', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{obs.sequence_number}</span>
+            <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+            <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>{st.emoji} {st.label}</span>
+            {isAssignedToMe && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>👤 Meg</span>}
+          </div>
+          <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
+            {obs.title || obs.description || '(uten tekst)'}
+          </div>
+          {(obs.location_ref || obs.assigned_email || obs.assigned_role) && (
+            <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap' }}>
+              {obs.location_ref && <span style={{ fontSize:'10px', color:'#2563eb' }}>📍 {obs.location_ref}</span>}
+              {obs.assigned_role && <span style={{ fontSize:'10px', color:'#64748b' }}>🔧 {obs.assigned_role}</span>}
+              {obs.assigned_email && !isAssignedToMe && <span style={{ fontSize:'10px', color:'#64748b', maxWidth:'120px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>✉️ {obs.assigned_email}</span>}
+            </div>
+          )}
+        </div>
       </div>
 
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'3px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{obs.sequence_number}</span>
-          <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
-          <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 6px', borderRadius:'6px', fontSize:'10px', fontWeight:'700' }}>{st.label}</span>
+      {/* Quick-action knapper */}
+      {!selectMode && (canResolve || canApprove) && (
+        <div style={{ display:'flex', gap:'6px', marginTop:'10px', paddingTop:'10px', borderTop:'1px solid #f1f5f9' }}>
+          {canResolve && (
+            <button onClick={(e) => handleQuickAction(e, onResolve)} style={{
+              flex:1, padding:'8px',
+              background:'#f0fdf4', color:'#16a34a',
+              border:'1px solid #bbf7d0', borderRadius:'8px',
+              fontSize:'12px', fontWeight:'700', cursor:'pointer'
+            }}>✅ Markér utbedret</button>
+          )}
+          {canApprove && (
+            <>
+              <button onClick={(e) => handleQuickAction(e, onApprove)} style={{
+                flex:1, padding:'8px',
+                background:'#ecfdf5', color:'#059669',
+                border:'1px solid #a7f3d0', borderRadius:'8px',
+                fontSize:'12px', fontWeight:'700', cursor:'pointer'
+              }}>✔️ Godkjenn</button>
+              <button onClick={(e) => handleQuickAction(e, onReject)} style={{
+                flex:1, padding:'8px',
+                background:'#fef2f2', color:'#dc2626',
+                border:'1px solid #fecaca', borderRadius:'8px',
+                fontSize:'12px', fontWeight:'700', cursor:'pointer'
+              }}>❌ Avvis</button>
+            </>
+          )}
         </div>
-        <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', lineHeight:1.35, display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical', overflow:'hidden' }}>
-          {obs.title || obs.description || '(uten tekst)'}
-        </div>
-        {(obs.location_ref || obs.assigned_email || obs.assigned_role) && (
-          <div style={{ display:'flex', gap:'8px', marginTop:'4px', flexWrap:'wrap' }}>
-            {obs.location_ref && <span style={{ fontSize:'10px', color:'#2563eb' }}>📍 {obs.location_ref}</span>}
-            {obs.assigned_role && <span style={{ fontSize:'10px', color:'#64748b' }}>🔧 {obs.assigned_role}</span>}
-            {obs.assigned_email && <span style={{ fontSize:'10px', color:'#64748b', maxWidth:'120px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>✉️ {obs.assigned_email}</span>}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   )
 }
@@ -27858,19 +28000,14 @@ function ObservationCardMobile({ obs, selectMode, isSelected, onTap, onLongPress
 // ═══════════════════════════════════════════════════════════════════════════
 // ObservationCaptureSheet — registrere/redigere ett punkt
 // ═══════════════════════════════════════════════════════════════════════════
-// Mobil-først full-screen ark. Flyt:
-//   1. Bilde først (kamera-trigger automatisk for nye punkt)
-//   2. Tale-til-tekst eller skriv tekst
-//   3. (valgfritt) kategori, plassering, tildeling
-//   4. Lagre
-// Kan også brukes på desktop — samme komponent, samme felter.
 
-function ObservationCaptureSheet({ inspection, observation, user, onClose, onSaved }) {
+function ObservationCaptureSheet({ inspection, observation, user, onClose, onSaved, onResolve, onApprove, onReject }) {
   const isEdit = !!observation
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const cameraInputRef = React.useRef(null)
   const galleryInputRef = React.useRef(null)
   const [employees, setEmployees] = React.useState([])
+  const [statusLog, setStatusLog] = React.useState([])
   const speech = useSpeechRecognition()
 
   const [form, setForm] = React.useState({
@@ -27890,13 +28027,21 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
   const [saving, setSaving] = React.useState(false)
   const [showAdvanced, setShowAdvanced] = React.useState(!!isEdit)
 
-  // Last ansatte for delegering
   React.useEffect(() => {
     supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
       .then(r => setEmployees(r.data || []))
   }, [])
 
-  // Auto-trigger kamera ved nye punkt og ingen bilder ennå
+  // Last status-historikk hvis vi redigerer
+  React.useEffect(() => {
+    if (!isEdit || !observation) return
+    supabase.from('observation_status_log')
+      .select('*')
+      .eq('observation_id', observation.id)
+      .order('changed_at', { ascending: false })
+      .then(r => setStatusLog(r.data || []))
+  }, [isEdit, observation?.id])
+
   React.useEffect(() => {
     if (!isEdit && form.images.length === 0 && cameraInputRef.current) {
       const t = setTimeout(() => { try { cameraInputRef.current?.click() } catch(e){} }, 200)
@@ -27905,10 +28050,8 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Sett description fra speech transcript (når bruker stopper)
   React.useEffect(() => {
     if (!speech.isListening && speech.transcript) {
-      // Append til eksisterende, ikke overskriv (i tilfelle bruker har skrevet noe)
       setForm(f => {
         const existing = (f.description || '').trim()
         const incoming = speech.transcript.trim()
@@ -27923,29 +28066,15 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
-  const uploadFile = async (file) => {
-    const blob = await compressImage(file).catch(() => file)
-    const ext = (file.name?.split('.').pop() || 'jpg').toLowerCase()
-    const id = crypto.randomUUID()
-    const obsFolder = observation?.id || 'pending'
-    const path = `befaring/${inspection.id}/observations/${obsFolder}/${id}.${ext}`
-    const { error } = await supabase.storage.from('plattform-files').upload(path, blob, { contentType: 'image/jpeg', upsert: false })
-    if (error) throw error
-    const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
-    return { url: publicUrl, uploaded_at: new Date().toISOString() }
-  }
-
   const handleFiles = async (files) => {
     if (!files || files.length === 0) return
     setUploading(true)
     try {
       const arr = Array.from(files)
-      const uploaded = []
-      for (const f of arr) {
-        try { uploaded.push(await uploadFile(f)) }
-        catch(e) { console.warn('Upload feilet:', e); alert('Kunne ikke laste opp ' + f.name + ': ' + e.message) }
-      }
+      const uploaded = await uploadObservationImages(arr, inspection.id, observation?.id)
       setForm(f => ({ ...f, images: [...f.images, ...uploaded] }))
+    } catch(e) {
+      alert('Kunne ikke laste opp: ' + e.message)
     } finally { setUploading(false) }
   }
 
@@ -27991,15 +28120,29 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   const handleDelete = async () => {
     if (!isEdit) return
-    if (!confirm('Slett dette punktet?')) return
+    if (!window.confirm('Slett dette punktet?')) return
     await supabase.from('inspection_observations').delete().eq('id', observation.id)
     onSaved()
+  }
+
+  const handleStatusChange = async (newStatus) => {
+    if (!isEdit) return
+    if (!window.confirm(`Endre status til "${OBS_STATUS[newStatus]?.label}"?`)) return
+    try {
+      const { error } = await supabase.from('inspection_observations').update({ status: newStatus }).eq('id', observation.id)
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
   }
 
   const toggleMic = () => {
     if (speech.isListening) speech.stop()
     else { speech.reset(); speech.start() }
   }
+
+  const currentStatus = observation?.status || 'apen'
+  const canResolve = isEdit && (currentStatus === 'apen' || currentStatus === 'pagar')
+  const canApprove = isEdit && currentStatus === 'utbedret'
 
   return (
     <>
@@ -28027,6 +28170,39 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
           </h2>
           {isEdit && <button onClick={handleDelete} style={{ background:'none',border:'1px solid #fecaca',borderRadius:'8px',padding:'5px 10px',color:'#dc2626',cursor:'pointer',fontSize:'13px' }}>Slett</button>}
         </div>
+
+        {/* Status-bar (kun ved redigering) */}
+        {isEdit && (
+          <div style={{ padding:'12px 18px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px', color:'#64748b', fontWeight:'600', textTransform:'uppercase' }}>Status</span>
+              <span style={{
+                background: OBS_STATUS[currentStatus].bg,
+                color: OBS_STATUS[currentStatus].color,
+                border: `1px solid ${OBS_STATUS[currentStatus].border}`,
+                padding:'3px 10px', borderRadius:'999px',
+                fontSize:'12px', fontWeight:'700'
+              }}>{OBS_STATUS[currentStatus].emoji} {OBS_STATUS[currentStatus].label}</span>
+            </div>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              {canResolve && onResolve && (
+                <button onClick={onResolve} style={{ flex:'1 1 auto', padding:'8px 12px', background:'#16a34a', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>✅ Markér utbedret</button>
+              )}
+              {canApprove && onApprove && (
+                <button onClick={onApprove} style={{ flex:'1 1 auto', padding:'8px 12px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>✔️ Godkjenn</button>
+              )}
+              {canApprove && onReject && (
+                <button onClick={onReject} style={{ flex:'1 1 auto', padding:'8px 12px', background:'#dc2626', color:'white', border:'none', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>❌ Avvis</button>
+              )}
+              {currentStatus === 'apen' && (
+                <button onClick={() => handleStatusChange('pagar')} style={{ flex:'1 1 auto', padding:'8px 12px', background:'white', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>🔧 Sett "Pågår"</button>
+              )}
+              {(currentStatus === 'avvist' || currentStatus === 'godkjent') && (
+                <button onClick={() => handleStatusChange('apen')} style={{ flex:'1 1 auto', padding:'8px 12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>↩️ Gjenåpne</button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Innhold (scrollbar) */}
         <div style={{ overflowY:'auto', flex:1, padding:'14px 18px', display:'flex', flexDirection:'column', gap:'14px', WebkitOverflowScrolling:'touch' }}>
@@ -28086,7 +28262,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
             )}
           </div>
 
-          {/* Kategori — alltid synlig */}
+          {/* Kategori */}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>Kategori</label>
             <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
@@ -28102,7 +28278,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
             </div>
           </div>
 
-          {/* Avansert (skjult bak knapp på mobil) */}
+          {/* Avansert */}
           {!showAdvanced ? (
             <button onClick={() => setShowAdvanced(true)} style={{ background:'none', border:'1px dashed #cbd5e1', borderRadius:'10px', padding:'10px', color:'#64748b', fontSize:'13px', cursor:'pointer', fontWeight:'600' }}>
               + Plassering, tildeling, frist...
@@ -28154,9 +28330,84 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
               </div>
             </>
           )}
+
+          {/* Resolution-info hvis utbedret eller godkjent */}
+          {isEdit && (currentStatus === 'utbedret' || currentStatus === 'godkjent') && observation.resolution_note && (
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px' }}>
+              <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>✅ Utbedring</div>
+              <p style={{ margin:0, fontSize:'13px', color:'#0f172a', lineHeight:1.5 }}>{observation.resolution_note}</p>
+              {Array.isArray(observation.resolution_images) && observation.resolution_images.length > 0 && (
+                <div style={{ display:'flex', gap:'6px', marginTop:'8px', flexWrap:'wrap' }}>
+                  {observation.resolution_images.map((img, idx) => (
+                    <img key={idx} src={img.url} alt="" style={{ width:'70px', height:'70px', objectFit:'cover', borderRadius:'6px' }} />
+                  ))}
+                </div>
+              )}
+              {observation.resolved_at && (
+                <p style={{ margin:'8px 0 0', fontSize:'11px', color:'#64748b' }}>📅 {formatDateTime(observation.resolved_at)}</p>
+              )}
+            </div>
+          )}
+
+          {/* Avvisning-info */}
+          {isEdit && currentStatus === 'avvist' && observation.rejection_note && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'12px' }}>
+              <div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>❌ Avvist</div>
+              <p style={{ margin:0, fontSize:'13px', color:'#0f172a', lineHeight:1.5 }}>{observation.rejection_note}</p>
+              {observation.rejected_at && (
+                <p style={{ margin:'8px 0 0', fontSize:'11px', color:'#64748b' }}>📅 {formatDateTime(observation.rejected_at)}</p>
+              )}
+            </div>
+          )}
+
+          {/* Status-historikk */}
+          {isEdit && statusLog.length > 0 && (
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>📜 Historikk</label>
+              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                {statusLog.map(log => {
+                  const fromSt = log.from_status ? OBS_STATUS[log.from_status] : null
+                  const toSt = OBS_STATUS[log.to_status] || OBS_STATUS.apen
+                  return (
+                    <div key={log.id} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 10px', fontSize:'12px', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                      {fromSt && (
+                        <>
+                          <span style={{ color:fromSt.color }}>{fromSt.label}</span>
+                          <span style={{ color:'#cbd5e1' }}>→</span>
+                        </>
+                      )}
+                      <span style={{ color:toSt.color, fontWeight:'700' }}>{toSt.emoji} {toSt.label}</span>
+                      <span style={{ flex:1, color:'#64748b', textAlign:'right', fontSize:'11px' }}>
+                        {log.changed_by_name && <span>{log.changed_by_name} · </span>}
+                        {formatDateTime(log.changed_at)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Sent-log */}
+          {isEdit && Array.isArray(observation.sent_log) && observation.sent_log.length > 0 && (
+            <div>
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>📧 Sendt til</label>
+              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                {observation.sent_log.map((entry, idx) => (
+                  <div key={idx} style={{ background:'#f5f3ff', borderRadius:'8px', padding:'8px 10px', fontSize:'12px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                      <span style={{ color:'#7c3aed', fontWeight:'700' }}>✉️ {entry.to}</span>
+                      {entry.name && <span style={{ color:'#64748b' }}>({entry.name})</span>}
+                    </div>
+                    <span style={{ fontSize:'11px', color:'#94a3b8' }}>{formatDateTime(entry.sent_at)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Lagre-knapp (sticky bunn) */}
+        {/* Lagre-knapp */}
         <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
           <button onClick={handleSave} disabled={saving || uploading} style={{
             width:'100%', padding:'14px',
@@ -28173,16 +28424,243 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ResolveObservationModal — markér punkt som utbedret med bilder + notat
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ResolveObservationModal({ inspection, observation, user, onClose, onSaved }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  const cameraInputRef = React.useRef(null)
+  const galleryInputRef = React.useRef(null)
+  const [note, setNote] = React.useState('')
+  const [images, setImages] = React.useState(Array.isArray(observation.resolution_images) ? observation.resolution_images : [])
+  const [uploading, setUploading] = React.useState(false)
+  const [saving, setSaving] = React.useState(false)
+
+  const handleFiles = async (files) => {
+    if (!files || files.length === 0) return
+    setUploading(true)
+    try {
+      const arr = Array.from(files)
+      const uploaded = await uploadObservationImages(arr, inspection.id, observation.id, 'resolution')
+      setImages(prev => [...prev, ...uploaded])
+    } catch(e) {
+      alert('Kunne ikke laste opp: ' + e.message)
+    } finally { setUploading(false) }
+  }
+
+  const removeImage = (idx) => setImages(prev => prev.filter((_, i) => i !== idx))
+
+  const handleSave = async () => {
+    if (images.length === 0) {
+      return alert('Du må legge til minst ett bilde av utbedringen.')
+    }
+    if (!note.trim()) {
+      return alert('Skriv en kort beskrivelse av utbedringen.')
+    }
+    setSaving(true)
+    try {
+      const { error } = await supabase.from('inspection_observations').update({
+        status: 'utbedret',
+        resolution_note: note.trim(),
+        resolution_images: images,
+        resolved_at: new Date().toISOString(),
+        resolved_by: user?.id || null,
+      }).eq('id', observation.id)
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const cat = OBS_CATEGORY[observation.category] || OBS_CATEGORY.observasjon
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
+      <div style={{
+        position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
+        transform: isMob ? 'none' : 'translate(-50%,-50%)',
+        background:'white', borderRadius: isMob ? 0 : '20px',
+        width: isMob ? '100%' : 'min(560px, calc(100vw - 32px))',
+        height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '92vh',
+        zIndex:201, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column'
+      }}>
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'24px',cursor:'pointer',color:'#64748b',padding:0,lineHeight:1 }}>×</button>
+          <h2 style={{ margin:0, flex:1, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>✅ Markér som utbedret</h2>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 18px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          {/* Punkt-info */}
+          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 12px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{observation.sequence_number}</span>
+              <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+            </div>
+            <p style={{ margin:0, fontSize:'13px', color:'#0f172a' }}>{observation.title || observation.description}</p>
+          </div>
+
+          {/* Bilder av utbedring (PÅKREVD) */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>
+              📷 Bilder av utbedringen <span style={{ color:'#dc2626' }}>*</span>
+            </label>
+            <p style={{ margin:'0 0 8px', fontSize:'11px', color:'#64748b' }}>Minst ett bilde påkrevd som dokumentasjon.</p>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:'8px' }}>
+              {images.map((img, idx) => (
+                <div key={idx} style={{ position:'relative', aspectRatio:'1/1', borderRadius:'10px', overflow:'hidden', background:'#f1f5f9' }}>
+                  <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
+                  <button onClick={() => removeImage(idx)} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
+                </div>
+              ))}
+              <button onClick={() => cameraInputRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #cbd5e1', borderRadius:'10px', background:'#f8fafc', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#64748b', fontSize:'11px', fontWeight:'600' }}>
+                <span style={{ fontSize:'22px' }}>📷</span>
+                {uploading ? 'Laster...' : 'Kamera'}
+              </button>
+              <button onClick={() => galleryInputRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #cbd5e1', borderRadius:'10px', background:'#f8fafc', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#64748b', fontSize:'11px', fontWeight:'600' }}>
+                <span style={{ fontSize:'22px' }}>🖼️</span>
+                Galleri
+              </button>
+            </div>
+            <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" multiple style={{ display:'none' }} onChange={e => { handleFiles(e.target.files); e.target.value=''; }} />
+            <input ref={galleryInputRef} type="file" accept="image/*" multiple style={{ display:'none' }} onChange={e => { handleFiles(e.target.files); e.target.value=''; }} />
+          </div>
+
+          {/* Notat */}
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+              📝 Beskrivelse av utbedring <span style={{ color:'#dc2626' }}>*</span>
+            </label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder="Hva ble gjort for å utbedre..." style={{ ...bInp, resize:'vertical' }} />
+          </div>
+        </div>
+
+        <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
+          <button onClick={handleSave} disabled={saving || uploading || images.length === 0 || !note.trim()} style={{
+            width:'100%', padding:'14px',
+            background: (saving || uploading || images.length === 0 || !note.trim()) ? '#94a3b8' : '#16a34a',
+            color:'white', border:'none', borderRadius:'12px',
+            fontSize:'15px', fontWeight:'800',
+            cursor: (saving || uploading || images.length === 0 || !note.trim()) ? 'not-allowed' : 'pointer'
+          }}>{saving ? 'Lagrer...' : uploading ? 'Laster opp...' : '✅ Markér som utbedret'}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ApproveRejectModal — godkjenn eller avvis utbedring
+// ═══════════════════════════════════════════════════════════════════════════
+
+function ApproveRejectModal({ inspection, observation, user, mode, onClose, onSaved }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  const isApprove = mode === 'approve'
+  const [note, setNote] = React.useState('')
+  const [saving, setSaving] = React.useState(false)
+
+  const handleSave = async () => {
+    if (!isApprove && !note.trim()) {
+      return alert('Skriv en kort begrunnelse for avvisning.')
+    }
+    setSaving(true)
+    try {
+      const payload = isApprove ? {
+        status: 'godkjent',
+        approved_at: new Date().toISOString(),
+        approved_by: user?.id || null,
+        approval_note: note.trim() || null,
+      } : {
+        status: 'avvist',
+        rejected_at: new Date().toISOString(),
+        rejected_by: user?.id || null,
+        rejection_note: note.trim(),
+      }
+      const { error } = await supabase.from('inspection_observations').update(payload).eq('id', observation.id)
+      if (error) throw error
+      onSaved()
+    } catch(e) { alert('Feil: ' + e.message) }
+    finally { setSaving(false) }
+  }
+
+  const cat = OBS_CATEGORY[observation.category] || OBS_CATEGORY.observasjon
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
+      <div style={{
+        position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
+        transform: isMob ? 'none' : 'translate(-50%,-50%)',
+        background:'white', borderRadius: isMob ? 0 : '20px',
+        width: isMob ? '100%' : 'min(520px, calc(100vw - 32px))',
+        height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '92vh',
+        zIndex:201, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column'
+      }}>
+        <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'24px',cursor:'pointer',color:'#64748b',padding:0,lineHeight:1 }}>×</button>
+          <h2 style={{ margin:0, flex:1, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>
+            {isApprove ? '✔️ Godkjenn utbedring' : '❌ Avvis utbedring'}
+          </h2>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 18px', display:'flex', flexDirection:'column', gap:'14px' }}>
+          <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 12px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{observation.sequence_number}</span>
+              <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+            </div>
+            <p style={{ margin:0, fontSize:'13px', color:'#0f172a' }}>{observation.title || observation.description}</p>
+          </div>
+
+          {observation.resolution_note && (
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px' }}>
+              <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>✅ Utbedring</div>
+              <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#0f172a', lineHeight:1.5 }}>{observation.resolution_note}</p>
+              {Array.isArray(observation.resolution_images) && observation.resolution_images.length > 0 && (
+                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                  {observation.resolution_images.map((img, idx) => (
+                    <a key={idx} href={img.url} target="_blank" rel="noreferrer">
+                      <img src={img.url} alt="" style={{ width:'80px', height:'80px', objectFit:'cover', borderRadius:'6px' }} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+              📝 {isApprove ? 'Kommentar (valgfritt)' : 'Begrunnelse for avvisning'}
+              {!isApprove && <span style={{ color:'#dc2626' }}> *</span>}
+            </label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3} placeholder={isApprove ? 'Eventuell kommentar...' : 'Hvorfor avvises utbedringen?'} style={{ ...bInp, resize:'vertical' }} />
+          </div>
+        </div>
+
+        <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white', display:'flex', gap:'8px' }}>
+          <button onClick={onClose} style={{ flex:1, padding:'12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving || (!isApprove && !note.trim())} style={{
+            flex:2, padding:'12px',
+            background: saving ? '#94a3b8' : (isApprove ? '#059669' : '#dc2626'),
+            color:'white', border:'none', borderRadius:'10px',
+            fontSize:'14px', fontWeight:'700',
+            cursor: saving ? 'not-allowed' : 'pointer'
+          }}>{saving ? 'Lagrer...' : (isApprove ? '✔️ Godkjenn' : '❌ Avvis')}</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SendObservationsSheet — send valgte punkter på e-post
 // ═══════════════════════════════════════════════════════════════════════════
-// Mobil-vennlig send-flyt: velg mottaker (kollega eller fritekst e-post),
-// skriv kort melding, send som HTML-e-post via send-quote Edge Function.
 
 function SendObservationsSheet({ inspection, observations, proj, user, onClose, onSent }) {
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const [employees, setEmployees] = React.useState([])
   const [externalParticipants, setExternalParticipants] = React.useState([])
-  const [recipientMode, setRecipientMode] = React.useState('intern') // intern | ekstern | epost
+  const [recipientMode, setRecipientMode] = React.useState('intern')
   const [internRecipient, setInternRecipient] = React.useState('')
   const [externalRecipient, setExternalRecipient] = React.useState('')
   const [emailRecipient, setEmailRecipient] = React.useState('')
@@ -28190,7 +28668,6 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
   const [message, setMessage] = React.useState('')
   const [sending, setSending] = React.useState(false)
 
-  // Forsøk auto-utfylling: hvis alle valgte punkter er tildelt samme person/e-post
   React.useEffect(() => {
     supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
       .then(r => setEmployees(r.data || []))
@@ -28269,7 +28746,6 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
       })
       if (!fnRes.ok) throw new Error('Sending feilet (' + fnRes.status + ')')
 
-      // Logg send på hvert punkt
       const sentEntry = { to: email, name: name || null, sent_at: new Date().toISOString(), sent_by: user?.id || null, message: message || null }
       for (const obs of observations) {
         const newLog = [...(Array.isArray(obs.sent_log) ? obs.sent_log : []), sentEntry]
@@ -28303,8 +28779,6 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
         </div>
 
         <div style={{ overflowY:'auto', flex:1, padding:'14px 18px', display:'flex', flexDirection:'column', gap:'14px' }}>
-
-          {/* Mottaker-velger */}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Send til</label>
             <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
@@ -28351,13 +28825,11 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
             )}
           </div>
 
-          {/* Melding */}
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>💬 Melding (valgfritt)</label>
             <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="F.eks. Vennligst utbedr disse punktene innen fredag..." style={{ ...bInp, resize:'vertical' }} />
           </div>
 
-          {/* Sammendrag av valgte punkter */}
           <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 12px' }}>
             <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', marginBottom:'6px' }}>{observations.length} valgte punkter</div>
             <div style={{ display:'flex', flexDirection:'column', gap:'4px', maxHeight:'150px', overflowY:'auto' }}>
@@ -28372,7 +28844,6 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
               })}
             </div>
           </div>
-
         </div>
 
         <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
@@ -28390,7 +28861,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BefaringInfoPanel — info-fane (delt mellom mobil og desktop)
+// BefaringInfoPanel
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BefaringInfoPanel({ ins, proj }) {
@@ -28458,11 +28929,8 @@ function BefaringInfoPanel({ ins, proj }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BefaringDetaljer — desktop / sjekkliste-modus (uendret fra før)
+// BefaringDetaljer — desktop / sjekkliste-modus
 // ═══════════════════════════════════════════════════════════════════════════
-// Beholder sjekkliste-flyt for befaringstyper som er forhåndsdefinerte
-// (HMS, sluttkontroll, garantibefaring). Får også en lenke til mobile-flow
-// for å registrere observasjoner hvis ønsket.
 
 function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const confirm = useConfirm()
@@ -28478,12 +28946,15 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const [saving, setSaving] = useState(false)
   const [editObs, setEditObs] = useState(null)
   const [showCapture, setShowCapture] = useState(false)
+  const [resolveObs, setResolveObs] = useState(null)
+  const [approveObs, setApproveObs] = useState(null)
+  const [rejectObs, setRejectObs] = useState(null)
   const [obsSelected, setObsSelected] = useState(new Set())
   const [showSendObs, setShowSendObs] = useState(false)
+  const [obsFilter, setObsFilter] = useState('alle')
   const fileInputRef = React.useRef(null)
   const proj = projects.find(p=>p.id===ins.project_id)
   const cfg = INS_STATUS[ins.status]
-  const useObsFirst = OBSERVATION_FIRST_TYPES.includes(ins.inspection_type)
 
   const loadDetails = async () => {
     const [it, fu, fi, obs] = await Promise.all([
@@ -28558,8 +29029,24 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const openF=followups.filter(f=>!f.completed).length
   const obsAvvik = observations.filter(o => o.category==='avvik').length
   const obsOpen = observations.filter(o => o.status==='apen' || o.status==='pagar').length
+  const obsVenterGodkjenn = observations.filter(o => o.status==='utbedret').length
 
-  // ── Konverter til avvik (eksisterende, beholdt) ──
+  const filteredObs = observations.filter(o => {
+    const filterDef = OBS_FILTERS.find(f => f.id === obsFilter)
+    if (!filterDef) return true
+    return filterDef.match(o, user?.id)
+  })
+
+  const obsCounts = {
+    alle: observations.length,
+    mine: observations.filter(o => o.assigned_to_user_id === user?.id).length,
+    apen: observations.filter(o => o.status === 'apen').length,
+    pagar: observations.filter(o => o.status === 'pagar').length,
+    utbedret: observations.filter(o => o.status === 'utbedret').length,
+    godkjent: observations.filter(o => o.status === 'godkjent').length,
+    avvist: observations.filter(o => o.status === 'avvist').length,
+  }
+
   const convertToDeviation = async (item) => {
     try {
       const { data: ed } = await supabase.from('deviations').select('deviation_number')
@@ -28597,6 +29084,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                 <h1 style={{ margin:0, fontSize: isMobBD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{ins.title}</h1>
                 <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700' }}>{cfg.emoji} {cfg.label}</span>
                 {(avvik+obsAvvik)>0 && <span style={{ background:'#fef2f2',color:'#dc2626',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700',padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',border:'1px solid #fecaca' }}>⚠️ {avvik+obsAvvik}</span>}
+                {obsVenterGodkjenn>0 && <span style={{ background:'#f0fdf4',color:'#16a34a',fontSize: isMobBD ? '10px' : '12px',fontWeight:'700',padding: isMobBD ? '2px 8px' : '3px 10px',borderRadius:'999px',border:'1px solid #bbf7d0' }}>✅ {obsVenterGodkjenn} venter</span>}
               </div>
               <div style={{ display:'flex', gap: isMobBD ? '6px' : '12px', flexWrap:'wrap' }}>
                 <span style={{ fontSize: isMobBD ? '11px' : '13px', color:'#64748b' }}>📅 {ins.date}</span>
@@ -28629,7 +29117,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
           {tab === 'observasjoner' && (
             <div style={bCard}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px', flexWrap:'wrap', gap:'8px' }}>
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📷 Observasjoner</h3>
                 <div style={{ display:'flex', gap:'8px' }}>
                   {obsSelected.size > 0 && (
@@ -28638,36 +29126,78 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
                   <button onClick={() => setShowCapture(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>+ Nytt</button>
                 </div>
               </div>
+
+              {observations.length > 0 && (
+                <div style={{ display:'flex', gap:'6px', marginBottom:'14px', flexWrap:'wrap' }}>
+                  {OBS_FILTERS.map(f => {
+                    const count = obsCounts[f.id] ?? 0
+                    const isActive = obsFilter === f.id
+                    return (
+                      <button key={f.id} onClick={() => setObsFilter(f.id)} style={{
+                        padding:'5px 11px',
+                        background: isActive ? '#059669' : '#f8fafc',
+                        color: isActive ? 'white' : '#64748b',
+                        border:'none',
+                        borderRadius:'999px',
+                        fontSize:'11px',
+                        fontWeight:'700',
+                        cursor:'pointer',
+                      }}>{f.label} ({count})</button>
+                    )
+                  })}
+                </div>
+              )}
+
               {observations.length === 0 ? (
                 <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'30px 0', margin:0 }}>Ingen observasjoner registrert ennå.</p>
+              ) : filteredObs.length === 0 ? (
+                <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'20px 0', margin:0 }}>Ingen punkter matcher filteret.</p>
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                  {observations.map(obs => {
+                  {filteredObs.map(obs => {
                     const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
                     const st = OBS_STATUS[obs.status] || OBS_STATUS.apen
                     const isSel = obsSelected.has(obs.id)
                     const firstImg = Array.isArray(obs.images) && obs.images.length > 0 ? obs.images[0] : null
+                    const canResolve = obs.status === 'apen' || obs.status === 'pagar'
+                    const canApprove = obs.status === 'utbedret'
                     return (
-                      <div key={obs.id} style={{ background:'#f8fafc', border:`2px solid ${isSel ? '#7c3aed' : '#f1f5f9'}`, borderRadius:'10px', padding:'10px', display:'flex', gap:'10px' }}>
-                        <input type="checkbox" checked={isSel} onChange={() => toggleObsSelect(obs.id)} style={{ accentColor:'#7c3aed', width:'18px', height:'18px', flexShrink:0, marginTop:'2px' }} />
-                        <div style={{ width:'56px', height:'56px', borderRadius:'8px', background:'#e2e8f0', flexShrink:0, overflow:'hidden', cursor:'pointer' }} onClick={() => setEditObs(obs)}>
-                          {firstImg ? <img src={firstImg.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', fontSize:'20px', opacity:0.4 }}>📝</div>}
-                        </div>
-                        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setEditObs(obs)}>
-                          <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'3px', flexWrap:'wrap' }}>
-                            <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{obs.sequence_number}</span>
-                            <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
-                            <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{st.label}</span>
+                      <div key={obs.id} style={{ background:'#f8fafc', border:`2px solid ${isSel ? '#7c3aed' : '#f1f5f9'}`, borderRadius:'10px', padding:'10px' }}>
+                        <div style={{ display:'flex', gap:'10px' }}>
+                          <input type="checkbox" checked={isSel} onChange={() => toggleObsSelect(obs.id)} style={{ accentColor:'#7c3aed', width:'18px', height:'18px', flexShrink:0, marginTop:'2px' }} />
+                          <div style={{ width:'56px', height:'56px', borderRadius:'8px', background:'#e2e8f0', flexShrink:0, overflow:'hidden', cursor:'pointer' }} onClick={() => setEditObs(obs)}>
+                            {firstImg ? <img src={firstImg.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} /> : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', fontSize:'20px', opacity:0.4 }}>📝</div>}
                           </div>
-                          <div style={{ fontSize:'13px', color:'#0f172a', lineHeight:1.4 }}>{obs.title || obs.description || '(uten tekst)'}</div>
-                          {(obs.location_ref || obs.assigned_email || obs.assigned_role) && (
-                            <div style={{ display:'flex', gap:'10px', marginTop:'4px', flexWrap:'wrap', fontSize:'11px', color:'#64748b' }}>
-                              {obs.location_ref && <span style={{ color:'#2563eb' }}>📍 {obs.location_ref}</span>}
-                              {obs.assigned_role && <span>🔧 {obs.assigned_role}</span>}
-                              {obs.assigned_email && <span>✉️ {obs.assigned_email}</span>}
+                          <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={() => setEditObs(obs)}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'5px', marginBottom:'3px', flexWrap:'wrap' }}>
+                              <span style={{ fontSize:'11px', fontWeight:'800', color:'#94a3b8' }}>#{obs.sequence_number}</span>
+                              <span style={{ background:cat.bg, color:cat.color, border:`1px solid ${cat.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{cat.emoji} {cat.label}</span>
+                              <span style={{ background:st.bg, color:st.color, border:`1px solid ${st.border}`, padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>{st.emoji} {st.label}</span>
+                              {obs.assigned_to_user_id === user?.id && <span style={{ background:'#eff6ff', color:'#2563eb', padding:'1px 6px', borderRadius:'5px', fontSize:'10px', fontWeight:'700' }}>👤 Meg</span>}
                             </div>
-                          )}
+                            <div style={{ fontSize:'13px', color:'#0f172a', lineHeight:1.4 }}>{obs.title || obs.description || '(uten tekst)'}</div>
+                            {(obs.location_ref || obs.assigned_email || obs.assigned_role) && (
+                              <div style={{ display:'flex', gap:'10px', marginTop:'4px', flexWrap:'wrap', fontSize:'11px', color:'#64748b' }}>
+                                {obs.location_ref && <span style={{ color:'#2563eb' }}>📍 {obs.location_ref}</span>}
+                                {obs.assigned_role && <span>🔧 {obs.assigned_role}</span>}
+                                {obs.assigned_email && <span>✉️ {obs.assigned_email}</span>}
+                              </div>
+                            )}
+                          </div>
                         </div>
+                        {(canResolve || canApprove) && (
+                          <div style={{ display:'flex', gap:'6px', marginTop:'8px', paddingTop:'8px', borderTop:'1px solid #e2e8f0' }}>
+                            {canResolve && (
+                              <button onClick={() => setResolveObs(obs)} style={{ flex:1, padding:'6px', background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>✅ Markér utbedret</button>
+                            )}
+                            {canApprove && (
+                              <>
+                                <button onClick={() => setApproveObs(obs)} style={{ flex:1, padding:'6px', background:'#ecfdf5', color:'#059669', border:'1px solid #a7f3d0', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>✔️ Godkjenn</button>
+                                <button onClick={() => setRejectObs(obs)} style={{ flex:1, padding:'6px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>❌ Avvis</button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -28781,6 +29311,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
             <h3 style={{ margin:'0 0 12px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>Sammendrag</h3>
             <div style={{ display:'flex', flexDirection:'column', gap:'6px', fontSize:'12px', color:'#64748b' }}>
               <div>📷 {observations.length} observasjoner ({obsOpen} åpne)</div>
+              {obsVenterGodkjenn > 0 && <div style={{ color:'#16a34a', fontWeight:'600' }}>✅ {obsVenterGodkjenn} venter godkjenning</div>}
               <div>☑️ {items.length} sjekkpunkter ({avvik} avvik)</div>
               <div>⏰ {followups.length} oppfølging ({openF} åpne)</div>
               <div>📎 {files.length} vedlegg</div>
@@ -28789,7 +29320,6 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
         </div>
       </div>
 
-      {/* Modaler */}
       {(showCapture || editObs) && (
         <ObservationCaptureSheet
           inspection={ins}
@@ -28797,6 +29327,41 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           user={user}
           onClose={() => { setShowCapture(false); setEditObs(null) }}
           onSaved={() => { setShowCapture(false); setEditObs(null); loadDetails() }}
+          onResolve={() => { const o = editObs; setEditObs(null); setResolveObs(o) }}
+          onApprove={() => { const o = editObs; setEditObs(null); setApproveObs(o) }}
+          onReject={() => { const o = editObs; setEditObs(null); setRejectObs(o) }}
+        />
+      )}
+
+      {resolveObs && (
+        <ResolveObservationModal
+          inspection={ins}
+          observation={resolveObs}
+          user={user}
+          onClose={() => setResolveObs(null)}
+          onSaved={() => { setResolveObs(null); loadDetails() }}
+        />
+      )}
+
+      {approveObs && (
+        <ApproveRejectModal
+          inspection={ins}
+          observation={approveObs}
+          user={user}
+          mode="approve"
+          onClose={() => setApproveObs(null)}
+          onSaved={() => { setApproveObs(null); loadDetails() }}
+        />
+      )}
+
+      {rejectObs && (
+        <ApproveRejectModal
+          inspection={ins}
+          observation={rejectObs}
+          user={user}
+          mode="reject"
+          onClose={() => setRejectObs(null)}
+          onSaved={() => { setRejectObs(null); loadDetails() }}
         />
       )}
 
@@ -28817,7 +29382,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BefaringModal — opprett/rediger befaring (uendret)
+// BefaringModal — opprett/rediger befaring
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BefaringModal({ projects, user, initial, onClose, onSaved }) {
