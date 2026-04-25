@@ -28536,6 +28536,17 @@ function ResolveObservationModal({ inspection, observation, user, onClose, onSav
         </div>
 
         <div style={{ padding:'12px 18px env(safe-area-inset-bottom)', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'white' }}>
+          {(images.length === 0 || !note.trim()) && !saving && !uploading && (
+            <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'8px 10px', marginBottom:'8px', fontSize:'12px', color:'#92400e', fontWeight:'600', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span>⚠️</span>
+              <span>
+                Mangler:
+                {images.length === 0 && ' bilde'}
+                {images.length === 0 && !note.trim() && ' og'}
+                {!note.trim() && ' beskrivelse'}
+              </span>
+            </div>
+          )}
           <button onClick={handleSave} disabled={saving || uploading || images.length === 0 || !note.trim()} style={{
             width:'100%', padding:'14px',
             background: (saving || uploading || images.length === 0 || !note.trim()) ? '#94a3b8' : '#16a34a',
