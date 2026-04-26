@@ -29226,57 +29226,61 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
       const dueLabel = days === null ? '' : (days < 0 ? `${Math.abs(days)} dag${Math.abs(days)===1?'':'er'} på overtid` : (days === 0 ? 'I dag' : (days === 1 ? 'I morgen' : `${days} dager igjen`)))
 
       return `
-        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.04)">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#ffffff" style="background-color:#ffffff;background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px">
           <!-- Kategori-banner -->
-          <div style="background:${cat.bg};border-bottom:1px solid ${cat.border};padding:10px 18px">
-            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-              <tr>
-                <td style="font-size:12px;font-weight:700;color:${cat.color};text-transform:uppercase;letter-spacing:0.04em">
-                  ${cat.emoji} ${cat.label} · Punkt #${obs.sequence_number}
-                </td>
-              </tr>
-            </table>
-          </div>
+          <tr>
+            <td bgcolor="${cat.bg}" style="background-color:${cat.bg};background:${cat.bg};border-bottom:1px solid ${cat.border};padding:10px 18px;border-radius:14px 14px 0 0">
+              <span style="font-size:12px;font-weight:700;color:${cat.color};text-transform:uppercase;letter-spacing:0.04em">
+                ${cat.emoji} ${cat.label} · Punkt #${obs.sequence_number}
+              </span>
+            </td>
+          </tr>
 
           <!-- Innhold -->
-          <div style="padding:18px">
-            ${obs.title ? `<h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;line-height:1.3">${esc(obs.title)}</h3>` : ''}
+          <tr>
+            <td bgcolor="#ffffff" style="background-color:#ffffff;padding:18px">
+              ${obs.title ? `<h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;line-height:1.3">${esc(obs.title)}</h3>` : ''}
 
-            ${obs.location_ref ? `
-              <div style="margin:0 0 10px">
-                <span style="display:inline-block;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600">📍 ${esc(obs.location_ref)}</span>
-              </div>
-            ` : ''}
+              ${obs.location_ref ? `
+                <div style="margin:0 0 10px">
+                  <span style="display:inline-block;background-color:#eff6ff;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600">📍 ${esc(obs.location_ref)}</span>
+                </div>
+              ` : ''}
 
-            ${obs.description ? `<p style="margin:0 0 14px;color:#334155;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(obs.description)}</p>` : ''}
+              ${obs.description ? `<p style="margin:0 0 14px;color:#334155;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(obs.description)}</p>` : ''}
 
-            ${obs.due_date ? `
-              <div style="background:${dueBg};border:1px solid ${dueColor}33;border-left:3px solid ${dueColor};border-radius:8px;padding:10px 12px;margin:0 0 14px">
-                <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+              ${obs.due_date ? `
+                <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="${dueBg}" style="background-color:${dueBg};background:${dueBg};border:1px solid ${dueColor}33;border-left:3px solid ${dueColor};border-radius:8px;margin:0 0 14px">
                   <tr>
-                    <td style="font-size:11px;color:${dueColor};text-transform:uppercase;letter-spacing:0.04em;font-weight:700">📅 Frist</td>
-                    <td align="right" style="font-size:11px;color:${dueColor};font-weight:700">${dueLabel}</td>
-                  </tr>
-                  <tr>
-                    <td colspan="2" style="font-size:14px;color:${dueColor};font-weight:700;padding-top:2px">${esc(formatDate(obs.due_date))}</td>
+                    <td bgcolor="${dueBg}" style="background-color:${dueBg};padding:10px 12px">
+                      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+                        <tr>
+                          <td style="font-size:11px;color:${dueColor};text-transform:uppercase;letter-spacing:0.04em;font-weight:700">📅 Frist</td>
+                          <td align="right" style="font-size:11px;color:${dueColor};font-weight:700">${dueLabel}</td>
+                        </tr>
+                        <tr>
+                          <td colspan="2" style="font-size:14px;color:${dueColor};font-weight:700;padding-top:2px">${esc(formatDate(obs.due_date))}</td>
+                        </tr>
+                      </table>
+                    </td>
                   </tr>
                 </table>
-              </div>
-            ` : ''}
+              ` : ''}
 
-            ${imgs.length ? `
-              <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0">
-                <tr>
-                  ${imgs.map(im => `
-                    <td style="padding:0 6px 6px 0;vertical-align:top">
-                      <img src="${esc(im.url)}" alt="" width="140" style="display:block;width:140px;height:105px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0" />
-                    </td>
-                  `).join('')}
-                </tr>
-              </table>
-            ` : ''}
-          </div>
-        </div>
+              ${imgs.length ? `
+                <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0">
+                  <tr>
+                    ${imgs.map(im => `
+                      <td style="padding:0 6px 6px 0;vertical-align:top">
+                        <img src="${esc(im.url)}" alt="" width="140" style="display:block;width:140px;height:105px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0" />
+                      </td>
+                    `).join('')}
+                  </tr>
+                </table>
+              ` : ''}
+            </td>
+          </tr>
+        </table>
       `
     }).join('')
 
@@ -29284,8 +29288,8 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
     const ctaButton = linkUrl ? `
       <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto">
         <tr>
-          <td align="center" style="background:#059669;border-radius:12px;box-shadow:0 4px 12px rgba(5,150,105,0.25)">
-            <a href="${esc(linkUrl)}" style="display:inline-block;padding:18px 36px;color:#ffffff;text-decoration:none;font-weight:800;font-size:17px;letter-spacing:0.01em;font-family:system-ui,-apple-system,sans-serif">
+          <td align="center" bgcolor="#059669" style="background-color:#059669;background:#059669;border-radius:12px;box-shadow:0 4px 12px rgba(5,150,105,0.25)">
+            <a href="${esc(linkUrl)}" style="display:inline-block;padding:18px 36px;color:#ffffff;text-decoration:none;font-weight:800;font-size:17px;letter-spacing:0.01em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
               📋 Åpne befaring
             </a>
           </td>
@@ -29294,19 +29298,27 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
     ` : ''
 
     const heroLink = linkUrl ? `
-      <div style="background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);border:2px solid #059669;border-radius:16px;padding:24px 20px;margin:0 0 24px;text-align:center">
-        <p style="margin:0 0 6px;color:#064e3b;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">${recipientName ? esc(recipientName) + ', d' : 'D'}u har fått tilsendt punkter</p>
-        <p style="margin:0 0 18px;color:#065f46;font-size:15px;line-height:1.5">Klikk på knappen for å markere punkter som utbedret og laste opp dokumentasjon.</p>
-        ${ctaButton}
-        <p style="margin:14px 0 0;color:#047857;font-size:12px">🔒 Lenken er gyldig i 15 dager · Ingen innlogging nødvendig</p>
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#ecfdf5" style="background-color:#ecfdf5;background:#ecfdf5;border:2px solid #059669;border-radius:16px;margin:0 0 24px">
+        <tr>
+          <td bgcolor="#ecfdf5" style="background-color:#ecfdf5;padding:24px 20px;text-align:center;border-radius:16px">
+            <p style="margin:0 0 6px;color:#064e3b;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">${recipientName ? esc(recipientName) + ', d' : 'D'}u har fått tilsendt punkter</p>
+            <p style="margin:0 0 18px;color:#065f46;font-size:15px;line-height:1.5">Klikk på knappen for å markere punkter som utbedret og laste opp dokumentasjon.</p>
+            ${ctaButton}
+            <p style="margin:14px 0 0;color:#047857;font-size:12px">🔒 Lenken er gyldig i 15 dager · Ingen innlogging nødvendig</p>
+          </td>
+        </tr>
+      </table>
     ` : ''
 
     const heroBottom = linkUrl ? `
-      <div style="background:#f8fafc;border-radius:16px;padding:24px 20px;margin:24px 0 0;text-align:center">
-        <p style="margin:0 0 14px;color:#475569;font-size:14px;font-weight:600">Klar til å begynne?</p>
-        ${ctaButton}
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f8fafc" style="background-color:#f8fafc;background:#f8fafc;border-radius:16px;margin:24px 0 0">
+        <tr>
+          <td bgcolor="#f8fafc" style="background-color:#f8fafc;padding:24px 20px;text-align:center;border-radius:16px">
+            <p style="margin:0 0 14px;color:#475569;font-size:14px;font-weight:600">Klar til å begynne?</p>
+            ${ctaButton}
+          </td>
+        </tr>
+      </table>
     ` : ''
 
     // Tell punkter med frist for sammendrag
@@ -29322,29 +29334,37 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
     // Frist-banner ved kritiske frister
     const urgencyBanner = (overdue.length > 0 || urgent.length > 0) ? `
-      <div style="background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:10px;padding:14px 16px;margin:0 0 18px">
-        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-          <tr>
-            <td valign="top" width="32" style="padding-right:10px;font-size:24px;line-height:1">⚠️</td>
-            <td>
-              <p style="margin:0 0 4px;color:#7f1d1d;font-size:14px;font-weight:700">
-                ${overdue.length > 0 ? `${overdue.length} punkt${overdue.length===1?'':'er'} på overtid` : ''}
-                ${overdue.length > 0 && urgent.length > 0 ? ' · ' : ''}
-                ${urgent.length > 0 ? `${urgent.length} punkt${urgent.length===1?'':'er'} med kort frist` : ''}
-              </p>
-              <p style="margin:0;color:#991b1b;font-size:13px">Vennligst prioriter disse.</p>
-            </td>
-          </tr>
-        </table>
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#fef2f2" style="background-color:#fef2f2;background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:10px;margin:0 0 18px">
+        <tr>
+          <td bgcolor="#fef2f2" style="background-color:#fef2f2;padding:14px 16px">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+              <tr>
+                <td valign="top" width="32" style="padding-right:10px;font-size:24px;line-height:1">⚠️</td>
+                <td>
+                  <p style="margin:0 0 4px;color:#7f1d1d;font-size:14px;font-weight:700">
+                    ${overdue.length > 0 ? `${overdue.length} punkt${overdue.length===1?'':'er'} på overtid` : ''}
+                    ${overdue.length > 0 && urgent.length > 0 ? ' · ' : ''}
+                    ${urgent.length > 0 ? `${urgent.length} punkt${urgent.length===1?'':'er'} med kort frist` : ''}
+                  </p>
+                  <p style="margin:0;color:#991b1b;font-size:13px">Vennligst prioriter disse.</p>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     ` : ''
 
     // Personlig melding fra avsender
     const messageBlock = message ? `
-      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #2563eb;border-radius:10px;padding:14px 16px;margin:0 0 18px">
-        <p style="margin:0 0 6px;color:#1e3a8a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">💬 Melding</p>
-        <p style="margin:0;color:#1e40af;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(message)}</p>
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#eff6ff" style="background-color:#eff6ff;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #2563eb;border-radius:10px;margin:0 0 18px">
+        <tr>
+          <td bgcolor="#eff6ff" style="background-color:#eff6ff;padding:14px 16px">
+            <p style="margin:0 0 6px;color:#1e3a8a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">💬 Melding</p>
+            <p style="margin:0;color:#1e40af;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(message)}</p>
+          </td>
+        </tr>
+      </table>
     ` : ''
 
     // Hero-seksjon (befaringens info)
@@ -29371,21 +29391,25 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
     // Sammendrag-stripe
     const summaryStrip = `
-      <div style="background:#0f172a;color:#ffffff;border-radius:12px;padding:14px 18px;margin:0 0 18px">
-        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
-          <tr>
-            <td>
-              <span style="font-size:22px;font-weight:800;color:#ffffff">${observations.length}</span>
-              <span style="font-size:13px;color:#cbd5e1;margin-left:6px">punkt${observations.length!==1?'er':''} sendt til deg</span>
-            </td>
-            ${withDue.length > 0 ? `
-              <td align="right" style="font-size:12px;color:#94a3b8">
-                ${withDue.length} med frist
-              </td>
-            ` : ''}
-          </tr>
-        </table>
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#0f172a" style="background-color:#0f172a;background:#0f172a;border-radius:12px;margin:0 0 18px">
+        <tr>
+          <td bgcolor="#0f172a" style="background-color:#0f172a;padding:14px 18px;border-radius:12px">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+              <tr>
+                <td>
+                  <span style="font-size:22px;font-weight:800;color:#ffffff">${observations.length}</span>
+                  <span style="font-size:13px;color:#cbd5e1;margin-left:6px">punkt${observations.length!==1?'er':''} sendt til deg</span>
+                </td>
+                ${withDue.length > 0 ? `
+                  <td align="right" style="font-size:12px;color:#94a3b8">
+                    ${withDue.length} med frist
+                  </td>
+                ` : ''}
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
     `
 
     return `<!DOCTYPE html>
@@ -29395,20 +29419,22 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Befaring: ${esc(inspection.title)}</title>
 </head>
-<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a">
-  <div style="background:#f1f5f9;padding:24px 12px">
-    <table cellpadding="0" cellspacing="0" border="0" align="center" width="100%" style="max-width:680px;margin:0 auto;border-collapse:collapse">
+<body style="margin:0;padding:0;background-color:#f1f5f9;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a">
+  <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f1f5f9" style="background-color:#f1f5f9;background:#f1f5f9">
+    <tr>
+      <td align="center" bgcolor="#f1f5f9" style="background-color:#f1f5f9;padding:24px 12px">
+        <table cellpadding="0" cellspacing="0" border="0" align="center" width="100%" style="max-width:680px;margin:0 auto;border-collapse:collapse">
       <!-- Header -->
       <tr>
-        <td style="background:linear-gradient(135deg,#059669 0%,#047857 100%);color:#ffffff;padding:32px 28px;border-radius:18px 18px 0 0">
-          <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.08em;opacity:0.9;text-transform:uppercase">🔍 Befaring</p>
+        <td bgcolor="#059669" style="background-color:#059669;background:#059669;color:#ffffff;padding:32px 28px;border-radius:18px 18px 0 0">
+          <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.08em;color:#d1fae5;text-transform:uppercase">🔍 Befaring</p>
           <h1 style="margin:0;font-size:24px;font-weight:800;line-height:1.25;color:#ffffff">${esc(inspection.title || 'Uten tittel')}</h1>
         </td>
       </tr>
 
       <!-- Body -->
       <tr>
-        <td style="background:#ffffff;padding:28px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+        <td bgcolor="#ffffff" style="background-color:#ffffff;background:#ffffff;padding:28px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
           ${heroInfo}
 
           <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
@@ -29430,14 +29456,16 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
       <!-- Footer -->
       <tr>
-        <td style="background:#ffffff;padding:20px 28px 28px;border-radius:0 0 18px 18px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;text-align:center">
+        <td bgcolor="#ffffff" style="background-color:#ffffff;background:#ffffff;padding:20px 28px 28px;border-radius:0 0 18px 18px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;text-align:center">
           <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6">
             Sendt fra <strong style="color:#475569">En Plattform</strong> — KS-system for bygg og anlegg
           </p>
         </td>
       </tr>
-    </table>
-  </div>
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>`
   }
