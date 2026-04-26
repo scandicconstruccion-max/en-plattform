@@ -27478,11 +27478,297 @@ function formatDateTime(iso) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// SystemAlert — gjenbrukbar system-popup (erstatter window.alert)
+// Bruk: const [alertState, showAlert] = useSystemAlert(); showAlert('Tittel', 'Melding')
+// ═══════════════════════════════════════════════════════════════════════════
+function SystemAlert({ title, message, onClose, variant = 'info' }) {
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  const variants = {
+    info:    { color:'#2563eb', bg:'#eff6ff', emoji:'ℹ️' },
+    success: { color:'#059669', bg:'#ecfdf5', emoji:'✅' },
+    warning: { color:'#d97706', bg:'#fffbeb', emoji:'⚠️' },
+    error:   { color:'#dc2626', bg:'#fef2f2', emoji:'❌' },
+  }
+  const v = variants[variant] || variants.info
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Enter') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000 }} />
+      <div style={{
+        position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+        background:'white', borderRadius:'20px',
+        width: isMob ? 'calc(100vw - 32px)' : 'min(440px, calc(100vw - 32px))',
+        zIndex:9001, fontFamily:'system-ui,sans-serif', overflow:'hidden',
+        boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ padding:'22px 24px 16px', textAlign:'center' }}>
+          <div style={{ fontSize:'48px', marginBottom:'8px', lineHeight:1 }}>{v.emoji}</div>
+          {title && <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>{title}</h3>}
+          {message && <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{message}</p>}
+        </div>
+        <div style={{ padding:'12px 18px 18px', borderTop:'1px solid #f1f5f9' }}>
+          <button onClick={onClose} autoFocus style={{
+            width:'100%', padding:'12px',
+            background: v.color, color:'white', border:'none', borderRadius:'12px',
+            fontSize:'14px', fontWeight:'700', cursor:'pointer',
+          }}>OK</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function useSystemAlert() {
+  const [state, setState] = React.useState(null)
+  const showAlert = React.useCallback((title, message, variant = 'info') => {
+    if (typeof title === 'object' && title !== null) {
+      setState({ title: title.title || '', message: title.message || '', variant: title.variant || 'info' })
+    } else {
+      setState({ title, message, variant })
+    }
+  }, [])
+  const close = React.useCallback(() => setState(null), [])
+  const element = state ? <SystemAlert title={state.title} message={state.message} variant={state.variant} onClose={close} /> : null
+  return [element, showAlert]
+}
+
+// Global system-alert som kan kalles fra hvor som helst i befaring-modulen
+// Settes opp av useSystemAlertGlobal i BefaringPage og BefaringMobileDetalj.
+// Faller tilbake til window.alert hvis ikke satt opp ennå.
+let __befaringAlert = null
+function bAlert(title, message, variant = 'info') {
+  if (__befaringAlert) {
+    __befaringAlert(title, message, variant)
+  } else if (typeof window !== 'undefined') {
+    window.alert(typeof title === 'object' ? (title.title + '\n' + (title.message || '')) : (title + (message ? '\n' + message : '')))
+  }
+}
+
+function useSystemAlertGlobal() {
+  const [element, showAlert] = useSystemAlert()
+  React.useEffect(() => {
+    __befaringAlert = showAlert
+    return () => { if (__befaringAlert === showAlert) __befaringAlert = null }
+  }, [showAlert])
+  return element
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Lightbox — full-skjerm bilde-visning
+// ═══════════════════════════════════════════════════════════════════════════
+function Lightbox({ images, startIndex = 0, onClose }) {
+  const [idx, setIdx] = React.useState(startIndex)
+  const arr = Array.isArray(images) ? images : [images]
+  const total = arr.length
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight' && idx < total - 1) setIdx(idx + 1)
+      else if (e.key === 'ArrowLeft' && idx > 0) setIdx(idx - 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [idx, total, onClose])
+
+  if (total === 0) return null
+  const current = arr[idx]
+  const url = typeof current === 'string' ? current : current?.url
+  if (!url) return null
+
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:9500,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 12px',
+      cursor:'zoom-out',
+    }}>
+      <button onClick={onClose} style={{
+        position:'absolute', top:'12px', right:'12px',
+        width:'40px', height:'40px', borderRadius:'50%',
+        background:'rgba(255,255,255,0.15)', color:'white',
+        border:'none', cursor:'pointer', fontSize:'24px', lineHeight:1,
+        display:'flex', alignItems:'center', justifyContent:'center',
+      }}>×</button>
+      {total > 1 && (
+        <>
+          {idx > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); setIdx(idx - 1) }} style={{
+              position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)',
+              width:'48px', height:'48px', borderRadius:'50%',
+              background:'rgba(255,255,255,0.15)', color:'white',
+              border:'none', cursor:'pointer', fontSize:'24px',
+            }}>‹</button>
+          )}
+          {idx < total - 1 && (
+            <button onClick={(e) => { e.stopPropagation(); setIdx(idx + 1) }} style={{
+              position:'absolute', right:'12px', top:'50%', transform:'translateY(-50%)',
+              width:'48px', height:'48px', borderRadius:'50%',
+              background:'rgba(255,255,255,0.15)', color:'white',
+              border:'none', cursor:'pointer', fontSize:'24px',
+            }}>›</button>
+          )}
+          <div style={{
+            position:'absolute', bottom:'20px', left:'50%', transform:'translateX(-50%)',
+            color:'white', fontSize:'13px', fontWeight:'600',
+            background:'rgba(0,0,0,0.5)', padding:'4px 12px', borderRadius:'12px',
+          }}>{idx + 1} / {total}</div>
+        </>
+      )}
+      <img src={url} alt="" onClick={(e) => e.stopPropagation()} style={{
+        maxWidth:'100%', maxHeight:'100%', objectFit:'contain', cursor:'default',
+        borderRadius:'8px',
+      }} />
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EmployeeSelect — dropdown for ansatte (henter fra user_profiles)
+// ═══════════════════════════════════════════════════════════════════════════
+function EmployeeSelect({ value, onChange, placeholder = 'Velg ansatt', allowCustom = false, customValue = '', onCustomChange = null }) {
+  const [employees, setEmployees] = React.useState([])
+  const [loading, setLoading] = React.useState(true)
+
+  React.useEffect(() => {
+    let mounted = true
+    supabase.from('user_profiles')
+      .select('id, full_name, email, role')
+      .order('full_name', { ascending: true })
+      .then(r => {
+        if (!mounted) return
+        setEmployees((r.data || []).filter(u => u.full_name))
+        setLoading(false)
+      })
+    return () => { mounted = false }
+  }, [])
+
+  return (
+    <div>
+      <select value={value || ''} onChange={e => onChange(e.target.value)} style={bInp}>
+        <option value="">{loading ? 'Laster...' : `— ${placeholder} —`}</option>
+        {employees.map(e => (
+          <option key={e.id} value={e.id}>
+            {e.full_name}{e.role ? ` · ${e.role}` : ''}
+          </option>
+        ))}
+      </select>
+      {allowCustom && (
+        <input
+          value={customValue}
+          onChange={e => onCustomChange?.(e.target.value)}
+          placeholder="Eller skriv navn manuelt"
+          style={{ ...bInp, marginTop:'6px' }}
+        />
+      )}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ProjectUESelect — dropdown for UE-er på et spesifikt prosjekt
+// (henter projects.subcontractors fra prosjektet, fritekst-fallback)
+// ═══════════════════════════════════════════════════════════════════════════
+function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, placeholder = 'Velg UE fra prosjektet' }) {
+  const [ues, setUes] = React.useState([])
+  const [loading, setLoading] = React.useState(true)
+  const [manualMode, setManualMode] = React.useState(false)
+
+  React.useEffect(() => {
+    let mounted = true
+    setLoading(true)
+    setUes([])
+    if (!projectId) { setLoading(false); return }
+    supabase.from('projects')
+      .select('subcontractors')
+      .eq('id', projectId)
+      .single()
+      .then(r => {
+        if (!mounted) return
+        const list = (r.data?.subcontractors || []).filter(s => s.email)
+        setUes(list)
+        setLoading(false)
+      })
+    return () => { mounted = false }
+  }, [projectId])
+
+  // Match nåværende value mot UE-listen (e-post som key)
+  const matchedUE = ues.find(u => (u.email || '').toLowerCase() === (value || '').toLowerCase())
+  const isCustom = manualMode || (value && !matchedUE && ues.length > 0)
+
+  if (!projectId) {
+    return (
+      <input
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        type="email"
+        placeholder="kontakt@ue.no (velg prosjekt for liste)"
+        style={bInp}
+      />
+    )
+  }
+
+  if (isCustom) {
+    return (
+      <div>
+        <input
+          value={value || ''}
+          onChange={e => onChange(e.target.value)}
+          type="email"
+          placeholder="kontakt@ue.no"
+          style={bInp}
+          autoFocus
+        />
+        {ues.length > 0 && (
+          <button
+            type="button"
+            onClick={() => { setManualMode(false); onChange('') }}
+            style={{ background:'none', border:'none', color:'#2563eb', cursor:'pointer', fontSize:'12px', padding:'4px 0', marginTop:'4px' }}
+          >← Velg fra prosjekt-UE-er i stedet</button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div>
+      <select
+        value={value || ''}
+        onChange={e => {
+          const selected = ues.find(u => u.email === e.target.value)
+          onChange(e.target.value)
+          if (selected && onSelectFull) onSelectFull(selected)
+        }}
+        style={bInp}
+      >
+        <option value="">{loading ? 'Laster UE-er...' : ues.length === 0 ? '— Ingen UE-er på prosjektet —' : `— ${placeholder} —`}</option>
+        {ues.map((ue, i) => (
+          <option key={i} value={ue.email}>
+            {ue.company || ue.contact_person || ue.email}{ue.trade ? ` · ${ue.trade}` : ''}{ue.contact_person && ue.company ? ` (${ue.contact_person})` : ''}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={() => setManualMode(true)}
+        style={{ background:'none', border:'none', color:'#2563eb', cursor:'pointer', fontSize:'12px', padding:'4px 0', marginTop:'4px' }}
+      >+ Skriv inn ny e-post manuelt</button>
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // BefaringPage — listevisning
 // ═══════════════════════════════════════════════════════════════════════════
 
 function BefaringPage() {
   const { user } = useAuth()
+  const alertEl = useSystemAlertGlobal()
   const [inspections, setInspections] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -27517,13 +27803,13 @@ function BefaringPage() {
 
   const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
 
-  if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div>
+  if (loading) return <>{alertEl}<div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div></>
   if (selected) {
     const useObs = OBSERVATION_FIRST_TYPES.includes(selected.inspection_type)
     if (useObs && isMobB) {
-      return <BefaringMobileDetalj inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+      return <>{alertEl}<BefaringMobileDetalj inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} /></>
     }
-    return <BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} />
+    return <>{alertEl}<BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} /></>
   }
 
   return (
@@ -27613,6 +27899,7 @@ function BefaringPage() {
         )}
       </div>
       {showNew&&<BefaringModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+      {alertEl}
     </div>
   )
 }
@@ -27623,6 +27910,7 @@ function BefaringPage() {
 
 function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const alertEl = useSystemAlertGlobal()
   const [ins, setIns] = useState(init)
   const [observations, setObservations] = useState([])
   const [loading, setLoading] = useState(true)
@@ -28030,6 +28318,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
   const [uploading, setUploading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [showAdvanced, setShowAdvanced] = React.useState(!!isEdit)
+  const [lightbox, setLightbox] = React.useState(null) // { images, index }
 
   React.useEffect(() => {
     supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
@@ -28046,13 +28335,9 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
       .then(r => setStatusLog(r.data || []))
   }, [isEdit, observation?.id])
 
-  React.useEffect(() => {
-    if (!isEdit && form.images.length === 0 && cameraInputRef.current) {
-      const t = setTimeout(() => { try { cameraInputRef.current?.click() } catch(e){} }, 200)
-      return () => clearTimeout(t)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  // (Punkt 3-fiks) Tidligere triggret vi kamera automatisk her ved nytt punkt.
+  // Det er nå fjernet — brukeren må aktivt klikke kamera/galleri-knappene
+  // i skjemaet, slik at de først kan se hele "Nytt punkt"-skjemaet.
 
   React.useEffect(() => {
     if (!speech.isListening && speech.transcript) {
@@ -28078,7 +28363,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
       const uploaded = await uploadObservationImages(arr, inspection.id, observation?.id)
       setForm(f => ({ ...f, images: [...f.images, ...uploaded] }))
     } catch(e) {
-      alert('Kunne ikke laste opp: ' + e.message)
+      bAlert('Opplasting feilet', e.message, 'error')
     } finally { setUploading(false) }
   }
 
@@ -28088,7 +28373,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   const handleSave = async () => {
     if (!form.description?.trim() && form.images.length === 0) {
-      return alert('Legg til bilde eller beskrivelse')
+      return bAlert('Mangler innhold', 'Legg til minst ett bilde eller en beskrivelse før du lagrer.', 'warning')
     }
     setSaving(true)
     try {
@@ -28118,7 +28403,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
       }
       onSaved()
     } catch(e) {
-      alert('Lagring feilet: ' + e.message)
+      bAlert('Lagring feilet', e.message, 'error')
     } finally { setSaving(false) }
   }
 
@@ -28136,7 +28421,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
       const { error } = await supabase.from('inspection_observations').update({ status: newStatus }).eq('id', observation.id)
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { bAlert('Feil', e.message, 'error') }
   }
 
   const toggleMic = () => {
@@ -28217,8 +28502,13 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:'8px' }}>
               {form.images.map((img, idx) => (
                 <div key={idx} style={{ position:'relative', aspectRatio:'1/1', borderRadius:'10px', overflow:'hidden', background:'#f1f5f9' }}>
-                  <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                  <button onClick={() => removeImage(idx)} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
+                  <img
+                    src={img.url}
+                    alt=""
+                    onClick={() => setLightbox({ images: form.images, index: idx })}
+                    style={{ width:'100%', height:'100%', objectFit:'cover', cursor:'zoom-in' }}
+                  />
+                  <button onClick={(e) => { e.stopPropagation(); removeImage(idx) }} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
                 </div>
               ))}
               <button onClick={() => cameraInputRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #cbd5e1', borderRadius:'10px', background:'#f8fafc', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#64748b', fontSize:'11px', fontWeight:'600' }}>
@@ -28309,7 +28599,18 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
               <div>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>✉️ Eller e-post (UE/ekstern)</label>
-                <input value={form.assigned_email} onChange={e => set('assigned_email', e.target.value)} type="email" placeholder="kontakt@ue.no" style={bInp} />
+                <ProjectUESelect
+                  projectId={inspection.project_id}
+                  value={form.assigned_email}
+                  onChange={v => set('assigned_email', v)}
+                  onSelectFull={(ue) => {
+                    setForm(f => ({
+                      ...f,
+                      assigned_email: ue.email || '',
+                      assigned_role: f.assigned_role || ue.trade || ue.discipline || '',
+                    }))
+                  }}
+                />
               </div>
 
               <div>
@@ -28343,7 +28644,13 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
               {Array.isArray(observation.resolution_images) && observation.resolution_images.length > 0 && (
                 <div style={{ display:'flex', gap:'6px', marginTop:'8px', flexWrap:'wrap' }}>
                   {observation.resolution_images.map((img, idx) => (
-                    <img key={idx} src={img.url} alt="" style={{ width:'70px', height:'70px', objectFit:'cover', borderRadius:'6px' }} />
+                    <img
+                      key={idx}
+                      src={img.url}
+                      alt=""
+                      onClick={() => setLightbox({ images: observation.resolution_images, index: idx })}
+                      style={{ width:'70px', height:'70px', objectFit:'cover', borderRadius:'6px', cursor:'zoom-in' }}
+                    />
                   ))}
                 </div>
               )}
@@ -28423,6 +28730,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
         </div>
       </div>
       <style>{`@keyframes pulse { 0%,100% { opacity:1 } 50% { opacity:0.6 } }`}</style>
+      {lightbox && <Lightbox images={lightbox.images} startIndex={lightbox.index} onClose={() => setLightbox(null)} />}
     </>
   )
 }
@@ -28452,7 +28760,7 @@ function ResolveObservationModal({ inspection, observation, user, onClose, onSav
       setImages(prev => [...prev, ...uploaded])
     } catch(e) {
       console.error('[ResolveModal] Upload error:', e)
-      alert('Kunne ikke laste opp: ' + e.message)
+      bAlert('Opplasting feilet', e.message, 'error')
     } finally { setUploading(false) }
   }
 
@@ -28460,10 +28768,10 @@ function ResolveObservationModal({ inspection, observation, user, onClose, onSav
 
   const handleSave = async () => {
     if (images.length === 0) {
-      return alert('Du må legge til minst ett bilde av utbedringen.')
+      return bAlert('Bilde mangler', 'Du må legge til minst ett bilde som dokumentasjon på utbedringen.', 'warning')
     }
     if (!note.trim()) {
-      return alert('Skriv en kort beskrivelse av utbedringen.')
+      return bAlert('Beskrivelse mangler', 'Skriv en kort beskrivelse av hva som ble gjort for å utbedre punktet.', 'warning')
     }
     setSaving(true)
     try {
@@ -28476,7 +28784,7 @@ function ResolveObservationModal({ inspection, observation, user, onClose, onSav
       }).eq('id', observation.id)
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { bAlert('Feil', e.message, 'error') }
     finally { setSaving(false) }
   }
 
@@ -28580,7 +28888,7 @@ function ApproveRejectModal({ inspection, observation, user, mode, onClose, onSa
 
   const handleSave = async () => {
     if (!isApprove && !note.trim()) {
-      return alert('Skriv en kort begrunnelse for avvisning.')
+      return bAlert('Begrunnelse mangler', 'Skriv en kort begrunnelse for hvorfor utbedringen avvises.', 'warning')
     }
     setSaving(true)
     try {
@@ -28597,8 +28905,30 @@ function ApproveRejectModal({ inspection, observation, user, mode, onClose, onSa
       }
       const { error } = await supabase.from('inspection_observations').update(payload).eq('id', observation.id)
       if (error) throw error
+
+      // Punkt 7: Send varsel til UE/utbedrer (e-post + in-app notification)
+      // Trigges bare hvis det finnes en utbedrer eller tildelt e-post.
+      // Failure i varslingen skal IKKE blokkere selve godkjenningen — vi logger bare.
+      try {
+        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-notify-resolver`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          },
+          body: JSON.stringify({
+            observation_id: observation.id,
+            action: isApprove ? 'approve' : 'reject',
+            note: note.trim() || null,
+          }),
+        })
+      } catch (notifyErr) {
+        console.warn('Varsling til UE feilet (men oppdatering OK):', notifyErr)
+      }
+
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { bAlert('Feil', e.message, 'error') }
     finally { setSaving(false) }
   }
 
@@ -28760,8 +29090,8 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
   const handleSend = async () => {
     const { email, name } = getRecipientEmail()
-    if (!email || !email.includes('@')) return alert('Velg eller skriv en gyldig e-post')
-    if (observations.length === 0) return alert('Ingen punkter å sende')
+    if (!email || !email.includes('@')) return bAlert('Ugyldig e-post', 'Velg eller skriv en gyldig e-postadresse.', 'warning')
+    if (observations.length === 0) return bAlert('Ingen punkter', 'Det er ingen observasjoner å sende.', 'warning')
 
     setSending(true)
     try {
@@ -28807,10 +29137,10 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
         await supabase.from('inspection_observations').update({ sent_log: newLog }).eq('id', obs.id)
       }
 
-      alert(`✓ Sendt ${observations.length} punkt${observations.length!==1?'er':''} til ${email}${viewLink ? ' (med lenke)' : ''}`)
+      bAlert('Sendt!', `${observations.length} punkt${observations.length!==1?'er':''} sendt til ${email}.${viewLink ? ' Mottaker har fått en lenke for å markere utbedringer.' : ''}`, 'success')
       onSent()
     } catch(e) {
-      alert('Feil: ' + e.message)
+      bAlert('Feil', e.message, 'error')
     } finally { setSending(false) }
   }
 
@@ -28990,6 +29320,7 @@ function BefaringInfoPanel({ ins, proj }) {
           <p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{ins.notes}</p>
         </div>
       )}
+      {alertEl}
     </div>
   )
 }
@@ -29000,6 +29331,7 @@ function BefaringInfoPanel({ ins, proj }) {
 
 function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const alertEl = useSystemAlertGlobal()
   const [ins, setIns] = useState(init)
   const [items, setItems] = useState(init.inspection_items||[])
   const [followups, setFollowups] = useState(init.inspection_followups||[])
@@ -29040,7 +29372,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       const { error } = await supabase.from('inspection_items').insert({ inspection_id:ins.id, description:newItem.trim(), sort_order:items.length })
       if (error) throw error
       setNewItem(''); loadDetails()
-    } catch(e) { alert('Feil ved lagring: '+e.message) }
+    } catch(e) { bAlert('Lagring feilet', e.message, 'error') }
   }
 
   const toggleItemStatus = async (item) => {
@@ -29075,7 +29407,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
       await supabase.from('inspection_files').insert({ inspection_id:ins.id, name:file.name, file_url:publicUrl, file_type:file.type })
       loadDetails()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { bAlert('Feil', e.message, 'error') }
     finally { setSaving(false); e.target.value='' }
   }
 
@@ -29118,8 +29450,8 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       const { data: ed } = await supabase.from('deviations').select('deviation_number')
       const devNr = nextSequenceNumber(ed||[], 'AV', 'deviation_number')
       await supabase.from('deviations').insert({ title:item.description, deviation_number:devNr, project_id:ins.project_id, description:'Opprettet fra befaring "'+ins.title+'" ('+ins.date+').\n\nSjekkpunkt: '+item.description, severity:'Middels', status:'Åpen', images:[], created_by:user?.id })
-      alert('Avvik opprettet: '+devNr)
-    } catch(e){alert('Feil: '+e.message)}
+      bAlert('Avvik opprettet', `Avvik nummer ${devNr} ble opprettet og linket til dette befaringspunktet.`, 'success')
+    } catch(e){bAlert('Feil', e.message, 'error')}
   }
 
   const ITEM_STATUS = {
@@ -29443,6 +29775,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       )}
 
       {editing && <BefaringModal projects={projects} user={user} initial={ins} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh() }} />}
+      {alertEl}
     </div>
   )
 }
@@ -29468,11 +29801,21 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [newParticipant, setNewParticipant] = useState('')
   const [newExt, setNewExt] = useState({ role:'ue', name:'', company:'', email:'' })
+  const [employees, setEmployees] = useState([])
+
+  React.useEffect(() => {
+    let mounted = true
+    supabase.from('user_profiles')
+      .select('id, full_name, role')
+      .order('full_name', { ascending: true })
+      .then(r => { if (mounted) setEmployees((r.data || []).filter(u => u.full_name)) })
+    return () => { mounted = false }
+  }, [])
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
   const save = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) return bAlert('Tittel mangler', 'Du må skrive en tittel for befaringen.', 'warning')
     setSaving(true)
     try {
       const payload = {
@@ -29490,7 +29833,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
       if (isEdit) { const { error } = await supabase.from('inspections').update(payload).eq('id', initial.id); if (error) throw error }
       else        { const { error } = await supabase.from('inspections').insert({ ...payload, created_by: user?.id }); if (error) throw error }
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { bAlert('Feil', e.message, 'error') }
     finally { setSaving(false) }
   }
 
@@ -29540,8 +29883,24 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
 
           <div>
             <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>👥 Interne deltakere</label>
-            <div style={{ display:'flex', gap:'6px', marginBottom:'8px' }}>
-              <input value={newParticipant} onChange={e => setNewParticipant(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addParticipant())} placeholder="Navn..." style={{ ...bInp, flex:1 }} />
+            <div style={{ display:'flex', gap:'6px', marginBottom:'8px', flexDirection: isMob ? 'column' : 'row' }}>
+              <select
+                value=""
+                onChange={e => {
+                  if (!e.target.value) return
+                  if (!form.participants.includes(e.target.value)) {
+                    set('participants', [...form.participants, e.target.value])
+                  }
+                  e.target.value = ''
+                }}
+                style={{ ...bInp, flex:1 }}
+              >
+                <option value="">— Velg fra ansatte —</option>
+                {employees.filter(em => em.full_name).map(em => (
+                  <option key={em.id} value={em.full_name}>{em.full_name}{em.role ? ' · ' + em.role : ''}</option>
+                ))}
+              </select>
+              <input value={newParticipant} onChange={e => setNewParticipant(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addParticipant())} placeholder="Eller skriv navn..." style={{ ...bInp, flex:1 }} />
               <button onClick={addParticipant} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+</button>
             </div>
             {form.participants.length > 0 && (
@@ -39828,6 +40187,124 @@ function OrdreViewPage() {
 // befaring-view-upload-url. Token + email i URL.
 // ───────────────────────────────────────────────────────────────────────────────
 
+// System-popup for view-siden (uavhengig av appens hoved-popup-system)
+function BVSystemAlert({ title, message, onClose, variant = 'info' }) {
+  const variants = {
+    info:    { color:'#2563eb', emoji:'ℹ️' },
+    success: { color:'#059669', emoji:'✅' },
+    warning: { color:'#d97706', emoji:'⚠️' },
+    error:   { color:'#dc2626', emoji:'❌' },
+  }
+  const v = variants[variant] || variants.info
+
+  React.useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Enter') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000 }} />
+      <div style={{
+        position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+        background:'white', borderRadius:'20px',
+        width: 'min(440px, calc(100vw - 32px))',
+        zIndex:9001, fontFamily:'system-ui,sans-serif', overflow:'hidden',
+        boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)',
+      }}>
+        <div style={{ padding:'22px 24px 16px', textAlign:'center' }}>
+          <div style={{ fontSize:'48px', marginBottom:'8px', lineHeight:1 }}>{v.emoji}</div>
+          {title && <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>{title}</h3>}
+          {message && <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.5, whiteSpace:'pre-wrap' }}>{message}</p>}
+        </div>
+        <div style={{ padding:'12px 18px 18px', borderTop:'1px solid #f1f5f9' }}>
+          <button onClick={onClose} autoFocus style={{
+            width:'100%', padding:'12px',
+            background: v.color, color:'white', border:'none', borderRadius:'12px',
+            fontSize:'14px', fontWeight:'700', cursor:'pointer',
+          }}>OK</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function useBVAlert() {
+  const [state, setState] = React.useState(null)
+  const showAlert = React.useCallback((title, message, variant = 'info') => {
+    setState({ title, message, variant })
+  }, [])
+  const close = React.useCallback(() => setState(null), [])
+  const element = state ? <BVSystemAlert title={state.title} message={state.message} variant={state.variant} onClose={close} /> : null
+  return [element, showAlert]
+}
+
+// Lightbox for view-siden
+function BVLightbox({ images, startIndex = 0, onClose }) {
+  const [idx, setIdx] = React.useState(startIndex)
+  const arr = Array.isArray(images) ? images : [images]
+  const total = arr.length
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight' && idx < total - 1) setIdx(idx + 1)
+      else if (e.key === 'ArrowLeft' && idx > 0) setIdx(idx - 1)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [idx, total, onClose])
+
+  if (total === 0) return null
+  const current = arr[idx]
+  const url = typeof current === 'string' ? current : current?.url
+  if (!url) return null
+
+  return (
+    <div onClick={onClose} style={{
+      position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', zIndex:9500,
+      display:'flex', alignItems:'center', justifyContent:'center', padding:'40px 12px',
+      cursor:'zoom-out',
+    }}>
+      <button onClick={onClose} style={{
+        position:'absolute', top:'12px', right:'12px',
+        width:'40px', height:'40px', borderRadius:'50%',
+        background:'rgba(255,255,255,0.15)', color:'white',
+        border:'none', cursor:'pointer', fontSize:'24px', lineHeight:1,
+      }}>×</button>
+      {total > 1 && (
+        <>
+          {idx > 0 && (
+            <button onClick={(e) => { e.stopPropagation(); setIdx(idx - 1) }} style={{
+              position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)',
+              width:'48px', height:'48px', borderRadius:'50%',
+              background:'rgba(255,255,255,0.15)', color:'white',
+              border:'none', cursor:'pointer', fontSize:'24px',
+            }}>‹</button>
+          )}
+          {idx < total - 1 && (
+            <button onClick={(e) => { e.stopPropagation(); setIdx(idx + 1) }} style={{
+              position:'absolute', right:'12px', top:'50%', transform:'translateY(-50%)',
+              width:'48px', height:'48px', borderRadius:'50%',
+              background:'rgba(255,255,255,0.15)', color:'white',
+              border:'none', cursor:'pointer', fontSize:'24px',
+            }}>›</button>
+          )}
+          <div style={{
+            position:'absolute', bottom:'20px', left:'50%', transform:'translateX(-50%)',
+            color:'white', fontSize:'13px', fontWeight:'600',
+            background:'rgba(0,0,0,0.5)', padding:'4px 12px', borderRadius:'12px',
+          }}>{idx + 1} / {total}</div>
+        </>
+      )}
+      <img src={url} alt="" onClick={(e) => e.stopPropagation()} style={{
+        maxWidth:'100%', maxHeight:'100%', objectFit:'contain', borderRadius:'8px',
+      }} />
+    </div>
+  )
+}
+
 const BV_OBS_CATEGORY = {
   observasjon:    { label:'Observasjon',   emoji:'📝', color:'#0369a1', bg:'#e0f2fe', border:'#bae6fd' },
   avvik:          { label:'Avvik',          emoji:'⚠️', color:'#b91c1c', bg:'#fef2f2', border:'#fecaca' },
@@ -40083,6 +40560,8 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
   const [saving, setSaving] = useState(false)
   const cameraRef = React.useRef(null)
   const galleryRef = React.useRef(null)
+  const [alertEl, showAlert] = useBVAlert()
+  const [lightbox, setLightbox] = React.useState(null) // { images, index }
 
   const cat = BV_OBS_CATEGORY[observation.category] || BV_OBS_CATEGORY.observasjon
   const statusCfg = BV_STATUS[observation.status] || BV_STATUS.apen
@@ -40156,7 +40635,7 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
       }
       setImages(prev => [...prev, ...newImgs])
     } catch (e) {
-      alert('Kunne ikke laste opp: ' + e.message)
+      showAlert('Opplasting feilet', e.message, 'error')
     } finally {
       setUploading(false)
     }
@@ -40165,8 +40644,8 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
   const removeImage = idx => setImages(prev => prev.filter((_, i) => i !== idx))
 
   const handleSubmit = async () => {
-    if (images.length === 0) return alert('Du må legge til minst ett bilde av utbedringen.')
-    if (!note.trim()) return alert('Skriv en kort beskrivelse av hva som ble gjort.')
+    if (images.length === 0) return showAlert('Bilde mangler', 'Du må legge til minst ett bilde som dokumentasjon på utbedringen.', 'warning')
+    if (!note.trim()) return showAlert('Beskrivelse mangler', 'Skriv en kort beskrivelse av hva som ble gjort.', 'warning')
     setSaving(true)
     try {
       const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-view-resolve`, {
@@ -40187,10 +40666,10 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || 'Kunne ikke registrere utbedring')
-      alert('✅ Sendt! Byggleder får varsel og vil godkjenne så snart som mulig.')
-      onSaved()
+      showAlert('Sendt!', 'Byggleder får varsel og vil godkjenne så snart som mulig.', 'success')
+      setTimeout(() => onSaved(), 1500)
     } catch (e) {
-      alert('Feil: ' + e.message)
+      showAlert('Feil', e.message, 'error')
     } finally {
       setSaving(false)
     }
@@ -40236,9 +40715,9 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
               <p style={{ margin:'0 0 8px', fontSize:'12px', fontWeight:'700', color:'#64748b', textTransform:'uppercase' }}>📷 Bilder fra befaring</p>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(100px, 1fr))', gap:'6px' }}>
                 {allImages.map((img, idx) => (
-                  <a key={idx} href={img.url} target="_blank" rel="noopener noreferrer" style={{ aspectRatio:'1/1', borderRadius:'8px', overflow:'hidden', background:'#f1f5f9' }}>
+                  <div key={idx} onClick={() => setLightbox({ images: allImages, index: idx })} style={{ aspectRatio:'1/1', borderRadius:'8px', overflow:'hidden', background:'#f1f5f9', cursor:'zoom-in' }}>
                     <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                  </a>
+                  </div>
                 ))}
               </div>
             </div>
@@ -40260,9 +40739,9 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
               {Array.isArray(observation.resolution_images) && observation.resolution_images.length > 0 && (
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(80px, 1fr))', gap:'4px' }}>
                   {observation.resolution_images.map((im, i) => (
-                    <a key={i} href={im.url} target="_blank" rel="noopener noreferrer" style={{ aspectRatio:'1/1', borderRadius:'6px', overflow:'hidden' }}>
+                    <div key={i} onClick={() => setLightbox({ images: observation.resolution_images, index: i })} style={{ aspectRatio:'1/1', borderRadius:'6px', overflow:'hidden', cursor:'zoom-in' }}>
                       <img src={im.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                    </a>
+                    </div>
                   ))}
                 </div>
               )}
@@ -40294,8 +40773,13 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(90px, 1fr))', gap:'8px' }}>
                   {images.map((img, idx) => (
                     <div key={idx} style={{ position:'relative', aspectRatio:'1/1', borderRadius:'10px', overflow:'hidden', background:'#f1f5f9' }}>
-                      <img src={img.url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} />
-                      <button onClick={() => removeImage(idx)} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
+                      <img
+                        src={img.url}
+                        alt=""
+                        onClick={() => setLightbox({ images, index: idx })}
+                        style={{ width:'100%', height:'100%', objectFit:'cover', cursor:'zoom-in' }}
+                      />
+                      <button onClick={(e) => { e.stopPropagation(); removeImage(idx) }} style={{ position:'absolute', top:'4px', right:'4px', width:'24px', height:'24px', borderRadius:'50%', background:'rgba(0,0,0,0.7)', color:'white', border:'none', cursor:'pointer', fontSize:'14px', lineHeight:1 }}>×</button>
                     </div>
                   ))}
                   <button onClick={() => cameraRef.current?.click()} disabled={uploading} style={{ aspectRatio:'1/1', border:'2px dashed #86efac', borderRadius:'10px', background:'white', cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'4px', color:'#15803d', fontSize:'11px', fontWeight:'700' }}>
@@ -40354,6 +40838,8 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
           </div>
         )}
       </div>
+      {alertEl}
+      {lightbox && <BVLightbox images={lightbox.images} startIndex={lightbox.index} onClose={() => setLightbox(null)} />}
     </>
   )
 }
