@@ -28452,17 +28452,47 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
         due_date: form.due_date || null,
         images: form.images,
       }
+
+      // Sjekk om tildelingen endret seg eller er ny — for å avgjøre om vi skal varsle
+      const previouslyAssignedTo = observation?.assigned_to_user_id || null
+      const previouslyAssignedEmail = (observation?.assigned_email || '').toLowerCase()
+      const newAssignedTo = payload.assigned_to_user_id
+      const newAssignedEmail = (payload.assigned_email || '').toLowerCase()
+      const assignmentChanged = (newAssignedTo !== previouslyAssignedTo) || (newAssignedEmail !== previouslyAssignedEmail)
+      const hasAssignment = !!(newAssignedTo || newAssignedEmail)
+
+      let savedId = observation?.id
       if (isEdit) {
         const { error } = await supabase.from('inspection_observations').update(payload).eq('id', observation.id)
         if (error) throw error
       } else {
-        const { error } = await supabase.from('inspection_observations').insert({
+        const { data, error } = await supabase.from('inspection_observations').insert({
           ...payload,
           inspection_id: inspection.id,
           created_by: user?.id,
-        })
+        }).select('id').single()
         if (error) throw error
+        savedId = data?.id
       }
+
+      // Send varsel til mottaker hvis ny tildeling eller endret tildeling
+      // (Edge Function er idempotent og hopper over hvis allerede varslet)
+      if (hasAssignment && (assignmentChanged || !isEdit) && savedId) {
+        try {
+          await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-notify-assignment`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY,
+              'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ observation_id: savedId, include_email: true }),
+          })
+        } catch (notifyErr) {
+          console.warn('Varsel til mottaker feilet (men lagring OK):', notifyErr)
+        }
+      }
+
       cleanFormStorage()
       onSaved()
     } catch(e) {
@@ -28679,14 +28709,34 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
               <div>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>👤 Tildel til (intern)</label>
-                <select value={form.assigned_to_user_id} onChange={e => {
-                  const emp = employees.find(em => em.user_id === e.target.value)
-                  setForm(f => ({ ...f, assigned_to_user_id: e.target.value, assigned_email: emp?.email || f.assigned_email, assigned_role: emp?.role || f.assigned_role }))
+                <select value={form.assigned_to_user_id || form.assigned_email || ''} onChange={e => {
+                  const val = e.target.value
+                  // Verdien kan være user_id (UUID) eller email (hvis ansatt mangler brukerkonto)
+                  const emp = employees.find(em => em.user_id === val || em.email === val)
+                  if (!emp) {
+                    setForm(f => ({ ...f, assigned_to_user_id: '', assigned_email: '', assigned_role: '' }))
+                    return
+                  }
+                  setForm(f => ({
+                    ...f,
+                    assigned_to_user_id: emp.user_id || '',
+                    assigned_email: emp.email || '',
+                    assigned_role: f.assigned_role || emp.role || '',
+                  }))
                 }} style={bInp}>
                   <option value="">— Ingen —</option>
-                  {employees.filter(em => em.user_id).map(em => (
-                    <option key={em.id} value={em.user_id}>{em.first_name} {em.last_name}{em.role ? ' · ' + em.role : ''}</option>
-                  ))}
+                  {employees.map(em => {
+                    // Bruk user_id som value hvis det finnes (for å koble til auth-bruker),
+                    // ellers bruk email som fallback-identifikator
+                    const val = em.user_id || em.email || em.id
+                    const name = `${em.first_name || ''} ${em.last_name || ''}`.trim() || em.email || '(uten navn)'
+                    const hasAccount = !!em.user_id
+                    const suffix = em.role ? ' · ' + em.role : ''
+                    const accountTag = hasAccount ? '' : ' · 📧 Kun e-post'
+                    return (
+                      <option key={em.id} value={val}>{name}{suffix}{accountTag}</option>
+                    )
+                  })}
                 </select>
               </div>
 
@@ -29898,10 +29948,19 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
 
   React.useEffect(() => {
     let mounted = true
-    supabase.from('user_profiles')
-      .select('id, full_name, role')
-      .order('full_name', { ascending: true })
-      .then(r => { if (mounted) setEmployees((r.data || []).filter(u => u.full_name)) })
+    supabase.from('employees')
+      .select('id, first_name, last_name, role, user_id')
+      .order('last_name', { ascending: true, nullsFirst: false })
+      .then(r => {
+        if (!mounted) return
+        const list = (r.data || [])
+          .map(em => ({
+            ...em,
+            full_name: `${em.first_name || ''} ${em.last_name || ''}`.trim(),
+          }))
+          .filter(em => em.full_name) // Bare ansatte med navn
+        setEmployees(list)
+      })
     return () => { mounted = false }
   }, [])
 
@@ -29963,8 +30022,8 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
 
         <div style={{ overflowY:'auto', flex:1, padding:'16px 18px', display:'flex', flexDirection:'column', gap:'12px' }}>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Tittel *</label><input value={form.title} onChange={e => set('title', e.target.value)} placeholder="F.eks. HMS-befaring uke 12" style={bInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>🎯 Hensikt med befaringen</label><textarea value={form.purpose} onChange={e => set('purpose', e.target.value)} rows={2} placeholder="Hva er formålet?" style={{ ...bInp, resize:'none' }} /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Befaringstype</label><select value={form.inspection_type} onChange={e => set('inspection_type', e.target.value)} style={bInp}>{BEFARING_TYPES.map(t => <option key={t.id} value={t.id}>{t.emoji} {t.label}</option>)}</select></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>🎯 Hensikt med befaringen</label><textarea value={form.purpose} onChange={e => set('purpose', e.target.value)} rows={2} placeholder="Hva er formålet?" style={{ ...bInp, resize:'none' }} /></div>
 
           <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'10px' }}>
             <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Dato</label><input type="date" value={form.date} onChange={e => set('date', e.target.value)} style={bInp} /></div>
@@ -29989,9 +30048,12 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
                 style={{ ...bInp, flex:1 }}
               >
                 <option value="">— Velg fra ansatte —</option>
-                {employees.filter(em => em.full_name).map(em => (
-                  <option key={em.id} value={em.full_name}>{em.full_name}{em.role ? ' · ' + em.role : ''}</option>
-                ))}
+                {employees.filter(em => em.full_name).map(em => {
+                  const accountTag = em.user_id ? '' : ' · 📧 Kun e-post'
+                  return (
+                    <option key={em.id} value={em.full_name}>{em.full_name}{em.role ? ' · ' + em.role : ''}{accountTag}</option>
+                  )
+                })}
               </select>
               <input value={newParticipant} onChange={e => setNewParticipant(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addParticipant())} placeholder="Eller skriv navn..." style={{ ...bInp, flex:1 }} />
               <button onClick={addParticipant} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+</button>
