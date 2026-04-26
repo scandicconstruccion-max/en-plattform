@@ -27758,247 +27758,17 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
 // BefaringPage — listevisning
 // ═══════════════════════════════════════════════════════════════════════════
 
-function BefaringPage() {
-  const { user } = useAuth()
-  const alertEl = useSystemAlertGlobal()
-  const [inspections, setInspections] = useState([])
-  const [projects, setProjects] = useState([])
-  const [loading, setLoading] = useState(true)
-  // selected persistes i sessionStorage så vi overlever kamera-retur på mobil
-  const [selected, setSelected] = useState(() => {
-    try {
-      const raw = sessionStorage.getItem('befaring:selected')
-      return raw ? JSON.parse(raw) : null
-    } catch { return null }
-  })
-  const [showNew, setShowNew] = useState(false)
-  const [filterStatus, setFilterStatus] = useState('alle')
-  const [filterProject, setFilterProject] = useState('alle')
-  const [search, setSearch] = useState('')
-
-  // Synkroniser selected til sessionStorage
-  React.useEffect(() => {
-    try {
-      if (selected) sessionStorage.setItem('befaring:selected', JSON.stringify(selected))
-      else sessionStorage.removeItem('befaring:selected')
-    } catch {}
-  }, [selected])
-
-  // Hvis vi har persisted selected men listen ikke er lastet ennå, vent.
-  // Når listen er lastet, valider at selected fortsatt finnes (kan ha blitt slettet).
-  React.useEffect(() => {
-    if (!selected || loading) return
-    const stillExists = inspections.find(i => i.id === selected.id)
-    if (!stillExists) setSelected(null)
-    else if (stillExists !== selected) {
-      // Oppdater til ny referanse hvis data endret seg
-      setSelected(stillExists)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading])
-
-  const load = async () => {
-    try {
-      const [ins, proj] = await Promise.all([
-        supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name').then(r=>r.data||[])
-      ])
-      setInspections(ins); setProjects(proj)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
-  }
-  useEffect(()=>{ load() },[])
-
-  const filtered = inspections.filter(i=>{
-    if (filterStatus!=='alle'&&i.status!==filterStatus) return false
-    if (filterProject!=='alle'&&i.project_id!==filterProject) return false
-    if (search&&![i.title,i.location].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
-    return true
-  })
-
-  const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
-  const openObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.status==='apen'||o.status==='pagar'||o.status==='utbedret').length,0)
-  const myObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.assigned_to_user_id === user?.id && (o.status==='apen'||o.status==='pagar')).length,0)
-
-  const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
-
-  if (loading) return <>{alertEl}<div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div></>
-  if (selected) {
-    const useObs = OBSERVATION_FIRST_TYPES.includes(selected.inspection_type)
-    if (useObs && isMobB) {
-      return <>{alertEl}<BefaringMobileDetalj inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} /></>
-    }
-    return <>{alertEl}<BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} /></>
-  }
-
-  return (
-    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobB ? '14px' : '20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobB ? '12px' : '16px', gap:'10px' }}>
-          <div>
-            <h1 style={{ fontSize: isMobB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
-            {!isMobB && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>}
-          </div>
-          <button onClick={()=>setShowNew(true)} style={{ padding: isMobB ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobB ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>{isMobB ? '+ Befaring' : '+ Ny befaring'}</button>
-        </div>
-        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
-          {[
-            { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
-            { label:'Mine åpne', value:myObservations, emoji:'👤', bg:myObservations>0?'#eff6ff':'#f8fafc', color:myObservations>0?'#2563eb':'#64748b' },
-            { label:'Åpne punkter', value:openObservations, emoji:'⏰', bg:openObservations>0?'#fffbeb':'#f8fafc', color:openObservations>0?'#d97706':'#64748b' },
-            { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
-          ].map(s=>(
-            <div key={s.label} style={{ background:s.bg, borderRadius: isMobB ? '10px' : '12px', padding: isMobB ? '10px' : '14px 16px' }}>
-              <div style={{ fontSize: isMobB ? '14px' : '18px', marginBottom: isMobB ? '2px' : '4px' }}>{s.emoji}</div>
-              <div style={{ fontSize: isMobB ? '16px' : '20px', fontWeight:'800', color:s.color }}>{s.value}</div>
-              <div style={{ fontSize: isMobB ? '9px' : '11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ padding: isMobB ? '12px' : '20px 32px', display:'flex', flexDirection:'column', gap: isMobB ? '12px' : '16px', overflowX:'hidden' }}>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobB ? '10px' : '14px 18px', display:'flex', gap: isMobB ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...bInp, maxWidth: isMobB ? '100%' : '220px', flex: isMobB ? '1 1 100%' : '1' }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '160px', flex: isMobB ? '1 1 48%' : 'none' }}>
-            <option value="alle">Alle statuser</option>
-            {Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
-          </select>
-          <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...bInp, maxWidth: isMobB ? '100%' : '180px', flex: isMobB ? '1 1 48%' : 'none' }} placeholder="Alle prosjekter" emptyValue="alle" />
-          {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
-          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
-        </div>
-
-        {filtered.length===0 ? (
-          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
-            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🔍</div>
-            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen befaringer funnet</h3>
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{inspections.length===0?'Registrer din første befaring.':'Prøv å endre filter.'}</p>
-          </div>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {filtered.map(ins=>{
-              const cfg=INS_STATUS[ins.status]
-              const proj=projects.find(p=>p.id===ins.project_id)
-              const items=ins.inspection_items||[]
-              const followups=ins.inspection_followups||[]
-              const observations=ins.inspection_observations||[]
-              const openF=followups.filter(f=>!f.completed).length
-              const avvik=items.filter(i=>i.status==='avvik').length + observations.filter(o=>o.category==='avvik').length
-              const openObs=observations.filter(o=>o.status==='apen'||o.status==='pagar').length
-              const venterGodkjenn=observations.filter(o=>o.status==='utbedret').length
-              const useObs = OBSERVATION_FIRST_TYPES.includes(ins.inspection_type)
-              return (
-                <div key={ins.id} onClick={()=>setSelected(ins)}
-                  style={{ background:'white', borderRadius: isMobB ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobB ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobB ? 'flex-start' : 'center', gap: isMobB ? '10px' : '16px', transition:'box-shadow 0.15s' }}
-                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                  {!isMobB && <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobB ? '13px' : '15px' }}>{ins.title}</span>
-                      <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
-                      {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
-                      {openObs>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openObs} åpne</span>}
-                      {venterGodkjenn>0&&<span style={{ background:'#f0fdf4',color:'#16a34a',border:'1px solid #bbf7d0',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>✅ {venterGodkjenn} venter godkjenn</span>}
-                      {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
-                    </div>
-                    <div style={{ display:'flex', gap: isMobB ? '6px' : '12px', flexWrap:'wrap' }}>
-                      <span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📅 {ins.date}</span>
-                      {ins.location&&<span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📍 {ins.location}</span>}
-                      {!isMobB && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                      {!isMobB && useObs && observations.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>📷 {observations.length} punkter</span>}
-                      {!isMobB && !useObs && items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} sjekkpunkter</span>}
-                    </div>
-                  </div>
-                  {!isMobB && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
-      {showNew&&<BefaringModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
-      {alertEl}
-    </div>
-  )
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
-// BefaringMobileDetalj — primær mobilflyt
+// PDF-EKSPORT: generateBefaringPdf()
+// Frittstående async-funksjon — kalles fra både BefaringMobileDetalj og BefaringDetaljer.
 // ═══════════════════════════════════════════════════════════════════════════
-
-function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
-  const confirm = useConfirm()
-  const alertEl = useSystemAlertGlobal()
-  const [ins, setIns] = useState(init)
-  const [observations, setObservations] = useState([])
-  const [loading, setLoading] = useState(true)
-  // showCapture og editObs persisteres også, så vi overlever kamera-retur
-  const [showCapture, setShowCapture] = useState(() => {
-    try { return sessionStorage.getItem('befaring:showCapture') === '1' } catch { return false }
-  })
-  const [editObs, setEditObs] = useState(() => {
-    try {
-      const raw = sessionStorage.getItem('befaring:editObs')
-      return raw ? JSON.parse(raw) : null
-    } catch { return null }
-  })
-
-  React.useEffect(() => {
-    try {
-      if (showCapture) sessionStorage.setItem('befaring:showCapture', '1')
-      else sessionStorage.removeItem('befaring:showCapture')
-    } catch {}
-  }, [showCapture])
-
-  React.useEffect(() => {
-    try {
-      if (editObs) sessionStorage.setItem('befaring:editObs', JSON.stringify(editObs))
-      else sessionStorage.removeItem('befaring:editObs')
-    } catch {}
-  }, [editObs])
-
-  const [resolveObs, setResolveObs] = useState(null)
-  const [approveObs, setApproveObs] = useState(null)
-  const [rejectObs, setRejectObs] = useState(null)
-  const [selectMode, setSelectMode] = useState(false)
-  const [selected, setSelected] = useState(new Set())
-  const [showSend, setShowSend] = useState(false)
-  const [tab, setTab] = useState('punkter')
-  const [filter, setFilter] = useState('alle')
-  const [showEdit, setShowEdit] = useState(false)
-  const [showPdfMenu, setShowPdfMenu] = useState(false)
-  const [pdfExporting, setPdfExporting] = useState(false)
-
-  const proj = projects.find(p => p.id === ins.project_id)
-  const cfg = INS_STATUS[ins.status]
-
-  const load = async () => {
-    try {
-      const { data } = await supabase
-        .from('inspection_observations')
-        .select('*')
-        .eq('inspection_id', ins.id)
-        .order('sequence_number', { ascending: true })
-      setObservations(data || [])
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
-  }
-  useEffect(() => { load() }, [])
-
-  const refresh = async () => {
-    const { data } = await supabase.from('inspections').select('*').eq('id', ins.id).single()
-    if (data) setIns(data)
-  }
-
-  // ── PDF-eksport ────────────────────────────────────────────────────────
+// ── PDF-eksport ────────────────────────────────────────────────────────
   // mode: 'compact' = oversikt (én linje per punkt + 1 lite bilde)
   //       'detailed' = full rapport (beskrivelse, alle bilder, status-historikk)
   // Følger sjekkliste-/avvik-PDF-stil (createBrandedPdf-rammeverket).
   // Bildestørrelse: 35×35mm — kompakt slik som i sjekkliste-PDF.
-  const exportBefaringPDF = async (mode = 'compact') => {
-    setPdfExporting(true)
-    try {
+  async function generateBefaringPdf({ ins, proj, filter, filteredObs, observations, mode = 'compact' }) {
       const pdf = await createBrandedPdf()
       const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
 
@@ -28500,13 +28270,240 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
       pdf.drawFooters()
       const filename = `${reportTitle === 'BEFARING' ? 'Befaring' : 'Befaringsrapport'} - ${ins.title || 'Ukjent'}.pdf`
       doc.save(filename)
-    } catch (e) {
-      console.error('PDF-eksport feilet:', e)
-      bAlert('PDF-eksport feilet', e.message || 'Ukjent feil', 'error')
-    } finally {
-      setPdfExporting(false)
-      setShowPdfMenu(false)
+}
+
+
+function BefaringPage() {
+  const { user } = useAuth()
+  const alertEl = useSystemAlertGlobal()
+  const [inspections, setInspections] = useState([])
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  // selected persistes i sessionStorage så vi overlever kamera-retur på mobil
+  const [selected, setSelected] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('befaring:selected')
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+  const [showNew, setShowNew] = useState(false)
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [filterProject, setFilterProject] = useState('alle')
+  const [search, setSearch] = useState('')
+
+  // Synkroniser selected til sessionStorage
+  React.useEffect(() => {
+    try {
+      if (selected) sessionStorage.setItem('befaring:selected', JSON.stringify(selected))
+      else sessionStorage.removeItem('befaring:selected')
+    } catch {}
+  }, [selected])
+
+  // Hvis vi har persisted selected men listen ikke er lastet ennå, vent.
+  // Når listen er lastet, valider at selected fortsatt finnes (kan ha blitt slettet).
+  React.useEffect(() => {
+    if (!selected || loading) return
+    const stillExists = inspections.find(i => i.id === selected.id)
+    if (!stillExists) setSelected(null)
+    else if (stillExists !== selected) {
+      // Oppdater til ny referanse hvis data endret seg
+      setSelected(stillExists)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
+
+  const load = async () => {
+    try {
+      const [ins, proj] = await Promise.all([
+        supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name').then(r=>r.data||[])
+      ])
+      setInspections(ins); setProjects(proj)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(()=>{ load() },[])
+
+  const filtered = inspections.filter(i=>{
+    if (filterStatus!=='alle'&&i.status!==filterStatus) return false
+    if (filterProject!=='alle'&&i.project_id!==filterProject) return false
+    if (search&&![i.title,i.location].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
+
+  const openFollowups = inspections.reduce((acc,i)=>acc+(i.inspection_followups||[]).filter(f=>!f.completed).length,0)
+  const openObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.status==='apen'||o.status==='pagar'||o.status==='utbedret').length,0)
+  const myObservations = inspections.reduce((acc,i)=>acc+(i.inspection_observations||[]).filter(o=>o.assigned_to_user_id === user?.id && (o.status==='apen'||o.status==='pagar')).length,0)
+
+  const isMobB = typeof window !== 'undefined' && window.innerWidth < 768
+
+  if (loading) return <>{alertEl}<div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster befaringer...</p></div></div></>
+  if (selected) {
+    const useObs = OBSERVATION_FIRST_TYPES.includes(selected.inspection_type)
+    if (useObs && isMobB) {
+      return <>{alertEl}<BefaringMobileDetalj inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} /></>
+    }
+    return <>{alertEl}<BefaringDetaljer inspection={selected} projects={projects} user={user} onBack={()=>{setSelected(null);load()}} /></>
+  }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', overflowX:'hidden', maxWidth:'100vw' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobB ? '14px' : '20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: isMobB ? '12px' : '16px', gap:'10px' }}>
+          <div>
+            <h1 style={{ fontSize: isMobB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
+            {!isMobB && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>}
+          </div>
+          <button onClick={()=>setShowNew(true)} style={{ padding: isMobB ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobB ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>{isMobB ? '+ Befaring' : '+ Ny befaring'}</button>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'10px' }}>
+          {[
+            { label:'Totalt', value:inspections.length, emoji:'🔍', bg:'#f8fafc', color:'#0f172a' },
+            { label:'Mine åpne', value:myObservations, emoji:'👤', bg:myObservations>0?'#eff6ff':'#f8fafc', color:myObservations>0?'#2563eb':'#64748b' },
+            { label:'Åpne punkter', value:openObservations, emoji:'⏰', bg:openObservations>0?'#fffbeb':'#f8fafc', color:openObservations>0?'#d97706':'#64748b' },
+            { label:'Gjennomført', value:inspections.filter(i=>i.status==='gjennomfort').length, emoji:'✅', bg:'#f0fdf4', color:'#16a34a' },
+          ].map(s=>(
+            <div key={s.label} style={{ background:s.bg, borderRadius: isMobB ? '10px' : '12px', padding: isMobB ? '10px' : '14px 16px' }}>
+              <div style={{ fontSize: isMobB ? '14px' : '18px', marginBottom: isMobB ? '2px' : '4px' }}>{s.emoji}</div>
+              <div style={{ fontSize: isMobB ? '16px' : '20px', fontWeight:'800', color:s.color }}>{s.value}</div>
+              <div style={{ fontSize: isMobB ? '9px' : '11px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ padding: isMobB ? '12px' : '20px 32px', display:'flex', flexDirection:'column', gap: isMobB ? '12px' : '16px', overflowX:'hidden' }}>
+        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobB ? '10px' : '14px 18px', display:'flex', gap: isMobB ? '8px' : '10px', flexWrap:'wrap', alignItems:'center' }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...bInp, maxWidth: isMobB ? '100%' : '220px', flex: isMobB ? '1 1 100%' : '1' }} />
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...bInp, maxWidth: isMobB ? '100%' : '160px', flex: isMobB ? '1 1 48%' : 'none' }}>
+            <option value="alle">Alle statuser</option>
+            {Object.entries(INS_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+          </select>
+          <SearchableProjectSelect value={filterProject} onChange={setFilterProject} projects={projects} style={{ ...bInp, maxWidth: isMobB ? '100%' : '180px', flex: isMobB ? '1 1 48%' : 'none' }} placeholder="Alle prosjekter" emptyValue="alle" />
+          {(search||filterStatus!=='alle'||filterProject!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterProject('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} befaringer</span>
+        </div>
+
+        {filtered.length===0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🔍</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen befaringer funnet</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{inspections.length===0?'Registrer din første befaring.':'Prøv å endre filter.'}</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {filtered.map(ins=>{
+              const cfg=INS_STATUS[ins.status]
+              const proj=projects.find(p=>p.id===ins.project_id)
+              const items=ins.inspection_items||[]
+              const followups=ins.inspection_followups||[]
+              const observations=ins.inspection_observations||[]
+              const openF=followups.filter(f=>!f.completed).length
+              const avvik=items.filter(i=>i.status==='avvik').length + observations.filter(o=>o.category==='avvik').length
+              const openObs=observations.filter(o=>o.status==='apen'||o.status==='pagar').length
+              const venterGodkjenn=observations.filter(o=>o.status==='utbedret').length
+              const useObs = OBSERVATION_FIRST_TYPES.includes(ins.inspection_type)
+              return (
+                <div key={ins.id} onClick={()=>setSelected(ins)}
+                  style={{ background:'white', borderRadius: isMobB ? '12px' : '14px', border:'1px solid #f1f5f9', padding: isMobB ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobB ? 'flex-start' : 'center', gap: isMobB ? '10px' : '16px', transition:'box-shadow 0.15s' }}
+                  onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                  {!isMobB && <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:cfg.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'20px',flexShrink:0 }}>{cfg.emoji}</div>}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px', flexWrap:'wrap' }}>
+                      <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobB ? '13px' : '15px' }}>{ins.title}</span>
+                      <span style={{ background:cfg.bg,color:cfg.color,border:`1px solid ${cfg.border}`,padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
+                      {avvik>0&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⚠️ {avvik} avvik</span>}
+                      {openObs>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openObs} åpne</span>}
+                      {venterGodkjenn>0&&<span style={{ background:'#f0fdf4',color:'#16a34a',border:'1px solid #bbf7d0',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>✅ {venterGodkjenn} venter godkjenn</span>}
+                      {openF>0&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ {openF} oppfølg.</span>}
+                    </div>
+                    <div style={{ display:'flex', gap: isMobB ? '6px' : '12px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📅 {ins.date}</span>
+                      {ins.location&&<span style={{ fontSize: isMobB ? '11px' : '12px', color:'#64748b' }}>📍 {ins.location}</span>}
+                      {!isMobB && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
+                      {!isMobB && useObs && observations.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>📷 {observations.length} punkter</span>}
+                      {!isMobB && !useObs && items.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>☑️ {items.length} sjekkpunkter</span>}
+                    </div>
+                  </div>
+                  {!isMobB && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+      {showNew&&<BefaringModal projects={projects} user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+      {alertEl}
+    </div>
+  )
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// BefaringMobileDetalj — primær mobilflyt
+// ═══════════════════════════════════════════════════════════════════════════
+
+function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
+  const confirm = useConfirm()
+  const alertEl = useSystemAlertGlobal()
+  const [ins, setIns] = useState(init)
+  const [observations, setObservations] = useState([])
+  const [loading, setLoading] = useState(true)
+  // showCapture og editObs persisteres også, så vi overlever kamera-retur
+  const [showCapture, setShowCapture] = useState(() => {
+    try { return sessionStorage.getItem('befaring:showCapture') === '1' } catch { return false }
+  })
+  const [editObs, setEditObs] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('befaring:editObs')
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+
+  React.useEffect(() => {
+    try {
+      if (showCapture) sessionStorage.setItem('befaring:showCapture', '1')
+      else sessionStorage.removeItem('befaring:showCapture')
+    } catch {}
+  }, [showCapture])
+
+  React.useEffect(() => {
+    try {
+      if (editObs) sessionStorage.setItem('befaring:editObs', JSON.stringify(editObs))
+      else sessionStorage.removeItem('befaring:editObs')
+    } catch {}
+  }, [editObs])
+
+  const [resolveObs, setResolveObs] = useState(null)
+  const [approveObs, setApproveObs] = useState(null)
+  const [rejectObs, setRejectObs] = useState(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selected, setSelected] = useState(new Set())
+  const [showSend, setShowSend] = useState(false)
+  const [tab, setTab] = useState('punkter')
+  const [filter, setFilter] = useState('alle')
+  const [showEdit, setShowEdit] = useState(false)
+  const [showPdfMenu, setShowPdfMenu] = useState(false)
+  const [pdfExporting, setPdfExporting] = useState(false)
+
+  const proj = projects.find(p => p.id === ins.project_id)
+  const cfg = INS_STATUS[ins.status]
+
+  const load = async () => {
+    try {
+      const { data } = await supabase
+        .from('inspection_observations')
+        .select('*')
+        .eq('inspection_id', ins.id)
+        .order('sequence_number', { ascending: true })
+      setObservations(data || [])
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const refresh = async () => {
+    const { data } = await supabase.from('inspections').select('*').eq('id', ins.id).single()
+    if (data) setIns(data)
   }
 
   // Filter-logikk
@@ -28525,6 +28522,20 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
     utbedret: observations.filter(o => o.status === 'utbedret').length,
     godkjent: observations.filter(o => o.status === 'godkjent').length,
     avvist: observations.filter(o => o.status === 'avvist').length,
+  }
+
+  // Wrapper rundt frittstående generateBefaringPdf — håndterer state og feil
+  const exportBefaringPDF = async (mode) => {
+    setPdfExporting(true)
+    try {
+      await generateBefaringPdf({ ins, proj, filter, filteredObs, observations, mode })
+    } catch (e) {
+      console.error('PDF-eksport feilet:', e)
+      bAlert('PDF-eksport feilet', e.message || 'Ukjent feil', 'error')
+    } finally {
+      setPdfExporting(false)
+      setShowPdfMenu(false)
+    }
   }
 
   const toggleSelect = (id) => {
@@ -30431,9 +30442,31 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
   const [obsSelected, setObsSelected] = useState(new Set())
   const [showSendObs, setShowSendObs] = useState(false)
   const [obsFilter, setObsFilter] = useState('alle')
+  const [showPdfMenu, setShowPdfMenu] = useState(false)
+  const [pdfExporting, setPdfExporting] = useState(false)
   const fileInputRef = React.useRef(null)
   const proj = projects.find(p=>p.id===ins.project_id)
   const cfg = INS_STATUS[ins.status]
+
+  // Filtrerte observasjoner — brukes både i listing og PDF-eksport
+  const filteredObsForPdf = observations.filter(o => {
+    const filterDef = OBS_FILTERS.find(f => f.id === obsFilter)
+    if (!filterDef) return true
+    return filterDef.match(o, user?.id)
+  })
+
+  const exportBefaringPDF = async (mode) => {
+    setPdfExporting(true)
+    try {
+      await generateBefaringPdf({ ins, proj, filter: obsFilter, filteredObs: filteredObsForPdf, observations, mode })
+    } catch (e) {
+      console.error('PDF-eksport feilet:', e)
+      bAlert('PDF-eksport feilet', e.message || 'Ukjent feil', 'error')
+    } finally {
+      setPdfExporting(false)
+      setShowPdfMenu(false)
+    }
+  }
 
   const loadDetails = async () => {
     const [it, fu, fi, obs] = await Promise.all([
@@ -30857,6 +30890,84 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
       )}
 
       {editing && <BefaringModal projects={projects} user={user} initial={ins} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); refresh() }} />}
+
+      {showPdfMenu && (
+        <>
+          <div onClick={() => !pdfExporting && setShowPdfMenu(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
+          <div style={{
+            position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
+            background:'white', borderRadius:'20px',
+            width:'min(560px, calc(100vw - 32px))', maxHeight:'92vh',
+            zIndex:201, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column'
+          }}>
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
+              <button onClick={() => !pdfExporting && setShowPdfMenu(false)} disabled={pdfExporting} style={{ background:'none', border:'none', fontSize:'24px', cursor: pdfExporting ? 'wait' : 'pointer', color:'#64748b', padding:0, lineHeight:1 }}>×</button>
+              <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📄 Last ned PDF-rapport</h2>
+            </div>
+
+            <div style={{ overflowY:'auto', flex:1, padding:'18px 20px', display:'flex', flexDirection:'column', gap:'12px' }}>
+              {obsFilter !== 'alle' && (
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px', fontSize:'13px', color:'#1e40af' }}>
+                  ℹ️ Aktivt filter: <strong>{OBS_FILTERS.find(f => f.id === obsFilter)?.label || obsFilter}</strong> ({filteredObsForPdf.length} punkter)
+                </div>
+              )}
+              {obsFilter === 'alle' && (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 14px', fontSize:'13px', color:'#475569' }}>
+                  ℹ️ Inkluderer alle {observations.length} punkter. Bruk filter på listen først for å lage en delrapport.
+                </div>
+              )}
+
+              {/* Kompakt-alternativ */}
+              <button onClick={() => exportBefaringPDF('compact')} disabled={pdfExporting} style={{
+                background:'white', border:'2px solid #e2e8f0', borderRadius:'14px', padding:'18px',
+                cursor: pdfExporting ? 'wait' : 'pointer', textAlign:'left', display:'flex', gap:'14px', alignItems:'flex-start',
+                opacity: pdfExporting ? 0.5 : 1, transition:'border-color 0.15s'
+              }}
+              onMouseOver={e => !pdfExporting && (e.currentTarget.style.borderColor = '#059669')}
+              onMouseOut={e => !pdfExporting && (e.currentTarget.style.borderColor = '#e2e8f0')}>
+                <div style={{ fontSize:'32px', lineHeight:1, flexShrink:0 }}>📋</div>
+                <div style={{ flex:1 }}>
+                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Kompakt rapport</h3>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>
+                    Oversiktslignende rapport med ett kort per punkt. Viser status, plassering, frist, tildelt og ett bilde per punkt.
+                  </p>
+                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>
+                    Best egnet for: rask gjennomgang, oversiktsmøter, statusrapport
+                  </p>
+                </div>
+              </button>
+
+              {/* Detaljert-alternativ */}
+              <button onClick={() => exportBefaringPDF('detailed')} disabled={pdfExporting} style={{
+                background:'white', border:'2px solid #e2e8f0', borderRadius:'14px', padding:'18px',
+                cursor: pdfExporting ? 'wait' : 'pointer', textAlign:'left', display:'flex', gap:'14px', alignItems:'flex-start',
+                opacity: pdfExporting ? 0.5 : 1, transition:'border-color 0.15s'
+              }}
+              onMouseOver={e => !pdfExporting && (e.currentTarget.style.borderColor = '#059669')}
+              onMouseOut={e => !pdfExporting && (e.currentTarget.style.borderColor = '#e2e8f0')}>
+                <div style={{ fontSize:'32px', lineHeight:1, flexShrink:0 }}>📄</div>
+                <div style={{ flex:1 }}>
+                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Detaljert rapport</h3>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>
+                    Full dokumentasjon med beskrivelse, alle bilder, utbedringsbilder, kommentarer og status-historikk per punkt.
+                  </p>
+                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>
+                    Best egnet for: arkivering, sluttdokumentasjon, garantibefaring, juridisk dokumentasjon
+                  </p>
+                </div>
+              </button>
+
+              {pdfExporting && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#92400e', display:'flex', alignItems:'center', gap:'10px' }}>
+                  <span style={{ fontSize:'20px' }}>⏳</span>
+                  <span>Genererer PDF... Dette kan ta noen sekunder hvis det er mange bilder.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
       {alertEl}
     </div>
   )
