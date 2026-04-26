@@ -27967,6 +27967,8 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const [tab, setTab] = useState('punkter')
   const [filter, setFilter] = useState('alle')
   const [showEdit, setShowEdit] = useState(false)
+  const [showPdfMenu, setShowPdfMenu] = useState(false)
+  const [pdfExporting, setPdfExporting] = useState(false)
 
   const proj = projects.find(p => p.id === ins.project_id)
   const cfg = INS_STATUS[ins.status]
@@ -27987,6 +27989,524 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const refresh = async () => {
     const { data } = await supabase.from('inspections').select('*').eq('id', ins.id).single()
     if (data) setIns(data)
+  }
+
+  // ── PDF-eksport ────────────────────────────────────────────────────────
+  // mode: 'compact' = oversikt (én linje per punkt + 1 lite bilde)
+  //       'detailed' = full rapport (beskrivelse, alle bilder, status-historikk)
+  // Følger sjekkliste-/avvik-PDF-stil (createBrandedPdf-rammeverket).
+  // Bildestørrelse: 35×35mm — kompakt slik som i sjekkliste-PDF.
+  const exportBefaringPDF = async (mode = 'compact') => {
+    setPdfExporting(true)
+    try {
+      const pdf = await createBrandedPdf()
+      const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
+
+      // Filtrér punkter — respekter aktivt filter
+      const obsToInclude = filteredObs
+
+      // Status-konfig (matcher OBS_STATUS-konstanten i UI)
+      const statusInfo = {
+        apen:      { label: 'Åpen',     color: '#d97706', bg: '#fef3c7' },
+        pagar:     { label: 'Pågår',    color: '#2563eb', bg: '#dbeafe' },
+        utbedret:  { label: 'Utbedret', color: '#9333ea', bg: '#f3e8ff' },
+        godkjent:  { label: 'Godkjent', color: '#16a34a', bg: '#dcfce7' },
+        avvist:    { label: 'Avvist',   color: '#dc2626', bg: '#fee2e2' },
+      }
+      const catInfo = OBS_CATEGORY
+
+      // Hent status-historikk for alle punkter hvis detaljert
+      let statusLogs = {}
+      if (mode === 'detailed' && obsToInclude.length > 0) {
+        const ids = obsToInclude.map(o => o.id)
+        const { data: logs } = await supabase
+          .from('observation_status_log')
+          .select('observation_id, from_status, to_status, changed_at, note, changed_by_email, changed_by_name')
+          .in('observation_id', ids)
+          .order('changed_at', { ascending: true })
+        if (logs) {
+          for (const l of logs) {
+            if (!statusLogs[l.observation_id]) statusLogs[l.observation_id] = []
+            statusLogs[l.observation_id].push(l)
+          }
+        }
+      }
+
+      // ── Header ──
+      const reportTitle = mode === 'detailed' ? 'BEFARINGSRAPPORT' : 'BEFARING'
+      pdf.drawHeader(reportTitle, ins.title || '')
+      let y = pdf.y
+      const addPage = () => { doc.addPage(); y = 14 }
+      const checkSpace = (n) => { if (y + n > ph - 18) addPage() }
+
+      // ── Status-pill ──
+      const insStatus = ins.status || 'planlagt'
+      const insStatusCfg = {
+        planlagt:    { label: 'Planlagt',    bg: '#eff6ff', color: '#2563eb' },
+        gjennomfort: { label: 'Gjennomført', bg: '#ecfdf5', color: '#059669' },
+        avsluttet:   { label: 'Avsluttet',   bg: '#f1f5f9', color: '#475569' },
+      }[insStatus] || { label: insStatus, bg: '#f1f5f9', color: '#475569' }
+
+      const sPillW = doc.getTextWidth(insStatusCfg.label) + 8
+      setF(hex(insStatusCfg.bg))
+      doc.roundedRect(ml, y - 3.5, sPillW, 6, 3, 3, 'F')
+      setC(hex(insStatusCfg.color))
+      doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+      doc.text(insStatusCfg.label, ml + 4, y)
+      y += 9
+
+      // ── Info-grid ──
+      setD(hex('#f1f5f9'))
+      setF(hex('#f8fafc'))
+      doc.roundedRect(ml, y, cw, 28, 2.5, 2.5, 'FD')
+
+      const fmtDate = (d) => {
+        if (!d) return '—'
+        try { return new Date(d).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) }
+        catch { return String(d) }
+      }
+      const infoFields = [
+        ['Prosjekt', proj?.name || '—'],
+        ['Sted / Lokasjon', ins.location || '—'],
+        ['Befaringsdato', fmtDate(ins.date)],
+        ['Type', BEFARING_TYPES.find(t => t.id === ins.inspection_type)?.label || '—'],
+      ]
+      const colW = cw / 2
+      infoFields.forEach((f, i) => {
+        const ix = ml + 6 + (i % 2) * colW
+        const iy = y + 6 + Math.floor(i / 2) * 13
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+        doc.text(String(f[0]).toUpperCase(), ix, iy)
+        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        const txt = doc.splitTextToSize(String(f[1]), colW - 12)
+        doc.text(txt[0] || '—', ix, iy + 5)
+      })
+      y += 34
+
+      // ── Hensikt (kun hvis utfylt) ──
+      if (ins.purpose) {
+        checkSpace(20)
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+        doc.text('HENSIKT MED BEFARINGEN', ml, y)
+        y += 4
+        setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        const lines = doc.splitTextToSize(String(ins.purpose), cw)
+        lines.forEach(ln => { checkSpace(5); doc.text(ln, ml, y); y += 4.5 })
+        y += 3
+      }
+
+      // ── Sammendrag ──
+      checkSpace(30)
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text('SAMMENDRAG', ml, y)
+      y += 4
+
+      const counts = {
+        total: obsToInclude.length,
+        apen: obsToInclude.filter(o => o.status === 'apen').length,
+        pagar: obsToInclude.filter(o => o.status === 'pagar').length,
+        utbedret: obsToInclude.filter(o => o.status === 'utbedret').length,
+        godkjent: obsToInclude.filter(o => o.status === 'godkjent').length,
+        avvist: obsToInclude.filter(o => o.status === 'avvist').length,
+      }
+
+      // Total-pill
+      setF(hex('#0f172a'))
+      doc.roundedRect(ml, y, 36, 12, 2, 2, 'F')
+      setC(hex('#ffffff')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+      doc.text(String(counts.total), ml + 3, y + 7.5)
+      setC(hex('#cbd5e1')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+      doc.text('PUNKTER', ml + 12, y + 5)
+      doc.text(filter !== 'alle' ? `(${OBS_FILTERS.find(f => f.id === filter)?.label || ''})` : 'totalt', ml + 12, y + 9)
+
+      // Status-piller
+      const statusPills = [
+        ['Åpen',     counts.apen,     '#fef3c7', '#92400e'],
+        ['Pågår',    counts.pagar,    '#dbeafe', '#1e40af'],
+        ['Utbedret', counts.utbedret, '#f3e8ff', '#6b21a8'],
+        ['Godkjent', counts.godkjent, '#dcfce7', '#15803d'],
+        ['Avvist',   counts.avvist,   '#fee2e2', '#991b1b'],
+      ]
+      let pillX = ml + 40
+      const pillY = y
+      statusPills.forEach(([lbl, cnt, bg, col]) => {
+        if (cnt === 0) return
+        const pillW = doc.getTextWidth(`${lbl} ${cnt}`) + 8
+        setF(hex(bg))
+        doc.roundedRect(pillX, pillY + 2.5, pillW, 7, 2, 2, 'F')
+        setC(hex(col)); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text(`${lbl} ${cnt}`, pillX + 4, pillY + 7.5)
+        pillX += pillW + 3
+      })
+      y += 16
+
+      // Separator
+      setD(hex('#e2e8f0'))
+      doc.setLineWidth(0.3)
+      doc.line(ml, y, pw - mr, y)
+      y += 6
+
+      // ── Punktliste ──
+      if (obsToInclude.length === 0) {
+        setC(hex('#94a3b8')); doc.setFontSize(10); doc.setFont('helvetica', 'italic')
+        doc.text('Ingen punkter matcher det aktive filteret.', ml, y + 5)
+        y += 14
+      } else {
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text('Kontrollpunkter', ml, y)
+        y += 6
+      }
+
+      // Hjelper: tegn ett bilde i gitt størrelse, returnerer false ved feil
+      const drawImage = async (url, x, yy, size) => {
+        try {
+          const resp = await fetch(url)
+          const blob = await resp.blob()
+          const base64 = await new Promise(resolve => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result)
+            reader.readAsDataURL(blob)
+          })
+          setD(hex('#e2e8f0')); doc.setLineWidth(0.2)
+          doc.rect(x, yy, size, size, 'S')
+          doc.addImage(base64, 'JPEG', x + 0.3, yy + 0.3, size - 0.6, size - 0.6)
+          return true
+        } catch {
+          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+          doc.rect(x, yy, size, size, 'FD')
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'italic')
+          doc.text('(bilde)', x + 2, yy + size / 2, { baseline: 'middle' })
+          return false
+        }
+      }
+
+      // Iterér over punkter
+      for (let i = 0; i < obsToInclude.length; i++) {
+        const obs = obsToInclude[i]
+        const cat = catInfo[obs.category] || catInfo.observasjon
+        const stat = statusInfo[obs.status] || statusInfo.apen
+        const imgs = Array.isArray(obs.images) ? obs.images : []
+        const resImgs = Array.isArray(obs.resolution_images) ? obs.resolution_images : []
+
+        // ── KOMPAKT MODUS ──
+        if (mode === 'compact') {
+          // Kort-høyde: ~38mm uten bilde, ~38mm med ett 30mm-bilde til høyre
+          const cardH = imgs.length > 0 ? 38 : 26
+          checkSpace(cardH + 4)
+
+          // Kort-bakgrunn
+          setF(hex('#ffffff')); setD(hex('#e2e8f0'))
+          doc.setLineWidth(0.3)
+          doc.roundedRect(ml, y, cw, cardH, 2.5, 2.5, 'FD')
+
+          // Kategori-stripe på toppen (3mm høy)
+          setF(hex(cat.color))
+          doc.roundedRect(ml, y, cw, 1.2, 0.5, 0.5, 'F')
+
+          // Innhold
+          const innerX = ml + 5
+          const imgArea = imgs.length > 0 ? 32 : 0
+          const textW = cw - 10 - imgArea
+
+          // Linje 1: "PUNKT #N · KATEGORI"
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(`PUNKT #${obs.sequence_number} · ${(cat.label || '').toUpperCase()}`, innerX, y + 5)
+
+          // Status-pill høyre side
+          const statLbl = stat.label
+          const statW = doc.getTextWidth(statLbl) + 6
+          const statX = ml + cw - 5 - statW - imgArea
+          setF(hex(stat.bg))
+          doc.roundedRect(statX, y + 2.5, statW, 5, 1.5, 1.5, 'F')
+          setC(hex(stat.color)); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(statLbl, statX + 3, y + 6)
+
+          // Linje 2: tittel (eller første linje av beskrivelse)
+          const titleLine = obs.title || (obs.description ? String(obs.description).split('\n')[0] : '(uten tittel)')
+          setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+          const titleSplit = doc.splitTextToSize(titleLine, textW)
+          doc.text(titleSplit[0] || '', innerX, y + 11)
+
+          // Linje 3: sub-info (plassering, frist, tildelt)
+          const subParts = []
+          if (obs.location_ref) subParts.push(obs.location_ref)
+          if (obs.due_date) subParts.push(`Frist ${fmtDate(obs.due_date)}`)
+          if (obs.assigned_email) subParts.push(obs.assigned_email)
+          else if (obs.assigned_to_user_id) subParts.push('Internt tildelt')
+
+          if (subParts.length > 0) {
+            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const subText = subParts.join('  ·  ')
+            const subSplit = doc.splitTextToSize(subText, textW)
+            doc.text(subSplit[0] || '', innerX, y + 16)
+          }
+
+          // Linje 4: kort beskrivelse (hvis tittel finnes og det er plass)
+          if (obs.title && obs.description) {
+            setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const dSplit = doc.splitTextToSize(String(obs.description), textW)
+            doc.text(dSplit[0] || '', innerX, y + 21)
+          }
+
+          // Bilde til høyre (30mm)
+          if (imgs.length > 0) {
+            await drawImage(imgs[0].url, ml + cw - 5 - 30, y + cardH/2 - 15, 30)
+          }
+
+          y += cardH + 3
+          continue
+        }
+
+        // ── DETALJERT MODUS ──
+        // Beregn omtrentlig høyde for å unngå brudd
+        const descLines = obs.description ? doc.splitTextToSize(String(obs.description), cw - 10).length : 0
+        const imgRows = Math.ceil(imgs.length / 4)
+        const resImgRows = Math.ceil(resImgs.length / 4)
+        const logCount = (statusLogs[obs.id] || []).length
+        const estHeight = 30 + descLines * 4 + imgRows * 38 + (resImgs.length > 0 ? 8 + resImgRows * 38 : 0) + logCount * 6 + 12
+        checkSpace(Math.min(estHeight, ph - 40))
+
+        // Kort-start y
+        const cardStart = y
+
+        // Kategori-stripe
+        setF(hex(cat.color))
+        doc.rect(ml, y, 2, 100, 'F') // dummy høyde, justeres på slutten
+
+        // Header: "PUNKT #N · KATEGORI"
+        setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text(`PUNKT #${obs.sequence_number}  ·  ${(cat.label || '').toUpperCase()}`, ml + 5, y + 4)
+
+        // Status-pill høyre
+        const statLbl = stat.label
+        const statW = doc.getTextWidth(statLbl) + 8
+        setF(hex(stat.bg))
+        doc.roundedRect(pw - mr - statW, y, statW, 6, 2, 2, 'F')
+        setC(hex(stat.color)); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+        doc.text(statLbl, pw - mr - statW + 4, y + 4)
+        y += 8
+
+        // Tittel
+        if (obs.title) {
+          setC(hex('#0f172a')); doc.setFontSize(12); doc.setFont('helvetica', 'bold')
+          const tSplit = doc.splitTextToSize(String(obs.title), cw - 5)
+          tSplit.forEach(ln => { checkSpace(6); doc.text(ln, ml + 5, y); y += 5.5 })
+        }
+
+        // Meta-rad (plassering, frist, tildelt, opprettet)
+        const metaLines = []
+        if (obs.location_ref) metaLines.push(['📍 Plassering', obs.location_ref])
+        if (obs.due_date) metaLines.push(['📅 Frist', fmtDate(obs.due_date)])
+        if (obs.assigned_email) metaLines.push(['👤 Tildelt', obs.assigned_email])
+        else if (obs.assigned_to_user_id) metaLines.push(['👤 Tildelt', 'Intern ansatt'])
+        if (obs.assigned_role) metaLines.push(['🔧 Fagrolle', obs.assigned_role])
+        if (obs.severity) metaLines.push(['⚠️ Alvorlighet', obs.severity])
+        if (obs.created_at) metaLines.push(['📆 Opprettet', fmtDate(obs.created_at)])
+
+        if (metaLines.length > 0) {
+          y += 1
+          for (let mi = 0; mi < metaLines.length; mi += 2) {
+            checkSpace(5)
+            const left = metaLines[mi]
+            const right = metaLines[mi + 1]
+            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            doc.text(`${left[0].replace(/[^\w\s]/g,'').trim()}: `, ml + 5, y)
+            setC(hex('#0f172a')); doc.setFont('helvetica', 'bold')
+            const lvSplit = doc.splitTextToSize(String(left[1]), cw/2 - 25)
+            doc.text(lvSplit[0] || '', ml + 5 + 22, y)
+            if (right) {
+              setC(hex('#64748b')); doc.setFont('helvetica', 'normal')
+              doc.text(`${right[0].replace(/[^\w\s]/g,'').trim()}: `, ml + cw/2 + 5, y)
+              setC(hex('#0f172a')); doc.setFont('helvetica', 'bold')
+              const rvSplit = doc.splitTextToSize(String(right[1]), cw/2 - 25)
+              doc.text(rvSplit[0] || '', ml + cw/2 + 5 + 22, y)
+            }
+            y += 4.5
+          }
+          y += 1
+        }
+
+        // Beskrivelse
+        if (obs.description) {
+          checkSpace(8)
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('BESKRIVELSE', ml + 5, y)
+          y += 4
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          const dSplit = doc.splitTextToSize(String(obs.description), cw - 5)
+          dSplit.forEach(ln => { checkSpace(5); doc.text(ln, ml + 5, y); y += 4 })
+          y += 2
+        }
+
+        // Bilder (kompakt: 35×35mm, opptil 4 per rad)
+        if (imgs.length > 0) {
+          checkSpace(8)
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(`BILDER (${imgs.length})`, ml + 5, y)
+          y += 4
+
+          const imgSize = 35
+          const imgGap = 3
+          const imgsPerRow = 4
+          const rows = Math.ceil(imgs.length / imgsPerRow)
+          for (let r = 0; r < rows; r++) {
+            checkSpace(imgSize + 3)
+            for (let c = 0; c < imgsPerRow; c++) {
+              const idx = r * imgsPerRow + c
+              if (idx >= imgs.length) break
+              const xPos = ml + 5 + c * (imgSize + imgGap)
+              await drawImage(imgs[idx].url, xPos, y, imgSize)
+            }
+            y += imgSize + 3
+          }
+        }
+
+        // Resolution-bilder (hvis utbedret)
+        if (resImgs.length > 0) {
+          checkSpace(10)
+          setC(hex('#9333ea')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(`UTBEDRINGSBILDER (${resImgs.length})`, ml + 5, y)
+          y += 4
+
+          const imgSize = 35
+          const imgGap = 3
+          const imgsPerRow = 4
+          const rows = Math.ceil(resImgs.length / imgsPerRow)
+          for (let r = 0; r < rows; r++) {
+            checkSpace(imgSize + 3)
+            for (let c = 0; c < imgsPerRow; c++) {
+              const idx = r * imgsPerRow + c
+              if (idx >= resImgs.length) break
+              const xPos = ml + 5 + c * (imgSize + imgGap)
+              await drawImage(resImgs[idx].url, xPos, y, imgSize)
+            }
+            y += imgSize + 3
+          }
+        }
+
+        // Resolution-notat
+        if (obs.resolution_note) {
+          checkSpace(8)
+          setF(hex('#faf5ff')); setD(hex('#e9d5ff'))
+          const rnLines = doc.splitTextToSize(String(obs.resolution_note), cw - 14)
+          const rnH = 8 + rnLines.length * 4
+          doc.roundedRect(ml + 5, y, cw - 5, rnH, 2, 2, 'FD')
+          setC(hex('#6b21a8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('UTBEDRINGSNOTAT', ml + 8, y + 4)
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          rnLines.forEach((ln, i) => doc.text(ln, ml + 8, y + 8 + i * 4))
+          y += rnH + 2
+        }
+
+        // Avvisningsnotat (hvis avvist)
+        if (obs.rejection_note) {
+          checkSpace(8)
+          setF(hex('#fef2f2')); setD(hex('#fecaca'))
+          const rjLines = doc.splitTextToSize(String(obs.rejection_note), cw - 14)
+          const rjH = 8 + rjLines.length * 4
+          doc.roundedRect(ml + 5, y, cw - 5, rjH, 2, 2, 'FD')
+          setC(hex('#991b1b')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('BEGRUNNELSE FOR AVVISNING', ml + 8, y + 4)
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          rjLines.forEach((ln, i) => doc.text(ln, ml + 8, y + 8 + i * 4))
+          y += rjH + 2
+        }
+
+        // Godkjennings-notat
+        if (obs.approval_note) {
+          checkSpace(8)
+          setF(hex('#f0fdf4')); setD(hex('#bbf7d0'))
+          const apLines = doc.splitTextToSize(String(obs.approval_note), cw - 14)
+          const apH = 8 + apLines.length * 4
+          doc.roundedRect(ml + 5, y, cw - 5, apH, 2, 2, 'FD')
+          setC(hex('#15803d')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('KOMMENTAR FRA BYGGLEDER', ml + 8, y + 4)
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          apLines.forEach((ln, i) => doc.text(ln, ml + 8, y + 8 + i * 4))
+          y += apH + 2
+        }
+
+        // Status-historikk
+        const log = statusLogs[obs.id] || []
+        if (log.length > 0) {
+          checkSpace(8)
+          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('HISTORIKK', ml + 5, y)
+          y += 4
+          for (const entry of log) {
+            checkSpace(5)
+            const ts = entry.changed_at ? new Date(entry.changed_at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : ''
+            const fromLbl = (statusInfo[entry.from_status] || {}).label || entry.from_status || '—'
+            const toLbl = (statusInfo[entry.to_status] || {}).label || entry.to_status || '—'
+            const who = entry.changed_by_name || entry.changed_by_email || ''
+            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const line = `${ts}  ·  ${fromLbl} → ${toLbl}${who ? '  ·  ' + who : ''}`
+            const lineSplit = doc.splitTextToSize(line, cw - 10)
+            doc.text(lineSplit[0] || '', ml + 5, y)
+            y += 4
+            if (entry.note) {
+              setC(hex('#475569')); doc.setFont('helvetica', 'italic')
+              const noteSplit = doc.splitTextToSize(String(entry.note), cw - 10)
+              noteSplit.slice(0, 3).forEach(ln => { checkSpace(4); doc.text(ln, ml + 8, y); y += 4 })
+            }
+          }
+          y += 1
+        }
+
+        // Tegn kategoristripen til riktig høyde (overskriv den dummy-høye)
+        const cardEnd = y
+        setF(hex('#ffffff'))
+        doc.rect(ml, cardStart, 2, cardEnd - cardStart, 'F') // skjul gammel
+        setF(hex(cat.color))
+        doc.rect(ml, cardStart, 2, cardEnd - cardStart, 'F')
+
+        // Skillelinje mellom punkter
+        if (i < obsToInclude.length - 1) {
+          y += 2
+          checkSpace(4)
+          setD(hex('#e2e8f0'))
+          doc.setLineWidth(0.2)
+          doc.line(ml + 5, y, pw - mr - 5, y)
+          y += 4
+        }
+      }
+
+      // ── Signaturfelt på slutten ──
+      checkSpace(34)
+      y += 4
+      setD(hex('#e2e8f0'))
+      doc.setLineWidth(0.3)
+      doc.line(ml, y, pw - mr, y)
+      y += 6
+
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text('SIGNATUR', ml, y)
+      y += 8
+
+      const sigW = (cw - 10) / 2
+      // Befaringsleder
+      setD(hex('#cbd5e1'))
+      doc.setLineWidth(0.4)
+      doc.line(ml, y + 12, ml + sigW, y + 12)
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+      doc.text('Befaringsleder', ml, y + 16)
+
+      // Byggherre/kunde
+      doc.line(ml + sigW + 10, y + 12, ml + sigW + 10 + sigW, y + 12)
+      doc.text('Byggherre / kunde', ml + sigW + 10, y + 16)
+      y += 18
+
+      // ── Footers + lagre ──
+      pdf.drawFooters()
+      const filename = `${reportTitle === 'BEFARING' ? 'Befaring' : 'Befaringsrapport'} - ${ins.title || 'Ukjent'}.pdf`
+      doc.save(filename)
+    } catch (e) {
+      console.error('PDF-eksport feilet:', e)
+      bAlert('PDF-eksport feilet', e.message || 'Ukjent feil', 'error')
+    } finally {
+      setPdfExporting(false)
+      setShowPdfMenu(false)
+    }
   }
 
   // Filter-logikk
@@ -28216,6 +28736,87 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
       )}
 
       {showEdit && <BefaringModal projects={projects} user={user} initial={ins} onClose={() => setShowEdit(false)} onSaved={() => { setShowEdit(false); refresh() }} />}
+
+      {showPdfMenu && (
+        <>
+          <div onClick={() => !pdfExporting && setShowPdfMenu(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
+          <div style={{
+            position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%',
+            transform: isMobBD ? 'none' : 'translate(-50%,-50%)',
+            background:'white', borderRadius: isMobBD ? 0 : '20px',
+            width: isMobBD ? '100%' : 'min(560px, calc(100vw - 32px))',
+            height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '92vh',
+            zIndex:201, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column'
+          }}>
+            <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
+              <button onClick={() => !pdfExporting && setShowPdfMenu(false)} disabled={pdfExporting} style={{ background:'none', border:'none', fontSize:'24px', cursor: pdfExporting ? 'wait' : 'pointer', color:'#64748b', padding:0, lineHeight:1 }}>×</button>
+              <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>📄 Last ned PDF-rapport</h2>
+            </div>
+
+            <div style={{ overflowY:'auto', flex:1, padding:'18px 20px', display:'flex', flexDirection:'column', gap:'12px' }}>
+              {filter !== 'alle' && (
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px', fontSize:'13px', color:'#1e40af' }}>
+                  ℹ️ Aktivt filter: <strong>{OBS_FILTERS.find(f => f.id === filter)?.label || filter}</strong> ({filteredObs.length} punkter)
+                </div>
+              )}
+              {filter === 'alle' && (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 14px', fontSize:'13px', color:'#475569' }}>
+                  ℹ️ Inkluderer alle {observations.length} punkter. Bruk filter på listen først for å lage en delrapport.
+                </div>
+              )}
+
+              {/* Kompakt-alternativ */}
+              <button onClick={() => exportBefaringPDF('compact')} disabled={pdfExporting} style={{
+                background:'white', border:'2px solid #e2e8f0', borderRadius:'14px', padding:'18px',
+                cursor: pdfExporting ? 'wait' : 'pointer', textAlign:'left', display:'flex', gap:'14px', alignItems:'flex-start',
+                opacity: pdfExporting ? 0.5 : 1,
+                transition:'border-color 0.15s'
+              }}
+              onMouseOver={e => !pdfExporting && (e.currentTarget.style.borderColor = '#059669')}
+              onMouseOut={e => !pdfExporting && (e.currentTarget.style.borderColor = '#e2e8f0')}>
+                <div style={{ fontSize:'32px', lineHeight:1, flexShrink:0 }}>📋</div>
+                <div style={{ flex:1 }}>
+                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Kompakt rapport</h3>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>
+                    Oversiktslignende rapport med ett kort per punkt. Viser status, plassering, frist, tildelt og ett bilde per punkt.
+                  </p>
+                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>
+                    Best egnet for: rask gjennomgang, oversiktsmøter, statusrapport
+                  </p>
+                </div>
+              </button>
+
+              {/* Detaljert-alternativ */}
+              <button onClick={() => exportBefaringPDF('detailed')} disabled={pdfExporting} style={{
+                background:'white', border:'2px solid #e2e8f0', borderRadius:'14px', padding:'18px',
+                cursor: pdfExporting ? 'wait' : 'pointer', textAlign:'left', display:'flex', gap:'14px', alignItems:'flex-start',
+                opacity: pdfExporting ? 0.5 : 1,
+                transition:'border-color 0.15s'
+              }}
+              onMouseOver={e => !pdfExporting && (e.currentTarget.style.borderColor = '#059669')}
+              onMouseOut={e => !pdfExporting && (e.currentTarget.style.borderColor = '#e2e8f0')}>
+                <div style={{ fontSize:'32px', lineHeight:1, flexShrink:0 }}>📄</div>
+                <div style={{ flex:1 }}>
+                  <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Detaljert rapport</h3>
+                  <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>
+                    Full dokumentasjon med beskrivelse, alle bilder, utbedringsbilder, kommentarer og status-historikk per punkt.
+                  </p>
+                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>
+                    Best egnet for: arkivering, sluttdokumentasjon, garantibefaring, juridisk dokumentasjon
+                  </p>
+                </div>
+              </button>
+
+              {pdfExporting && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 14px', fontSize:'13px', color:'#92400e', display:'flex', alignItems:'center', gap:'10px' }}>
+                  <span style={{ fontSize:'20px' }}>⏳</span>
+                  <span>Genererer PDF... Dette kan ta noen sekunder hvis det er mange bilder.</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -29973,6 +30574,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
           </div>
           <div style={{ display:'flex', gap: isMobBD ? '6px' : '8px', flexShrink:0, flexWrap:'wrap', width: isMobBD ? '100%' : 'auto' }}>
             <button onClick={() => setShowCapture(true)} style={{ padding: isMobBD ? '7px 10px' : '10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobBD ? '12px' : '14px', fontWeight:'700', flex: isMobBD ? 1 : 'none' }}>{isMobBD ? '+ Punkt' : '📷 Nytt punkt'}</button>
+            <button onClick={() => setShowPdfMenu(true)} disabled={pdfExporting} style={{ padding: isMobBD ? '7px 10px' : '10px 16px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'10px', cursor: pdfExporting ? 'wait' : 'pointer', fontSize: isMobBD ? '12px' : '14px', fontWeight:'700', flex: isMobBD ? 1 : 'none', opacity: pdfExporting ? 0.6 : 1 }}>{pdfExporting ? '⏳ Genererer...' : (isMobBD ? '📄 PDF' : '📄 Last ned PDF')}</button>
             <button onClick={()=>setEditing(true)} style={{ padding: isMobBD ? '7px 10px' : '9px 14px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize: isMobBD ? '12px' : '13px' }}>✏️</button>
             <button onClick={handleDelete} style={{ padding: isMobBD ? '7px 10px' : '9px 12px',border:'1px solid #fecaca',borderRadius:'10px',background:'white',cursor:'pointer',color:'#dc2626',fontSize: isMobBD ? '12px' : '13px' }}>🗑️</button>
           </div>
