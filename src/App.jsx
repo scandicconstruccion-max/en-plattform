@@ -27340,12 +27340,26 @@ const bCard = { background:'white', borderRadius: typeof window !== 'undefined' 
 // ═══════════════════════════════════════════════════════════════════════════
 // HOOK: useSpeechRecognition (Web Speech API)
 // ═══════════════════════════════════════════════════════════════════════════
+//
+// Eksponerer:
+//  - isListening, isSupported
+//  - interimTranscript: live-tekst mens brukeren snakker (visuell feedback)
+//  - start(): begynn opptak. Resetter intern transcript-buffer.
+//  - stop(): avslutt opptak. Setter isListening = false når 'end'-event kommer.
+//  - consumeFinal(): henter ut samlet final-tekst og NULLER bufferen.
+//    Komponenten kaller dette ÉN gang per opptak (vanligvis i mic-toggle).
+//
+// Designvalget: Vi unngår useEffect-baserte side-effekter for å hente ut tekst.
+// Tidligere ble setForm trigget i en effect som lyttet på isListening-endring,
+// men det førte til at samme tekst ble lagt til flere ganger pga. re-renders
+// og avhengighetsproblemer. Nå må komponenten EKSPLISITT konsumere teksten.
+
 function useSpeechRecognition() {
   const [isListening, setIsListening] = React.useState(false)
-  const [transcript, setTranscript] = React.useState('')
   const [interimTranscript, setInterimTranscript] = React.useState('')
   const recognitionRef = React.useRef(null)
-  const finalTranscriptRef = React.useRef('')
+  const finalBufferRef = React.useRef('')
+  const lastResultIndexRef = React.useRef(0)
 
   const SR = typeof window !== 'undefined' && (window.SpeechRecognition || window.webkitSpeechRecognition)
   const isSupported = !!SR
@@ -27359,23 +27373,29 @@ function useSpeechRecognition() {
 
     recognition.onresult = (event) => {
       let interim = ''
-      let final = finalTranscriptRef.current
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Bare prosesser nye resultater siden forrige event for å unngå duplisering
+      const startIdx = Math.max(event.resultIndex, lastResultIndexRef.current)
+      for (let i = startIdx; i < event.results.length; i++) {
         const result = event.results[i]
         if (result.isFinal) {
-          final += (final && !final.endsWith(' ') ? ' ' : '') + result[0].transcript.trim()
+          const text = result[0].transcript.trim()
+          if (text) {
+            const buf = finalBufferRef.current
+            finalBufferRef.current = buf ? buf + ' ' + text : text
+          }
+          lastResultIndexRef.current = i + 1
         } else {
-          interim += result[0].transcript
+          // Bare den siste interim-blokken — ikke akkumuler
+          interim = result[0].transcript
         }
       }
-      finalTranscriptRef.current = final
-      setTranscript(final)
       setInterimTranscript(interim)
     }
 
     recognition.onerror = (event) => {
       console.warn('Speech recognition error:', event.error)
       setIsListening(false)
+      setInterimTranscript('')
     }
 
     recognition.onend = () => {
@@ -27391,6 +27411,10 @@ function useSpeechRecognition() {
   const start = React.useCallback(() => {
     if (!recognitionRef.current || isListening) return
     try {
+      // Reset buffer FØR start så ny opptak begynner med blank state
+      finalBufferRef.current = ''
+      lastResultIndexRef.current = 0
+      setInterimTranscript('')
       recognitionRef.current.start()
       setIsListening(true)
     } catch(e) { console.warn('Could not start recognition:', e) }
@@ -27402,13 +27426,23 @@ function useSpeechRecognition() {
     setIsListening(false)
   }, [])
 
+  // Henter ut samlet final-tekst og nuller bufferen.
+  // Kalles eksplisitt av komponenten når den ønsker å lese ny tekst (typisk
+  // når brukeren stopper opptaket via mic-toggle).
+  const consumeFinal = React.useCallback(() => {
+    const text = finalBufferRef.current
+    finalBufferRef.current = ''
+    lastResultIndexRef.current = 0
+    return text
+  }, [])
+
   const reset = React.useCallback(() => {
-    finalTranscriptRef.current = ''
-    setTranscript('')
+    finalBufferRef.current = ''
+    lastResultIndexRef.current = 0
     setInterimTranscript('')
   }, [])
 
-  return { isSupported, isListening, transcript, interimTranscript, start, stop, reset }
+  return { isSupported, isListening, interimTranscript, start, stop, reset, consumeFinal }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -28376,19 +28410,10 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
   // Det er nå fjernet — brukeren må aktivt klikke kamera/galleri-knappene
   // i skjemaet, slik at de først kan se hele "Nytt punkt"-skjemaet.
 
-  React.useEffect(() => {
-    if (!speech.isListening && speech.transcript) {
-      setForm(f => {
-        const existing = (f.description || '').trim()
-        const incoming = speech.transcript.trim()
-        if (!incoming) return f
-        if (existing && existing.endsWith(incoming)) return f
-        return { ...f, description: existing ? existing + ' ' + incoming : incoming, voice_transcript: (f.voice_transcript ? f.voice_transcript + ' ' : '') + incoming }
-      })
-      speech.reset()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [speech.isListening])
+  // Tale-til-tekst: tidligere brukte vi en useEffect som lyttet på speech.isListening
+  // og auto-merget speech.transcript inn i form.description. Det førte til at samme
+  // tekst kunne legges til flere ganger pga. re-renders. Nå konsumerer vi teksten
+  // eksplisitt fra toggleMic() når brukeren stopper opptaket — én gang per runde.
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -28476,8 +28501,25 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
   }
 
   const toggleMic = () => {
-    if (speech.isListening) speech.stop()
-    else { speech.reset(); speech.start() }
+    if (speech.isListening) {
+      speech.stop()
+      // Konsumer den ferdige teksten umiddelbart ved stopp.
+      // Vi gir browseren et lite øyeblikk til å fullføre eventuelle siste resultater
+      // (onend-event kan komme etter siste onresult med isFinal=true).
+      setTimeout(() => {
+        const text = speech.consumeFinal()
+        if (text && text.trim()) {
+          const incoming = text.trim()
+          setForm(f => ({
+            ...f,
+            description: f.description ? (f.description.trim() + ' ' + incoming) : incoming,
+            voice_transcript: f.voice_transcript ? (f.voice_transcript + ' ' + incoming) : incoming,
+          }))
+        }
+      }, 250)
+    } else {
+      speech.start() // start() resetter buffer internt
+    }
   }
 
   const currentStatus = observation?.status || 'apen'
