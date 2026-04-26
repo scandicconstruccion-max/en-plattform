@@ -27730,11 +27730,38 @@ function BefaringPage() {
   const [inspections, setInspections] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
-  const [selected, setSelected] = useState(null)
+  // selected persistes i sessionStorage så vi overlever kamera-retur på mobil
+  const [selected, setSelected] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('befaring:selected')
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
   const [showNew, setShowNew] = useState(false)
   const [filterStatus, setFilterStatus] = useState('alle')
   const [filterProject, setFilterProject] = useState('alle')
   const [search, setSearch] = useState('')
+
+  // Synkroniser selected til sessionStorage
+  React.useEffect(() => {
+    try {
+      if (selected) sessionStorage.setItem('befaring:selected', JSON.stringify(selected))
+      else sessionStorage.removeItem('befaring:selected')
+    } catch {}
+  }, [selected])
+
+  // Hvis vi har persisted selected men listen ikke er lastet ennå, vent.
+  // Når listen er lastet, valider at selected fortsatt finnes (kan ha blitt slettet).
+  React.useEffect(() => {
+    if (!selected || loading) return
+    const stillExists = inspections.find(i => i.id === selected.id)
+    if (!stillExists) setSelected(null)
+    else if (stillExists !== selected) {
+      // Oppdater til ny referanse hvis data endret seg
+      setSelected(stillExists)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading])
 
   const load = async () => {
     try {
@@ -27872,8 +27899,31 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const [ins, setIns] = useState(init)
   const [observations, setObservations] = useState([])
   const [loading, setLoading] = useState(true)
-  const [showCapture, setShowCapture] = useState(false)
-  const [editObs, setEditObs] = useState(null)
+  // showCapture og editObs persisteres også, så vi overlever kamera-retur
+  const [showCapture, setShowCapture] = useState(() => {
+    try { return sessionStorage.getItem('befaring:showCapture') === '1' } catch { return false }
+  })
+  const [editObs, setEditObs] = useState(() => {
+    try {
+      const raw = sessionStorage.getItem('befaring:editObs')
+      return raw ? JSON.parse(raw) : null
+    } catch { return null }
+  })
+
+  React.useEffect(() => {
+    try {
+      if (showCapture) sessionStorage.setItem('befaring:showCapture', '1')
+      else sessionStorage.removeItem('befaring:showCapture')
+    } catch {}
+  }, [showCapture])
+
+  React.useEffect(() => {
+    try {
+      if (editObs) sessionStorage.setItem('befaring:editObs', JSON.stringify(editObs))
+      else sessionStorage.removeItem('befaring:editObs')
+    } catch {}
+  }, [editObs])
+
   const [resolveObs, setResolveObs] = useState(null)
   const [approveObs, setApproveObs] = useState(null)
   const [rejectObs, setRejectObs] = useState(null)
@@ -28260,7 +28310,13 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
   const [statusLog, setStatusLog] = React.useState([])
   const speech = useSpeechRecognition()
 
-  const [form, setForm] = React.useState({
+  // Form-state persisteres til sessionStorage så vi overlever kamera-retur på mobil.
+  // Storage-key inkluderer inspection.id (og observation.id ved edit) for å unngå feilmatch.
+  const formStorageKey = React.useMemo(() => {
+    return `befaring:obsForm:${inspection.id}:${observation?.id || 'new'}`
+  }, [inspection.id, observation?.id])
+
+  const initialForm = React.useMemo(() => ({
     title: observation?.title || '',
     description: observation?.description || '',
     voice_transcript: observation?.voice_transcript || '',
@@ -28272,7 +28328,30 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
     assigned_role: observation?.assigned_role || '',
     due_date: observation?.due_date || '',
     images: Array.isArray(observation?.images) ? observation.images : [],
+  }), [observation?.id])
+
+  const [form, setForm] = React.useState(() => {
+    try {
+      const raw = sessionStorage.getItem(formStorageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        // Slå sammen med initial form for å sikre alle felter er der
+        return { ...initialForm, ...parsed }
+      }
+    } catch {}
+    return initialForm
   })
+
+  // Synkroniser form til sessionStorage ved hver endring
+  React.useEffect(() => {
+    try { sessionStorage.setItem(formStorageKey, JSON.stringify(form)) } catch {}
+  }, [form, formStorageKey])
+
+  // Når sheet lukkes (success eller manuell), rens sessionStorage
+  // Dette gjøres via wrapping av onClose/onSaved nedenfor
+  const cleanFormStorage = React.useCallback(() => {
+    try { sessionStorage.removeItem(formStorageKey) } catch {}
+  }, [formStorageKey])
   const [uploading, setUploading] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [showAdvanced, setShowAdvanced] = React.useState(!!isEdit)
@@ -28359,6 +28438,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
         })
         if (error) throw error
       }
+      cleanFormStorage()
       onSaved()
     } catch(e) {
       bAlert('Lagring feilet', e.message, 'error')
@@ -28369,6 +28449,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
     if (!isEdit) return
     if (!window.confirm('Slett dette punktet?')) return
     await supabase.from('inspection_observations').delete().eq('id', observation.id)
+    cleanFormStorage()
     onSaved()
   }
 
@@ -28378,8 +28459,20 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
     try {
       const { error } = await supabase.from('inspection_observations').update({ status: newStatus }).eq('id', observation.id)
       if (error) throw error
+      cleanFormStorage()
       onSaved()
     } catch(e) { bAlert('Feil', e.message, 'error') }
+  }
+
+  // Wrapped onClose: rens form-storage ved manuell lukking (men gi brukeren mulighet
+  // til å bekrefte hvis de har skrevet noe — for å unngå tap ved utilsiktet klikk).
+  const handleClose = () => {
+    const hasContent = form.title?.trim() || form.description?.trim() || form.images?.length > 0
+    if (hasContent && !isEdit) {
+      if (!window.confirm('Du har ikke lagret. Vil du forkaste det du har skrevet?')) return
+    }
+    cleanFormStorage()
+    onClose()
   }
 
   const toggleMic = () => {
@@ -28393,7 +28486,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+      <div onClick={handleClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
       <div style={{
         position:'fixed',
         inset: isMob ? 0 : 'auto',
@@ -28411,7 +28504,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
       }}>
         {/* Header */}
         <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
-          <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'24px',cursor:'pointer',color:'#64748b',padding:0,lineHeight:1 }}>×</button>
+          <button onClick={handleClose} style={{ background:'none',border:'none',fontSize:'24px',cursor:'pointer',color:'#64748b',padding:0,lineHeight:1 }}>×</button>
           <h2 style={{ margin:0, flex:1, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>
             {isEdit ? `Punkt #${observation.sequence_number}` : '📷 Nytt punkt'}
           </h2>
