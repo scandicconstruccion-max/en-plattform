@@ -29067,11 +29067,11 @@ function ApproveRejectModal({ inspection, observation, user, mode, onClose, onSa
       const { error } = await supabase.from('inspection_observations').update(payload).eq('id', observation.id)
       if (error) throw error
 
-      // Punkt 7: Send varsel til UE/utbedrer (e-post + in-app notification)
-      // Trigges bare hvis det finnes en utbedrer eller tildelt e-post.
-      // Failure i varslingen skal IKKE blokkere selve godkjenningen — vi logger bare.
+      // Send varsel til UE/utbedrer (e-post + in-app notification).
+      // Failure i varslingen skal IKKE blokkere selve godkjenningen — vi viser feil til byggleder.
+      let notifyResult = null
       try {
-        await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-notify-resolver`, {
+        const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/befaring-notify-resolver`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -29084,8 +29084,49 @@ function ApproveRejectModal({ inspection, observation, user, mode, onClose, onSa
             note: note.trim() || null,
           }),
         })
+        const responseText = await fnRes.text()
+        try {
+          notifyResult = JSON.parse(responseText)
+        } catch {
+          notifyResult = { error: 'Ugyldig svar fra varselsfunksjon', raw: responseText }
+        }
+        if (!fnRes.ok) {
+          console.warn('befaring-notify-resolver returnerte feil:', fnRes.status, notifyResult)
+          notifyResult = { ...notifyResult, http_status: fnRes.status }
+        }
       } catch (notifyErr) {
         console.warn('Varsling til UE feilet (men oppdatering OK):', notifyErr)
+        notifyResult = { error: notifyErr.message }
+      }
+
+      // Vis bekreftelse til byggleder
+      const actionLabel = isApprove ? 'godkjent' : 'avvist'
+      const recipientShown = notifyResult?.sent_to
+      if (recipientShown) {
+        bAlert(
+          isApprove ? '✅ Utbedring godkjent' : '🔄 Utbedring avvist',
+          `Punkt #${observation.sequence_number} er ${actionLabel}. Varsel sendt til ${recipientShown}.`,
+          'success'
+        )
+      } else if (notifyResult?.reason === 'Ingen mottaker') {
+        bAlert(
+          isApprove ? '✅ Utbedring godkjent' : '🔄 Utbedring avvist',
+          `Punkt #${observation.sequence_number} er ${actionLabel}. Ingen UE eller mottaker var registrert, så ingen varsel ble sendt.`,
+          'info'
+        )
+      } else if (notifyResult?.error) {
+        bAlert(
+          isApprove ? '⚠️ Godkjent — men varsel feilet' : '⚠️ Avvist — men varsel feilet',
+          `Punkt #${observation.sequence_number} er ${actionLabel}, men varsel til UE kunne ikke sendes:\n\n${notifyResult.error}`,
+          'warning'
+        )
+      } else {
+        // Sjelden — varselsfunksjon ga uventet svar
+        bAlert(
+          isApprove ? '✅ Utbedring godkjent' : '🔄 Utbedring avvist',
+          `Punkt #${observation.sequence_number} er ${actionLabel}.`,
+          'success'
+        )
       }
 
       onSaved()
