@@ -27791,7 +27791,7 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
         const ids = obsToInclude.map(o => o.id)
         const { data: logs } = await supabase
           .from('observation_status_log')
-          .select('observation_id, from_status, to_status, changed_at, note, changed_by_email, changed_by_name')
+          .select('observation_id, from_status, to_status, changed_at, note, changed_by_name, on_behalf_of_email, on_behalf_of_name')
           .in('observation_id', ids)
           .order('changed_at', { ascending: true })
         if (logs) {
@@ -28196,31 +28196,92 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
           y += apH + 2
         }
 
-        // Status-historikk
+        // Status-historikk — vises som tidslinje med tydelig dato/tid og person
         const log = statusLogs[obs.id] || []
         if (log.length > 0) {
-          checkSpace(8)
-          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-          doc.text('HISTORIKK', ml + 5, y)
-          y += 4
+          checkSpace(14)
+          y += 2
+          // Header med ramme rundt hele historikk-blokken
+          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+          // Beregn høyde først (uten å tegne)
+          const lineH = 12 // høyde per entry inkl. dato + status-linje
+          const noteH = 4 // ekstra per linje av notat
+          let totalNotes = 0
           for (const entry of log) {
-            checkSpace(5)
-            const ts = entry.changed_at ? new Date(entry.changed_at).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : ''
-            const fromLbl = (statusInfo[entry.from_status] || {}).label || entry.from_status || '—'
-            const toLbl = (statusInfo[entry.to_status] || {}).label || entry.to_status || '—'
-            const who = entry.changed_by_name || entry.changed_by_email || ''
-            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-            const line = `${ts}  ·  ${fromLbl} → ${toLbl}${who ? '  ·  ' + who : ''}`
-            const lineSplit = doc.splitTextToSize(line, cw - 10)
-            doc.text(lineSplit[0] || '', ml + 5, y)
-            y += 4
             if (entry.note) {
-              setC(hex('#475569')); doc.setFont('helvetica', 'italic')
-              const noteSplit = doc.splitTextToSize(String(entry.note), cw - 10)
-              noteSplit.slice(0, 3).forEach(ln => { checkSpace(4); doc.text(ln, ml + 8, y); y += 4 })
+              totalNotes += doc.splitTextToSize(String(entry.note), cw - 30).slice(0, 3).length
             }
           }
-          y += 1
+          const blockH = 8 + log.length * lineH + totalNotes * noteH + 4
+          checkSpace(blockH)
+          // Bakgrunns-boks
+          doc.roundedRect(ml + 5, y, cw - 5, blockH, 2, 2, 'FD')
+
+          // Header
+          setC(hex('#475569')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('STATUS-HISTORIKK', ml + 9, y + 5)
+          let logY = y + 11
+
+          for (let li = 0; li < log.length; li++) {
+            const entry = log[li]
+            const tsRaw = entry.changed_at ? new Date(entry.changed_at) : null
+            const dateLbl = tsRaw ? tsRaw.toLocaleDateString('nb-NO', { day:'2-digit', month:'short', year:'numeric' }) : '—'
+            const timeLbl = tsRaw ? tsRaw.toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' }) : ''
+            const fromLbl = (statusInfo[entry.from_status] || {}).label || entry.from_status || 'Opprettet'
+            const toLbl = (statusInfo[entry.to_status] || {}).label || entry.to_status || '—'
+            const toCol = (statusInfo[entry.to_status] || {}).color || '#64748b'
+            // Bestem hvem som utførte
+            const who = entry.on_behalf_of_name
+              ? `${entry.on_behalf_of_name}${entry.on_behalf_of_email ? ' <' + entry.on_behalf_of_email + '>' : ''}`
+              : (entry.changed_by_name || 'System')
+
+            // Tidslinje-prikk
+            setF(hex(toCol))
+            doc.circle(ml + 11, logY + 1, 1.2, 'F')
+
+            // Tidslinje-strek (vertikal) hvis det er flere etter
+            if (li < log.length - 1) {
+              setD(hex('#cbd5e1'))
+              doc.setLineWidth(0.3)
+              doc.line(ml + 11, logY + 3, ml + 11, logY + lineH - 1)
+            }
+
+            // Dato + tid (venstre, fet)
+            setC(hex('#0f172a')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+            doc.text(dateLbl, ml + 16, logY + 2)
+            if (timeLbl) {
+              setC(hex('#94a3b8')); doc.setFont('helvetica', 'normal')
+              doc.text(timeLbl, ml + 16 + doc.getTextWidth(dateLbl) + 3, logY + 2)
+            }
+
+            // Status-overgang (høyre side)
+            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const statusText = `${fromLbl} → `
+            const tw = doc.getTextWidth(statusText)
+            const startX = pw - mr - 80
+            doc.text(statusText, startX, logY + 2)
+            setC(hex(toCol)); doc.setFont('helvetica', 'bold')
+            doc.text(toLbl, startX + tw, logY + 2)
+
+            // Hvem utførte (linje 2)
+            setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const whoLine = `Utført av: ${who}`
+            const whoSplit = doc.splitTextToSize(whoLine, cw - 30)
+            doc.text(whoSplit[0] || '', ml + 16, logY + 7)
+
+            logY += lineH
+
+            // Eventuell kommentar/notat
+            if (entry.note) {
+              setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'italic')
+              const noteSplit = doc.splitTextToSize(`«${entry.note}»`, cw - 30)
+              noteSplit.slice(0, 3).forEach(ln => {
+                doc.text(ln, ml + 16, logY)
+                logY += noteH
+              })
+            }
+          }
+          y += blockH + 3
         }
 
         // Tegn kategoristripen til riktig høyde (overskriv den dummy-høye)
@@ -28240,31 +28301,6 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
           y += 4
         }
       }
-
-      // ── Signaturfelt på slutten ──
-      checkSpace(34)
-      y += 4
-      setD(hex('#e2e8f0'))
-      doc.setLineWidth(0.3)
-      doc.line(ml, y, pw - mr, y)
-      y += 6
-
-      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-      doc.text('SIGNATUR', ml, y)
-      y += 8
-
-      const sigW = (cw - 10) / 2
-      // Befaringsleder
-      setD(hex('#cbd5e1'))
-      doc.setLineWidth(0.4)
-      doc.line(ml, y + 12, ml + sigW, y + 12)
-      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
-      doc.text('Befaringsleder', ml, y + 16)
-
-      // Byggherre/kunde
-      doc.line(ml + sigW + 10, y + 12, ml + sigW + 10 + sigW, y + 12)
-      doc.text('Byggherre / kunde', ml + sigW + 10, y + 16)
-      y += 18
 
       // ── Footers + lagre ──
       pdf.drawFooters()
