@@ -27801,7 +27801,7 @@ function BefaringPage() {
     try {
       const [ins, proj] = await Promise.all([
         supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
+        supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name').then(r=>r.data||[])
       ])
       setInspections(ins); setProjects(proj)
     } catch(e) { console.error(e) }
@@ -28336,6 +28336,7 @@ function ObservationCardMobile({ obs, user, selectMode, isSelected, onTap, onLon
 // ═══════════════════════════════════════════════════════════════════════════
 
 function ObservationCaptureSheet({ inspection, observation, user, onClose, onSaved, onResolve, onApprove, onReject }) {
+  const confirm = useConfirm()
   const isEdit = !!observation
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const cameraInputRef = React.useRef(null)
@@ -28392,7 +28393,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
   const [lightbox, setLightbox] = React.useState(null) // { images, index }
 
   React.useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
+    supabase.from('employees').select('id, first_name, last_name, email, position, department, user_id').order('last_name', { nullsFirst: false })
       .then(r => setEmployees(r.data || []))
   }, [])
 
@@ -28502,7 +28503,13 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   const handleDelete = async () => {
     if (!isEdit) return
-    if (!window.confirm('Slett dette punktet?')) return
+    const ok = await confirm({
+      message: 'Slett dette punktet?',
+      subMessage: `Punkt #${observation?.sequence_number || ''}${observation?.title ? ' — ' + observation.title : ''} blir permanent slettet.`,
+      danger: true,
+      confirmLabel: 'Slett',
+    })
+    if (!ok) return
     await supabase.from('inspection_observations').delete().eq('id', observation.id)
     cleanFormStorage()
     onSaved()
@@ -28510,7 +28517,12 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   const handleStatusChange = async (newStatus) => {
     if (!isEdit) return
-    if (!window.confirm(`Endre status til "${OBS_STATUS[newStatus]?.label}"?`)) return
+    const ok = await confirm({
+      message: 'Endre status?',
+      subMessage: `Status settes til "${OBS_STATUS[newStatus]?.label}".`,
+      confirmLabel: 'Endre',
+    })
+    if (!ok) return
     try {
       const { error } = await supabase.from('inspection_observations').update({ status: newStatus }).eq('id', observation.id)
       if (error) throw error
@@ -28521,10 +28533,16 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   // Wrapped onClose: rens form-storage ved manuell lukking (men gi brukeren mulighet
   // til å bekrefte hvis de har skrevet noe — for å unngå tap ved utilsiktet klikk).
-  const handleClose = () => {
+  const handleClose = async () => {
     const hasContent = form.title?.trim() || form.description?.trim() || form.images?.length > 0
     if (hasContent && !isEdit) {
-      if (!window.confirm('Du har ikke lagret. Vil du forkaste det du har skrevet?')) return
+      const ok = await confirm({
+        message: 'Forkaste det du har skrevet?',
+        subMessage: 'Du har ikke lagret. Hvis du lukker mister du innholdet.',
+        danger: true,
+        confirmLabel: 'Forkast',
+      })
+      if (!ok) return
     }
     cleanFormStorage()
     onClose()
@@ -28721,7 +28739,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
                     ...f,
                     assigned_to_user_id: emp.user_id || '',
                     assigned_email: emp.email || '',
-                    assigned_role: f.assigned_role || emp.role || '',
+                    assigned_role: f.assigned_role || emp.position || '',
                   }))
                 }} style={bInp}>
                   <option value="">— Ingen —</option>
@@ -28731,7 +28749,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
                     const val = em.user_id || em.email || em.id
                     const name = `${em.first_name || ''} ${em.last_name || ''}`.trim() || em.email || '(uten navn)'
                     const hasAccount = !!em.user_id
-                    const suffix = em.role ? ' · ' + em.role : ''
+                    const suffix = em.position ? ' · ' + em.position : ''
                     const accountTag = hasAccount ? '' : ' · 📧 Kun e-post'
                     return (
                       <option key={em.id} value={val}>{name}{suffix}{accountTag}</option>
@@ -29161,7 +29179,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
   const [sending, setSending] = React.useState(false)
 
   React.useEffect(() => {
-    supabase.from('employees').select('id, first_name, last_name, email, role, user_id').order('last_name')
+    supabase.from('employees').select('id, first_name, last_name, email, position, department, user_id').order('last_name', { nullsFirst: false })
       .then(r => setEmployees(r.data || []))
     setExternalParticipants(Array.isArray(inspection.external_participants) ? inspection.external_participants : [])
 
@@ -29221,12 +29239,18 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
   const getRecipientEmail = () => {
     if (recipientMode === 'intern') {
-      const emp = employees.find(e => e.user_id === internRecipient)
-      return { email: emp?.email, name: emp ? `${emp.first_name} ${emp.last_name}` : '' }
+      // internRecipient inneholder employees.id (uuid). Det er ikke samme som user_id.
+      const emp = employees.find(e => e.id === internRecipient)
+      return { email: emp?.email, name: emp ? `${emp.first_name || ''} ${emp.last_name || ''}`.trim() : '' }
     }
     if (recipientMode === 'ekstern') {
+      // Hvis verdien er en index (e.g. "0", "1") fra externalParticipants
       const ext = externalParticipants.find((_, i) => String(i) === externalRecipient)
-      return { email: ext?.email, name: ext?.name || '' }
+      if (ext) return { email: ext.email, name: ext.name || '' }
+      // Eller hvis det er en e-post fra projectUEs
+      const ue = projectUEs.find(u => u.email === externalRecipient)
+      if (ue) return { email: ue.email, name: ue.contact_person || ue.company || '' }
+      return { email: null, name: '' }
     }
     return { email: emailRecipient, name: recipientName }
   }
@@ -29287,8 +29311,22 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
     } finally { setSending(false) }
   }
 
-  const internEmployees = employees.filter(e => e.user_id && e.email)
+  const internEmployees = employees.filter(e => e.email)
   const externalsWithEmail = externalParticipants.map((p, i) => ({ ...p, _idx: i })).filter(p => p.email)
+
+  // Hent UE-er fra prosjekt for "Deltaker"-modus
+  const [projectUEs, setProjectUEs] = React.useState([])
+  React.useEffect(() => {
+    if (!inspection?.project_id) return
+    let mounted = true
+    supabase.from('projects').select('subcontractors').eq('id', inspection.project_id).single()
+      .then(r => {
+        if (!mounted) return
+        const list = (r.data?.subcontractors || []).filter(s => s.email)
+        setProjectUEs(list)
+      })
+    return () => { mounted = false }
+  }, [inspection?.project_id])
 
   return (
     <>
@@ -29312,7 +29350,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
             <div style={{ display:'flex', gap:'6px', marginBottom:'10px' }}>
               {[
                 ['intern', '👥 Kollega', internEmployees.length === 0],
-                ['ekstern', '🤝 Deltaker', externalsWithEmail.length === 0],
+                ['ekstern', '🤝 Deltaker', externalsWithEmail.length === 0 && projectUEs.length === 0],
                 ['epost', '✉️ E-post', false],
               ].map(([k, l, disabled]) => (
                 <button key={k} onClick={() => !disabled && setRecipientMode(k)} disabled={disabled}
@@ -29330,19 +29368,44 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
             {recipientMode === 'intern' && (
               <select value={internRecipient} onChange={e => setInternRecipient(e.target.value)} style={bInp}>
                 <option value="">— Velg kollega —</option>
-                {internEmployees.map(e => (
-                  <option key={e.id} value={e.user_id}>{e.first_name} {e.last_name} · {e.email}</option>
-                ))}
+                {internEmployees.map(e => {
+                  const name = `${e.first_name || ''} ${e.last_name || ''}`.trim() || e.email
+                  const accountTag = e.user_id ? '' : ' · 📧 Kun e-post'
+                  return (
+                    <option key={e.id} value={e.id}>{name} · {e.email}{accountTag}</option>
+                  )
+                })}
               </select>
             )}
 
             {recipientMode === 'ekstern' && (
-              <select value={externalRecipient} onChange={e => setExternalRecipient(e.target.value)} style={bInp}>
-                <option value="">— Velg deltaker —</option>
-                {externalsWithEmail.map(p => (
-                  <option key={p._idx} value={p._idx}>{getRoleLabel(p.role)} · {p.name} · {p.email}</option>
-                ))}
-              </select>
+              <>
+                <select value={externalRecipient} onChange={e => setExternalRecipient(e.target.value)} style={bInp}>
+                  <option value="">— Velg deltaker eller UE —</option>
+                  {externalsWithEmail.length > 0 && (
+                    <optgroup label="Deltakere på befaringen">
+                      {externalsWithEmail.map(p => (
+                        <option key={`ext-${p._idx}`} value={p._idx}>{getRoleLabel(p.role)} · {p.name} · {p.email}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {projectUEs.length > 0 && (
+                    <optgroup label="UE-er på prosjektet">
+                      {projectUEs.map((u, i) => (
+                        <option key={`ue-${i}`} value={u.email}>
+                          {u.company || u.contact_person || u.email}{u.trade ? ' · ' + u.trade : ''}
+                          {u.contact_person && u.company ? ` (${u.contact_person})` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                {externalsWithEmail.length === 0 && projectUEs.length === 0 && (
+                  <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8' }}>
+                    Ingen eksterne deltakere eller UE-er funnet. Bruk e-post-fanen for å sende til en ny e-post.
+                  </p>
+                )}
+              </>
             )}
 
             {recipientMode === 'epost' && (
@@ -29949,7 +30012,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
   React.useEffect(() => {
     let mounted = true
     supabase.from('employees')
-      .select('id, first_name, last_name, role, user_id')
+      .select('id, first_name, last_name, position, department, user_id')
       .order('last_name', { ascending: true, nullsFirst: false })
       .then(r => {
         if (!mounted) return
@@ -29957,6 +30020,8 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
           .map(em => ({
             ...em,
             full_name: `${em.first_name || ''} ${em.last_name || ''}`.trim(),
+            // Bakoverkompatibilitet: noen render-steder ser etter em.role
+            role: em.position || em.department || null,
           }))
           .filter(em => em.full_name) // Bare ansatte med navn
         setEmployees(list)
@@ -30030,7 +30095,20 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
             <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Status</label><select value={form.status} onChange={e => set('status', e.target.value)} style={bInp}>{Object.entries(INS_STATUS).map(([k, v]) => <option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           </div>
 
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} placeholder="Velg prosjekt" /></div>
+          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => {
+            const proj = projects.find(p => p.id === v)
+            // Auto-fyll Sted hvis prosjektet har en adresse OG Sted ikke er fylt manuelt
+            // (eller er lik forrige prosjekts adresse, så vi ikke overskriver brukerens egen tekst)
+            setForm(f => {
+              const prevProj = projects.find(p => p.id === f.project_id)
+              const stedErAutoFylt = !f.location || (prevProj && f.location === prevProj.address)
+              return {
+                ...f,
+                project_id: v,
+                location: stedErAutoFylt && proj?.address ? proj.address : f.location,
+              }
+            })
+          }} projects={projects} placeholder="Velg prosjekt" /></div>
           <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Sted</label><input value={form.location} onChange={e => set('location', e.target.value)} placeholder="Adresse / lokasjon" style={bInp} /></div>
 
           <div>
@@ -30051,7 +30129,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
                 {employees.filter(em => em.full_name).map(em => {
                   const accountTag = em.user_id ? '' : ' · 📧 Kun e-post'
                   return (
-                    <option key={em.id} value={em.full_name}>{em.full_name}{em.role ? ' · ' + em.role : ''}{accountTag}</option>
+                    <option key={em.id} value={em.full_name}>{em.full_name}{em.position ? ' · ' + em.position : ''}{accountTag}</option>
                   )
                 })}
               </select>
