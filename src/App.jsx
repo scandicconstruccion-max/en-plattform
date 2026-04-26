@@ -27629,48 +27629,6 @@ function Lightbox({ images, startIndex = 0, onClose }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// EmployeeSelect — dropdown for ansatte (henter fra user_profiles)
-// ═══════════════════════════════════════════════════════════════════════════
-function EmployeeSelect({ value, onChange, placeholder = 'Velg ansatt', allowCustom = false, customValue = '', onCustomChange = null }) {
-  const [employees, setEmployees] = React.useState([])
-  const [loading, setLoading] = React.useState(true)
-
-  React.useEffect(() => {
-    let mounted = true
-    supabase.from('user_profiles')
-      .select('id, full_name, email, role')
-      .order('full_name', { ascending: true })
-      .then(r => {
-        if (!mounted) return
-        setEmployees((r.data || []).filter(u => u.full_name))
-        setLoading(false)
-      })
-    return () => { mounted = false }
-  }, [])
-
-  return (
-    <div>
-      <select value={value || ''} onChange={e => onChange(e.target.value)} style={bInp}>
-        <option value="">{loading ? 'Laster...' : `— ${placeholder} —`}</option>
-        {employees.map(e => (
-          <option key={e.id} value={e.id}>
-            {e.full_name}{e.role ? ` · ${e.role}` : ''}
-          </option>
-        ))}
-      </select>
-      {allowCustom && (
-        <input
-          value={customValue}
-          onChange={e => onCustomChange?.(e.target.value)}
-          placeholder="Eller skriv navn manuelt"
-          style={{ ...bInp, marginTop:'6px' }}
-        />
-      )}
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // ProjectUESelect — dropdown for UE-er på et spesifikt prosjekt
 // (henter projects.subcontractors fra prosjektet, fritekst-fallback)
 // ═══════════════════════════════════════════════════════════════════════════
