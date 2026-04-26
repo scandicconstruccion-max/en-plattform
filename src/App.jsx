@@ -29195,46 +29195,251 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
   }, [])
 
   const buildEmailHtml = (linkUrl = null, recipientName = '') => {
+    // Hjelper: HTML-escape
+    const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+
+    // Hjelper: norsk dato + dager til frist
+    const formatDate = (dateStr) => {
+      if (!dateStr) return ''
+      try {
+        const d = new Date(dateStr)
+        return d.toLocaleDateString('nb-NO', { weekday:'long', day:'numeric', month:'long', year:'numeric' })
+      } catch { return dateStr }
+    }
+    const daysUntil = (dateStr) => {
+      if (!dateStr) return null
+      try {
+        const d = new Date(dateStr)
+        const now = new Date()
+        now.setHours(0,0,0,0); d.setHours(0,0,0,0)
+        return Math.round((d - now) / (1000 * 60 * 60 * 24))
+      } catch { return null }
+    }
+
+    // Bygg punkt-kort
     const items = observations.map(obs => {
       const cat = OBS_CATEGORY[obs.category] || OBS_CATEGORY.observasjon
-      const imgs = (Array.isArray(obs.images) ? obs.images : []).slice(0, 4)
+      const imgs = (Array.isArray(obs.images) ? obs.images : []).slice(0, 6)
+      const days = daysUntil(obs.due_date)
+      const dueColor = days === null ? '#64748b' : (days < 0 ? '#dc2626' : (days <= 3 ? '#dc2626' : (days <= 7 ? '#d97706' : '#059669')))
+      const dueBg    = days === null ? '#f1f5f9' : (days < 0 ? '#fef2f2' : (days <= 3 ? '#fef2f2' : (days <= 7 ? '#fffbeb' : '#ecfdf5')))
+      const dueLabel = days === null ? '' : (days < 0 ? `${Math.abs(days)} dag${Math.abs(days)===1?'':'er'} på overtid` : (days === 0 ? 'I dag' : (days === 1 ? 'I morgen' : `${days} dager igjen`)))
+
       return `
-        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:10px">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
-            <span style="background:${cat.bg};color:${cat.color};border:1px solid ${cat.border};padding:3px 10px;border-radius:6px;font-size:11px;font-weight:700">${cat.emoji} ${cat.label}</span>
-            <span style="font-weight:800;color:#0f172a">Punkt ${obs.sequence_number}</span>
-            ${obs.location_ref ? `<span style="color:#2563eb;font-size:12px">📍 ${obs.location_ref}</span>` : ''}
+        <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:14px;margin-bottom:14px;overflow:hidden;box-shadow:0 1px 3px rgba(15,23,42,0.04)">
+          <!-- Kategori-banner -->
+          <div style="background:${cat.bg};border-bottom:1px solid ${cat.border};padding:10px 18px">
+            <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+              <tr>
+                <td style="font-size:12px;font-weight:700;color:${cat.color};text-transform:uppercase;letter-spacing:0.04em">
+                  ${cat.emoji} ${cat.label} · Punkt #${obs.sequence_number}
+                </td>
+              </tr>
+            </table>
           </div>
-          ${obs.description ? `<p style="margin:0 0 10px;color:#0f172a;font-size:14px;line-height:1.5">${obs.description.replace(/</g,'&lt;')}</p>` : ''}
-          ${imgs.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap">${imgs.map(im => `<img src="${im.url}" style="width:140px;height:105px;object-fit:cover;border-radius:8px" />`).join('')}</div>` : ''}
-          ${obs.due_date ? `<p style="margin:8px 0 0;color:#d97706;font-size:12px;font-weight:600">📅 Frist: ${obs.due_date}</p>` : ''}
+
+          <!-- Innhold -->
+          <div style="padding:18px">
+            ${obs.title ? `<h3 style="margin:0 0 6px;font-size:17px;font-weight:700;color:#0f172a;line-height:1.3">${esc(obs.title)}</h3>` : ''}
+
+            ${obs.location_ref ? `
+              <div style="margin:0 0 10px">
+                <span style="display:inline-block;background:#eff6ff;color:#1e40af;border:1px solid #bfdbfe;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600">📍 ${esc(obs.location_ref)}</span>
+              </div>
+            ` : ''}
+
+            ${obs.description ? `<p style="margin:0 0 14px;color:#334155;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(obs.description)}</p>` : ''}
+
+            ${obs.due_date ? `
+              <div style="background:${dueBg};border:1px solid ${dueColor}33;border-left:3px solid ${dueColor};border-radius:8px;padding:10px 12px;margin:0 0 14px">
+                <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+                  <tr>
+                    <td style="font-size:11px;color:${dueColor};text-transform:uppercase;letter-spacing:0.04em;font-weight:700">📅 Frist</td>
+                    <td align="right" style="font-size:11px;color:${dueColor};font-weight:700">${dueLabel}</td>
+                  </tr>
+                  <tr>
+                    <td colspan="2" style="font-size:14px;color:${dueColor};font-weight:700;padding-top:2px">${esc(formatDate(obs.due_date))}</td>
+                  </tr>
+                </table>
+              </div>
+            ` : ''}
+
+            ${imgs.length ? `
+              <table cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;margin:0">
+                <tr>
+                  ${imgs.map(im => `
+                    <td style="padding:0 6px 6px 0;vertical-align:top">
+                      <img src="${esc(im.url)}" alt="" width="140" style="display:block;width:140px;height:105px;object-fit:cover;border-radius:10px;border:1px solid #e2e8f0" />
+                    </td>
+                  `).join('')}
+                </tr>
+              </table>
+            ` : ''}
+          </div>
         </div>
       `
     }).join('')
 
-    const linkBlock = linkUrl ? `
-      <div style="background:#ecfdf5;border:2px solid #059669;border-radius:12px;padding:18px;margin:0 0 18px;text-align:center">
-        <p style="margin:0 0 12px;color:#064e3b;font-size:14px;font-weight:600">${recipientName ? recipientName + ' — k' : 'K'}likk her for å markere punkter som utbedret og laste opp dokumentasjon:</p>
-        <a href="${linkUrl}" style="display:inline-block;background:#059669;color:white;padding:14px 28px;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px">📋 Åpne befaring</a>
-        <p style="margin:12px 0 0;color:#065f46;font-size:11px">Lenken er gyldig i 15 dager. Ingen innlogging nødvendig.</p>
+    // CTA-knapp (gjentas øverst og nederst)
+    const ctaButton = linkUrl ? `
+      <table cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto">
+        <tr>
+          <td align="center" style="background:#059669;border-radius:12px;box-shadow:0 4px 12px rgba(5,150,105,0.25)">
+            <a href="${esc(linkUrl)}" style="display:inline-block;padding:18px 36px;color:#ffffff;text-decoration:none;font-weight:800;font-size:17px;letter-spacing:0.01em;font-family:system-ui,-apple-system,sans-serif">
+              📋 Åpne befaring
+            </a>
+          </td>
+        </tr>
+      </table>
+    ` : ''
+
+    const heroLink = linkUrl ? `
+      <div style="background:linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%);border:2px solid #059669;border-radius:16px;padding:24px 20px;margin:0 0 24px;text-align:center">
+        <p style="margin:0 0 6px;color:#064e3b;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em">${recipientName ? esc(recipientName) + ', d' : 'D'}u har fått tilsendt punkter</p>
+        <p style="margin:0 0 18px;color:#065f46;font-size:15px;line-height:1.5">Klikk på knappen for å markere punkter som utbedret og laste opp dokumentasjon.</p>
+        ${ctaButton}
+        <p style="margin:14px 0 0;color:#047857;font-size:12px">🔒 Lenken er gyldig i 15 dager · Ingen innlogging nødvendig</p>
       </div>
     ` : ''
 
-    return `
-<div style="font-family:system-ui,-apple-system,sans-serif;max-width:720px;margin:0 auto;padding:20px;background:#f8fafc">
-  <div style="background:#059669;color:white;padding:18px 24px;border-radius:12px 12px 0 0">
-    <h1 style="margin:0;font-size:20px">Befaring: ${inspection.title}</h1>
-    <p style="margin:6px 0 0;opacity:0.9;font-size:13px">📅 ${inspection.date}${inspection.location ? ' · 📍 ' + inspection.location : ''}${proj ? ' · 🏗️ ' + proj.name : ''}</p>
+    const heroBottom = linkUrl ? `
+      <div style="background:#f8fafc;border-radius:16px;padding:24px 20px;margin:24px 0 0;text-align:center">
+        <p style="margin:0 0 14px;color:#475569;font-size:14px;font-weight:600">Klar til å begynne?</p>
+        ${ctaButton}
+      </div>
+    ` : ''
+
+    // Tell punkter med frist for sammendrag
+    const withDue = observations.filter(o => o.due_date)
+    const overdue = observations.filter(o => {
+      const d = daysUntil(o.due_date)
+      return d !== null && d < 0
+    })
+    const urgent = observations.filter(o => {
+      const d = daysUntil(o.due_date)
+      return d !== null && d >= 0 && d <= 3
+    })
+
+    // Frist-banner ved kritiske frister
+    const urgencyBanner = (overdue.length > 0 || urgent.length > 0) ? `
+      <div style="background:#fef2f2;border:1px solid #fecaca;border-left:4px solid #dc2626;border-radius:10px;padding:14px 16px;margin:0 0 18px">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+          <tr>
+            <td valign="top" width="32" style="padding-right:10px;font-size:24px;line-height:1">⚠️</td>
+            <td>
+              <p style="margin:0 0 4px;color:#7f1d1d;font-size:14px;font-weight:700">
+                ${overdue.length > 0 ? `${overdue.length} punkt${overdue.length===1?'':'er'} på overtid` : ''}
+                ${overdue.length > 0 && urgent.length > 0 ? ' · ' : ''}
+                ${urgent.length > 0 ? `${urgent.length} punkt${urgent.length===1?'':'er'} med kort frist` : ''}
+              </p>
+              <p style="margin:0;color:#991b1b;font-size:13px">Vennligst prioriter disse.</p>
+            </td>
+          </tr>
+        </table>
+      </div>
+    ` : ''
+
+    // Personlig melding fra avsender
+    const messageBlock = message ? `
+      <div style="background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #2563eb;border-radius:10px;padding:14px 16px;margin:0 0 18px">
+        <p style="margin:0 0 6px;color:#1e3a8a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em">💬 Melding</p>
+        <p style="margin:0;color:#1e40af;font-size:14px;line-height:1.6;white-space:pre-wrap">${esc(message)}</p>
+      </div>
+    ` : ''
+
+    // Hero-seksjon (befaringens info)
+    const heroInfo = `
+      <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse;margin:0 0 4px">
+        <tr>
+          <td style="padding:6px 0;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;width:90px">📅 Dato</td>
+          <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600">${esc(formatDate(inspection.date))}</td>
+        </tr>
+        ${inspection.location ? `
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">📍 Sted</td>
+            <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:500">${esc(inspection.location)}</td>
+          </tr>
+        ` : ''}
+        ${proj ? `
+          <tr>
+            <td style="padding:6px 0;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em">🏗️ Prosjekt</td>
+            <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:500">${esc(proj.name)}${proj.project_number ? ` <span style="color:#94a3b8">(${esc(proj.project_number)})</span>` : ''}</td>
+          </tr>
+        ` : ''}
+      </table>
+    `
+
+    // Sammendrag-stripe
+    const summaryStrip = `
+      <div style="background:#0f172a;color:#ffffff;border-radius:12px;padding:14px 18px;margin:0 0 18px">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" style="border-collapse:collapse">
+          <tr>
+            <td>
+              <span style="font-size:22px;font-weight:800;color:#ffffff">${observations.length}</span>
+              <span style="font-size:13px;color:#cbd5e1;margin-left:6px">punkt${observations.length!==1?'er':''} sendt til deg</span>
+            </td>
+            ${withDue.length > 0 ? `
+              <td align="right" style="font-size:12px;color:#94a3b8">
+                ${withDue.length} med frist
+              </td>
+            ` : ''}
+          </tr>
+        </table>
+      </div>
+    `
+
+    return `<!DOCTYPE html>
+<html lang="nb">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Befaring: ${esc(inspection.title)}</title>
+</head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;color:#0f172a">
+  <div style="background:#f1f5f9;padding:24px 12px">
+    <table cellpadding="0" cellspacing="0" border="0" align="center" width="100%" style="max-width:680px;margin:0 auto;border-collapse:collapse">
+      <!-- Header -->
+      <tr>
+        <td style="background:linear-gradient(135deg,#059669 0%,#047857 100%);color:#ffffff;padding:32px 28px;border-radius:18px 18px 0 0">
+          <p style="margin:0 0 6px;font-size:12px;font-weight:700;letter-spacing:0.08em;opacity:0.9;text-transform:uppercase">🔍 Befaring</p>
+          <h1 style="margin:0;font-size:24px;font-weight:800;line-height:1.25;color:#ffffff">${esc(inspection.title || 'Uten tittel')}</h1>
+        </td>
+      </tr>
+
+      <!-- Body -->
+      <tr>
+        <td style="background:#ffffff;padding:28px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0">
+          ${heroInfo}
+
+          <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
+
+          ${summaryStrip}
+          ${urgencyBanner}
+          ${messageBlock}
+          ${heroLink}
+
+          <div style="margin:24px 0 14px">
+            <h2 style="margin:0;font-size:13px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.06em">Punktene</h2>
+          </div>
+
+          ${items}
+
+          ${heroBottom}
+        </td>
+      </tr>
+
+      <!-- Footer -->
+      <tr>
+        <td style="background:#ffffff;padding:20px 28px 28px;border-radius:0 0 18px 18px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;text-align:center">
+          <p style="margin:0;color:#94a3b8;font-size:12px;line-height:1.6">
+            Sendt fra <strong style="color:#475569">En Plattform</strong> — KS-system for bygg og anlegg
+          </p>
+        </td>
+      </tr>
+    </table>
   </div>
-  <div style="background:white;padding:18px 24px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px">
-    ${message ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px;margin-bottom:14px;color:#1e3a8a;font-size:14px;line-height:1.5">${message.replace(/\n/g,'<br>')}</div>` : ''}
-    ${linkBlock}
-    <h2 style="margin:0 0 12px;font-size:16px;color:#0f172a">${observations.length} punkt${observations.length!==1?'er':''}</h2>
-    ${items}
-    <hr style="border:none;border-top:1px solid #f1f5f9;margin:20px 0">
-    <p style="margin:0;color:#94a3b8;font-size:12px">Sendt fra En Plattform — KS-system for bygg og anlegg</p>
-  </div>
-</div>`
+</body>
+</html>`
   }
 
   const getRecipientEmail = () => {
