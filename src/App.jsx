@@ -28154,134 +28154,132 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
           }
         }
 
-        // Resolution-notat
-        if (obs.resolution_note) {
-          checkSpace(8)
-          setF(hex('#faf5ff')); setD(hex('#e9d5ff'))
-          const rnLines = doc.splitTextToSize(String(obs.resolution_note), cw - 14)
-          const rnH = 8 + rnLines.length * 4
-          doc.roundedRect(ml + 5, y, cw - 5, rnH, 2, 2, 'FD')
-          setC(hex('#6b21a8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-          doc.text('UTBEDRINGSNOTAT', ml + 8, y + 4)
-          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-          rnLines.forEach((ln, i) => doc.text(ln, ml + 8, y + 8 + i * 4))
-          y += rnH + 2
-        }
-
-        // Avvisningsnotat (hvis avvist)
-        if (obs.rejection_note) {
-          checkSpace(8)
-          setF(hex('#fef2f2')); setD(hex('#fecaca'))
-          const rjLines = doc.splitTextToSize(String(obs.rejection_note), cw - 14)
-          const rjH = 8 + rjLines.length * 4
-          doc.roundedRect(ml + 5, y, cw - 5, rjH, 2, 2, 'FD')
-          setC(hex('#991b1b')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-          doc.text('BEGRUNNELSE FOR AVVISNING', ml + 8, y + 4)
-          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-          rjLines.forEach((ln, i) => doc.text(ln, ml + 8, y + 8 + i * 4))
-          y += rjH + 2
-        }
-
-        // Godkjennings-notat
-        if (obs.approval_note) {
-          checkSpace(8)
-          setF(hex('#f0fdf4')); setD(hex('#bbf7d0'))
-          const apLines = doc.splitTextToSize(String(obs.approval_note), cw - 14)
-          const apH = 8 + apLines.length * 4
-          doc.roundedRect(ml + 5, y, cw - 5, apH, 2, 2, 'FD')
-          setC(hex('#15803d')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-          doc.text('KOMMENTAR FRA BYGGLEDER', ml + 8, y + 4)
-          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-          apLines.forEach((ln, i) => doc.text(ln, ml + 8, y + 8 + i * 4))
-          y += apH + 2
-        }
-
-        // Status-historikk — vises som tidslinje med tydelig dato/tid og person
+        // ── Status-historikk integrert i notat-rubrikkene ──
+        // I stedet for en separat historikk-blokk fletter vi dato/utført-av inn
+        // i de tre fargede rubrikkene (utbedringsnotat, avvist, godkjent).
+        // Statusendringer uten notat (f.eks. "Pågår") vises som kompakte én-linjes-rader.
         const log = statusLogs[obs.id] || []
-        if (log.length > 0) {
-          checkSpace(14)
-          y += 2
-          // Header med ramme rundt hele historikk-blokken
-          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
-          // Beregn høyde først (uten å tegne)
-          const lineH = 12 // høyde per entry inkl. dato + status-linje
-          const noteH = 4 // ekstra per linje av notat
-          let totalNotes = 0
-          for (const entry of log) {
-            if (entry.note) {
-              totalNotes += doc.splitTextToSize(String(entry.note), cw - 30).slice(0, 3).length
-            }
+
+        // Hjelper: format dato + tid på norsk
+        const fmtLogTs = (ts) => {
+          if (!ts) return ''
+          try {
+            const d = new Date(ts)
+            const dt = d.toLocaleDateString('nb-NO', { day:'2-digit', month:'short', year:'numeric' })
+            const tm = d.toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' })
+            return `${dt} kl ${tm}`
+          } catch { return String(ts) }
+        }
+        // Hjelper: hvem utførte handlingen
+        const fmtLogWho = (entry) => {
+          if (!entry) return ''
+          if (entry.on_behalf_of_name) {
+            return `${entry.on_behalf_of_name}${entry.on_behalf_of_email ? ' (' + entry.on_behalf_of_email + ')' : ''}`
           }
-          const blockH = 8 + log.length * lineH + totalNotes * noteH + 4
-          checkSpace(blockH)
-          // Bakgrunns-boks
-          doc.roundedRect(ml + 5, y, cw - 5, blockH, 2, 2, 'FD')
+          return entry.changed_by_name || 'System'
+        }
+        // Finn siste log-entry som førte til en gitt status
+        const findLastTo = (status) => {
+          for (let li = log.length - 1; li >= 0; li--) {
+            if (log[li].to_status === status) return log[li]
+          }
+          return null
+        }
 
-          // Header
-          setC(hex('#475569')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-          doc.text('STATUS-HISTORIKK', ml + 9, y + 5)
-          let logY = y + 11
+        // Hjelper: tegn en notat-boks med integrert meta-linje
+        // (verb = "Utført av" / "Avvist av" / "Godkjent av")
+        const drawNoteBox = (notatTekst, tittel, verb, logEntry, colors) => {
+          checkSpace(10)
+          const noteLines = doc.splitTextToSize(String(notatTekst), cw - 14)
+          const ts = fmtLogTs(logEntry?.changed_at)
+          const who = fmtLogWho(logEntry)
+          const metaLine = (who || ts) ? `${verb} ${who || '—'}${ts ? '  ·  ' + ts : ''}` : null
+          // Høyde: header(4) + meta(metaLine ? 4.5 : 0) + notat-linjer + padding
+          const boxH = 6 + (metaLine ? 4.5 : 0) + noteLines.length * 4 + 4
+          checkSpace(boxH)
+          setF(hex(colors.bg)); setD(hex(colors.border))
+          doc.roundedRect(ml + 5, y, cw - 5, boxH, 2, 2, 'FD')
+          // Tittel
+          setC(hex(colors.title)); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(tittel, ml + 8, y + 4)
+          // Meta-linje (verb + person + dato)
+          let textY = y + 8
+          if (metaLine) {
+            setC(hex(colors.meta)); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const metaSplit = doc.splitTextToSize(metaLine, cw - 14)
+            doc.text(metaSplit[0] || '', ml + 8, textY)
+            textY += 4.5
+          }
+          // Selve notatet
+          setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          noteLines.forEach((ln, i) => doc.text(ln, ml + 8, textY + i * 4))
+          y += boxH + 2
+        }
 
-          for (let li = 0; li < log.length; li++) {
-            const entry = log[li]
-            const tsRaw = entry.changed_at ? new Date(entry.changed_at) : null
-            const dateLbl = tsRaw ? tsRaw.toLocaleDateString('nb-NO', { day:'2-digit', month:'short', year:'numeric' }) : '—'
-            const timeLbl = tsRaw ? tsRaw.toLocaleTimeString('nb-NO', { hour:'2-digit', minute:'2-digit' }) : ''
-            const fromLbl = (statusInfo[entry.from_status] || {}).label || entry.from_status || 'Opprettet'
+        // Spor hvilke log-entries vi har "konsumert" i notat-boksene
+        const consumedIds = new Set()
+
+        // Utbedringsnotat (lilla) — kobles til siste 'utbedret'-overgang
+        if (obs.resolution_note) {
+          const e = findLastTo('utbedret')
+          if (e) consumedIds.add(e.id)
+          drawNoteBox(obs.resolution_note, 'UTBEDRINGSNOTAT', 'Utført av', e, {
+            bg: '#faf5ff', border: '#e9d5ff', title: '#6b21a8', meta: '#7e22ce'
+          })
+        }
+
+        // Avvisningsnotat (rød)
+        if (obs.rejection_note) {
+          const e = findLastTo('avvist')
+          if (e) consumedIds.add(e.id)
+          drawNoteBox(obs.rejection_note, 'BEGRUNNELSE FOR AVVISNING', 'Avvist av', e, {
+            bg: '#fef2f2', border: '#fecaca', title: '#991b1b', meta: '#b91c1c'
+          })
+        }
+
+        // Godkjennings-notat (grønn) — vises også hvis godkjent uten kommentar,
+        // for å dokumentere godkjenningsdato og hvem som godkjente
+        const approvedEntry = findLastTo('godkjent')
+        if (obs.approval_note || approvedEntry) {
+          if (approvedEntry) consumedIds.add(approvedEntry.id)
+          const txt = obs.approval_note || '(Ingen kommentar oppgitt)'
+          drawNoteBox(txt, 'KOMMENTAR FRA BYGGLEDER', 'Godkjent av', approvedEntry, {
+            bg: '#f0fdf4', border: '#bbf7d0', title: '#15803d', meta: '#16a34a'
+          })
+        }
+
+        // Øvrige statusendringer som ikke er dekket av notat-boksene
+        // (f.eks. "Opprettet → Åpen" eller "Pågår"-overganger uten kommentar)
+        // Vises som kompakt én-linjes-stripe per hendelse
+        const remainingLog = log.filter(e => !consumedIds.has(e.id))
+        if (remainingLog.length > 0) {
+          checkSpace(8)
+          const stripH = 4 + remainingLog.length * 4.5 + 2
+          checkSpace(stripH)
+          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+          doc.roundedRect(ml + 5, y, cw - 5, stripH, 2, 2, 'FD')
+          setC(hex('#64748b')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text('ØVRIGE STATUSENDRINGER', ml + 8, y + 3.5)
+          let stY = y + 7.5
+          for (const entry of remainingLog) {
+            const ts = fmtLogTs(entry.changed_at)
+            const who = fmtLogWho(entry)
             const toLbl = (statusInfo[entry.to_status] || {}).label || entry.to_status || '—'
             const toCol = (statusInfo[entry.to_status] || {}).color || '#64748b'
-            // Bestem hvem som utførte
-            const who = entry.on_behalf_of_name
-              ? `${entry.on_behalf_of_name}${entry.on_behalf_of_email ? ' <' + entry.on_behalf_of_email + '>' : ''}`
-              : (entry.changed_by_name || 'System')
-
-            // Tidslinje-prikk
-            setF(hex(toCol))
-            doc.circle(ml + 11, logY + 1, 1.2, 'F')
-
-            // Tidslinje-strek (vertikal) hvis det er flere etter
-            if (li < log.length - 1) {
-              setD(hex('#cbd5e1'))
-              doc.setLineWidth(0.3)
-              doc.line(ml + 11, logY + 3, ml + 11, logY + lineH - 1)
-            }
-
-            // Dato + tid (venstre, fet)
-            setC(hex('#0f172a')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
-            doc.text(dateLbl, ml + 16, logY + 2)
-            if (timeLbl) {
-              setC(hex('#94a3b8')); doc.setFont('helvetica', 'normal')
-              doc.text(timeLbl, ml + 16 + doc.getTextWidth(dateLbl) + 3, logY + 2)
-            }
-
-            // Status-overgang (høyre side)
-            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-            const statusText = `${fromLbl} → `
-            const tw = doc.getTextWidth(statusText)
-            const startX = pw - mr - 80
-            doc.text(statusText, startX, logY + 2)
-            setC(hex(toCol)); doc.setFont('helvetica', 'bold')
-            doc.text(toLbl, startX + tw, logY + 2)
-
-            // Hvem utførte (linje 2)
+            // Liten farget pille for status til venstre
+            setF(hex((statusInfo[entry.to_status] || {}).bg || '#f1f5f9'))
+            const pillW = doc.getTextWidth(toLbl) + 4
+            doc.roundedRect(ml + 8, stY - 2.5, pillW, 3.5, 1, 1, 'F')
+            setC(hex(toCol)); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+            doc.text(toLbl, ml + 10, stY)
+            // Hvem + når
             setC(hex('#475569')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-            const whoLine = `Utført av: ${who}`
-            const whoSplit = doc.splitTextToSize(whoLine, cw - 30)
-            doc.text(whoSplit[0] || '', ml + 16, logY + 7)
-
-            logY += lineH
-
-            // Eventuell kommentar/notat
-            if (entry.note) {
-              setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'italic')
-              const noteSplit = doc.splitTextToSize(`«${entry.note}»`, cw - 30)
-              noteSplit.slice(0, 3).forEach(ln => {
-                doc.text(ln, ml + 16, logY)
-                logY += noteH
-              })
-            }
+            const tail = `${who}${ts ? '  ·  ' + ts : ''}`
+            const tailSplit = doc.splitTextToSize(tail, cw - pillW - 18)
+            doc.text(tailSplit[0] || '', ml + 8 + pillW + 4, stY)
+            stY += 4.5
           }
-          y += blockH + 3
+          y += stripH + 2
         }
 
         // Tegn kategoristripen til riktig høyde (overskriv den dummy-høye)
