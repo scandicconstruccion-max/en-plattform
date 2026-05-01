@@ -40705,36 +40705,56 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
 function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, onSent }) {
   const [email, setEmail] = useState('')
-  const [message, setMessage] = useState('Vi tillater oss herved å fremme følgende tilbud for ovennevnte prosjekt.')
+  const [message, setMessage] = useState(kalk.tilbud_innledning || 'Vi tillater oss herved å fremme følgende tilbud for ovennevnte prosjekt.')
+  const [forbehold, setForbehold] = useState(kalk.forbehold || '')
   const [validUntil, setValidUntil] = useState('')
-  const [visning, setVisning] = useState('faggruppe')
+  const [gyldighetDager, setGyldighetDager] = useState(kalk.tilbud_gyldighet_dager || 30)
+  const [visning, setVisning] = useState(kalk.tilbud_visning || 'faggruppe')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [step, setStep] = useState(1)
 
-  // Standardmeldinger
+  // Standardmeldinger (delt for begge typer — filtreres på template_type)
   const [stdMeldinger, setStdMeldinger] = useState([])
-  const [showMeldingPicker, setShowMeldingPicker] = useState(false)
-  const [showNewMelding, setShowNewMelding] = useState(false)
+  const [showMeldingPicker, setShowMeldingPicker] = useState(null) // 'innledning' | 'forbehold' | null
+  const [showNewMelding, setShowNewMelding] = useState(null) // 'innledning' | 'forbehold' | null
   const [newMeldingName, setNewMeldingName] = useState('')
 
   const [companyInfo, setCompanyInfo] = useState(null)
   useEffect(() => {
     supabase.from('company_settings').select('name, address, phone, email, org_number, logo_url')
       .limit(1).single().then(({ data }) => setCompanyInfo(data || {}))
-    // Load standardmeldinger
+    // Last alle standardmeldinger (begge typer på én gang)
     supabase.from('standardmeldinger').select('*').order('name')
       .then(({ data }) => setStdMeldinger(data || []))
       .catch(() => {})
+    // Auto-sett tilbudsfrist basert på lagret gyldighet
+    if (!validUntil) {
+      const d = new Date()
+      d.setDate(d.getDate() + (kalk.tilbud_gyldighet_dager || 30))
+      setValidUntil(d.toISOString().slice(0, 10))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const saveStdMelding = async () => {
-    if (!newMeldingName.trim() || !message.trim()) return
-    const { data, error } = await supabase.from('standardmeldinger').insert({ name: newMeldingName.trim(), tekst: message, user_id: user?.id }).select().single()
+  // Filtrer maler etter type
+  const innledningMaler = stdMeldinger.filter(m => (m.template_type || 'innledning') === 'innledning')
+  const forbeholdMaler = stdMeldinger.filter(m => m.template_type === 'forbehold')
+
+  const saveStdMelding = async (type) => {
+    if (!newMeldingName.trim()) return
+    const tekst = type === 'innledning' ? message : forbehold
+    if (!tekst.trim()) return
+    const { data, error } = await supabase.from('standardmeldinger').insert({
+      name: newMeldingName.trim(),
+      tekst,
+      template_type: type,
+      user_id: user?.id,
+    }).select().single()
     if (error) { alert('Feil: ' + error.message); return }
     setStdMeldinger(m => [...m, data])
     setNewMeldingName('')
-    setShowNewMelding(false)
+    setShowNewMelding(null)
   }
 
   const deleteStdMelding = async (id) => {
@@ -40831,6 +40851,7 @@ ${message ? `<div class="message">${message}</div>` : ''}
     <tr class="grand-row"><td colspan="3">Totalsum ink. mva</td><td style="text-align:right">${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</td></tr>
   </tbody>
 </table>
+${forbehold ? `<div style="margin:20px 0;padding:16px 18px;background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #f59e0b;border-radius:8px"><div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">⚠️ Forbehold</div><div style="font-size:13px;color:#451a03;line-height:1.7;white-space:pre-wrap">${forbehold.replace(/</g, '&lt;')}</div></div>` : ''}
 ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></div>` : ''}
 <div class="footer">
   <p>Tilbud generert fra En Plattform · ${dato}</p>
@@ -40849,6 +40870,18 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
     if (!email) return alert('E-postadresse er påkrevd')
     setSending(true)
     try {
+      // Lagre tilbuds-innstillinger på kalkylen så de huskes til neste gang
+      try {
+        await supabase.from('calculations').update({
+          forbehold: forbehold || null,
+          tilbud_visning: visning,
+          tilbud_gyldighet_dager: gyldighetDager,
+          tilbud_innledning: message || null,
+        }).eq('id', kalk.id)
+      } catch (saveErr) {
+        // Ikke kritisk hvis lagring feiler — fortsett med utsendelse
+        console.warn('Kunne ikke lagre tilbuds-innstillinger:', saveErr)
+      }
       const approvalUrl = await createApprovalToken({ module: 'calculation', recordId: kalk.id, recipientEmail: email, createdBy: user?.id })
       const ci = companyInfo || {}
       const dato = new Date().toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })
@@ -40947,19 +40980,19 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
               <div>
                 <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
-                  <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>Melding</label>
+                  <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>💬 Innledningstekst</label>
                   <div style={{ position:'relative' }}>
-                    <button onClick={() => setShowMeldingPicker(!showMeldingPicker)}
+                    <button onClick={() => setShowMeldingPicker(showMeldingPicker === 'innledning' ? null : 'innledning')}
                       style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', color:'#64748b', display:'flex', alignItems:'center', gap:'4px' }}>
-                      📝 Standardmeldinger
+                      📋 Hent fra mal
                     </button>
-                    {showMeldingPicker && (
+                    {showMeldingPicker === 'innledning' && (
                       <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'8px', zIndex:20, marginTop:'4px', width:'320px' }}>
-                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', padding:'4px 8px', marginBottom:'4px' }}>LAGREDE MELDINGER</div>
-                        {stdMeldinger.length === 0 && <p style={{ fontSize:'12px', color:'#94a3b8', padding:'8px', margin:0 }}>Ingen lagrede meldinger ennå</p>}
-                        {stdMeldinger.map(m => (
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', padding:'4px 8px', marginBottom:'4px' }}>LAGREDE INNLEDNINGER</div>
+                        {innledningMaler.length === 0 && <p style={{ fontSize:'12px', color:'#94a3b8', padding:'8px', margin:0 }}>Ingen lagrede innledninger ennå</p>}
+                        {innledningMaler.map(m => (
                           <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
-                            <button onClick={() => { setMessage(m.tekst); setShowMeldingPicker(false) }}
+                            <button onClick={() => { setMessage(m.tekst); setShowMeldingPicker(null) }}
                               style={{ flex:1, background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'12px', color:'#0f172a' }}>
                               <div style={{ fontWeight:'600', marginBottom:'2px' }}>{m.name}</div>
                               <div style={{ color:'#94a3b8', fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.tekst}</div>
@@ -40968,16 +41001,16 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
                           </div>
                         ))}
                         <div style={{ borderTop:'1px solid #f1f5f9', marginTop:'6px', paddingTop:'6px' }}>
-                          {showNewMelding ? (
+                          {showNewMelding === 'innledning' ? (
                             <div style={{ display:'flex', gap:'4px' }}>
-                              <input value={newMeldingName} onChange={e => setNewMeldingName(e.target.value)} placeholder="Navn på meldingen" style={{ ...qInp, fontSize:'12px', padding:'6px 8px', flex:1 }} />
-                              <button onClick={saveStdMelding} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>Lagre</button>
-                              <button onClick={() => setShowNewMelding(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
+                              <input value={newMeldingName} onChange={e => setNewMeldingName(e.target.value)} placeholder="Navn på malen" style={{ ...qInp, fontSize:'12px', padding:'6px 8px', flex:1 }} />
+                              <button onClick={() => saveStdMelding('innledning')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'6px', padding:'6px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>Lagre</button>
+                              <button onClick={() => setShowNewMelding(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
                             </div>
                           ) : (
-                            <button onClick={() => setShowNewMelding(true)}
+                            <button onClick={() => setShowNewMelding('innledning')}
                               style={{ width:'100%', background:'white', border:'1px dashed #e2e8f0', borderRadius:'6px', padding:'6px', cursor:'pointer', fontSize:'12px', color:'#64748b', fontWeight:'600' }}>
-                              + Lagre nåværende melding
+                              💾 Lagre nåværende som mal
                             </button>
                           )}
                         </div>
@@ -40985,7 +41018,54 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
                     )}
                   </div>
                 </div>
-                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={2} style={{ ...qInp, resize:'none' }} />
+                <textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} style={{ ...qInp, resize:'vertical' }} placeholder="Skriv en kort innledning til kunden..." />
+              </div>
+
+              {/* FORBEHOLD-felt med egen mal-picker */}
+              <div>
+                <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'6px' }}>
+                  <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>⚠️ Forbehold (valgfritt)</label>
+                  <div style={{ position:'relative' }}>
+                    <button onClick={() => setShowMeldingPicker(showMeldingPicker === 'forbehold' ? null : 'forbehold')}
+                      style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', color:'#92400e', display:'flex', alignItems:'center', gap:'4px' }}>
+                      📋 Hent fra mal
+                    </button>
+                    {showMeldingPicker === 'forbehold' && (
+                      <div style={{ position:'absolute', top:'100%', right:0, background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', boxShadow:'0 8px 24px rgba(0,0,0,0.12)', padding:'8px', zIndex:20, marginTop:'4px', width:'320px' }}>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3b8', padding:'4px 8px', marginBottom:'4px' }}>LAGREDE FORBEHOLD</div>
+                        {forbeholdMaler.length === 0 && <p style={{ fontSize:'12px', color:'#94a3b8', padding:'8px', margin:0 }}>Ingen lagrede forbehold ennå</p>}
+                        {forbeholdMaler.map(m => (
+                          <div key={m.id} style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                            <button onClick={() => { setForbehold(m.tekst); setShowMeldingPicker(null) }}
+                              style={{ flex:1, background:'#fffbeb', border:'1px solid #fef3c7', borderRadius:'8px', padding:'8px 10px', cursor:'pointer', textAlign:'left', fontSize:'12px', color:'#451a03' }}>
+                              <div style={{ fontWeight:'600', marginBottom:'2px' }}>{m.name}</div>
+                              <div style={{ color:'#a16207', fontSize:'11px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.tekst}</div>
+                            </button>
+                            <button onClick={() => deleteStdMelding(m.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', padding:'4px', flexShrink:0 }}>×</button>
+                          </div>
+                        ))}
+                        <div style={{ borderTop:'1px solid #f1f5f9', marginTop:'6px', paddingTop:'6px' }}>
+                          {showNewMelding === 'forbehold' ? (
+                            <div style={{ display:'flex', gap:'4px' }}>
+                              <input value={newMeldingName} onChange={e => setNewMeldingName(e.target.value)} placeholder="Navn på forbehold-mal" style={{ ...qInp, fontSize:'12px', padding:'6px 8px', flex:1 }} />
+                              <button onClick={() => saveStdMelding('forbehold')} style={{ background:'#f59e0b', color:'white', border:'none', borderRadius:'6px', padding:'6px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>Lagre</button>
+                              <button onClick={() => setShowNewMelding(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px' }}>×</button>
+                            </div>
+                          ) : (
+                            <button onClick={() => setShowNewMelding('forbehold')}
+                              style={{ width:'100%', background:'white', border:'1px dashed #fde68a', borderRadius:'6px', padding:'6px', cursor:'pointer', fontSize:'12px', color:'#92400e', fontWeight:'600' }}>
+                              💾 Lagre nåværende som mal
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <textarea value={forbehold} onChange={e => setForbehold(e.target.value)} rows={3}
+                  style={{ ...qInp, resize:'vertical', background:'#fffbeb', border:'1px solid #fde68a' }}
+                  placeholder="Eksempel:&#10;• Tilbudet er basert på enhetspriser i NS 8409.&#10;• Eksklusive eventuelle grunnarbeider.&#10;• Forutsetter tilstrekkelig adkomst til byggeplassen." />
+                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>Forbehold vises som egen seksjon i tilbudet, før signaturfeltet.</p>
               </div>
 
               <div>
