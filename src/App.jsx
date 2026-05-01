@@ -40956,7 +40956,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
         setD(hex('#f1f5f9')); doc.setLineWidth(0.2)
         doc.line(ml, y + 1, pw - mr, y + 1)
         setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
-        const fagLabel = `${line.fag.emoji || ''} ${line.name}`.trim()
+        const fagLabel = String(line.name || '').trim()
         doc.text(fagLabel, ml + 3, y + 5)
         doc.setFont('helvetica', 'bold')
         doc.text(fmtKr(line.amount), pw - mr - 3, y + 5, { align: 'right' })
@@ -41018,7 +41018,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
         setF(hex(fc.bg)); setD(hex(fc.border)); doc.setLineWidth(0.3)
         doc.roundedRect(ml, y, cw, 9, 2, 2, 'FD')
         setC(hex(fc.text)); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-        const bannerText = `${line.fag.emoji || ''} ${(line.name || '').toUpperCase()}`.trim()
+        const bannerText = String(line.name || '').toUpperCase().trim()
         doc.text(bannerText, ml + 4, y + 6)
         doc.text(fmtKr(line.amount), pw - mr - 3, y + 6, { align: 'right' })
         y += 11
@@ -41029,7 +41029,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
           // Bygningsdel-linje
           setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
           const bdName = doc.splitTextToSize(bd.name || 'Bygningsdel', cw - 60)[0] || ''
-          doc.text(`▸ ${bdName}`, ml + 3, y)
+          doc.text(`• ${bdName}`, ml + 3, y)
           // Mengde + enhet
           setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
           doc.text(`${bd.mengde} ${bd.enhet}`, pw - mr - 35, y, { align: 'right' })
