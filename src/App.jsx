@@ -40882,27 +40882,61 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
       const ci = companyInfo || {}
       const dato = new Date().toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })
 
-      // Kort, profesjonell e-post — ikke detaljert prisoversikt
-      const emailHtml = `
-        <div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px">
-          ${ci.logo_url ? `<img src="${ci.logo_url}" style="max-height:50px;margin-bottom:16px" />` : ''}
-          <h1 style="color:#0f172a;font-size:20px;margin:0 0 8px">Tilbud: ${kalk.title}</h1>
-          <p style="color:#64748b;font-size:13px;margin:0 0 20px">Ref: ${kalk.kalk_number} · ${dato}</p>
-          ${message ? `<p style="color:#475569;line-height:1.6;margin-bottom:20px">${message}</p>` : ''}
-          <div style="background:#f0fdf4;border-radius:12px;padding:20px;margin:20px 0;border:1px solid #bbf7d0;text-align:center">
-            <div style="font-size:13px;color:#16a34a;font-weight:600;margin-bottom:4px">TOTALSUM</div>
-            <div style="font-size:28px;font-weight:800;color:#0f172a">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr <span style="font-size:14px;color:#64748b;font-weight:400">eks. mva</span></div>
-            <div style="font-size:14px;color:#64748b;margin-top:4px">Ink. mva: ${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</div>
-          </div>
-          ${validUntil ? `<p style="color:#92400e;font-size:13px;background:#fffbeb;padding:10px 14px;border-radius:8px;border:1px solid #fde68a">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></p>` : ''}
-          <p style="color:#64748b;font-size:13px;margin-top:16px">Klikk på knappen nedenfor for å se og godkjenne tilbudet.</p>
-          <div style="text-align:center;margin:28px 0">
-            <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
-          </div>
-          <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
-          <p style="color:#94a3b8;font-size:12px">${ci.name || 'Bedrift'} · ${ci.phone || ''} · ${ci.email || ''}</p>
-        </div>
-      `
+      // Outlook-vennlig e-post — bruker tabell-layout og bgcolor i stedet for div+CSS
+      // for at Outlook desktop ikke skal blåse opp fargene til hele cellebredden
+      const emailHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">
+<table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9">
+  <tr><td align="center" style="padding:24px 16px">
+    <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border:1px solid #e2e8f0">
+      <!-- Header med logo -->
+      <tr><td style="padding:24px 28px 16px 28px">
+        ${ci.logo_url ? `<img src="${ci.logo_url}" alt="${ci.name || ''}" style="max-height:50px;display:block;border:0" />` : `<div style="font-size:18px;font-weight:bold;color:#0f172a">${ci.name || 'Bedrift'}</div>`}
+      </td></tr>
+
+      <!-- Tittel + ref -->
+      <tr><td style="padding:0 28px 8px 28px">
+        <div style="font-size:20px;font-weight:bold;color:#0f172a;line-height:1.3">Tilbud: ${kalk.title || ''}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:6px">Ref: ${kalk.kalk_number || ''} · ${dato}</div>
+      </td></tr>
+
+      ${message ? `<tr><td style="padding:16px 28px 0 28px">
+        <div style="font-size:14px;color:#475569;line-height:1.6">${String(message).replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+      </td></tr>` : ''}
+
+      <!-- Totalsum-boks (Outlook-trygg: bgcolor på td) -->
+      <tr><td style="padding:20px 28px 0 28px">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#f0fdf4" style="background-color:#f0fdf4;border:1px solid #bbf7d0">
+          <tr><td align="center" style="padding:18px 16px">
+            <div style="font-size:12px;color:#16a34a;font-weight:bold;letter-spacing:0.5px">TOTALSUM</div>
+            <div style="font-size:26px;font-weight:bold;color:#0f172a;margin-top:6px">${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr <span style="font-size:13px;color:#64748b;font-weight:normal">eks. mva</span></div>
+            <div style="font-size:13px;color:#64748b;margin-top:4px">Ink. mva: ${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</div>
+          </td></tr>
+        </table>
+      </td></tr>
+
+      ${validUntil ? `<tr><td style="padding:14px 28px 0 28px">
+        <table cellpadding="0" cellspacing="0" border="0" width="100%" bgcolor="#fffbeb" style="background-color:#fffbeb;border:1px solid #fde68a">
+          <tr><td style="padding:10px 14px;font-size:13px;color:#92400e">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day:'2-digit', month:'long', year:'numeric' })}</strong></td></tr>
+        </table>
+      </td></tr>` : ''}
+
+      <!-- CTA -->
+      <tr><td align="center" style="padding:24px 28px 8px 28px">
+        <div style="font-size:13px;color:#64748b;margin-bottom:14px">Klikk på knappen nedenfor for å se og godkjenne tilbudet.</div>
+        <table cellpadding="0" cellspacing="0" border="0">
+          <tr><td bgcolor="#059669" style="background-color:#059669"><a href="${approvalUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;font-family:Arial,Helvetica,sans-serif">Se og godkjenn tilbud</a></td></tr>
+        </table>
+      </td></tr>
+
+      <!-- Footer -->
+      <tr><td style="padding:24px 28px;border-top:1px solid #f1f5f9">
+        <div style="font-size:12px;color:#94a3b8;line-height:1.6">${ci.name || 'Bedrift'}${ci.phone ? ' · ' + ci.phone : ''}${ci.email ? ' · ' + ci.email : ''}${ci.org_number ? '<br>Org.nr: ' + ci.org_number : ''}</div>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`
 
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
