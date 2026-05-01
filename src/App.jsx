@@ -41003,10 +41003,11 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
 
       // Kolonne-layout (faste kolonner, beregnet fra sidebredde)
       // Beskrivelse | Mengde | Enhet | Pris (kun i 'detaljert')
+      // For "uten priser"-moduser plasseres kolonnene lenger til venstre så de ikke flyter alene mot kanten
       const showPrice = visning === 'detaljert'
-      const colMengde = pw - mr - (showPrice ? 50 : 20)  // høyrejustert
-      const colEnhet  = pw - mr - (showPrice ? 30 : 4)   // venstrejustert
-      const colPris   = pw - mr - 3                       // høyrejustert
+      const colMengde = showPrice ? pw - mr - 50 : pw - mr - 35  // høyrejustert
+      const colEnhet  = showPrice ? pw - mr - 28 : pw - mr - 18  // venstrejustert
+      const colPris   = pw - mr - 3                               // høyrejustert (kun detaljert)
 
       // Beskrivelse-kolonnen får alt fra ml til 8mm før mengde-kolonnen
       const descMaxX = colMengde - 16
