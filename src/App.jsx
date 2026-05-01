@@ -40705,7 +40705,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
   const [forbehold, setForbehold] = useState(kalk.forbehold || '')
   const [validUntil, setValidUntil] = useState('')
   const [gyldighetDager, setGyldighetDager] = useState(kalk.tilbud_gyldighet_dager || 30)
-  const [visning, setVisning] = useState(kalk.tilbud_visning || 'faggruppe')
+  const [visning, setVisning] = useState(kalk.tilbud_visning || null)
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [step, setStep] = useState(1)
@@ -40790,6 +40790,343 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     })
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // PDF-generering (jsPDF + createBrandedPdf)
+  // Returnerer doc-objektet — caller kaller doc.save() eller doc.output('blob')
+  // ════════════════════════════════════════════════════════════════════════
+  const generateTilbudPdf = async () => {
+    const ci = companyInfo || {}
+    const pdf = await createBrandedPdf()
+    const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
+
+    const fmtKr = n => `${Math.round(n || 0).toLocaleString('nb-NO')} kr`
+    const fmtDate = d => d ? new Date(d).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' }) : ''
+    const dato = fmtDate(new Date())
+    const lines = buildLines()
+
+    let y = 0
+
+    // ══ HERO HEADER (grønn 40mm med logo i hvit boks) ══
+    setF(hex('#059669'))
+    doc.rect(0, 0, pw, 40, 'F')
+
+    // Tilbud-label
+    setC(hex('#d1fae5')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+    doc.text('TILBUD', ml, 13)
+
+    // Tittel
+    setC(hex('#ffffff')); doc.setFontSize(20); doc.setFont('helvetica', 'bold')
+    const titleLines = doc.splitTextToSize(kalk.title || 'Tilbud', cw - 60)
+    doc.text(titleLines[0] || '', ml, 22)
+    if (titleLines[1]) doc.text(doc.splitTextToSize(titleLines[1], cw - 60)[0], ml, 28)
+
+    // Ref + dato
+    setC(hex('#a7f3d0')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+    doc.text(`${kalk.kalk_number || ''} · ${dato}`, ml, 34)
+
+    // Logo i hvit boks oppe til høyre
+    if (pdf.logoDataUrl) {
+      try {
+        const logoBoxW = 36, logoBoxH = 26
+        const logoX = pw - mr - logoBoxW
+        const logoY = 7
+        setF(hex('#ffffff'))
+        doc.roundedRect(logoX, logoY, logoBoxW, logoBoxH, 2, 2, 'F')
+        // Bruk JPEG først (de fleste logos), fallback PNG
+        try {
+          doc.addImage(pdf.logoDataUrl, 'JPEG', logoX + 3, logoY + 3, logoBoxW - 6, logoBoxH - 6, undefined, 'FAST')
+        } catch {
+          doc.addImage(pdf.logoDataUrl, 'PNG', logoX + 3, logoY + 3, logoBoxW - 6, logoBoxH - 6, undefined, 'FAST')
+        }
+      } catch (e) {
+        // Fallback: hvit boks med bedriftsnavn
+        if (ci.name) {
+          const w = doc.getTextWidth(ci.name) + 10
+          setF(hex('#ffffff'))
+          doc.roundedRect(pw - mr - w, 13, w, 12, 2, 2, 'F')
+          setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+          doc.text(ci.name, pw - mr - w + 5, 21)
+        }
+      }
+    } else if (ci.name) {
+      // Ingen logo — vis bedriftsnavn i hvit boks
+      const w = doc.getTextWidth(ci.name) + 10
+      setF(hex('#ffffff'))
+      doc.roundedRect(pw - mr - w, 13, w, 12, 2, 2, 'F')
+      setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+      doc.text(ci.name, pw - mr - w + 5, 21)
+    }
+
+    y = 50
+
+    // ══ KONTAKTINFO-GRID (kunde + bedrift) ══
+    const colW = (cw - 6) / 2
+    setF(hex('#f8fafc')); setD(hex('#e2e8f0')); doc.setLineWidth(0.3)
+
+    // Kunde-boks (venstre)
+    doc.roundedRect(ml, y, colW, 28, 2, 2, 'FD')
+    setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+    doc.text('TILBUDET ER SENDT TIL', ml + 4, y + 5)
+    setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+    doc.text(kalk.customer_name || '—', ml + 4, y + 12)
+    setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+    let kY = y + 17
+    if (kalk.customer_address) {
+      const addrLines = doc.splitTextToSize(String(kalk.customer_address), colW - 8)
+      addrLines.slice(0, 2).forEach(ln => { doc.text(ln, ml + 4, kY); kY += 4 })
+    }
+    if (email && kY < y + 26) doc.text(email, ml + 4, kY)
+
+    // Bedrift-boks (høyre)
+    const rX = ml + colW + 6
+    doc.roundedRect(rX, y, colW, 28, 2, 2, 'FD')
+    setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+    doc.text('TILBUDET ER FRA', rX + 4, y + 5)
+    setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+    doc.text(ci.name || '—', rX + 4, y + 12)
+    setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+    let bY = y + 17
+    if (ci.org_number) { doc.text(`Org. ${ci.org_number}`, rX + 4, bY); bY += 4 }
+    if (ci.address) {
+      const al = doc.splitTextToSize(String(ci.address), colW - 8)
+      doc.text(al[0] || '', rX + 4, bY); bY += 4
+    }
+    if ((ci.email || ci.phone) && bY < y + 26) {
+      const contact = [ci.email, ci.phone].filter(Boolean).join(' · ')
+      doc.text(doc.splitTextToSize(contact, colW - 8)[0] || '', rX + 4, bY)
+    }
+
+    y += 34
+
+    // ══ TOTALPRIS-BOKS (mørk) ══
+    setF(hex('#0f172a'))
+    doc.roundedRect(ml, y, cw, 26, 2.5, 2.5, 'F')
+    setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+    doc.text('TOTALSUM', ml + 6, y + 7)
+    setC(hex('#ffffff')); doc.setFontSize(22); doc.setFont('helvetica', 'bold')
+    doc.text(fmtKr(totals.totInkMva), ml + 6, y + 17)
+    setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+    doc.text('Inkl. mva 25%', ml + 6, y + 22)
+
+    // Høyre side: eks mva + gyldighet
+    setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+    doc.text('Eks. mva', pw - mr - 6, y + 7, { align: 'right' })
+    setC(hex('#cbd5e1')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+    doc.text(fmtKr(totals.totMedFortjeneste), pw - mr - 6, y + 13, { align: 'right' })
+    if (validUntil) {
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+      doc.text('Gyldig til', pw - mr - 6, y + 18, { align: 'right' })
+      setC(hex('#a7f3d0')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text(fmtDate(validUntil), pw - mr - 6, y + 23, { align: 'right' })
+    }
+
+    y += 32
+
+    // ══ INNLEDNINGSTEKST ══
+    if (message?.trim()) {
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text('VÅR MELDING', ml, y)
+      y += 4
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+      const msgLines = doc.splitTextToSize(message.trim(), cw)
+      msgLines.forEach(ln => {
+        if (y > ph - 25) { doc.addPage(); y = 14 }
+        doc.text(ln, ml, y); y += 4.5
+      })
+      y += 4
+    }
+
+    // ══ SAMMENDRAG PER FAG (vises i alle moduser unntatt 'total') ══
+    if (visning !== 'total') {
+      if (y > ph - 80) { doc.addPage(); y = 14 }
+      setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+      doc.text('Sammendrag', ml, y)
+      y += 6
+
+      // Header-rad
+      setF(hex('#f8fafc'))
+      doc.rect(ml, y - 4, cw, 7, 'F')
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text('FAG', ml + 3, y)
+      doc.text('BELØP EKS. MVA', pw - mr - 3, y, { align: 'right' })
+      y += 4
+
+      lines.forEach(line => {
+        if (y > ph - 30) { doc.addPage(); y = 14 }
+        setD(hex('#f1f5f9')); doc.setLineWidth(0.2)
+        doc.line(ml, y + 1, pw - mr, y + 1)
+        setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'normal')
+        const fagLabel = `${line.fag.emoji || ''} ${line.name}`.trim()
+        doc.text(fagLabel, ml + 3, y + 5)
+        doc.setFont('helvetica', 'bold')
+        doc.text(fmtKr(line.amount), pw - mr - 3, y + 5, { align: 'right' })
+        y += 8
+      })
+
+      // Sum eks mva (grønn rad)
+      setF(hex('#ecfdf5'))
+      doc.rect(ml, y, cw, 9, 'F')
+      setC(hex('#064e3b')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text('Sum eks. mva', ml + 3, y + 6)
+      doc.setFontSize(11)
+      doc.text(fmtKr(totals.totMedFortjeneste), pw - mr - 3, y + 6, { align: 'right' })
+      y += 9
+
+      // MVA
+      setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+      doc.text('+ MVA 25%', ml + 3, y + 5)
+      doc.text(fmtKr(totals.mva), pw - mr - 3, y + 5, { align: 'right' })
+      y += 7
+
+      // Totalsum (mørk rad)
+      setF(hex('#0f172a'))
+      doc.rect(ml, y, cw, 10, 'F')
+      setC(hex('#ffffff')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+      doc.text('Totalsum inkl. mva', ml + 3, y + 6.5)
+      doc.setFontSize(12)
+      doc.text(fmtKr(totals.totInkMva), pw - mr - 3, y + 6.5, { align: 'right' })
+      y += 14
+    }
+
+    // ══ DETALJSIDE (kun for 'bygningsdel' og 'detaljert') ══
+    if ((visning === 'bygningsdel' || visning === 'detaljert') && lines.some(l => l.bdLines.length > 0)) {
+      doc.addPage(); y = 14
+      setC(hex('#0f172a')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+      doc.text(visning === 'detaljert' ? 'Detaljert spesifikasjon' : 'Spesifikasjon per fag', ml, y)
+      y += 8
+
+      const fagColors = {
+        'tomrer':      { bg: '#fef3c7', border: '#fde68a', text: '#92400e' },
+        'maler':       { bg: '#dbeafe', border: '#bfdbfe', text: '#1e3a8a' },
+        'murer':       { bg: '#fee2e2', border: '#fecaca', text: '#991b1b' },
+        'flislegger':  { bg: '#fee2e2', border: '#fecaca', text: '#991b1b' },
+        'rorlegger':   { bg: '#dbeafe', border: '#bfdbfe', text: '#1e3a8a' },
+        'elektriker':  { bg: '#fed7aa', border: '#fdba74', text: '#9a3412' },
+        'taktekker':   { bg: '#e9d5ff', border: '#d8b4fe', text: '#6b21a8' },
+        'gulvlegger':  { bg: '#fce7f3', border: '#fbcfe8', text: '#9f1239' },
+        'gravearbeid': { bg: '#d1fae5', border: '#a7f3d0', text: '#065f46' },
+        'betongarbeider': { bg: '#e2e8f0', border: '#cbd5e1', text: '#334155' },
+      }
+
+      lines.forEach(line => {
+        if (y > ph - 50) { doc.addPage(); y = 14 }
+
+        const fagId = (line.fag.id || '').toLowerCase()
+        const fc = fagColors[fagId] || { bg: '#f1f5f9', border: '#e2e8f0', text: '#475569' }
+
+        // Fag-banner
+        setF(hex(fc.bg)); setD(hex(fc.border)); doc.setLineWidth(0.3)
+        doc.roundedRect(ml, y, cw, 9, 2, 2, 'FD')
+        setC(hex(fc.text)); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+        const bannerText = `${line.fag.emoji || ''} ${(line.name || '').toUpperCase()}`.trim()
+        doc.text(bannerText, ml + 4, y + 6)
+        doc.text(fmtKr(line.amount), pw - mr - 3, y + 6, { align: 'right' })
+        y += 11
+
+        // Bygningsdeler
+        line.bdLines.forEach(bd => {
+          if (y > ph - 25) { doc.addPage(); y = 14 }
+          // Bygningsdel-linje
+          setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+          const bdName = doc.splitTextToSize(bd.name || 'Bygningsdel', cw - 60)[0] || ''
+          doc.text(`▸ ${bdName}`, ml + 3, y)
+          // Mengde + enhet
+          setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          doc.text(`${bd.mengde} ${bd.enhet}`, pw - mr - 35, y, { align: 'right' })
+          // Sum (kun hvis 'detaljert' — i 'bygningsdel' viser vi IKKE pris per linje)
+          if (visning === 'detaljert') {
+            setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+            doc.text(fmtKr(bd.amount), pw - mr - 3, y, { align: 'right' })
+          }
+          y += 5
+
+          // Detalj-linjer (arbeidsarter + materialer) — kun i 'detaljert'
+          if (visning === 'detaljert') {
+            bd.details.forEach(d => {
+              if (y > ph - 20) { doc.addPage(); y = 14 }
+              setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+              const detailText = doc.splitTextToSize(d.text || '', cw - 70)[0] || ''
+              doc.text(`  · ${detailText}`, ml + 5, y)
+              doc.text(`${d.mengde} ${d.enhet}`, pw - mr - 35, y, { align: 'right' })
+              doc.text(fmtKr(d.amount), pw - mr - 3, y, { align: 'right' })
+              y += 4
+            })
+          }
+          y += 2
+        })
+        y += 3
+      })
+    }
+
+    // ══ SISTE SIDE: Vilkår + Forbehold + Signatur ══
+    doc.addPage(); y = 14
+    setC(hex('#0f172a')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
+    doc.text('Betingelser', ml, y)
+    y += 8
+
+    // Tre info-bokser
+    const boxW = (cw - 8) / 3
+    const boxes = [
+      { icon: 'GYLDIGHET', label: 'GYLDIGHET', val: validUntil ? fmtDate(validUntil) : '—', sub: gyldighetDager ? `${gyldighetDager} dager` : '' },
+      { icon: 'OPPSTART',  label: 'OPPSTART',  val: 'Etter avtale', sub: 'Tidsplan avtales' },
+      { icon: 'BETALING',  label: 'BETALING',  val: '14 dager netto', sub: 'Etter sluttfaktura' },
+    ]
+    boxes.forEach((b, i) => {
+      const bx = ml + i * (boxW + 4)
+      setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
+      doc.roundedRect(bx, y, boxW, 22, 2, 2, 'FD')
+      setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+      doc.text(b.label, bx + 3, y + 6)
+      setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
+      doc.text(b.val, bx + 3, y + 13)
+      setC(hex('#64748b')); doc.setFontSize(7); doc.setFont('helvetica', 'normal')
+      doc.text(b.sub, bx + 3, y + 18)
+    })
+    y += 28
+
+    // Forbehold (oransje boks) — kun hvis utfylt
+    if (forbehold?.trim()) {
+      setF(hex('#fffbeb')); setD(hex('#fde68a')); doc.setLineWidth(0.4)
+      const fbLines = doc.splitTextToSize(forbehold.trim(), cw - 12)
+      const fbH = 10 + fbLines.length * 4.5 + 4
+      if (y + fbH > ph - 50) { doc.addPage(); y = 14 }
+      doc.roundedRect(ml, y, cw, fbH, 2, 2, 'FD')
+      // Venstre stripe
+      setF(hex('#f59e0b'))
+      doc.rect(ml, y, 1.5, fbH, 'F')
+      // Tittel
+      setC(hex('#92400e')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+      doc.text('FORBEHOLD', ml + 6, y + 6)
+      // Tekst
+      setC(hex('#451a03')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+      let fY = y + 12
+      fbLines.forEach(ln => { doc.text(ln, ml + 6, fY); fY += 4.5 })
+      y += fbH + 6
+    }
+
+    // Generelle vilkår
+    if (y > ph - 60) { doc.addPage(); y = 14 }
+    setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'bold')
+    doc.text('GENERELLE VILKÅR', ml, y)
+    y += 5
+    const vilkar = [
+      `Tilbudet er bindende i ${gyldighetDager} dager fra dato.`,
+      'Endringer i materialer eller omfang utløser endringsmelding etter NS 8409.',
+      'Arbeidet utføres i henhold til gjeldende byggetekniske forskrifter (TEK17).',
+      'Mva legges til alle priser med 25%.',
+    ]
+    setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+    vilkar.forEach(v => {
+      const vl = doc.splitTextToSize(`• ${v}`, cw - 4)
+      vl.forEach(ln => { if (y > ph - 35) { doc.addPage(); y = 14 } ; doc.text(ln, ml, y); y += 4.5 })
+    })
+
+    // ══ FOOTERS (på alle sider) ══
+    pdf.drawFooters()
+
+    return doc
+  }
+
   // Generate print-ready tilbud HTML with 4 columns
   const generateTilbudHTML = () => {
     const lines = buildLines()
@@ -40855,11 +41192,20 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 </body></html>`
   }
 
-  const openPreview = () => {
-    const html = generateTilbudHTML()
-    const w = window.open('', '_blank')
-    w.document.write(html)
-    w.document.close()
+  const openPreview = async () => {
+    if (!visning) {
+      alert('Velg visningsmodus først (Per fag / Detaljert / Kun totalsum)')
+      return
+    }
+    try {
+      const doc = await generateTilbudPdf()
+      const blob = doc.output('blob')
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank')
+    } catch (e) {
+      console.error('PDF-forhåndsvisning feilet:', e)
+      alert('Forhåndsvisning feilet: ' + e.message)
+    }
   }
 
   const handleSend = async () => {
@@ -40954,9 +41300,9 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
   const VISNING_OPTIONS = [
     { id: 'total', name: 'Kun totalsum', desc: 'Bare total eks/ink mva', emoji: '💰' },
-    { id: 'faggruppe', name: 'Per faggruppe', desc: 'Tømrer, maler, rørlegger osv.', emoji: '👷' },
-    { id: 'bygningsdel', name: 'Per bygningsdel', desc: 'Yttervegg, innervegg, tak osv.', emoji: '🧱' },
-    { id: 'detaljert', name: 'Detaljert', desc: 'Alle arbeidsarter og materialer', emoji: '📋' },
+    { id: 'faggruppe', name: 'Per fag', desc: 'Sammendrag per fag-gruppe', emoji: '🗂️' },
+    { id: 'bygningsdel', name: 'Detaljert uten priser', desc: 'Alle bygningsdeler, uten enhetspriser', emoji: '📄' },
+    { id: 'detaljert', name: 'Detaljert med priser', desc: 'Alle arbeidsarter og materialer', emoji: '📋' },
   ]
 
   return (
@@ -41108,10 +41454,10 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
               </div>
 
               <div style={{ display:'flex', justifyContent:'space-between', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-                <button onClick={openPreview} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>👁️ Forhåndsvis PDF</button>
+                <button onClick={openPreview} disabled={!visning} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: visning ? 'pointer' : 'not-allowed', fontSize:'13px', fontWeight:'600', color: visning ? '#374151' : '#cbd5e1', opacity: visning ? 1 : 0.6 }}>👁️ Forhåndsvis PDF</button>
                 <div style={{ display:'flex', gap:'10px' }}>
                   <button onClick={onClose} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-                  <button onClick={handleSend} disabled={sending} style={{ padding:'10px 22px', background:sending?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize:'13px', fontWeight:'700' }}>{sending ? 'Sender...' : '📧 Send tilbud'}</button>
+                  <button onClick={handleSend} disabled={sending || !visning || !email} style={{ padding:'10px 22px', background:(sending || !visning || !email)?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:(sending || !visning || !email)?'not-allowed':'pointer', fontSize:'13px', fontWeight:'700', opacity: (!visning || !email) ? 0.7 : 1 }}>{sending ? 'Sender...' : !visning ? 'Velg detaljnivå' : !email ? 'Mangler e-post' : '📧 Send tilbud'}</button>
                 </div>
               </div>
             </>
