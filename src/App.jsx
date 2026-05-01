@@ -40891,7 +40891,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
     <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border:1px solid #e2e8f0">
       <!-- Header med logo -->
       <tr><td style="padding:24px 28px 16px 28px">
-        ${ci.logo_url ? `<img src="${ci.logo_url}" alt="${ci.name || ''}" style="max-height:50px;display:block;border:0" />` : `<div style="font-size:18px;font-weight:bold;color:#0f172a">${ci.name || 'Bedrift'}</div>`}
+        ${ci.logo_url ? `<img src="${ci.logo_url}" alt="${ci.name || ''}" height="50" style="height:50px;width:auto;max-width:200px;display:block;border:0;outline:none;text-decoration:none" />` : `<div style="font-size:18px;font-weight:bold;color:#0f172a">${ci.name || 'Bedrift'}</div>`}
       </td></tr>
 
       <!-- Tittel + ref -->
