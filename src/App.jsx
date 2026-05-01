@@ -40995,6 +40995,16 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       doc.text(visning === 'detaljert' ? 'Detaljert spesifikasjon' : 'Spesifikasjon per fag', ml, y)
       y += 8
 
+      // Kolonne-layout (faste kolonner, beregnet fra sidebredde)
+      // Beskrivelse | Mengde | Enhet | Pris (kun i 'detaljert')
+      const showPrice = visning === 'detaljert'
+      const colMengde = pw - mr - (showPrice ? 50 : 20)  // høyrejustert
+      const colEnhet  = pw - mr - (showPrice ? 30 : 4)   // venstrejustert
+      const colPris   = pw - mr - 3                       // høyrejustert
+
+      // Beskrivelse-kolonnen får alt fra ml til 8mm før mengde-kolonnen
+      const descMaxX = colMengde - 16
+
       const fagColors = {
         'tomrer':      { bg: '#fef3c7', border: '#fde68a', text: '#92400e' },
         'maler':       { bg: '#dbeafe', border: '#bfdbfe', text: '#1e3a8a' },
@@ -41006,6 +41016,18 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
         'gulvlegger':  { bg: '#fce7f3', border: '#fbcfe8', text: '#9f1239' },
         'gravearbeid': { bg: '#d1fae5', border: '#a7f3d0', text: '#065f46' },
         'betongarbeider': { bg: '#e2e8f0', border: '#cbd5e1', text: '#334155' },
+      }
+
+      // Hjelper: tegne tabellheader (gjenbrukes etter sideskift)
+      const drawTableHeader = (yy) => {
+        setF(hex('#f8fafc'))
+        doc.rect(ml, yy - 3, cw, 6, 'F')
+        setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+        doc.text('BESKRIVELSE', ml + 3, yy)
+        doc.text('MENGDE', colMengde, yy, { align: 'right' })
+        doc.text('ENHET', colEnhet, yy)
+        if (showPrice) doc.text('PRIS', colPris, yy, { align: 'right' })
+        return yy + 5
       }
 
       lines.forEach(line => {
@@ -41023,38 +41045,53 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
         doc.text(fmtKr(line.amount), pw - mr - 3, y + 6, { align: 'right' })
         y += 11
 
+        // Tabellheader for dette faget
+        y = drawTableHeader(y)
+
         // Bygningsdeler
         line.bdLines.forEach(bd => {
-          if (y > ph - 25) { doc.addPage(); y = 14 }
-          // Bygningsdel-linje
+          if (y > ph - 25) { doc.addPage(); y = 14; y = drawTableHeader(y) }
+
+          // Beregn høyde for navn (kan være flere linjer)
+          const bdNameLines = doc.splitTextToSize(bd.name || 'Bygningsdel', descMaxX - ml - 6)
+          const lineH = bdNameLines.length * 4
+
+          // Bygningsdel-linje (fet)
           setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-          const bdName = doc.splitTextToSize(bd.name || 'Bygningsdel', cw - 60)[0] || ''
-          doc.text(`• ${bdName}`, ml + 3, y)
-          // Mengde + enhet
-          setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-          doc.text(`${bd.mengde} ${bd.enhet}`, pw - mr - 35, y, { align: 'right' })
-          // Sum (kun hvis 'detaljert' — i 'bygningsdel' viser vi IKKE pris per linje)
-          if (visning === 'detaljert') {
+          bdNameLines.forEach((ln, i) => doc.text(`${i === 0 ? '• ' : '  '}${ln}`, ml + 3, y + i * 4))
+
+          // Mengde + enhet (i egne kolonner)
+          setC(hex('#475569')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+          doc.text(String(bd.mengde || ''), colMengde, y, { align: 'right' })
+          doc.text(String(bd.enhet || ''), colEnhet, y)
+
+          // Sum (kun hvis 'detaljert')
+          if (showPrice) {
             setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
-            doc.text(fmtKr(bd.amount), pw - mr - 3, y, { align: 'right' })
+            doc.text(fmtKr(bd.amount), colPris, y, { align: 'right' })
           }
-          y += 5
+          y += lineH + 1
 
           // Detalj-linjer (arbeidsarter + materialer) — kun i 'detaljert'
           if (visning === 'detaljert') {
             bd.details.forEach(d => {
-              if (y > ph - 20) { doc.addPage(); y = 14 }
-              setC(hex('#94a3b8')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-              const detailText = doc.splitTextToSize(d.text || '', cw - 70)[0] || ''
-              doc.text(`  · ${detailText}`, ml + 5, y)
-              doc.text(`${d.mengde} ${d.enhet}`, pw - mr - 35, y, { align: 'right' })
-              doc.text(fmtKr(d.amount), pw - mr - 3, y, { align: 'right' })
+              if (y > ph - 20) { doc.addPage(); y = 14; y = drawTableHeader(y) }
+              setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+              const detailText = doc.splitTextToSize(d.text || '', descMaxX - ml - 12)[0] || ''
+              doc.text(detailText, ml + 8, y)
+              doc.text(String(d.mengde || ''), colMengde, y, { align: 'right' })
+              doc.text(String(d.enhet || ''), colEnhet, y)
+              doc.text(fmtKr(d.amount), colPris, y, { align: 'right' })
               y += 4
             })
           }
           y += 2
+
+          // Tynne skillelinje mellom bygningsdeler
+          setD(hex('#f1f5f9')); doc.setLineWidth(0.2)
+          doc.line(ml, y - 1, pw - mr, y - 1)
         })
-        y += 3
+        y += 4
       })
     }
 
