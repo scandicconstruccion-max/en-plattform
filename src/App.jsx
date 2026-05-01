@@ -38042,11 +38042,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               )}
             </div>
 
-            {/* Send til tilbudsmodul */}
-            {!isMobKV && <button onClick={handleTilbudClick}
-              style={{ background: hasTilbudModule ? '#2563eb' : '#94a3b8', color:'white', border:'none', borderRadius:'10px', padding:'9px 16px', cursor:'pointer', fontSize:'13px', fontWeight:'600', opacity: hasTilbudModule ? 1 : 0.6 }}>
-              📋 Tilbud
-            </button>}
+            {/* Send til tilbudsmodul — fjernet, da tilbud sendes direkte herfra via "Send til kunde" */}
 
             <button onClick={() => setShowSendModal(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '📧 Send' : '📧 Send til kunde'}</button>
           </div>
@@ -40899,7 +40895,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
             <div style="font-size:14px;color:#64748b;margin-top:4px">Ink. mva: ${Math.round(totals.totInkMva).toLocaleString('nb-NO')} kr</div>
           </div>
           ${validUntil ? `<p style="color:#92400e;font-size:13px;background:#fffbeb;padding:10px 14px;border-radius:8px;border:1px solid #fde68a">⏰ Tilbudet er gyldig til <strong>${new Date(validUntil).toLocaleDateString('nb-NO', { day: '2-digit', month: 'long', year: 'numeric' })}</strong></p>` : ''}
-          <p style="color:#64748b;font-size:13px;margin-top:16px">Detaljert tilbudsspesifikasjon er vedlagt som PDF.</p>
+          <p style="color:#64748b;font-size:13px;margin-top:16px">Klikk på knappen nedenfor for å se og godkjenne tilbudet.</p>
           <div style="text-align:center;margin:28px 0">
             <a href="${approvalUrl}" style="background:#059669;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">✅ Godkjenn tilbud</a>
           </div>
