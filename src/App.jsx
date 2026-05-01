@@ -40990,7 +40990,13 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
 
     // ══ DETALJSIDE (kun for 'bygningsdel' og 'detaljert') ══
     if ((visning === 'bygningsdel' || visning === 'detaljert') && lines.some(l => l.bdLines.length > 0)) {
-      doc.addPage(); y = 14
+      // Smart sideskift: Hvis det er nok plass for en fag-banner + tabellheader + 2 linjer (~50mm),
+      // fortsett på samme side med litt margin. Ellers ny side.
+      if (y > ph - 70) {
+        doc.addPage(); y = 14
+      } else {
+        y += 6  // litt luft mellom sammendrag og detaljside
+      }
       setC(hex('#0f172a')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
       doc.text(visning === 'detaljert' ? 'Detaljert spesifikasjon' : 'Spesifikasjon per fag', ml, y)
       y += 8
@@ -41096,7 +41102,17 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     }
 
     // ══ SISTE SIDE: Vilkår + Forbehold + Signatur ══
-    doc.addPage(); y = 14
+    // Smart sideskift: Beregn minimum plass som trengs (info-bokser + vilkår + ev. forbehold)
+    // og bare ny side hvis det ikke er plass.
+    const forbeholdHeight = forbehold?.trim()
+      ? 14 + doc.splitTextToSize(forbehold.trim(), cw - 12).length * 4.5
+      : 0
+    const minSpaceNeeded = 16 /* tittel */ + 28 /* info-bokser */ + forbeholdHeight + 32 /* vilkår */
+    if (y + minSpaceNeeded > ph - 18) {
+      doc.addPage(); y = 14
+    } else {
+      y += 8  // litt luft mellom seksjoner
+    }
     setC(hex('#0f172a')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
     doc.text('Betingelser', ml, y)
     y += 8
