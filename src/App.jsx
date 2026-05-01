@@ -41269,7 +41269,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
       <!-- CTA -->
       <tr><td align="center" style="padding:24px 28px 8px 28px">
-        <div style="font-size:13px;color:#64748b;margin-bottom:14px">Klikk på knappen nedenfor for å se og godkjenne tilbudet.</div>
+        <div style="font-size:13px;color:#64748b;margin-bottom:14px">Du finner det fullstendige tilbudet vedlagt som PDF. Klikk på knappen nedenfor for å se og godkjenne tilbudet.</div>
         <table cellpadding="0" cellspacing="0" border="0">
           <tr><td bgcolor="#059669" style="background-color:#059669"><a href="${approvalUrl}" style="display:inline-block;padding:14px 32px;color:#ffffff;text-decoration:none;font-weight:bold;font-size:15px;font-family:Arial,Helvetica,sans-serif">Se og godkjenn tilbud</a></td></tr>
         </table>
@@ -41284,10 +41284,29 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 </table>
 </body></html>`
 
+      // Generer PDF som base64 for vedlegg
+      let pdfAttachment = null
+      try {
+        const pdfDoc = await generateTilbudPdf()
+        const pdfDataUri = pdfDoc.output('datauristring')
+        const pdfBase64 = pdfDataUri.split(',')[1] // strippet bort "data:application/pdf;base64,"
+        const safeTitle = (kalk.title || 'Tilbud').replace(/[^a-zA-Z0-9æøåÆØÅ \-_.]/g, '').trim()
+        const filename = `Tilbud ${kalk.kalk_number || ''} – ${safeTitle}.pdf`.replace(/\s+/g, ' ').trim()
+        pdfAttachment = { filename, content: pdfBase64 }
+      } catch (pdfErr) {
+        console.warn('Kunne ikke generere PDF-vedlegg:', pdfErr)
+        // Fortsett uten vedlegg — e-posten skal uansett sendes
+      }
+
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: email, subject: `Tilbud ${kalk.kalk_number} – ${kalk.title}`, html: emailHtml })
+        body: JSON.stringify({
+          to: email,
+          subject: `Tilbud ${kalk.kalk_number} – ${kalk.title}`,
+          html: emailHtml,
+          attachments: pdfAttachment ? [pdfAttachment] : []
+        })
       })
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
@@ -41318,7 +41337,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
             <div style={{ textAlign:'center', padding:'20px 0' }}>
               <div style={{ fontSize:'48px', marginBottom:'12px' }}>✅</div>
               <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Tilbud sendt!</h3>
-              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar en kort e-post med totalsum og godkjenningsknapp</p>
+              <p style={{ margin:0, color:'#64748b', fontSize:'14px' }}>Kunden mottar e-post med tilbudet vedlagt som PDF og godkjenningsknapp</p>
             </div>
           ) : (
             <>
