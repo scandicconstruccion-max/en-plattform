@@ -34856,7 +34856,8 @@ const BIM_VEIVISER_STEG = [
   { nr: 2, label: 'Yttermål', icon: '📏' },
   { nr: 3, label: 'Konstruksjoner', icon: '🧱' },
   { nr: 4, label: 'Tekniske fag', icon: '🔧' },
-  { nr: 5, label: 'Oppsummering', icon: '✅' },
+  { nr: 5, label: 'Prosjektinfo', icon: '📋' },
+  { nr: 6, label: 'Oppsummering', icon: '✅' },
 ]
 
 // Bygningstyper med visuelle defaults — preset-mål og typiske egenskaper
@@ -35685,8 +35686,121 @@ function BimVeiviserSteg4({ veiviserData, update, isMob }) {
   )
 }
 
-// ─── STEG 5: OPPSUMMERING OG OPPRETT KALKYLE ─────────────────────────────────
-function BimVeiviserSteg5({ veiviserData, isMob }) {
+// ─── STEG 5: PROSJEKTINFO (kunde, adresse, navn) ─────────────────────────────
+// Speiler feltene fra KalkProsjektEditor slik at brukeren kan fylle ut
+// prosjektmetadata direkte i veiviseren
+function BimVeiviserSteg5Prosjektinfo({ veiviserData, update, isMob }) {
+  // Auto-foreslå tittel basert på tidligere valg første gang brukeren kommer hit
+  // Bruker bygningstype + mål + etasjer som default
+  React.useEffect(() => {
+    if (!veiviserData.title) {
+      const bygningstype = BIM_BYGNINGSTYPER.find(t => t.id === veiviserData.bygningstype)
+      if (bygningstype && veiviserData.lengde && veiviserData.bredde && veiviserData.etasjer) {
+        const auto = `${bygningstype.name} ${veiviserData.lengde}×${veiviserData.bredde}m, ${veiviserData.etasjer} etg`
+        update('title', auto)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Auto-generer kalk_number første gang
+  React.useEffect(() => {
+    if (!veiviserData.kalk_number) {
+      supabase.from('calculations').select('kalk_number').then(({ data }) => {
+        if (data) update('kalk_number', nextSequenceNumber(data, 'KA', 'kalk_number'))
+      }).catch(() => {})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const lbl = (t) => <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>{t}</label>
+
+  return (
+    <div>
+      <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Prosjektinfo</h3>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Fyll inn prosjektnavn, kunde og adresse. Du kan justere alt etter at kalkylen er opprettet.</p>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'12px' }}>
+        {/* Prosjektnavn — fullbredde, obligatorisk */}
+        <div style={{ gridColumn:'1/-1' }}>
+          {lbl('Prosjektnavn *')}
+          <input value={veiviserData.title || ''} onChange={(e) => update('title', e.target.value)}
+            placeholder="F.eks. Tilbygg Strandveien 12" style={qInp} />
+        </div>
+
+        {/* Nummer — venstre */}
+        <div>
+          {lbl('Nummer')}
+          <input value={veiviserData.kalk_number || ''} onChange={(e) => update('kalk_number', e.target.value)} style={qInp} />
+        </div>
+
+        {/* Tom plass høyre */}
+        <div></div>
+
+        {/* Velg eksisterende kunde — fullbredde */}
+        <div style={{ gridColumn:'1/-1' }}>
+          {lbl('Velg eksisterende kunde')}
+          <CustomerSelect
+            value={veiviserData.customer_id}
+            valueAsId
+            onChange={v => update('customer_id', v)}
+            onSelect={c => {
+              update('customer_id', c.id)
+              update('customer_name', c.name || '')
+              if (c.email) update('customer_email', c.email)
+              if (c.address) update('customer_address', c.address)
+              if (c.orgnr) update('customer_orgnr', c.orgnr)
+            }}
+            placeholder="Søk etter kunde — eller fyll ut under for ny"
+          />
+          <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>Velger du eksisterende, autofylles feltene under.</p>
+        </div>
+
+        {/* Kundenavn + Org.nr på samme rad */}
+        <div>
+          {lbl('Kundenavn')}
+          <input value={veiviserData.customer_name || ''} onChange={(e) => update('customer_name', e.target.value)}
+            placeholder="Kundenavn" style={qInp} />
+        </div>
+        <div>
+          {lbl('Org.nr')}
+          <input value={veiviserData.customer_orgnr || ''} onChange={(e) => update('customer_orgnr', e.target.value)}
+            placeholder="123 456 789" style={qInp} />
+        </div>
+
+        {/* E-post — fullbredde */}
+        <div style={{ gridColumn:'1/-1' }}>
+          {lbl('E-post')}
+          <input type="email" value={veiviserData.customer_email || ''} onChange={(e) => update('customer_email', e.target.value)}
+            placeholder="kunde@epost.no" style={qInp} />
+        </div>
+
+        {/* Adresse — fullbredde */}
+        <div style={{ gridColumn:'1/-1' }}>
+          {lbl('Prosjektadresse')}
+          <input value={veiviserData.customer_address || ''} onChange={(e) => update('customer_address', e.target.value)}
+            placeholder="Adresse" style={qInp} />
+        </div>
+
+        {/* Notater — fullbredde */}
+        <div style={{ gridColumn:'1/-1' }}>
+          {lbl('Interne notater')}
+          <textarea value={veiviserData.notes || ''} onChange={(e) => update('notes', e.target.value)}
+            placeholder="Interne notater om prosjektet (vises ikke for kunde)" rows={3}
+            style={{ ...qInp, resize:'vertical', fontFamily:'system-ui,sans-serif' }} />
+        </div>
+      </div>
+
+      <div style={{ marginTop:'16px', padding:'10px 14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', fontSize:'12px', color:'#1e40af', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+        <span style={{ fontSize:'14px' }}>💡</span>
+        <span>Faggrupper, faktorer og bygningsdeler genereres automatisk basert på dine tidligere valg. Du kan justere alt etter at kalkylen er opprettet.</span>
+      </div>
+    </div>
+  )
+}
+
+// ─── STEG 6: OPPSUMMERING OG OPPRETT KALKYLE ─────────────────────────────────
+function BimVeiviserSteg6Oppsummering({ veiviserData, isMob }) {
   // Bygg liste over alle bygningsdeler som vil bli opprettet (støtter multi-select)
   const bygningsdelerForhandsvisning = React.useMemo(() => {
     if (!veiviserData.mengder) return []
@@ -35899,6 +36013,15 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
     antallVaskerom: 0,
     elektroNiva: 'standard',
     ventilasjonType: 'balansert',
+    // Steg 5: Prosjektinfo (kunde, adresse, navn etc.)
+    title: '',
+    kalk_number: '',
+    customer_id: null,
+    customer_name: '',
+    customer_email: '',
+    customer_address: '',
+    customer_orgnr: '',
+    notes: '',
     // Kjøkken som rundsum (RS) — default 150 000 kr per kjøkken
     inkluderKjokken: false,
     kjokkenPrisPerStk: 150000,
@@ -35919,7 +36042,6 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
     if (steg === 1) return !!veiviserData.bygningstype
     if (steg === 2) return parseFloat(veiviserData.lengde) > 0 && parseFloat(veiviserData.bredde) > 0 && parseInt(veiviserData.etasjer) > 0
     if (steg === 3) {
-      // Alle obligatoriske kategorier må ha minst ett valg (single eller multi)
       const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
         if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
         return k.obligatorisk
@@ -35932,13 +36054,41 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
       })
     }
     if (steg === 4) return true // alle defaults er gyldige
+    if (steg === 5) return !!veiviserData.title && veiviserData.title.trim().length > 0
     return true
+  }
+
+  // Returner liste over manglende obligatoriske valg i nåværende steg
+  // Brukes til å vise tooltip / feedback når Neste er disabled
+  const manglendeFelter = () => {
+    if (steg === 1 && !veiviserData.bygningstype) return ['Bygningstype']
+    if (steg === 2) {
+      const m = []
+      if (!parseFloat(veiviserData.lengde) > 0) m.push('Lengde')
+      if (!parseFloat(veiviserData.bredde) > 0) m.push('Bredde')
+      if (!parseInt(veiviserData.etasjer) > 0) m.push('Etasjer')
+      return m
+    }
+    if (steg === 3) {
+      const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
+        if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+        return k.obligatorisk
+      })
+      return obligatoriske.filter(k => {
+        const v = veiviserData.valgteKonstruksjoner[k.id]
+        if (!v) return true
+        if (erMultiVerdi(v)) return v.length === 0
+        return false
+      }).map(k => k.label)
+    }
+    if (steg === 5 && (!veiviserData.title || !veiviserData.title.trim())) return ['Prosjektnavn']
+    return []
   }
 
   const update = (key, value) => setVeiviserData(d => ({ ...d, [key]: value }))
   const updateKonstruksjon = (kategori, bdId) => setVeiviserData(d => ({ ...d, valgteKonstruksjoner: { ...d.valgteKonstruksjoner, [kategori]: bdId } }))
 
-  const naste = () => { if (steg < 5 && kanGaaVidere()) setSteg(steg + 1) }
+  const naste = () => { if (steg < BIM_VEIVISER_STEG.length && kanGaaVidere()) setSteg(steg + 1) }
   const tilbake = () => { if (steg > 1) setSteg(steg - 1) }
 
   return (
@@ -36003,30 +36153,44 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
           )}
 
           {steg === 5 && (
-            <BimVeiviserSteg5 veiviserData={veiviserData} isMob={isMob} />
+            <BimVeiviserSteg5Prosjektinfo veiviserData={veiviserData} update={update} isMob={isMob} />
+          )}
+
+          {steg === 6 && (
+            <BimVeiviserSteg6Oppsummering veiviserData={veiviserData} isMob={isMob} />
           )}
         </div>
 
         {/* Nederst: Tilbake / Neste / Opprett */}
-        <div style={{ borderTop:'1px solid #f1f5f9', padding: isMob ? '14px 18px' : '16px 26px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px', flexShrink:0, background:'#fafbfc' }}>
-          <button onClick={steg === 1 ? onClose : tilbake}
-            style={{ padding: isMob ? '10px 14px' : '11px 20px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'600' }}>
-            {steg === 1 ? 'Avbryt' : '← Tilbake'}
-          </button>
-          <div style={{ fontSize: isMob ? '11px' : '12px', color:'#94a3b8', fontWeight:'500' }}>
-            Steg {steg} av {BIM_VEIVISER_STEG.length}
-          </div>
-          {steg < 5 ? (
-            <button onClick={naste} disabled={!kanGaaVidere()}
-              style={{ padding: isMob ? '10px 16px' : '11px 22px', background: kanGaaVidere() ? 'linear-gradient(135deg, #8b5cf6, #3b82f6)' : '#e2e8f0', color: kanGaaVidere() ? 'white' : '#94a3b8', border:'none', borderRadius:'10px', cursor: kanGaaVidere() ? 'pointer' : 'not-allowed', fontSize: isMob ? '12px' : '13px', fontWeight:'700', boxShadow: kanGaaVidere() ? '0 4px 12px rgba(139,92,246,0.3)' : 'none' }}>
-              Neste →
-            </button>
-          ) : (
-            <button onClick={() => { if (onComplete) onComplete(veiviserData) }}
-              style={{ padding: isMob ? '10px 16px' : '11px 22px', background:'linear-gradient(135deg, #059669, #10b981)', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'700', boxShadow:'0 4px 12px rgba(16,185,129,0.3)' }}>
-              ✓ Opprett kalkyle
-            </button>
+        <div style={{ borderTop:'1px solid #f1f5f9', padding: isMob ? '14px 18px' : '16px 26px', flexShrink:0, background:'#fafbfc' }}>
+          {/* Mangler-banner: vises kun når Neste-knappen er disabled OG noe konkret mangler */}
+          {!kanGaaVidere() && manglendeFelter().length > 0 && steg < BIM_VEIVISER_STEG.length && (
+            <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'8px 12px', marginBottom:'10px', fontSize:'12px', color:'#92400e', display:'flex', alignItems:'center', gap:'8px' }}>
+              <span style={{ fontSize:'14px' }}>⚠️</span>
+              <span><strong>Mangler:</strong> {manglendeFelter().join(', ')}</span>
+            </div>
           )}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px' }}>
+            <button onClick={steg === 1 ? onClose : tilbake}
+              style={{ padding: isMob ? '10px 14px' : '11px 20px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'600' }}>
+              {steg === 1 ? 'Avbryt' : '← Tilbake'}
+            </button>
+            <div style={{ fontSize: isMob ? '11px' : '12px', color:'#94a3b8', fontWeight:'500' }}>
+              Steg {steg} av {BIM_VEIVISER_STEG.length}
+            </div>
+            {steg < BIM_VEIVISER_STEG.length ? (
+              <button onClick={naste} disabled={!kanGaaVidere()}
+                title={!kanGaaVidere() && manglendeFelter().length > 0 ? `Mangler: ${manglendeFelter().join(', ')}` : ''}
+                style={{ padding: isMob ? '10px 16px' : '11px 22px', background: kanGaaVidere() ? 'linear-gradient(135deg, #8b5cf6, #3b82f6)' : '#e2e8f0', color: kanGaaVidere() ? 'white' : '#94a3b8', border:'none', borderRadius:'10px', cursor: kanGaaVidere() ? 'pointer' : 'not-allowed', fontSize: isMob ? '12px' : '13px', fontWeight:'700', boxShadow: kanGaaVidere() ? '0 4px 12px rgba(139,92,246,0.3)' : 'none' }}>
+                Neste →
+              </button>
+            ) : (
+              <button onClick={() => { if (onComplete) onComplete(veiviserData) }}
+                style={{ padding: isMob ? '10px 16px' : '11px 22px', background:'linear-gradient(135deg, #059669, #10b981)', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'700', boxShadow:'0 4px 12px rgba(16,185,129,0.3)' }}>
+                ✓ Opprett kalkyle
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -36910,22 +37074,50 @@ function KalkulasjonPage({ onNavigate }) {
         try {
           const { kalkyler: nyeKalkyler, faktorer } = byggKalkylerFraVeiviser(data)
           if (nyeKalkyler.length === 0) { alert('Ingen bygningsdeler valgt. Gå tilbake og velg minst en konstruksjon.'); return }
-          // Hent eksisterende kalk-numre for å generere nytt nummer
-          const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
-          const newKalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+          // Bruk prosjektinfo fra veiviser-data; fallback til auto-generert hvis tomt
+          let kalkNr = data.kalk_number
+          if (!kalkNr) {
+            const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+            kalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+          }
           const bygningstype = BIM_BYGNINGSTYPER.find(t => t.id === data.bygningstype)
-          const tittel = `${bygningstype?.name || 'Prosjekt'} ${data.lengde}×${data.bredde}m, ${data.etasjer} etg`
-          const payload = {
+          const tittel = data.title?.trim() || `${bygningstype?.name || 'Prosjekt'} ${data.lengde}×${data.bredde}m, ${data.etasjer} etg`
+          // Felles kunde-oppløsning: finner/oppretter kunde i customers-tabellen
+          const formForResolve = {
+            customer_name: data.customer_name || '',
+            customer_email: data.customer_email || '',
+            customer_address: data.customer_address || '',
+            customer_orgnr: data.customer_orgnr || '',
+            customer_id: data.customer_id || null,
+          }
+          const { customerId } = await resolveCustomerFromForm({
+            form: formForResolve,
+            user,
+            initialCustomerId: data.customer_id || null,
+            statusOnCreate: 'lead',
+          })
+          // Beregn totals slik editor gjør
+          const totals = beregnProsjektTotal(nyeKalkyler, faktorer)
+          const payload = sanitizeDbPayload({
             title: tittel,
-            kalk_number: newKalkNr,
+            kalk_number: kalkNr,
+            customer_id: customerId,
+            customer_name: data.customer_name || '',
+            customer_email: data.customer_email || '',
+            customer_address: data.customer_address || '',
+            customer_orgnr: data.customer_orgnr || '',
+            notes: data.notes || '',
             kalkyler: nyeKalkyler,
             faktorer,
             status: 'Utkast',
             is_template: false,
+            total_cost: totals.totSelvkost,
+            total_ex_mva: totals.totMedFortjeneste,
+            profit_percent: totals.fortjenesteProsent,
             created_by: user?.id,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          }
+          })
           const { data: created, error } = await supabase.from('calculations').insert(payload).select().single()
           if (error) throw error
           setShowHurtigstart(false)
