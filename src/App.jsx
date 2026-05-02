@@ -34857,6 +34857,312 @@ const BIM_VEIVISER_STEG = [
   { nr: 5, label: 'Oppsummering', icon: '✅' },
 ]
 
+// Bygningstyper med visuelle defaults — preset-mål og typiske egenskaper
+const BIM_BYGNINGSTYPER = [
+  {
+    id: 'enebolig', icon: '🏠', name: 'Enebolig',
+    desc: 'Frittliggende bolig med 1–3 etasjer',
+    presetLengde: 12, presetBredde: 8, presetEtasjer: 2,
+    presetTaktype: 'skraa', presetTakvinkel: 30,
+    typiskBRA: '120–250 m²',
+  },
+  {
+    id: 'tomannsbolig', icon: '🏘️', name: 'Tomannsbolig',
+    desc: 'To boenheter under samme tak',
+    presetLengde: 16, presetBredde: 9, presetEtasjer: 2,
+    presetTaktype: 'skraa', presetTakvinkel: 30,
+    typiskBRA: '200–350 m²',
+  },
+  {
+    id: 'hytte', icon: '🛖', name: 'Hytte',
+    desc: 'Fritidsbolig, vanligvis 1 etasje',
+    presetLengde: 8, presetBredde: 7, presetEtasjer: 1,
+    presetTaktype: 'skraa', presetTakvinkel: 35,
+    typiskBRA: '50–120 m²',
+  },
+  {
+    id: 'garasje', icon: '🚗', name: 'Garasje',
+    desc: 'Frittstående garasje eller bod',
+    presetLengde: 6, presetBredde: 6, presetEtasjer: 1,
+    presetTaktype: 'pulttak', presetTakvinkel: 15,
+    typiskBRA: '20–60 m²',
+  },
+  {
+    id: 'tilbygg', icon: '🔨', name: 'Tilbygg',
+    desc: 'Påbygg eller utvidelse',
+    presetLengde: 5, presetBredde: 4, presetEtasjer: 1,
+    presetTaktype: 'pulttak', presetTakvinkel: 15,
+    typiskBRA: '15–60 m²',
+  },
+]
+
+const BIM_TAKTYPER = [
+  { id: 'skraa', icon: '🏠', name: 'Skråtak (saltak)', desc: 'To takflater som møtes i mønelinje' },
+  { id: 'flatt', icon: '⬜', name: 'Flatt tak', desc: 'Lavt fall med membran' },
+  { id: 'pulttak', icon: '🔻', name: 'Pulttak', desc: 'Ensidig fall' },
+]
+
+// ─── STEG 1: BYGNINGSTYPE ────────────────────────────────────────────────────
+function BimVeiviserSteg1({ veiviserData, update, isMob }) {
+  const velgBygningstype = (type) => {
+    update('bygningstype', type.id)
+    // Auto-utfyll preset-mål hvis lengde/bredde er tomme — slik at brukeren
+    // kan gå videre uten å taste alt på nytt
+    if (!veiviserData.lengde) update('lengde', String(type.presetLengde))
+    if (!veiviserData.bredde) update('bredde', String(type.presetBredde))
+    if (!veiviserData.etasjer || veiviserData.etasjer === 1) update('etasjer', type.presetEtasjer)
+    update('taktype', type.presetTaktype)
+    update('takvinkel', type.presetTakvinkel)
+  }
+
+  return (
+    <div>
+      <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Hva slags bygg skal du kalkulere?</h3>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg type — vi fyller inn typiske mål automatisk som du kan justere i neste steg.</p>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(220px, 1fr))', gap:'12px' }}>
+        {BIM_BYGNINGSTYPER.map(t => {
+          const valgt = veiviserData.bygningstype === t.id
+          return (
+            <button key={t.id} onClick={() => velgBygningstype(t)}
+              style={{
+                background: valgt ? 'linear-gradient(135deg, #f5f3ff, #eff6ff)' : 'white',
+                border: valgt ? '2px solid #8b5cf6' : '1.5px solid #e2e8f0',
+                borderRadius:'14px',
+                padding: isMob ? '14px 16px' : '18px 20px',
+                cursor:'pointer',
+                textAlign:'left',
+                transition:'all 0.15s',
+                position:'relative',
+                boxShadow: valgt ? '0 4px 16px rgba(139,92,246,0.15)' : 'none',
+              }}
+              onMouseEnter={(e) => { if (!valgt) e.currentTarget.style.borderColor = '#cbd5e1' }}
+              onMouseLeave={(e) => { if (!valgt) e.currentTarget.style.borderColor = '#e2e8f0' }}>
+              {valgt && (
+                <div style={{ position:'absolute', top:'12px', right:'12px', background:'#8b5cf6', color:'white', borderRadius:'50%', width:'22px', height:'22px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'12px', fontWeight:'700' }}>✓</div>
+              )}
+              <div style={{ fontSize: isMob ? '32px' : '38px', marginBottom:'8px' }}>{t.icon}</div>
+              <div style={{ fontSize: isMob ? '14px' : '15px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>{t.name}</div>
+              <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.4, marginBottom:'8px' }}>{t.desc}</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8', borderTop:'1px solid #f1f5f9', paddingTop:'8px', marginTop:'8px' }}>
+                <div>Typisk: {t.typiskBRA}</div>
+                <div style={{ marginTop:'2px' }}>Preset: {t.presetLengde}×{t.presetBredde}m, {t.presetEtasjer} etg</div>
+              </div>
+            </button>
+          )
+        })}
+      </div>
+
+      {veiviserData.bygningstype && (
+        <div style={{ marginTop:'18px', padding:'12px 14px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', display:'flex', alignItems:'center', gap:'10px' }}>
+          <span style={{ fontSize:'18px' }}>✓</span>
+          <span style={{ fontSize:'13px', color:'#065f46' }}>
+            <strong>{BIM_BYGNINGSTYPER.find(t => t.id === veiviserData.bygningstype)?.name}</strong> valgt. Standardmål er fylt inn — du justerer dem i neste steg.
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── STEG 2: YTTERMÅL MED LIVE MENGDEBEREGNING ───────────────────────────────
+function BimVeiviserSteg2({ veiviserData, update, isMob }) {
+  // Live-beregning av mengder basert på input. useMemo unngår re-beregning ved
+  // hver render hvis ingen relevante felter har endret seg.
+  const mengder = React.useMemo(() => {
+    const lengde = parseFloat(veiviserData.lengde)
+    const bredde = parseFloat(veiviserData.bredde)
+    const etasjer = parseInt(veiviserData.etasjer)
+    if (!lengde || !bredde || !etasjer || lengde <= 0 || bredde <= 0 || etasjer <= 0) return null
+    return beregnMengderFraMaal({
+      lengde,
+      bredde,
+      etasjer,
+      etasjehoyde: parseFloat(veiviserData.etasjehoyde) || 2.5,
+      taktype: veiviserData.taktype,
+      takvinkel: parseFloat(veiviserData.takvinkel) || 30,
+      antallVinduer: veiviserData.antallVinduer === '' ? undefined : parseInt(veiviserData.antallVinduer),
+      antallYtterdorer: veiviserData.antallYtterdorer === '' ? undefined : parseInt(veiviserData.antallYtterdorer),
+      baerendeYttervegg: veiviserData.baerendeYttervegg !== false,
+    })
+  }, [veiviserData.lengde, veiviserData.bredde, veiviserData.etasjer, veiviserData.etasjehoyde, veiviserData.taktype, veiviserData.takvinkel, veiviserData.antallVinduer, veiviserData.antallYtterdorer, veiviserData.baerendeYttervegg])
+
+  // Lagre beregnede mengder i veiviserData så de er tilgjengelige i steg 3+
+  React.useEffect(() => {
+    update('mengder', mengder)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mengder])
+
+  const InputFelt = ({ label, suffix, value, onChange, placeholder, type = 'number', step, min }) => (
+    <div>
+      <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'6px' }}>{label}</label>
+      <div style={{ position:'relative' }}>
+        <input type={type} step={step} min={min} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+          style={{ width:'100%', padding:'10px 12px', paddingRight: suffix ? '40px' : '12px', border:'1.5px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', color:'#0f172a', background:'white', outline:'none', transition:'border-color 0.15s' }}
+          onFocus={(e) => e.target.style.borderColor = '#8b5cf6'}
+          onBlur={(e) => e.target.style.borderColor = '#e2e8f0'} />
+        {suffix && <span style={{ position:'absolute', right:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'12px', color:'#94a3b8', fontWeight:'500' }}>{suffix}</span>}
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Tast inn yttermål</h3>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Lengde, bredde, etasjer og taktype — vi regner ut alle mengdene live.</p>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 320px', gap: isMob ? '20px' : '28px', alignItems:'flex-start' }}>
+
+        {/* Venstre kolonne: Inputs */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+
+          {/* Yttermål */}
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.5px', marginBottom:'10px', textTransform:'uppercase' }}>Mål og etasjer</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }}>
+              <InputFelt label="Lengde" suffix="m" value={veiviserData.lengde} onChange={(v) => update('lengde', v)} placeholder="12" step="0.1" min="0" />
+              <InputFelt label="Bredde" suffix="m" value={veiviserData.bredde} onChange={(v) => update('bredde', v)} placeholder="8" step="0.1" min="0" />
+              <InputFelt label="Etasjer" value={veiviserData.etasjer} onChange={(v) => update('etasjer', parseInt(v) || 1)} placeholder="2" step="1" min="1" />
+            </div>
+            <div style={{ marginTop:'10px' }}>
+              <InputFelt label="Etasjehøyde (brutto)" suffix="m" value={veiviserData.etasjehoyde} onChange={(v) => update('etasjehoyde', v)} placeholder="2.5" step="0.1" min="2" />
+            </div>
+          </div>
+
+          {/* Taktype */}
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.5px', marginBottom:'10px', textTransform:'uppercase' }}>Taktype</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px' }}>
+              {BIM_TAKTYPER.map(t => {
+                const valgt = veiviserData.taktype === t.id
+                return (
+                  <button key={t.id} onClick={() => update('taktype', t.id)}
+                    style={{
+                      background: valgt ? 'linear-gradient(135deg, #f5f3ff, #eff6ff)' : 'white',
+                      border: valgt ? '2px solid #8b5cf6' : '1.5px solid #e2e8f0',
+                      borderRadius:'10px',
+                      padding:'12px 8px',
+                      cursor:'pointer',
+                      textAlign:'center',
+                      transition:'all 0.15s',
+                    }}>
+                    <div style={{ fontSize:'24px', marginBottom:'4px' }}>{t.icon}</div>
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>{t.name}</div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8', lineHeight:1.3 }}>{t.desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+            {(veiviserData.taktype === 'skraa' || veiviserData.taktype === 'pulttak') && (
+              <div style={{ marginTop:'10px', padding:'10px 12px', background:'#f8fafc', borderRadius:'10px' }}>
+                <label style={{ display:'flex', justifyContent:'space-between', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'8px' }}>
+                  <span>Takvinkel</span>
+                  <strong style={{ color:'#8b5cf6' }}>{veiviserData.takvinkel}°</strong>
+                </label>
+                <input type="range" min="5" max="60" step="1" value={veiviserData.takvinkel} onChange={(e) => update('takvinkel', parseInt(e.target.value))}
+                  style={{ width:'100%', accentColor:'#8b5cf6', cursor:'pointer' }} />
+                <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>
+                  <span>5°</span><span>30°</span><span>60°</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Åpninger */}
+          <div>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.5px', marginBottom:'10px', textTransform:'uppercase' }}>Åpninger</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+              <InputFelt label="Vinduer" suffix="stk" value={veiviserData.antallVinduer} onChange={(v) => update('antallVinduer', v)} placeholder={mengder ? String(Math.round(mengder.bra * 0.10)) : 'auto'} step="1" min="0" />
+              <InputFelt label="Ytterdører" suffix="stk" value={veiviserData.antallYtterdorer} onChange={(v) => update('antallYtterdorer', v)} placeholder="1" step="1" min="0" />
+            </div>
+            <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>
+              ℹ️ La feltene stå tomme for automatisk estimat (TEK17 lyskrav: ca 10% av BRA i vindusareal)
+            </p>
+          </div>
+
+          {/* Bærende */}
+          <div>
+            <label style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#f8fafc', borderRadius:'10px', cursor:'pointer', border:'1px solid #e2e8f0' }}>
+              <input type="checkbox" checked={veiviserData.baerendeYttervegg !== false} onChange={(e) => update('baerendeYttervegg', e.target.checked)}
+                style={{ width:'18px', height:'18px', accentColor:'#8b5cf6', cursor:'pointer' }} />
+              <div>
+                <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>Bærende yttervegg</div>
+                <div style={{ fontSize:'11px', color:'#64748b' }}>Påvirker åpningstillegg per tømrertariff (+1 stk per åpning)</div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Høyre kolonne: Live preview */}
+        <div style={{ position: isMob ? 'static' : 'sticky', top:'0' }}>
+          <div style={{ background: mengder ? 'linear-gradient(135deg, #faf5ff, #eff6ff)' : '#f8fafc', borderRadius:'14px', padding:'16px 18px', border:'1px solid', borderColor: mengder ? '#ddd6fe' : '#e2e8f0' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+              <span style={{ fontSize:'18px' }}>📊</span>
+              <strong style={{ fontSize:'14px', color:'#0f172a' }}>Beregnede mengder</strong>
+            </div>
+
+            {!mengder ? (
+              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>Tast inn lengde, bredde og etasjer for å se mengder live.</p>
+            ) : (
+              <>
+                {/* Hovedtall */}
+                <div style={{ background:'white', borderRadius:'10px', padding:'12px', marginBottom:'10px', display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+                  <div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>BRA</div>
+                    <div style={{ fontSize:'20px', fontWeight:'800', color:'#8b5cf6' }}>{mengder.bra} <span style={{ fontSize:'12px', fontWeight:'500', color:'#94a3b8' }}>m²</span></div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>Omkrets</div>
+                    <div style={{ fontSize:'20px', fontWeight:'800', color:'#3b82f6' }}>{mengder.omkrets} <span style={{ fontSize:'12px', fontWeight:'500', color:'#94a3b8' }}>lm</span></div>
+                  </div>
+                </div>
+
+                {/* Detaljerte mengder */}
+                <div style={{ background:'white', borderRadius:'10px', padding:'10px 12px', fontSize:'12px' }}>
+                  {[
+                    { label: 'Yttervegg (netto)', value: mengder.nettoYtterveggAreal, enhet: 'm²', tooltip: `Brutto ${mengder.bruttoYtterveggAreal} m² minus ${mengder.vinduer.totalAreal + mengder.ytterdorer.totalAreal} m² åpninger` },
+                    { label: 'Innervegg', value: mengder.innerveggAreal, enhet: 'm²' },
+                    { label: 'Tak', value: mengder.takAreal, enhet: 'm²' },
+                    { label: 'Gulv', value: mengder.gulvAreal, enhet: 'm²' },
+                    { label: 'Etasjeskille', value: mengder.etasjeskilleAreal, enhet: 'm²' },
+                    { label: 'Grunnmur', value: mengder.grunnmurAreal, enhet: 'm²' },
+                  ].map((m, i) => (
+                    <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'5px 0', borderBottom: i < 5 ? '1px solid #f1f5f9' : 'none' }} title={m.tooltip || ''}>
+                      <span style={{ color:'#475569' }}>{m.label}</span>
+                      <strong style={{ color:'#0f172a' }}>{m.value} {m.enhet}</strong>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Åpninger */}
+                <div style={{ background:'white', borderRadius:'10px', padding:'10px 12px', fontSize:'12px', marginTop:'8px' }}>
+                  <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', marginBottom:'6px' }}>Åpninger</div>
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
+                    <span>🪟 {mengder.vinduer.antall} vinduer</span>
+                    <strong style={{ color:'#0f172a' }}>{mengder.vinduer.totalAreal} m²</strong>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
+                    <span>🚪 {mengder.ytterdorer.antall} ytterdører</span>
+                    <strong style={{ color:'#0f172a' }}>{mengder.ytterdorer.totalAreal} m²</strong>
+                  </div>
+                  <div style={{ borderTop:'1px solid #f1f5f9', marginTop:'4px', paddingTop:'6px', display:'flex', justifyContent:'space-between', color:'#64748b', fontSize:'11px' }}>
+                    <span>Åpningstillegg (tømrertariff)</span>
+                    <strong style={{ color:'#8b5cf6' }}>{mengder.vinduer.aapningstillegg + mengder.ytterdorer.aapningstillegg} stk</strong>
+                  </div>
+                </div>
+
+                <p style={{ margin:'10px 0 0', fontSize:'11px', color:'#64748b', textAlign:'center', fontStyle:'italic' }}>
+                  Disse mengdene mater bygningsdelene i neste steg.
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BimKalkyleVeiviserModal({ onClose, onComplete }) {
   const [steg, setSteg] = useState(1)
   const [veiviserData, setVeiviserData] = useState({
@@ -34964,49 +35270,11 @@ function BimKalkyleVeiviserModal({ onClose, onComplete }) {
         {/* Steg-innhold */}
         <div style={{ flex:1, overflowY:'auto', padding: isMob ? '20px' : '28px 32px' }}>
           {steg === 1 && (
-            <div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Hva slags bygg skal du kalkulere?</h3>
-              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg type — dette tilpasser veiviseren videre.</p>
-              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
-                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
-                <strong>Steg 1: Bygningstype</strong>
-                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Visuelle valg-kort kommer i Patch 3b.</p>
-                <p style={{ margin:'12px 0 0', fontSize:'12px' }}>For å teste videre, klikk en av disse:</p>
-                <div style={{ display:'flex', gap:'8px', justifyContent:'center', marginTop:'10px', flexWrap:'wrap' }}>
-                  {['enebolig','tomannsbolig','hytte','garasje','tilbygg'].map(t => (
-                    <button key={t} onClick={() => update('bygningstype', t)}
-                      style={{ padding:'8px 14px', borderRadius:'8px', border: veiviserData.bygningstype === t ? '2px solid #059669' : '1px solid #fcd34d', background: veiviserData.bygningstype === t ? '#ecfdf5' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: veiviserData.bygningstype === t ? '#065f46' : '#92400e' }}>
-                      {veiviserData.bygningstype === t ? '✓ ' : ''}{t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <BimVeiviserSteg1 veiviserData={veiviserData} update={update} isMob={isMob} />
           )}
 
           {steg === 2 && (
-            <div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tast inn yttermål</h3>
-              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Lengde, bredde, etasjer og taktype — så regner vi ut alle mengdene.</p>
-              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
-                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
-                <strong>Steg 2: Yttermål</strong>
-                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Mål-input med live mengdeberegning kommer i Patch 3b.</p>
-                <p style={{ margin:'12px 0 0', fontSize:'12px' }}>For å teste videre — bruk testdata:</p>
-                <button onClick={() => {
-                  update('lengde', 12); update('bredde', 8); update('etasjer', 2)
-                  const m = beregnMengderFraMaal({ lengde: 12, bredde: 8, etasjer: 2, taktype: 'skraa', takvinkel: 30 })
-                  update('mengder', m)
-                }} style={{ marginTop:'10px', padding:'10px 18px', borderRadius:'8px', border:'2px solid #059669', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#065f46' }}>
-                  Bruk testdata: 12×8m, 2 etasjer
-                </button>
-                {veiviserData.mengder && (
-                  <div style={{ marginTop:'14px', padding:'12px', background:'white', borderRadius:'8px', textAlign:'left', fontSize:'12px', color:'#0f172a' }}>
-                    <strong>Beregnet:</strong> BRA {veiviserData.mengder.bra} m² · Yttervegg {veiviserData.mengder.nettoYtterveggAreal} m² · Tak {veiviserData.mengder.takAreal} m² · {veiviserData.mengder.vinduer.antall} vinduer
-                  </div>
-                )}
-              </div>
-            </div>
+            <BimVeiviserSteg2 veiviserData={veiviserData} update={update} isMob={isMob} />
           )}
 
           {steg === 3 && (
