@@ -32052,7 +32052,7 @@ const MODULE_CATALOG = [
   {
     id: 'bim_kalkyle',
     name: 'BIM-Kalkyle',
-    desc: 'Tilleggsmodul som lar deg starte kalkylen fra IFC, DWG eller plantegning — eller fra yttermål via veiviser. Inkluderer 50+ standardkonstruksjoner, automatisk kompletthetssjekk og tekniske fag som rundsum. Fra tegning til tilbud på minutter.',
+    desc: 'Tilleggsmodul for proffe aktører — last opp IFC, DWG eller PDF-tegninger og få automatisk mengdeberegning, materialmatching og kalkyle. Krever Kalkulasjon basis. Kommer snart — kontakt oss for tidlig tilgang.',
     emoji: '📐',
     price: 1899,
     perCompany: true,
@@ -34538,18 +34538,20 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
 
         <div style={{ padding:'24px' }}>
           <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
-            BIM-Kalkyle er en utvidelse av Kalkulasjonsmodulen som lar deg starte fra tegninger eller bare yttermål — i stedet for å bygge opp kalkylen manuelt.
+            BIM-Kalkyle er for proffe aktører som kalkulerer fra arkitekt-tegninger. Last opp IFC, DWG eller PDF og få automatisk mengdeberegning, materialmatching mot prisbok og ferdig kalkyle.
           </p>
 
           <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', marginBottom:'16px' }}>
             <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.5px', marginBottom:'8px' }}>HVA DU FÅR</div>
             {[
-              { icon:'✨', text:'Veiviser med 50+ standardkonstruksjoner' },
-              { icon:'📏', text:'Mengdeberegning fra yttermål — automatisk' },
+              { icon:'📂', text:'IFC-import fra ArchiCAD, Revit og andre BIM-verktøy' },
+              { icon:'📐', text:'DWG-import for 2D-tegninger og geometri' },
+              { icon:'📄', text:'PDF-tegninger med AI-analyse' },
+              { icon:'📏', text:'Automatisk mengdeberegning fra 3D-geometri' },
+              { icon:'🔗', text:'Materialmatching mot prisbok via NOBB' },
+              { icon:'✅', text:'Bekreftelsesflyt med grønn/gul markering' },
+              { icon:'🎲', text:'3D-verifisering med klikkbare bygningsdeler' },
               { icon:'🔍', text:'Automatisk kompletthetssjekk' },
-              { icon:'🔧', text:'Tekniske fag (VVS, elektro, ventilasjon) som rundsum' },
-              { icon:'📂', text:'IFC, DWG og PDF-import (kommer)' },
-              { icon:'🎲', text:'3D-verifisering med klikkbare bygningsdeler (kommer)' },
             ].map((f, i) => (
               <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'4px 0', fontSize:'13px', color:'#0f172a' }}>
                 <span style={{ fontSize:'15px', flexShrink:0 }}>{f.icon}</span>
@@ -35623,7 +35625,7 @@ function BimVeiviserSteg5({ veiviserData, isMob }) {
   )
 }
 
-function BimKalkyleVeiviserModal({ onClose, onComplete }) {
+function KalkHurtigstartModal({ onClose, onComplete }) {
   const [steg, setSteg] = useState(1)
   const [veiviserData, setVeiviserData] = useState({
     // Steg 1: Bygningstype
@@ -35696,10 +35698,10 @@ function BimKalkyleVeiviserModal({ onClose, onComplete }) {
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: isMob ? '18px 18px 16px' : '22px 26px 20px', color:'white', position:'relative', flexShrink:0 }}>
           <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: isMob ? '12px' : '16px' }}>
-            <div style={{ fontSize: isMob ? '24px' : '28px' }}>📐</div>
+            <div style={{ fontSize: isMob ? '24px' : '28px' }}>✨</div>
             <div>
-              <h2 style={{ margin:0, fontSize: isMob ? '17px' : '20px', fontWeight:'800' }}>BIM-Kalkyle</h2>
-              <p style={{ margin:'2px 0 0', fontSize: isMob ? '11px' : '12px', opacity:0.95 }}>Fra tegning til tilbud på minutter</p>
+              <h2 style={{ margin:0, fontSize: isMob ? '17px' : '20px', fontWeight:'800' }}>Hurtigstart</h2>
+              <p style={{ margin:'2px 0 0', fontSize: isMob ? '11px' : '12px', opacity:0.95 }}>Få et raskt utgangspunkt basert på yttermål</p>
             </div>
           </div>
 
@@ -35773,6 +35775,143 @@ function BimKalkyleVeiviserModal({ onClose, onComplete }) {
               ✓ Opprett kalkyle
             </button>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── KALKYLE OPPRETT-VALG MODAL ──────────────────────────────────────────────
+// Vises når brukeren klikker "+ Nytt kalkulasjonsprosjekt".
+// Lar brukeren velge mellom Hurtigstart-veiviser eller tom kalkyle.
+
+function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
+  const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setIsMob(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:140, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'620px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+
+        <div style={{ padding:'22px 24px 16px', borderBottom:'1px solid #f1f5f9', position:'relative' }}>
+          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'#f1f5f9', border:'none', borderRadius:'50%', width:'30px', height:'30px', cursor:'pointer', color:'#64748b', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <h2 style={{ margin:'0 0 4px', fontSize:'19px', fontWeight:'800', color:'#0f172a' }}>Nytt kalkulasjonsprosjekt</h2>
+          <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>Hvordan vil du starte?</p>
+        </div>
+
+        <div style={{ padding:'20px 24px 24px' }}>
+          <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'12px' }}>
+
+            {/* Hurtigstart (først, anbefalt) */}
+            <button onClick={onVelgHurtigstart}
+              style={{
+                background:'linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%)',
+                border:'2px solid #c4b5fd',
+                borderRadius:'14px',
+                padding: isMob ? '18px 16px' : '22px 20px',
+                cursor:'pointer',
+                textAlign:'left',
+                position:'relative',
+                transition:'all 0.15s',
+                boxShadow:'0 4px 16px rgba(139,92,246,0.1)',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,92,246,0.2)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#c4b5fd'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.1)' }}>
+              <div style={{ position:'absolute', top:'12px', right:'12px', background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'12px', letterSpacing:'0.3px' }}>ANBEFALT</div>
+              <div style={{ fontSize:'36px', marginBottom:'10px' }}>✨</div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Hurtigstart</h3>
+              <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#475569', lineHeight:1.5 }}>
+                Få et raskt utgangspunkt basert på yttermål, etasjer og bygningstype.
+              </p>
+              <div style={{ borderTop:'1px solid #e9d5ff', paddingTop:'10px', fontSize:'11px', color:'#7c3aed' }}>
+                ⏱️ Spar tid — alle bygningsdeler og mengder fylles inn automatisk
+              </div>
+            </button>
+
+            {/* Tom kalkyle */}
+            <button onClick={onVelgTom}
+              style={{
+                background:'white',
+                border:'2px solid #e2e8f0',
+                borderRadius:'14px',
+                padding: isMob ? '18px 16px' : '22px 20px',
+                cursor:'pointer',
+                textAlign:'left',
+                transition:'all 0.15s',
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#94a3b8' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0' }}>
+              <div style={{ fontSize:'36px', marginBottom:'10px' }}>📝</div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Tom kalkyle</h3>
+              <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#475569', lineHeight:1.5 }}>
+                Bygg opp kalkylen manuelt — legg til fagkalkyler og bygningsdeler fra biblioteket etter behov.
+              </p>
+              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'10px', fontSize:'11px', color:'#64748b' }}>
+                💪 Full kontroll — perfekt for spesielle prosjekter eller egne maler
+              </div>
+            </button>
+          </div>
+
+          <p style={{ margin:'14px 0 0', fontSize:'11px', color:'#94a3b8', textAlign:'center' }}>
+            Begge alternativene gir deg samme kalkyle-editor etterpå. Du kan justere alt fritt.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── BIM-IMPORT PLACEHOLDER MODAL ────────────────────────────────────────────
+// Vises når en bruker MED bim_kalkyle-modulen klikker "BIM-Kalkyle"-knappen.
+// Erstattes av ekte IFC/DWG/PDF-importflyt i Patch 6+.
+
+function BimImportPlaceholderModal({ onClose }) {
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'24px', color:'white', position:'relative' }}>
+          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px' }}>×</button>
+          <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
+          <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
+          <p style={{ margin:0, fontSize:'14px', opacity:0.95 }}>IFC, DWG og PDF-import</p>
+        </div>
+
+        <div style={{ padding:'24px' }}>
+          <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e', marginBottom:'18px' }}>
+            <div style={{ fontSize:'40px', marginBottom:'8px' }}>🚧</div>
+            <strong style={{ fontSize:'15px' }}>Under utvikling</strong>
+            <p style={{ margin:'8px 0 0', fontSize:'13px', lineHeight:1.5 }}>
+              Vi jobber med IFC, DWG og PDF-import. Funksjonen aktiveres så snart første versjon er ferdig.
+            </p>
+          </div>
+
+          <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', marginBottom:'18px' }}>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'8px' }}>HVA SOM KOMMER</div>
+            {[
+              { icon:'📂', text:'IFC-import fra ArchiCAD, Revit og andre BIM-verktøy' },
+              { icon:'📐', text:'DWG-import for 2D-tegninger og geometri' },
+              { icon:'📄', text:'PDF-tegninger med AI-analyse' },
+              { icon:'📏', text:'Automatisk mengdeberegning fra 3D-geometri' },
+              { icon:'🔗', text:'Materialmatching mot prisbok via NOBB' },
+              { icon:'✅', text:'Bekreftelsesflyt med grønn/gul markering' },
+            ].map((f, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'4px 0', fontSize:'12px', color:'#0f172a' }}>
+                <span style={{ fontSize:'14px', flexShrink:0 }}>{f.icon}</span>
+                <span style={{ lineHeight:1.4 }}>{f.text}</span>
+              </div>
+            ))}
+          </div>
+
+          <button onClick={onClose}
+            style={{ width:'100%', padding:'12px', background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+            Lukk
+          </button>
         </div>
       </div>
     </div>
@@ -35959,9 +36098,11 @@ function KalkulasjonPage({ onNavigate }) {
   const [compareIds, setCompareIds] = useState([])
   const [showCompare, setShowCompare] = useState(false)
   const [expandedCompareFag, setExpandedCompareFag] = useState(new Set())
-  // BIM-Kalkyle: veiviser og upsell
-  const [showBimVeiviser, setShowBimVeiviser] = useState(false)
+  // BIM-Kalkyle og Hurtigstart state
+  const [showHurtigstart, setShowHurtigstart] = useState(false)
+  const [showOpprettValg, setShowOpprettValg] = useState(false)
   const [showBimUpsell, setShowBimUpsell] = useState(false)
+  const [showBimImport, setShowBimImport] = useState(false)
   const [bimActiveModules, setBimActiveModules] = useState([])
   useEffect(() => {
     supabase.from('company_settings').select('active_modules').limit(1).single()
@@ -35969,7 +36110,7 @@ function KalkulasjonPage({ onNavigate }) {
       .catch(() => {})
   }, [])
   const handleBimKalkyleClick = () => {
-    if (hasBimKalkyle(bimActiveModules)) setShowBimVeiviser(true)
+    if (hasBimKalkyle(bimActiveModules)) setShowBimImport(true)
     else setShowBimUpsell(true)
   }
 
@@ -36334,10 +36475,10 @@ function KalkulasjonPage({ onNavigate }) {
             )}
             <button onClick={handleBimKalkyleClick}
               style={{ background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '9px 12px' : '11px 18px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', boxShadow:'0 4px 12px rgba(139,92,246,0.25)', display:'flex', alignItems:'center', gap:'6px' }}
-              title="Start ny kalkyle fra yttermål eller tegning">
+              title="Last opp IFC, DWG eller PDF-tegning">
               📐 {isMobK ? 'BIM' : 'BIM-Kalkyle'}
             </button>
-            <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
+            <button onClick={() => setShowOpprettValg(true)}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '9px 12px' : '11px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
               {isMobK ? '+ Ny kalkyle' : '+ Nytt kalkulasjonsprosjekt'}
             </button>
@@ -36508,7 +36649,12 @@ function KalkulasjonPage({ onNavigate }) {
       )}
 
       {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
-      {showBimVeiviser && <BimKalkyleVeiviserModal onClose={() => setShowBimVeiviser(false)} onComplete={async (data) => {
+      {showOpprettValg && <KalkOpprettValgModal
+        onClose={() => setShowOpprettValg(false)}
+        onVelgHurtigstart={() => { setShowOpprettValg(false); setShowHurtigstart(true) }}
+        onVelgTom={() => { setShowOpprettValg(false); setEditKalk(null); setShowEditor(true) }}
+      />}
+      {showHurtigstart && <KalkHurtigstartModal onClose={() => setShowHurtigstart(false)} onComplete={async (data) => {
         try {
           const { kalkyler: nyeKalkyler, faktorer } = byggKalkylerFraVeiviser(data)
           if (nyeKalkyler.length === 0) { alert('Ingen bygningsdeler valgt. Gå tilbake og velg minst en konstruksjon.'); return }
@@ -36530,15 +36676,16 @@ function KalkulasjonPage({ onNavigate }) {
           }
           const { data: created, error } = await supabase.from('calculations').insert(payload).select().single()
           if (error) throw error
-          setShowBimVeiviser(false)
+          setShowHurtigstart(false)
           await load()
           if (created) setViewKalk(created)
         } catch(e) {
           alert('Feil ved opprettelse: ' + e.message)
-          console.error('BIM-Kalkyle opprettelse feilet:', e)
+          console.error('Hurtigstart opprettelse feilet:', e)
         }
       }} />}
       {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
+      {showBimImport && <BimImportPlaceholderModal onClose={() => setShowBimImport(false)} />}
     </div>
   )
 }
