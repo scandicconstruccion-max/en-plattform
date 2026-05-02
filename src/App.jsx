@@ -35291,8 +35291,7 @@ function summerProsent(liste) {
   return Math.round(liste.reduce((s, v) => s + (v.prosent || 0), 0) * 10) / 10
 }
 
-function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
-  const [aktivKategori, setAktivKategori] = useState('yttervegg')
+function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKategori, setAktivKategori }) {
 
   // Skjul etasjeskille hvis kun 1 etasje
   const tilgjengeligeKategorier = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
@@ -36058,6 +36057,25 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
+  // Aktiv kategori i steg 3 — styres her slik at Neste/Tilbake kan navigere
+  // sekvensielt mellom kategoriene uten å forlate steg 3
+  const [aktivKategori, setAktivKategori] = useState('yttervegg')
+
+  // Ref til scroll-container slik at vi alltid kan scrolle til toppen
+  // når brukeren bytter steg eller kategori
+  const scrollContainerRef = React.useRef(null)
+  const scrollToTop = () => {
+    if (scrollContainerRef.current) scrollContainerRef.current.scrollTop = 0
+  }
+
+  // Hvilke kategorier er tilgjengelige i steg 3 (filtrert på etasjer osv.)
+  const tilgjengeligeKategorierISteg3 = () => {
+    return BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
+      if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+      return true
+    })
+  }
+
   // Validering per steg — bestemmer om "Neste"-knappen er aktiv
   // Steg 3 (Konstruksjoner) er bevisst myk: brukeren får ikke mas underveis,
   // men advares i steg 6 (Oppsummering) hvis obligatoriske kategorier mangler.
@@ -36105,13 +36123,65 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   const update = (key, value) => setVeiviserData(d => ({ ...d, [key]: value }))
   const updateKonstruksjon = (kategori, bdId) => setVeiviserData(d => ({ ...d, valgteKonstruksjoner: { ...d.valgteKonstruksjoner, [kategori]: bdId } }))
 
-  const naste = () => { if (steg < BIM_VEIVISER_STEG.length && kanGaaVidere()) setSteg(steg + 1) }
-  const tilbake = () => { if (steg > 1) setSteg(steg - 1) }
+  // Sekvensiell navigasjon:
+  // - I steg 3: Neste går til neste kategori-fane. Når man er på siste kategori
+  //   går Neste videre til steg 4. Tilbake går til forrige kategori, og fra
+  //   første kategori går Tilbake til steg 2.
+  // - I andre steg: Neste/Tilbake går mellom hovedstegene som før.
+  const naste = () => {
+    if (steg === 3) {
+      const kategorier = tilgjengeligeKategorierISteg3()
+      const idx = kategorier.findIndex(k => k.id === aktivKategori)
+      if (idx >= 0 && idx < kategorier.length - 1) {
+        // Gå til neste kategori innen steg 3
+        setAktivKategori(kategorier[idx + 1].id)
+        scrollToTop()
+        return
+      }
+      // På siste kategori — gå til steg 4
+      if (kanGaaVidere()) { setSteg(4); scrollToTop() }
+      return
+    }
+    if (steg < BIM_VEIVISER_STEG.length && kanGaaVidere()) {
+      setSteg(steg + 1)
+      scrollToTop()
+    }
+  }
+
+  const tilbake = () => {
+    if (steg === 3) {
+      const kategorier = tilgjengeligeKategorierISteg3()
+      const idx = kategorier.findIndex(k => k.id === aktivKategori)
+      if (idx > 0) {
+        // Gå til forrige kategori innen steg 3
+        setAktivKategori(kategorier[idx - 1].id)
+        scrollToTop()
+        return
+      }
+      // På første kategori — gå tilbake til steg 2
+      setSteg(2); scrollToTop()
+      return
+    }
+    if (steg > 1) { setSteg(steg - 1); scrollToTop() }
+  }
+
+  // Når brukeren går inn i steg 3 — start på første tilgjengelige kategori
+  // Dette håndterer også scenarioet der en bruker går tilbake fra steg 4 til steg 3:
+  // de skal lande på siste kategori, slik at Tilbake-flyten føles naturlig.
+  useEffect(() => {
+    if (steg === 3) {
+      const kategorier = tilgjengeligeKategorierISteg3()
+      if (kategorier.length > 0 && !kategorier.find(k => k.id === aktivKategori)) {
+        setAktivKategori(kategorier[0].id)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [steg])
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMob ? '8px' : '5vh 16px', overflowY:'auto' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1100px', maxHeight: isMob ? '95vh' : '92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1100px', maxHeight: isMob ? '95vh' : '90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Gradient header med fremgangsindikator */}
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: isMob ? '18px 18px 16px' : '22px 26px 20px', color:'white', position:'relative', flexShrink:0 }}>
@@ -36152,7 +36222,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
         </div>
 
         {/* Steg-innhold */}
-        <div style={{ flex:1, overflowY:'auto', padding: isMob ? '20px' : '28px 32px' }}>
+        <div ref={scrollContainerRef} style={{ flex:1, overflowY:'auto', padding: isMob ? '20px' : '28px 32px' }}>
           {steg === 1 && (
             <BimVeiviserSteg1 veiviserData={veiviserData} update={update} isMob={isMob} />
           )}
@@ -36162,7 +36232,13 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
           )}
 
           {steg === 3 && (
-            <BimVeiviserSteg3 veiviserData={veiviserData} updateKonstruksjon={updateKonstruksjon} isMob={isMob} />
+            <BimVeiviserSteg3
+              veiviserData={veiviserData}
+              updateKonstruksjon={updateKonstruksjon}
+              isMob={isMob}
+              aktivKategori={aktivKategori}
+              setAktivKategori={(id) => { setAktivKategori(id); scrollToTop() }}
+            />
           )}
 
           {steg === 4 && (
@@ -36178,7 +36254,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
               veiviserData={veiviserData}
               isMob={isMob}
               manglendeObligatoriske={manglendeObligatoriskeKonstruksjoner()}
-              onTilbakeTilKonstruksjoner={() => setSteg(3)}
+              onTilbakeTilKonstruksjoner={() => { setSteg(3); scrollToTop() }}
             />
           )}
         </div>
