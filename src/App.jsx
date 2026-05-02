@@ -34604,6 +34604,247 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   )
 }
 
+// ─── BIM-KALKYLE: MENGDEBEREGNING FRA YTTERMÅL ───────────────────────────────
+// Pure-funksjon som tar enkle inputs (lengde, bredde, etasjer, vinduer osv.)
+// og returnerer alle mengdene som skal inn i bygningsdelene i en kalkyle.
+// Brukes av veiviseren (Patch 3) og senere av IFC-import.
+
+// Standard erfaringstall for norsk boligbygging (TEK17 + tømrertariff)
+const BIM_DEFAULTS = {
+  etasjehoyde: 2.5,           // m brutto etasjehøyde (gulv-til-gulv)
+  takutspring: 0.5,           // m takutspring fra yttervegg
+  innervegg_per_m2_bra: 0.8,  // lm innervegg per m² BRA (norsk boligpraksis)
+  innervegg_hoyde: 2.4,       // m netto romhøyde
+  vindu_default_areal: 1.8,   // m² per vindu (typisk 1,2×1,5m)
+  dor_ytre_areal: 2.1,        // m² per ytterdør (0,9×2,1m)
+  dor_indre_areal: 1.7,       // m² per innerdør (0,8×2,1m)
+  vindu_default_antall_per_m2_bra: 0.10, // 1 vindu per 10 m² BRA (TEK17 lyskrav-estimat)
+  ytterdor_default: 1,        // 1 hovedytterdør per bolig
+  innerdor_per_rom: 1,        // 1 dør per rom
+  rom_per_m2_bra: 0.025,      // 1 rom per 40 m² BRA (estimat for boliger)
+}
+
+// Beregn antall åpningstillegg per tømrertariffen (samme regler som beregnBygningsdel)
+//   0,5–2,5 m² = 1 stk, 2,5–4,5 m² = 2 stk, 4,5–6,5 m² = 3 stk, >6,5 m² = 4 stk
+//   + 1 ekstra hvis bærende bindingsverk
+function bimAapningstilleggForAreal(areal, baerende = false) {
+  let n = 0
+  if (areal > 0.5 && areal <= 2.5) n = 1
+  else if (areal > 2.5 && areal <= 4.5) n = 2
+  else if (areal > 4.5 && areal <= 6.5) n = 3
+  else if (areal > 6.5) n = 4
+  if (baerende && n > 0) n += 1
+  return n
+}
+
+/**
+ * Beregner alle mengder for en boligkalkyle fra yttermål.
+ *
+ * @param {Object} input
+ * @param {number} input.lengde         - Yttermål lengde i meter (f.eks. 12)
+ * @param {number} input.bredde         - Yttermål bredde i meter (f.eks. 8)
+ * @param {number} input.etasjer        - Antall etasjer (1, 2, 3...)
+ * @param {number} [input.etasjehoyde]  - Brutto etasjehøyde i meter (default 2,5)
+ * @param {string} [input.taktype]      - 'flatt' | 'skraa' | 'pulttak' (default 'skraa')
+ * @param {number} [input.takvinkel]    - Takvinkel i grader for skråtak (default 30)
+ * @param {number} [input.antallVinduer]   - Antall vinduer (default: estimert fra BRA)
+ * @param {number} [input.vinduAreal]      - Gj.snitt-areal per vindu i m² (default 1,8)
+ * @param {number} [input.antallYtterdorer] - Antall ytterdører (default 1)
+ * @param {number} [input.antallInnerdorer] - Antall innerdører (default: estimert fra BRA)
+ * @param {boolean} [input.baerendeYttervegg] - Er yttervegg bærende? (default true)
+ * @param {boolean} [input.baerendeInnervegg] - Har bærende innervegger? (default false)
+ *
+ * @returns {Object} mengder
+ *   @returns {number} mengder.bra              - Bruksareal (BRA) i m²
+ *   @returns {number} mengder.bya              - Bebygd areal (BYA) i m²
+ *   @returns {number} mengder.omkrets          - Omkrets i lm
+ *   @returns {number} mengder.bruttoYtterveggAreal - Brutto yttervegg uten åpninger
+ *   @returns {number} mengder.nettoYtterveggAreal  - Yttervegg minus vinduer/dører
+ *   @returns {number} mengder.innerveggAreal   - Innervegg-areal i m²
+ *   @returns {number} mengder.innerveggLm      - Innervegg lengde i lm
+ *   @returns {number} mengder.takAreal         - Tak-areal i m² (med utspring + vinkelkomp.)
+ *   @returns {number} mengder.gulvAreal        - Gulv-areal totalt (alle etasjer)
+ *   @returns {number} mengder.etasjeskilleAreal - Etasjeskille-areal i m²
+ *   @returns {number} mengder.grunnmurAreal    - Grunnmur ringfundament i m²
+ *   @returns {number} mengder.fundamentLm      - Stripefundament i lm
+ *   @returns {Object} mengder.vinduer          - { antall, totalAreal, aapningstillegg }
+ *   @returns {Object} mengder.ytterdorer       - { antall, totalAreal, aapningstillegg }
+ *   @returns {Object} mengder.innerdorer       - { antall, totalAreal, aapningstillegg }
+ *   @returns {Object} mengder.input            - Inputs som ble brukt (for sporbarhet)
+ */
+function beregnMengderFraMaal(input) {
+  // ── Inputs med defaults ──────────────────────────────────────────────────
+  const lengde = parseFloat(input.lengde) || 0
+  const bredde = parseFloat(input.bredde) || 0
+  const etasjer = parseInt(input.etasjer) || 1
+  const etasjehoyde = parseFloat(input.etasjehoyde) || BIM_DEFAULTS.etasjehoyde
+  const taktype = input.taktype || 'skraa'
+  const takvinkel = parseFloat(input.takvinkel) || 30
+  const baerendeYV = input.baerendeYttervegg !== false // default true
+  const baerendeIV = input.baerendeInnervegg === true  // default false
+
+  // ── Grunnberegninger ─────────────────────────────────────────────────────
+  const bya = lengde * bredde                     // bebygd areal (én etasje)
+  const bra = bya * etasjer                        // bruksareal totalt
+  const omkrets = 2 * (lengde + bredde)
+  const totalveghoyde = etasjehoyde * etasjer
+
+  // ── Yttervegg ────────────────────────────────────────────────────────────
+  const bruttoYtterveggAreal = omkrets * totalveghoyde
+
+  // Vinduer
+  const antallVinduer = parseInt(input.antallVinduer) >= 0
+    ? parseInt(input.antallVinduer)
+    : Math.round(bra * BIM_DEFAULTS.vindu_default_antall_per_m2_bra)
+  const vinduAreal = parseFloat(input.vinduAreal) || BIM_DEFAULTS.vindu_default_areal
+  const totalVinduAreal = antallVinduer * vinduAreal
+  const vinduAapningstillegg = antallVinduer * bimAapningstilleggForAreal(vinduAreal, baerendeYV)
+
+  // Ytterdører
+  const antallYtterdorer = parseInt(input.antallYtterdorer) >= 0
+    ? parseInt(input.antallYtterdorer)
+    : BIM_DEFAULTS.ytterdor_default
+  const totalYtterdorAreal = antallYtterdorer * BIM_DEFAULTS.dor_ytre_areal
+  const ytterdorAapningstillegg = antallYtterdorer * bimAapningstilleggForAreal(BIM_DEFAULTS.dor_ytre_areal, baerendeYV)
+
+  const nettoYtterveggAreal = Math.max(0, bruttoYtterveggAreal - totalVinduAreal - totalYtterdorAreal)
+
+  // ── Innervegg (estimat fra BRA) ──────────────────────────────────────────
+  const innerveggLm = bra * BIM_DEFAULTS.innervegg_per_m2_bra
+  const innerveggAreal = innerveggLm * BIM_DEFAULTS.innervegg_hoyde
+
+  // Innerdører
+  const antallInnerdorer = parseInt(input.antallInnerdorer) >= 0
+    ? parseInt(input.antallInnerdorer)
+    : Math.max(1, Math.round(bra * BIM_DEFAULTS.rom_per_m2_bra * BIM_DEFAULTS.innerdor_per_rom))
+  const totalInnerdorAreal = antallInnerdorer * BIM_DEFAULTS.dor_indre_areal
+  const innerdorAapningstillegg = antallInnerdorer * bimAapningstilleggForAreal(BIM_DEFAULTS.dor_indre_areal, baerendeIV)
+
+  // ── Tak ──────────────────────────────────────────────────────────────────
+  // For skråtak: takflate-areal = grunnflate / cos(vinkel) + utspring på alle sider
+  let takAreal
+  if (taktype === 'flatt') {
+    takAreal = (lengde + 2 * BIM_DEFAULTS.takutspring) * (bredde + 2 * BIM_DEFAULTS.takutspring)
+  } else if (taktype === 'pulttak') {
+    const radians = (takvinkel * Math.PI) / 180
+    takAreal = ((lengde + 2 * BIM_DEFAULTS.takutspring) * (bredde + 2 * BIM_DEFAULTS.takutspring)) / Math.cos(radians)
+  } else {
+    // Skråtak (saltak) — grunnflate inkl. utspring delt på cos(vinkel)
+    const radians = (takvinkel * Math.PI) / 180
+    takAreal = ((lengde + 2 * BIM_DEFAULTS.takutspring) * (bredde + 2 * BIM_DEFAULTS.takutspring)) / Math.cos(radians)
+  }
+
+  // ── Gulv og etasjeskille ─────────────────────────────────────────────────
+  const gulvAreal = bra
+  const etasjeskilleAreal = bya * Math.max(0, etasjer - 1)
+
+  // ── Grunnmur og fundament ────────────────────────────────────────────────
+  const grunnmurAreal = bya               // plate på mark = BYA
+  const fundamentLm = omkrets             // stripefundament i lm rundt huset
+
+  return {
+    // Hovedtall
+    bra: Math.round(bra * 10) / 10,
+    bya: Math.round(bya * 10) / 10,
+    omkrets: Math.round(omkrets * 10) / 10,
+    totalveghoyde: Math.round(totalveghoyde * 10) / 10,
+    // Yttervegg
+    bruttoYtterveggAreal: Math.round(bruttoYtterveggAreal * 10) / 10,
+    nettoYtterveggAreal: Math.round(nettoYtterveggAreal * 10) / 10,
+    // Innervegg
+    innerveggAreal: Math.round(innerveggAreal * 10) / 10,
+    innerveggLm: Math.round(innerveggLm * 10) / 10,
+    // Tak/gulv/etasjeskille
+    takAreal: Math.round(takAreal * 10) / 10,
+    gulvAreal: Math.round(gulvAreal * 10) / 10,
+    etasjeskilleAreal: Math.round(etasjeskilleAreal * 10) / 10,
+    // Grunnmur
+    grunnmurAreal: Math.round(grunnmurAreal * 10) / 10,
+    fundamentLm: Math.round(fundamentLm * 10) / 10,
+    // Åpninger
+    vinduer: {
+      antall: antallVinduer,
+      arealPerStk: vinduAreal,
+      totalAreal: Math.round(totalVinduAreal * 10) / 10,
+      aapningstillegg: vinduAapningstillegg,
+    },
+    ytterdorer: {
+      antall: antallYtterdorer,
+      arealPerStk: BIM_DEFAULTS.dor_ytre_areal,
+      totalAreal: Math.round(totalYtterdorAreal * 10) / 10,
+      aapningstillegg: ytterdorAapningstillegg,
+    },
+    innerdorer: {
+      antall: antallInnerdorer,
+      arealPerStk: BIM_DEFAULTS.dor_indre_areal,
+      totalAreal: Math.round(totalInnerdorAreal * 10) / 10,
+      aapningstillegg: innerdorAapningstillegg,
+    },
+    // Input som ble brukt (sporbarhet for brukeren)
+    input: { lengde, bredde, etasjer, etasjehoyde, taktype, takvinkel, baerendeYttervegg: baerendeYV, baerendeInnervegg: baerendeIV },
+  }
+}
+
+// ─── BIM-KALKYLE: TEKNISKE FAG SOM RUNDSUM ───────────────────────────────────
+// Erfaringstall fra norsk boligbygging — justerbart i veiviseren senere
+
+const BIM_TEKNISK_RUNDSUM = {
+  // VVS — fast pris per bad/kjøkken (eks. mva)
+  vvs_bad_standard: 65000,        // bad m/dusj, servant, toalett
+  vvs_bad_med_badekar: 85000,     // bad m/badekar i tillegg
+  vvs_kjokken: 35000,             // kjøkkenrørlegging
+  vvs_vaskerom: 18000,            // vaskerom m/sluk og kran
+  // Elektro — kr per m² BRA
+  elektro_standard_per_m2: 850,   // standard installasjon
+  elektro_utvidet_per_m2: 1200,   // smarthus / mange punkter
+  // Ventilasjon — kr per m² BRA
+  ventilasjon_balansert_per_m2: 1500, // balansert vent. m/varmegjenvinning
+  ventilasjon_avtrekk_per_m2: 600,    // enkelt avtrekk
+}
+
+/**
+ * Beregner rundsum for tekniske fag basert på BRA og enkle inputs.
+ * Brukes i veiviseren steg 4 — gir raskt et fornuftig estimat.
+ */
+function beregnTekniskRundsum(input) {
+  const bra = parseFloat(input.bra) || 0
+  const antallBad = parseInt(input.antallBad) || 0
+  const antallBadMedBadekar = parseInt(input.antallBadMedBadekar) || 0
+  const antallKjokken = parseInt(input.antallKjokken) || 1
+  const antallVaskerom = parseInt(input.antallVaskerom) || 0
+  const elektroNiva = input.elektroNiva || 'standard'    // 'standard' | 'utvidet'
+  const ventilasjonType = input.ventilasjonType || 'balansert' // 'balansert' | 'avtrekk' | 'ingen'
+
+  const vvs = (antallBad * BIM_TEKNISK_RUNDSUM.vvs_bad_standard)
+            + (antallBadMedBadekar * BIM_TEKNISK_RUNDSUM.vvs_bad_med_badekar)
+            + (antallKjokken * BIM_TEKNISK_RUNDSUM.vvs_kjokken)
+            + (antallVaskerom * BIM_TEKNISK_RUNDSUM.vvs_vaskerom)
+
+  const elektroSats = elektroNiva === 'utvidet'
+    ? BIM_TEKNISK_RUNDSUM.elektro_utvidet_per_m2
+    : BIM_TEKNISK_RUNDSUM.elektro_standard_per_m2
+  const elektro = bra * elektroSats
+
+  let ventilasjon = 0
+  if (ventilasjonType === 'balansert') ventilasjon = bra * BIM_TEKNISK_RUNDSUM.ventilasjon_balansert_per_m2
+  else if (ventilasjonType === 'avtrekk') ventilasjon = bra * BIM_TEKNISK_RUNDSUM.ventilasjon_avtrekk_per_m2
+
+  return {
+    vvs: Math.round(vvs),
+    elektro: Math.round(elektro),
+    ventilasjon: Math.round(ventilasjon),
+    total: Math.round(vvs + elektro + ventilasjon),
+    detaljer: {
+      vvs_bad: antallBad * BIM_TEKNISK_RUNDSUM.vvs_bad_standard,
+      vvs_bad_badekar: antallBadMedBadekar * BIM_TEKNISK_RUNDSUM.vvs_bad_med_badekar,
+      vvs_kjokken: antallKjokken * BIM_TEKNISK_RUNDSUM.vvs_kjokken,
+      vvs_vaskerom: antallVaskerom * BIM_TEKNISK_RUNDSUM.vvs_vaskerom,
+      elektro_sats: elektroSats,
+      ventilasjon_type: ventilasjonType,
+    },
+  }
+}
+
 // ─── BEREGNINGSMOTOR ─────────────────────────────────────────────────────────
 // Basert på Proresult-logikk: grunntid × justering = faktisk tid, timekostnad inkl. sosiale/faste
 
