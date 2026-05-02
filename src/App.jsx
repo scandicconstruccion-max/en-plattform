@@ -34845,6 +34845,246 @@ function beregnTekniskRundsum(input) {
   }
 }
 
+// ─── BIM-KALKYLE VEISIVER-MODAL ──────────────────────────────────────────────
+// 5-stegs veiviser: Bygningstype → Yttermål → Konstruksjoner → Tekniske fag → Oppsummering
+// Patch 3a: Skjelett med navigasjon. Patch 3b/3c fyller inn innholdet.
+
+const BIM_VEIVISER_STEG = [
+  { nr: 1, label: 'Bygningstype', icon: '🏠' },
+  { nr: 2, label: 'Yttermål', icon: '📏' },
+  { nr: 3, label: 'Konstruksjoner', icon: '🧱' },
+  { nr: 4, label: 'Tekniske fag', icon: '🔧' },
+  { nr: 5, label: 'Oppsummering', icon: '✅' },
+]
+
+function BimKalkyleVeiviserModal({ onClose, onComplete }) {
+  const [steg, setSteg] = useState(1)
+  const [veiviserData, setVeiviserData] = useState({
+    // Steg 1: Bygningstype
+    bygningstype: null,         // 'enebolig' | 'tomannsbolig' | 'hytte' | 'garasje' | 'tilbygg'
+    // Steg 2: Yttermål
+    lengde: '',
+    bredde: '',
+    etasjer: 1,
+    etasjehoyde: 2.5,
+    taktype: 'skraa',
+    takvinkel: 30,
+    antallVinduer: '',
+    antallYtterdorer: 1,
+    // Steg 3: Konstruksjonsvalg (bibliotek-IDer)
+    valgteKonstruksjoner: {
+      yttervegg: null,
+      innervegg: null,
+      tak: null,
+      gulv: null,
+      grunnmur: null,
+      etasjeskille: null,
+    },
+    // Steg 4: Tekniske fag
+    antallBad: 1,
+    antallBadMedBadekar: 0,
+    antallKjokken: 1,
+    antallVaskerom: 0,
+    elektroNiva: 'standard',
+    ventilasjonType: 'balansert',
+    // Beregnede mengder (oppdateres i steg 2)
+    mengder: null,
+    teknisk: null,
+  })
+
+  const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setIsMob(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  // Validering per steg — bestemmer om "Neste"-knappen er aktiv
+  const kanGaaVidere = () => {
+    if (steg === 1) return !!veiviserData.bygningstype
+    if (steg === 2) return parseFloat(veiviserData.lengde) > 0 && parseFloat(veiviserData.bredde) > 0 && parseInt(veiviserData.etasjer) > 0
+    if (steg === 3) {
+      // Minimum: yttervegg + tak + gulv valgt
+      const v = veiviserData.valgteKonstruksjoner
+      return !!v.yttervegg && !!v.tak && !!v.gulv
+    }
+    if (steg === 4) return true // alle defaults er gyldige
+    return true
+  }
+
+  const update = (key, value) => setVeiviserData(d => ({ ...d, [key]: value }))
+  const updateKonstruksjon = (kategori, bdId) => setVeiviserData(d => ({ ...d, valgteKonstruksjoner: { ...d.valgteKonstruksjoner, [kategori]: bdId } }))
+
+  const naste = () => { if (steg < 5 && kanGaaVidere()) setSteg(steg + 1) }
+  const tilbake = () => { if (steg > 1) setSteg(steg - 1) }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'780px', maxHeight: isMob ? '95vh' : '85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+
+        {/* Gradient header med fremgangsindikator */}
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: isMob ? '18px 18px 16px' : '22px 26px 20px', color:'white', position:'relative', flexShrink:0 }}>
+          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom: isMob ? '12px' : '16px' }}>
+            <div style={{ fontSize: isMob ? '24px' : '28px' }}>📐</div>
+            <div>
+              <h2 style={{ margin:0, fontSize: isMob ? '17px' : '20px', fontWeight:'800' }}>BIM-Kalkyle</h2>
+              <p style={{ margin:'2px 0 0', fontSize: isMob ? '11px' : '12px', opacity:0.95 }}>Fra tegning til tilbud på minutter</p>
+            </div>
+          </div>
+
+          {/* Fremgangsindikator */}
+          <div style={{ display:'flex', gap: isMob ? '4px' : '6px', alignItems:'center' }}>
+            {BIM_VEIVISER_STEG.map((s, i) => (
+              <React.Fragment key={s.nr}>
+                <div style={{
+                  display:'flex', alignItems:'center', gap:'6px',
+                  flex: steg === s.nr ? 1 : '0 0 auto',
+                  padding: isMob ? '6px 8px' : '6px 12px',
+                  background: steg === s.nr ? 'rgba(255,255,255,0.25)' : steg > s.nr ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.05)',
+                  borderRadius:'20px',
+                  fontSize: isMob ? '10px' : '12px',
+                  fontWeight: steg === s.nr ? '700' : '500',
+                  opacity: steg < s.nr ? 0.6 : 1,
+                  transition: 'all 0.2s',
+                  whiteSpace:'nowrap',
+                }}>
+                  <span>{steg > s.nr ? '✓' : s.icon}</span>
+                  {(steg === s.nr || !isMob) && <span>{s.label}</span>}
+                </div>
+                {i < BIM_VEIVISER_STEG.length - 1 && !isMob && (
+                  <div style={{ flex:'0 0 auto', height:'1px', width:'8px', background:'rgba(255,255,255,0.3)' }} />
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        {/* Steg-innhold */}
+        <div style={{ flex:1, overflowY:'auto', padding: isMob ? '20px' : '28px 32px' }}>
+          {steg === 1 && (
+            <div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Hva slags bygg skal du kalkulere?</h3>
+              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg type — dette tilpasser veiviseren videre.</p>
+              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
+                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
+                <strong>Steg 1: Bygningstype</strong>
+                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Visuelle valg-kort kommer i Patch 3b.</p>
+                <p style={{ margin:'12px 0 0', fontSize:'12px' }}>For å teste videre, klikk en av disse:</p>
+                <div style={{ display:'flex', gap:'8px', justifyContent:'center', marginTop:'10px', flexWrap:'wrap' }}>
+                  {['enebolig','tomannsbolig','hytte','garasje','tilbygg'].map(t => (
+                    <button key={t} onClick={() => update('bygningstype', t)}
+                      style={{ padding:'8px 14px', borderRadius:'8px', border: veiviserData.bygningstype === t ? '2px solid #059669' : '1px solid #fcd34d', background: veiviserData.bygningstype === t ? '#ecfdf5' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: veiviserData.bygningstype === t ? '#065f46' : '#92400e' }}>
+                      {veiviserData.bygningstype === t ? '✓ ' : ''}{t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {steg === 2 && (
+            <div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tast inn yttermål</h3>
+              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Lengde, bredde, etasjer og taktype — så regner vi ut alle mengdene.</p>
+              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
+                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
+                <strong>Steg 2: Yttermål</strong>
+                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Mål-input med live mengdeberegning kommer i Patch 3b.</p>
+                <p style={{ margin:'12px 0 0', fontSize:'12px' }}>For å teste videre — bruk testdata:</p>
+                <button onClick={() => {
+                  update('lengde', 12); update('bredde', 8); update('etasjer', 2)
+                  const m = beregnMengderFraMaal({ lengde: 12, bredde: 8, etasjer: 2, taktype: 'skraa', takvinkel: 30 })
+                  update('mengder', m)
+                }} style={{ marginTop:'10px', padding:'10px 18px', borderRadius:'8px', border:'2px solid #059669', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#065f46' }}>
+                  Bruk testdata: 12×8m, 2 etasjer
+                </button>
+                {veiviserData.mengder && (
+                  <div style={{ marginTop:'14px', padding:'12px', background:'white', borderRadius:'8px', textAlign:'left', fontSize:'12px', color:'#0f172a' }}>
+                    <strong>Beregnet:</strong> BRA {veiviserData.mengder.bra} m² · Yttervegg {veiviserData.mengder.nettoYtterveggAreal} m² · Tak {veiviserData.mengder.takAreal} m² · {veiviserData.mengder.vinduer.antall} vinduer
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {steg === 3 && (
+            <div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Velg konstruksjonstyper</h3>
+              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg yttervegg, innervegg, tak og gulv fra konstruksjonsbiblioteket.</p>
+              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
+                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
+                <strong>Steg 3: Konstruksjoner</strong>
+                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Visuelle bibliotek-kort kommer i Patch 3c.</p>
+                <p style={{ margin:'12px 0 0', fontSize:'12px' }}>For å teste videre — placeholder-valg:</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginTop:'10px', maxWidth:'320px', margin:'10px auto 0' }}>
+                  {['yttervegg','innervegg','tak','gulv','grunnmur'].map(k => (
+                    <button key={k} onClick={() => updateKonstruksjon(k, `placeholder_${k}`)}
+                      style={{ padding:'8px 14px', borderRadius:'8px', border: veiviserData.valgteKonstruksjoner[k] ? '2px solid #059669' : '1px solid #fcd34d', background: veiviserData.valgteKonstruksjoner[k] ? '#ecfdf5' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: veiviserData.valgteKonstruksjoner[k] ? '#065f46' : '#92400e', textAlign:'left' }}>
+                      {veiviserData.valgteKonstruksjoner[k] ? '✓ ' : ''}{k}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {steg === 4 && (
+            <div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tekniske fag</h3>
+              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>VVS, elektro og ventilasjon — som rundsum basert på erfaringstall.</p>
+              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
+                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
+                <strong>Steg 4: Tekniske fag</strong>
+                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Inputfelter for bad/kjøkken/elektro/ventilasjon kommer i Patch 3c.</p>
+              </div>
+            </div>
+          )}
+
+          {steg === 5 && (
+            <div>
+              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Oppsummering og opprett kalkyle</h3>
+              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Forhåndsvis bygningsdeler og kostnadsestimat før du oppretter kalkylen.</p>
+              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
+                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
+                <strong>Steg 5: Oppsummering</strong>
+                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Forhåndsvisning + opprett-knapp kommer i Patch 3c.</p>
+                <div style={{ marginTop:'14px', padding:'12px', background:'white', borderRadius:'8px', textAlign:'left', fontSize:'11px', color:'#475569', fontFamily:'monospace' }}>
+                  <strong>veiviserData (debug):</strong>
+                  <pre style={{ margin:'4px 0 0', fontSize:'10px', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{JSON.stringify({ bygningstype: veiviserData.bygningstype, lengde: veiviserData.lengde, bredde: veiviserData.bredde, etasjer: veiviserData.etasjer, valgteKonstruksjoner: veiviserData.valgteKonstruksjoner }, null, 2)}</pre>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Nederst: Tilbake / Neste / Opprett */}
+        <div style={{ borderTop:'1px solid #f1f5f9', padding: isMob ? '14px 18px' : '16px 26px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px', flexShrink:0, background:'#fafbfc' }}>
+          <button onClick={steg === 1 ? onClose : tilbake}
+            style={{ padding: isMob ? '10px 14px' : '11px 20px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'600' }}>
+            {steg === 1 ? 'Avbryt' : '← Tilbake'}
+          </button>
+          <div style={{ fontSize: isMob ? '11px' : '12px', color:'#94a3b8', fontWeight:'500' }}>
+            Steg {steg} av {BIM_VEIVISER_STEG.length}
+          </div>
+          {steg < 5 ? (
+            <button onClick={naste} disabled={!kanGaaVidere()}
+              style={{ padding: isMob ? '10px 16px' : '11px 22px', background: kanGaaVidere() ? 'linear-gradient(135deg, #8b5cf6, #3b82f6)' : '#e2e8f0', color: kanGaaVidere() ? 'white' : '#94a3b8', border:'none', borderRadius:'10px', cursor: kanGaaVidere() ? 'pointer' : 'not-allowed', fontSize: isMob ? '12px' : '13px', fontWeight:'700', boxShadow: kanGaaVidere() ? '0 4px 12px rgba(139,92,246,0.3)' : 'none' }}>
+              Neste →
+            </button>
+          ) : (
+            <button onClick={() => { if (onComplete) onComplete(veiviserData); onClose() }} disabled
+              style={{ padding: isMob ? '10px 16px' : '11px 22px', background:'#e2e8f0', color:'#94a3b8', border:'none', borderRadius:'10px', cursor:'not-allowed', fontSize: isMob ? '12px' : '13px', fontWeight:'700' }}>
+              Opprett kalkyle (Patch 3c)
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── BEREGNINGSMOTOR ─────────────────────────────────────────────────────────
 // Basert på Proresult-logikk: grunntid × justering = faktisk tid, timekostnad inkl. sosiale/faste
 
@@ -35025,6 +35265,19 @@ function KalkulasjonPage({ onNavigate }) {
   const [compareIds, setCompareIds] = useState([])
   const [showCompare, setShowCompare] = useState(false)
   const [expandedCompareFag, setExpandedCompareFag] = useState(new Set())
+  // BIM-Kalkyle: veiviser og upsell
+  const [showBimVeiviser, setShowBimVeiviser] = useState(false)
+  const [showBimUpsell, setShowBimUpsell] = useState(false)
+  const [bimActiveModules, setBimActiveModules] = useState([])
+  useEffect(() => {
+    supabase.from('company_settings').select('active_modules').limit(1).single()
+      .then(({ data }) => setBimActiveModules(data?.active_modules || []))
+      .catch(() => {})
+  }, [])
+  const handleBimKalkyleClick = () => {
+    if (hasBimKalkyle(bimActiveModules)) setShowBimVeiviser(true)
+    else setShowBimUpsell(true)
+  }
 
   const load = async () => {
     try {
@@ -35385,6 +35638,11 @@ function KalkulasjonPage({ onNavigate }) {
                 🗂️ Mal ({templates.length})
               </button>
             )}
+            <button onClick={handleBimKalkyleClick}
+              style={{ background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '9px 12px' : '11px 18px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', boxShadow:'0 4px 12px rgba(139,92,246,0.25)', display:'flex', alignItems:'center', gap:'6px' }}
+              title="Start ny kalkyle fra yttermål eller tegning">
+              📐 {isMobK ? 'BIM' : 'BIM-Kalkyle'}
+            </button>
             <button onClick={() => { setEditKalk(null); setShowEditor(true) }}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '9px 12px' : '11px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
               {isMobK ? '+ Ny kalkyle' : '+ Nytt kalkulasjonsprosjekt'}
@@ -35556,6 +35814,8 @@ function KalkulasjonPage({ onNavigate }) {
       )}
 
       {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
+      {showBimVeiviser && <BimKalkyleVeiviserModal onClose={() => setShowBimVeiviser(false)} onComplete={(data) => { console.log('BIM-Kalkyle veiviser fullført:', data); setShowBimVeiviser(false) }} />}
+      {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
     </div>
   )
 }
