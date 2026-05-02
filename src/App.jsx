@@ -36111,7 +36111,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'780px', maxHeight: isMob ? '95vh' : '85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1100px', maxHeight: isMob ? '95vh' : '92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Gradient header med fremgangsindikator */}
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: isMob ? '18px 18px 16px' : '22px 26px 20px', color:'white', position:'relative', flexShrink:0 }}>
@@ -36260,7 +36260,6 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
               }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,92,246,0.2)' }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#c4b5fd'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.1)' }}>
-              <div style={{ position:'absolute', top:'12px', right:'12px', background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'12px', letterSpacing:'0.3px' }}>ANBEFALT</div>
               <div style={{ fontSize:'36px', marginBottom:'10px' }}>✨</div>
               <h3 style={{ margin:'0 0 6px', fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Hurtigstart</h3>
               <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#475569', lineHeight:1.5 }}>
