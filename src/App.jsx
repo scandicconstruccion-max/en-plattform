@@ -35966,11 +35966,11 @@ function BimVeiviserSteg6Oppsummering({ veiviserData, isMob, manglendeObligatori
         {/* Høyre: Total + opprett-info */}
         <div>
           <div style={{ background:'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)', borderRadius:'14px', padding:'18px', border:'1px solid #a7f3d0', position: isMob ? 'static' : 'sticky', top:0 }}>
-            <div style={{ fontSize:'11px', fontWeight:'700', color:'#065f46', textTransform:'uppercase', marginBottom:'8px' }}>Estimat totalt</div>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#065f46', textTransform:'uppercase', marginBottom:'8px' }}>Foreløpig estimat (selvkost)</div>
             <div style={{ fontSize:'28px', fontWeight:'800', color:'#065f46', marginBottom:'4px' }}>
               {Math.round(totalEstimat).toLocaleString('nb-NO')} kr
             </div>
-            <div style={{ fontSize:'11px', color:'#047857', marginBottom:'14px' }}>eks. mva, før påslag og fortjeneste</div>
+            <div style={{ fontSize:'11px', color:'#047857', marginBottom:'14px' }}>Grov-beregning. Endelig tall ses i kalkylen etter opprettelse.</div>
 
             <div style={{ background:'white', borderRadius:'10px', padding:'10px 12px', fontSize:'12px', marginBottom:'12px' }}>
               <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
@@ -35991,6 +35991,23 @@ function BimVeiviserSteg6Oppsummering({ veiviserData, isMob, manglendeObligatori
 
             <p style={{ margin:0, fontSize:'11px', color:'#065f46', lineHeight:1.5 }}>
               ℹ️ Klikk <strong>"Opprett kalkyle"</strong> nederst for å lagre alt i en ny kalkyle. Du kan da justere mengder, priser og legge til mer.
+            </p>
+          </div>
+
+          {/* Infoboks: forklarer at bedriftens egne faktorer brukes */}
+          <div style={{ marginTop:'12px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'12px 14px', fontSize:'12px', color:'#1e40af', lineHeight:1.5 }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', marginBottom:'6px' }}>
+              <span style={{ fontSize:'14px', flexShrink:0 }}>⚙️</span>
+              <strong>Beregningsgrunnlag</strong>
+            </div>
+            <p style={{ margin:'0 0 6px', paddingLeft:'22px' }}>
+              Kalkylen bruker <strong>din bedrifts kalkulasjonsfaktorer</strong> per fag (timelønn, sosiale, faste, fortjeneste, justering). Disse settes på Faktorer-siden.
+            </p>
+            <p style={{ margin:'0 0 6px', paddingLeft:'22px' }}>
+              Materialpriser hentes fra valgt 5001-prisliste hvis aktivert, ellers fra biblioteket.
+            </p>
+            <p style={{ margin:0, paddingLeft:'22px', fontSize:'11px', color:'#3730a3', fontStyle:'italic' }}>
+              Tallet over er en grov-beregning uten påslag. Etter opprettelse ser du endelig tilbudssum med dine faktorer.
             </p>
           </div>
         </div>
@@ -36181,7 +36198,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMob ? '8px' : '5vh 16px', overflowY:'auto' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1100px', maxHeight: isMob ? '95vh' : '90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1280px', maxHeight: isMob ? '95vh' : '93vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Gradient header med fremgangsindikator */}
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: isMob ? '18px 18px 16px' : '22px 26px 20px', color:'white', position:'relative', flexShrink:0 }}>
@@ -37170,7 +37187,14 @@ function KalkulasjonPage({ onNavigate }) {
       />}
       {showHurtigstart && <KalkHurtigstartModal onClose={() => setShowHurtigstart(false)} onComplete={async (data) => {
         try {
-          const { kalkyler: nyeKalkyler, faktorer } = byggKalkylerFraVeiviser(data)
+          // Hent bedriftens lagrede faktorer (matcher hvordan KalkProsjektEditor gjør det)
+          let bedriftFaktorer = {}
+          try {
+            const { data: cs } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+            bedriftFaktorer = cs?.kalk_faktorer || {}
+          } catch(e) { /* OK at den feiler — vi faller tilbake til defaults */ }
+
+          const { kalkyler: nyeKalkyler, faktorer } = byggKalkylerFraVeiviser(data, bedriftFaktorer)
           if (nyeKalkyler.length === 0) {
             await appAlert({ message: 'Ingen bygningsdeler valgt', subMessage: 'Gå tilbake til Konstruksjoner og velg minst én bygningsdel.', kind: 'warning' })
             return
@@ -38241,7 +38265,7 @@ function bibliotekTilBygningsdel(bd, mengde) {
 // ─── BIM-KALKYLE: BYGG KALKYLE FRA VEIVISER-DATA ─────────────────────────────
 // Tar inn veiviserData (bygningstype, mengder, valgte konstruksjoner, tekniske fag)
 // og returnerer en komplett payload som kan settes inn i calculations-tabellen.
-function byggKalkylerFraVeiviser(veiviserData) {
+function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
   const mengder = veiviserData.mengder
   if (!mengder) return { kalkyler: [], faktorer: {} }
 
@@ -38399,9 +38423,13 @@ function byggKalkylerFraVeiviser(veiviserData) {
     })
   }
 
-  // Default faktorer per fag
+  // Faktorer per fag — foretrekk bedriftens lagrede faktorer hvis tilgjengelig,
+  // ellers fall tilbake til system-defaults. Dette matcher hvordan
+  // KalkProsjektEditor.handleSave() henter fra company_settings.kalk_faktorer.
   const faktorer = {}
-  kalkyler.forEach(kl => { faktorer[kl.fag] = getDefaultFaktorer(kl.fag) })
+  kalkyler.forEach(kl => {
+    faktorer[kl.fag] = (bedriftFaktorer && bedriftFaktorer[kl.fag]) || getDefaultFaktorer(kl.fag)
+  })
 
   return { kalkyler, faktorer }
 }
