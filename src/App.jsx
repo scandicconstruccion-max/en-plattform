@@ -35332,7 +35332,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
   return (
     <div>
       <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Velg konstruksjonstyper</h3>
-      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg én konstruksjon per kategori. Yttervegg, tak og gulv er obligatorisk. Innervegg kan deles på flere typer.</p>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Bla gjennom kategoriene og velg konstruksjoner som passer prosjektet. Du kan hoppe over kategorier — vi minner deg om eventuelle manglende valg på slutten.</p>
 
       {/* Kategori-tabber */}
       <div style={{ display:'flex', gap:'6px', overflowX:'auto', marginBottom:'16px', paddingBottom:'4px', borderBottom:'1px solid #f1f5f9' }}>
@@ -35360,7 +35360,6 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
               }}>
               <span>{k.icon}</span>
               <span>{k.label}</span>
-              {k.obligatorisk && !erValgt && <span style={{ color: erAktiv ? '#fbbf24' : '#dc2626', fontSize:'10px' }}>*</span>}
               {k.anbefalt && !erValgt && !erAktiv && <span style={{ background:'#fef3c7', color:'#92400e', fontSize:'9px', padding:'1px 5px', borderRadius:'4px', fontWeight:'700' }}>Anbefalt</span>}
               {erValgt && antall > 1 && <span style={{ background: erAktiv ? 'rgba(255,255,255,0.3)' : '#a7f3d0', color: erAktiv ? 'white' : '#065f46', fontSize:'10px', padding:'1px 6px', borderRadius:'10px', fontWeight:'700' }}>{antall}</span>}
               {erValgt && antall <= 1 && <span style={{ fontSize:'10px' }}>✓</span>}
@@ -35374,7 +35373,6 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'10px', flexWrap:'wrap', gap:'8px' }}>
           <h4 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
             {aktivKat?.icon} Velg {aktivKat?.label.toLowerCase()}
-            {aktivKat?.obligatorisk && <span style={{ color:'#dc2626', marginLeft:'6px' }}>*</span>}
             {aktivKat && aktivMengde > 0 && (aktivKat.id === 'vinduer' || aktivKat.id === 'ytterdorer' || aktivKat.id === 'innerdorer' || aktivKat.id === 'innvendig_trapp') && (
               <span style={{ marginLeft:'8px', fontSize:'12px', fontWeight:'500', color:'#64748b' }}>
                 ({aktivMengde} stk{aktivKat.id === 'innvendig_trapp' ? ' (default)' : ' fra steg 2'})
@@ -35484,11 +35482,11 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
           {tilgjengeligeKategorier.map(k => {
             const verdi = veiviserData.valgteKonstruksjoner[k.id]
             const har = !!verdi && (erMultiVerdi(verdi) ? verdi.length > 0 : true)
-            const statusBg = har ? '#ecfdf5' : k.obligatorisk ? '#fef3c7' : '#f1f5f9'
-            const statusColor = har ? '#065f46' : k.obligatorisk ? '#92400e' : '#64748b'
+            const statusBg = har ? '#ecfdf5' : '#f1f5f9'
+            const statusColor = har ? '#065f46' : '#94a3b8'
             let statusText
             if (!har) {
-              statusText = k.obligatorisk ? 'Mangler' : 'Hopp over'
+              statusText = '—'
             } else if (erMultiVerdi(verdi)) {
               statusText = `${verdi.length} valgt`
             } else {
@@ -35800,7 +35798,7 @@ function BimVeiviserSteg5Prosjektinfo({ veiviserData, update, isMob }) {
 }
 
 // ─── STEG 6: OPPSUMMERING OG OPPRETT KALKYLE ─────────────────────────────────
-function BimVeiviserSteg6Oppsummering({ veiviserData, isMob }) {
+function BimVeiviserSteg6Oppsummering({ veiviserData, isMob, manglendeObligatoriske = [], onTilbakeTilKonstruksjoner }) {
   // Bygg liste over alle bygningsdeler som vil bli opprettet (støtter multi-select)
   const bygningsdelerForhandsvisning = React.useMemo(() => {
     if (!veiviserData.mengder) return []
@@ -35853,6 +35851,29 @@ function BimVeiviserSteg6Oppsummering({ veiviserData, isMob }) {
     <div>
       <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Oppsummering</h3>
       <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Bekreft at alt ser riktig ut før du oppretter kalkylen. Du kan justere alt etterpå.</p>
+
+      {/* Advarsel om manglende obligatoriske konstruksjoner — kun vises i steg 6 */}
+      {manglendeObligatoriske.length > 0 && (
+        <div style={{ background:'#fef3c7', border:'1.5px solid #fcd34d', borderRadius:'12px', padding:'14px 16px', marginBottom:'16px', display:'flex', flexDirection: isMob ? 'column' : 'row', gap:'12px', alignItems: isMob ? 'flex-start' : 'center' }}>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:'10px', flex:1 }}>
+            <span style={{ fontSize:'20px', flexShrink:0 }}>⚠️</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'4px' }}>
+                Du mangler valg av obligatoriske konstruksjoner
+              </div>
+              <div style={{ fontSize:'12px', color:'#78350f', lineHeight:1.5 }}>
+                Du har ikke valgt: <strong>{manglendeObligatoriske.map(k => `${k.icon} ${k.label}`).join(', ')}</strong>. Du kan opprette kalkylen likevel og legge dem til manuelt etterpå, eller gå tilbake til steg 3 og velge nå.
+              </div>
+            </div>
+          </div>
+          {onTilbakeTilKonstruksjoner && (
+            <button onClick={onTilbakeTilKonstruksjoner}
+              style={{ flexShrink:0, padding:'8px 14px', background:'#92400e', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
+              ← Gå til Konstruksjoner
+            </button>
+          )}
+        </div>
+      )}
 
       <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 280px', gap:'16px' }}>
 
@@ -36038,28 +36059,20 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   }, [])
 
   // Validering per steg — bestemmer om "Neste"-knappen er aktiv
+  // Steg 3 (Konstruksjoner) er bevisst myk: brukeren får ikke mas underveis,
+  // men advares i steg 6 (Oppsummering) hvis obligatoriske kategorier mangler.
   const kanGaaVidere = () => {
     if (steg === 1) return !!veiviserData.bygningstype
     if (steg === 2) return parseFloat(veiviserData.lengde) > 0 && parseFloat(veiviserData.bredde) > 0 && parseInt(veiviserData.etasjer) > 0
-    if (steg === 3) {
-      const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
-        if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
-        return k.obligatorisk
-      })
-      return obligatoriske.every(k => {
-        const v = veiviserData.valgteKonstruksjoner[k.id]
-        if (!v) return false
-        if (erMultiVerdi(v)) return v.length > 0
-        return true
-      })
-    }
-    if (steg === 4) return true // alle defaults er gyldige
+    if (steg === 3) return true // Myk validering — sjekkes i steg 6
+    if (steg === 4) return true
     if (steg === 5) return !!veiviserData.title && veiviserData.title.trim().length > 0
     return true
   }
 
   // Returner liste over manglende obligatoriske valg i nåværende steg
-  // Brukes til å vise tooltip / feedback når Neste er disabled
+  // Brukes til å vise tooltip / feedback når Neste er disabled.
+  // Steg 3 returnerer alltid tom liste — manglende konstruksjoner sjekkes i steg 6.
   const manglendeFelter = () => {
     if (steg === 1 && !veiviserData.bygningstype) return ['Bygningstype']
     if (steg === 2) {
@@ -36069,20 +36082,24 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
       if (!parseInt(veiviserData.etasjer) > 0) m.push('Etasjer')
       return m
     }
-    if (steg === 3) {
-      const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
-        if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
-        return k.obligatorisk
-      })
-      return obligatoriske.filter(k => {
-        const v = veiviserData.valgteKonstruksjoner[k.id]
-        if (!v) return true
-        if (erMultiVerdi(v)) return v.length === 0
-        return false
-      }).map(k => k.label)
-    }
     if (steg === 5 && (!veiviserData.title || !veiviserData.title.trim())) return ['Prosjektnavn']
     return []
+  }
+
+  // Brukes i steg 6: returner liste over obligatoriske konstruksjons-kategorier
+  // som ikke er valgt. Dette er separert fra manglendeFelter() siden vi ikke
+  // vil mase i steg 3 — kun varsle i oppsummeringen.
+  const manglendeObligatoriskeKonstruksjoner = () => {
+    const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
+      if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+      return k.obligatorisk
+    })
+    return obligatoriske.filter(k => {
+      const v = veiviserData.valgteKonstruksjoner[k.id]
+      if (!v) return true
+      if (erMultiVerdi(v)) return v.length === 0
+      return false
+    })
   }
 
   const update = (key, value) => setVeiviserData(d => ({ ...d, [key]: value }))
@@ -36157,7 +36174,12 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
           )}
 
           {steg === 6 && (
-            <BimVeiviserSteg6Oppsummering veiviserData={veiviserData} isMob={isMob} />
+            <BimVeiviserSteg6Oppsummering
+              veiviserData={veiviserData}
+              isMob={isMob}
+              manglendeObligatoriske={manglendeObligatoriskeKonstruksjoner()}
+              onTilbakeTilKonstruksjoner={() => setSteg(3)}
+            />
           )}
         </div>
 
