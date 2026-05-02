@@ -32050,6 +32050,18 @@ const MODULE_CATALOG = [
     standalone: true, // Can be purchased without grunnpakke
   },
   {
+    id: 'bim_kalkyle',
+    name: 'BIM-Kalkyle',
+    desc: 'Tilleggsmodul som lar deg starte kalkylen fra IFC, DWG eller plantegning — eller fra yttermål via veiviser. Inkluderer 50+ standardkonstruksjoner, automatisk kompletthetssjekk og tekniske fag som rundsum. Fra tegning til tilbud på minutter.',
+    emoji: '📐',
+    price: 1899,
+    perCompany: true,
+    requires: ['kalkulator'], // Avhengighet: krever basis Kalkulasjon
+    addon: true, // Markeres som tilleggsmodul i UI
+    addonTo: 'kalkulator',
+    standalone: false,
+  },
+  {
     id: 'tilbud',
     name: 'Tilbudsmodul',
     desc: 'Tilbudsadministrasjon med PDF og e-post til kunde',
@@ -33266,9 +33278,22 @@ function MinBedriftPage() {
   }
 
   const toggleModule = async (modId, action) => {
-    const newModules = action === 'add'
+    let newModules = action === 'add'
       ? [...activeModules, modId]
       : activeModules.filter(m => m !== modId)
+
+    // ── BIM-Kalkyle avhengighetslogikk ──────────────────────────────────────
+    // 1. Aktivering av bim_kalkyle krever at kalkulator også er aktivt
+    if (action === 'add' && modId === 'bim_kalkyle' && !newModules.includes('kalkulator')) {
+      newModules = [...newModules, 'kalkulator']
+      appAlert({ message: 'Kalkulasjon (basis) ble også aktivert', subMessage: 'BIM-Kalkyle krever basis Kalkulasjon. Begge er nå aktive.', kind: 'info' })
+    }
+    // 2. Deaktivering av kalkulator deaktiverer automatisk bim_kalkyle
+    if (action === 'remove' && modId === 'kalkulator' && newModules.includes('bim_kalkyle')) {
+      newModules = newModules.filter(m => m !== 'bim_kalkyle')
+      appAlert({ message: 'BIM-Kalkyle ble også deaktivert', subMessage: 'BIM-Kalkyle krever basis Kalkulasjon og kan ikke kjøres alene.', kind: 'info' })
+    }
+
     setActiveModules(newModules)
     try {
       // If first module purchase during trial, upgrade to active
@@ -34449,6 +34474,134 @@ function getDefaultFaktorer(fagId) {
     mat_justering_prosent: fag.defaultMatJustering,
     grunntid_justering: fag.defaultGrunntidJustering,
   }
+}
+
+// ─── BIM-KALKYLE TILGANGSKONTROLL ────────────────────────────────────────────
+// BIM-Kalkyle er tilleggsmodul som krever basis Kalkulasjon (1499 kr/mnd) + 1899 kr/mnd
+
+function hasKalkulator(activeModules) {
+  return (activeModules || []).includes('kalkulator')
+}
+
+function hasBimKalkyle(activeModules) {
+  const mods = activeModules || []
+  // BIM-Kalkyle krever BÅDE basis kalkulator OG bim_kalkyle
+  return mods.includes('kalkulator') && mods.includes('bim_kalkyle')
+}
+
+// Hook for å hente BIM-Kalkyle-status fra company_settings
+function useBimKalkyleStatus() {
+  const [activeModules, setActiveModules] = useState([])
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    supabase.from('company_settings').select('active_modules').limit(1).single()
+      .then(({ data }) => { setActiveModules(data?.active_modules || []); setLoading(false) })
+      .catch(() => setLoading(false))
+  }, [])
+  return {
+    activeModules,
+    hasKalkulator: hasKalkulator(activeModules),
+    hasBimKalkyle: hasBimKalkyle(activeModules),
+    loading,
+  }
+}
+
+// ─── BIM-KALKYLE UPSELL-MODAL ────────────────────────────────────────────────
+// Vises når en bruker uten BIM-Kalkyle prøver å bruke en BIM-Kalkyle-funksjon
+
+function BimKalkyleUpsellModal({ onClose, onNavigate }) {
+  const [hasBasis, setHasBasis] = useState(true)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    supabase.from('company_settings').select('active_modules').limit(1).single()
+      .then(({ data }) => {
+        setHasBasis((data?.active_modules || []).includes('kalkulator'))
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const totalPrice = hasBasis ? 1899 : 3398
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        {/* Gradient header */}
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
+          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
+          <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
+          <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
+        </div>
+
+        <div style={{ padding:'24px' }}>
+          <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
+            BIM-Kalkyle er en utvidelse av Kalkulasjonsmodulen som lar deg starte fra tegninger eller bare yttermål — i stedet for å bygge opp kalkylen manuelt.
+          </p>
+
+          <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', marginBottom:'16px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.5px', marginBottom:'8px' }}>HVA DU FÅR</div>
+            {[
+              { icon:'✨', text:'Veiviser med 50+ standardkonstruksjoner' },
+              { icon:'📏', text:'Mengdeberegning fra yttermål — automatisk' },
+              { icon:'🔍', text:'Automatisk kompletthetssjekk' },
+              { icon:'🔧', text:'Tekniske fag (VVS, elektro, ventilasjon) som rundsum' },
+              { icon:'📂', text:'IFC, DWG og PDF-import (kommer)' },
+              { icon:'🎲', text:'3D-verifisering med klikkbare bygningsdeler (kommer)' },
+            ].map((f, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'4px 0', fontSize:'13px', color:'#0f172a' }}>
+                <span style={{ fontSize:'15px', flexShrink:0 }}>{f.icon}</span>
+                <span style={{ lineHeight:1.4 }}>{f.text}</span>
+              </div>
+            ))}
+          </div>
+
+          {loading ? (
+            <div style={{ textAlign:'center', padding:'12px', color:'#94a3b8', fontSize:'13px' }}>Laster...</div>
+          ) : !hasBasis ? (
+            <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>⚠️ KREVER BASIS KALKULASJON</div>
+              <p style={{ margin:'0 0 8px', fontSize:'12px', color:'#78350f', lineHeight:1.4 }}>BIM-Kalkyle er en tilleggsmodul. Du må også ha Kalkulasjon (basis) aktivt:</p>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', fontSize:'12px', color:'#0f172a' }}>
+                <span>🧮 Kalkulasjon (basis)</span><strong>1 499 kr/mnd</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'4px 0', fontSize:'12px', color:'#0f172a' }}>
+                <span>📐 BIM-Kalkyle (tillegg)</span><strong>1 899 kr/mnd</strong>
+              </div>
+              <div style={{ borderTop:'1px solid #fcd34d', marginTop:'4px', paddingTop:'6px', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>
+                <span>Total</span><strong>{totalPrice.toLocaleString('nb-NO')} kr/mnd</strong>
+              </div>
+            </div>
+          ) : (
+            <div style={{ background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ fontSize:'12px', fontWeight:'700', color:'#065f46', marginBottom:'2px' }}>📐 BIM-Kalkyle (tillegg)</div>
+                <div style={{ fontSize:'11px', color:'#047857' }}>I tillegg til basis Kalkulasjon du allerede har</div>
+              </div>
+              <strong style={{ fontSize:'16px', color:'#065f46' }}>1 899 kr/mnd</strong>
+            </div>
+          )}
+
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={onClose} style={{ flex:'0 0 auto', padding:'12px 18px', background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+              Ikke nå
+            </button>
+            <button
+              onClick={() => { if (onNavigate) onNavigate('minbedrift'); onClose() }}
+              style={{ flex:1, padding:'12px 18px', background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'700', boxShadow:'0 4px 12px rgba(139,92,246,0.3)' }}>
+              {hasBasis ? 'Aktiver BIM-Kalkyle' : 'Aktiver begge moduler'}
+            </button>
+          </div>
+
+          <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'11px', color:'#94a3b8' }}>
+            Du kan deaktivere igjen når som helst fra Min bedrift → Abonnement
+          </p>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── BEREGNINGSMOTOR ─────────────────────────────────────────────────────────
@@ -42648,7 +42801,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator','ressursplan']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator','bim_kalkyle','ressursplan']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
