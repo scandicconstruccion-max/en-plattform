@@ -35165,7 +35165,11 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
 
 // ─── STEG 3: KONSTRUKSJONSVALG FRA BIBLIOTEK ─────────────────────────────────
 // Mapper hver kategori (yttervegg, innervegg, etc.) til de tilsvarende
-// kategoriene i BYGNINGSDEL_BIBLIOTEK
+// kategoriene i BYGNINGSDEL_BIBLIOTEK.
+// mengdePath kan være:
+//   - en streng: 'gulvAreal' → mengder.gulvAreal
+//   - en streng med punkt: 'vinduer.antall' → mengder.vinduer.antall
+//   - en filterFn for spesifikke bygningsdeler innen samme kategori
 const BIM_KONSTRUKSJON_KATEGORIER = [
   { id: 'yttervegg',    label: 'Yttervegg',    icon: '🧱', obligatorisk: true,  bibliotekKategorier: ['Yttervegg', 'Fasade'], mengdeFelt: 'nettoYtterveggAreal' },
   { id: 'innervegg',    label: 'Innervegg',    icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Innervegg', 'Vegg innvendig'], mengdeFelt: 'innerveggAreal' },
@@ -35173,11 +35177,32 @@ const BIM_KONSTRUKSJON_KATEGORIER = [
   { id: 'gulv',         label: 'Gulv',         icon: '🟫', obligatorisk: true,  bibliotekKategorier: ['Gulv', 'Gulvplate'], mengdeFelt: 'gulvAreal' },
   { id: 'etasjeskille', label: 'Etasjeskille', icon: '🟦', obligatorisk: false, bibliotekKategorier: ['Etasjeskille'], mengdeFelt: 'etasjeskilleAreal', kunHvisFlerEtasjes: true },
   { id: 'grunnmur',     label: 'Grunnmur',     icon: '🟪', obligatorisk: false, bibliotekKategorier: ['Fundament', 'Betongdekke', 'Drenering'], mengdeFelt: 'grunnmurAreal' },
+  // Vinduer/dører — egne underkategorier av "Dører/vinduer" filtrert på navn
+  { id: 'vinduer',      label: 'Vinduer',      icon: '🪟', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /vindu/i.test(bd.name), mengdeFelt: 'vinduer.antall' },
+  { id: 'ytterdorer',   label: 'Ytterdører',   icon: '🚪', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /ytterdør/i.test(bd.name), mengdeFelt: 'ytterdorer.antall' },
+  { id: 'innerdorer',   label: 'Innerdører',   icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /innerdør|skyvedør/i.test(bd.name), mengdeFelt: 'innerdorer.antall' },
 ]
 
-function getBibliotekForKategori(katIds) {
+// Hjelper: hent verdi fra mengder-objektet via mengdeFelt-string ('a' eller 'a.b')
+function getMengdeFraPath(mengder, path) {
+  if (!mengder || !path) return 0
+  if (path.includes('.')) {
+    const parts = path.split('.')
+    let value = mengder
+    for (const p of parts) {
+      if (!value) return 0
+      value = value[p]
+    }
+    return value || 0
+  }
+  return mengder[path] || 0
+}
+
+function getBibliotekForKategori(katIds, filterFn) {
   if (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return []
-  return BYGNINGSDEL_BIBLIOTEK.filter(bd => katIds.includes(bd.kategori))
+  let result = BYGNINGSDEL_BIBLIOTEK.filter(bd => katIds.includes(bd.kategori))
+  if (filterFn) result = result.filter(filterFn)
+  return result
 }
 
 function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
@@ -35190,13 +35215,16 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
   })
 
   const aktivKat = tilgjengeligeKategorier.find(k => k.id === aktivKategori) || tilgjengeligeKategorier[0]
-  const tilgjengeligeBd = aktivKat ? getBibliotekForKategori(aktivKat.bibliotekKategorier) : []
+  const tilgjengeligeBd = aktivKat ? getBibliotekForKategori(aktivKat.bibliotekKategorier, aktivKat.bibliotekFilter) : []
   const valgtBdId = veiviserData.valgteKonstruksjoner[aktivKategori]
+
+  // Antall enheter som kommer fra steg 2 — vises i tabben for vinduer/dører
+  const aktivMengde = aktivKat ? getMengdeFraPath(veiviserData.mengder, aktivKat.mengdeFelt) : 0
 
   return (
     <div>
       <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Velg konstruksjonstyper</h3>
-      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg én konstruksjon per kategori. Yttervegg, tak og gulv er obligatorisk.</p>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg én konstruksjon per kategori. Yttervegg, tak og gulv er obligatorisk. Vinduer/ytterdører er anbefalt.</p>
 
       {/* Kategori-tabber */}
       <div style={{ display:'flex', gap:'6px', overflowX:'auto', marginBottom:'16px', paddingBottom:'4px', borderBottom:'1px solid #f1f5f9' }}>
@@ -35223,6 +35251,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
               <span>{k.icon}</span>
               <span>{k.label}</span>
               {k.obligatorisk && !erValgt && <span style={{ color: erAktiv ? '#fbbf24' : '#dc2626', fontSize:'10px' }}>*</span>}
+              {k.anbefalt && !erValgt && !erAktiv && <span style={{ background:'#fef3c7', color:'#92400e', fontSize:'9px', padding:'1px 5px', borderRadius:'4px', fontWeight:'700' }}>Anbefalt</span>}
               {erValgt && <span style={{ fontSize:'10px' }}>✓</span>}
             </button>
           )
@@ -35235,9 +35264,24 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
           <h4 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
             {aktivKat?.icon} Velg {aktivKat?.label.toLowerCase()}
             {aktivKat?.obligatorisk && <span style={{ color:'#dc2626', marginLeft:'6px' }}>*</span>}
+            {aktivKat && aktivMengde > 0 && (aktivKat.id === 'vinduer' || aktivKat.id === 'ytterdorer' || aktivKat.id === 'innerdorer') && (
+              <span style={{ marginLeft:'8px', fontSize:'12px', fontWeight:'500', color:'#64748b' }}>
+                ({aktivMengde} stk fra steg 2)
+              </span>
+            )}
           </h4>
           <span style={{ fontSize:'11px', color:'#94a3b8' }}>{tilgjengeligeBd.length} alternativer</span>
         </div>
+
+        {/* Anbefalt-banner for vinduer/ytterdører */}
+        {aktivKat?.anbefalt && !valgtBdId && aktivMengde > 0 && (
+          <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', padding:'10px 14px', marginBottom:'12px', fontSize:'12px', color:'#92400e', display:'flex', alignItems:'flex-start', gap:'10px' }}>
+            <span style={{ fontSize:'16px' }}>💡</span>
+            <span>
+              <strong>Anbefalt:</strong> Du har {aktivMengde} {aktivKat.label.toLowerCase()} i prosjektet. Velg type for å få med produkt og montering i kalkylen — eller hopp over hvis disse skal kalkuleres separat.
+            </span>
+          </div>
+        )}
 
         {tilgjengeligeBd.length === 0 ? (
           <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8', background:'#f8fafc', borderRadius:'12px' }}>
@@ -35249,7 +35293,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
             {tilgjengeligeBd.map(bd => {
               const valgt = valgtBdId === bd.id
               return (
-                <button key={bd.id} onClick={() => updateKonstruksjon(aktivKategori, bd.id)}
+                <button key={bd.id} onClick={() => updateKonstruksjon(aktivKategori, valgt ? null : bd.id)}
                   style={{
                     background: valgt ? 'linear-gradient(135deg, #f5f3ff, #eff6ff)' : 'white',
                     border: valgt ? '2px solid #8b5cf6' : '1.5px solid #e2e8f0',
@@ -35284,9 +35328,12 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
           {tilgjengeligeKategorier.map(k => {
             const valgtId = veiviserData.valgteKonstruksjoner[k.id]
             const bd = valgtId ? BYGNINGSDEL_BIBLIOTEK.find(b => b.id === valgtId) : null
+            const statusBg = bd ? '#ecfdf5' : k.obligatorisk ? '#fef3c7' : '#f1f5f9'
+            const statusColor = bd ? '#065f46' : k.obligatorisk ? '#92400e' : '#64748b'
+            const statusText = bd ? bd.name : k.obligatorisk ? 'Mangler' : 'Hopp over'
             return (
-              <span key={k.id} style={{ padding:'3px 8px', borderRadius:'6px', background: bd ? '#ecfdf5' : '#fef3c7', color: bd ? '#065f46' : '#92400e', fontSize:'11px', fontWeight:'600' }}>
-                {k.icon} {k.label}: {bd ? bd.name : (k.obligatorisk ? 'Mangler' : 'Hopp over')}
+              <span key={k.id} style={{ padding:'3px 8px', borderRadius:'6px', background: statusBg, color: statusColor, fontSize:'11px', fontWeight:'600' }}>
+                {k.icon} {k.label}: {statusText}
               </span>
             )
           })}
@@ -35442,7 +35489,8 @@ function BimVeiviserSteg5({ veiviserData, isMob }) {
       if (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return
       const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === valgtId)
       if (!bd) return
-      const mengde = veiviserData.mengder[kat.mengdeFelt] || 0
+      const mengde = getMengdeFraPath(veiviserData.mengder, kat.mengdeFelt)
+      if (mengde <= 0) return // Hopp over hvis ingen mengde (f.eks. 0 vinduer)
       // Estimer kostnad enkelt: arbeid (timer × 380) + materialer + UE
       const arbeidstimer = (bd.arbeidsarter || []).reduce((s, a) => s + (parseFloat(a.grunntid) || 0), 0) * mengde
       const arbeidskostnad = arbeidstimer * 380 // approximate
@@ -36671,6 +36719,27 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Skyvedør komplett m/skinne', mengde: 1, enhet: 'stk', enhetspris: 5500 }, { varenavn: 'Festemateriell', mengde: 1, enhet: 'rs', enhetspris: 250 }],
     underleverandorer: [], enhet: 'stk'
   },
+  // Tilleggsvarianter for BIM-Kalkyle (Patch 4) — kvalitetsnivåer
+  { id: 'tom_vindu_passiv', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 passivhus', beskrivelse: '3-lags passivhus-vindu med U-verdi <0.8, høy lufttetthet — montering m/foring og listverk',
+    arbeidsarter: [{ beskrivelse: 'Demontering gammelt vindu', grunntid: 0.7 }, { beskrivelse: 'Montering passivhus-vindu', grunntid: 2.4 }, { beskrivelse: 'Foring og listverk', grunntid: 1.2 }, { beskrivelse: 'Lufttetting med tape', grunntid: 0.4 }],
+    materialer: [{ varenavn: 'Passivhus-vindu 120×120', mengde: 1, enhet: 'stk', enhetspris: 10500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Tetningsbånd og tape', mengde: 1, enhet: 'rs', enhetspris: 350 }, { varenavn: 'Skruer og skum', mengde: 1, enhet: 'rs', enhetspris: 180 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_dor_ytter_energi', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør energi/sikkerhet', beskrivelse: 'Energieffektiv ytterdør med sikkerhetslås og isolert kjerne — montering m/karm og listverk',
+    arbeidsarter: [{ beskrivelse: 'Demontering gammel dør', grunntid: 0.7 }, { beskrivelse: 'Montering ny ytterdør', grunntid: 3.5 }, { beskrivelse: 'Foring og listverk', grunntid: 1.8 }, { beskrivelse: 'Sikkerhetsbeslag og lås', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Ytterdør energi m/karm og lås', mengde: 1, enhet: 'stk', enhetspris: 18500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 250 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_dor_ytter_passiv', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør passivhus', beskrivelse: 'Passivhus-ytterdør med U-verdi <0.8 og høy lufttetthet — montering m/karm og lufttetting',
+    arbeidsarter: [{ beskrivelse: 'Demontering gammel dør', grunntid: 0.7 }, { beskrivelse: 'Montering passivhus-dør', grunntid: 4.0 }, { beskrivelse: 'Foring og listverk', grunntid: 1.8 }, { beskrivelse: 'Lufttetting med tape', grunntid: 0.5 }],
+    materialer: [{ varenavn: 'Passivhus-ytterdør m/karm', mengde: 1, enhet: 'stk', enhetspris: 28500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Tetningsbånd og tape', mengde: 1, enhet: 'rs', enhetspris: 450 }, { varenavn: 'Skruer og skum', mengde: 1, enhet: 'rs', enhetspris: 250 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_dor_inner_eik', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Innerdør eik/finer', beskrivelse: 'Innerdør i eik eller finer for høyere finish — montering m/karm og listverk',
+    arbeidsarter: [{ beskrivelse: 'Montering karm', grunntid: 1.3 }, { beskrivelse: 'Montering dørblad og beslag', grunntid: 0.6 }, { beskrivelse: 'Listverk og finish', grunntid: 0.6 }],
+    materialer: [{ varenavn: 'Innerdør eik/finer m/karm', mengde: 1, enhet: 'stk', enhetspris: 5800 }, { varenavn: 'Listverk eik/finer', mengde: 1, enhet: 'sett', enhetspris: 550 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 180 }],
+    underleverandorer: [], enhet: 'stk'
+  },
   // Himling
   { id: 'tom_him_gips', fag: 'tomrer', kategori: 'Himling', name: 'Himling gipsplater på lekter', beskrivelse: 'Gipshimling på trelekter med sparkling',
     arbeidsarter: [{ beskrivelse: 'Montering lekter c/c 400', grunntid: 0.20 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.28 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.20 }],
@@ -37485,13 +37554,16 @@ function byggKalkylerFraVeiviser(veiviserData) {
     if (!valgtId) return
     const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === valgtId)
     if (!bd) return
-    const mengde = mengder[kat.mengdeFelt] || 1
+    const mengde = getMengdeFraPath(mengder, kat.mengdeFelt) || 1
+    if (mengde <= 0) return // Hopp over kategorier uten mengde (f.eks. 0 vinduer)
     const fag = bd.fag
 
     // Konverter til runtime-format
     const newBd = bibliotekTilBygningsdel(bd, mengde)
 
     // For ytterveggen: legg inn vinduer og ytterdører som åpningstillegg automatisk
+    // Dette er mertid for tilpasning rundt åpninger (per tømrertariff) — separat fra
+    // selve vindus-/dør-bygningsdelen som inneholder produkt + monteringskostnad.
     if (kat.id === 'yttervegg' && mengder.vinduer && mengder.ytterdorer) {
       const apningstillegg = []
       // Vinduer (typisk 1.8 m² → 1 stk åpningstillegg per vindu)
