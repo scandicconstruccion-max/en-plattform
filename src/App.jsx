@@ -35163,6 +35163,418 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
   )
 }
 
+// ─── STEG 3: KONSTRUKSJONSVALG FRA BIBLIOTEK ─────────────────────────────────
+// Mapper hver kategori (yttervegg, innervegg, etc.) til de tilsvarende
+// kategoriene i BYGNINGSDEL_BIBLIOTEK
+const BIM_KONSTRUKSJON_KATEGORIER = [
+  { id: 'yttervegg',    label: 'Yttervegg',    icon: '🧱', obligatorisk: true,  bibliotekKategorier: ['Yttervegg', 'Fasade'], mengdeFelt: 'nettoYtterveggAreal' },
+  { id: 'innervegg',    label: 'Innervegg',    icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Innervegg', 'Vegg innvendig'], mengdeFelt: 'innerveggAreal' },
+  { id: 'tak',          label: 'Tak',          icon: '🏠', obligatorisk: true,  bibliotekKategorier: ['Yttertak', 'Tekking'], mengdeFelt: 'takAreal' },
+  { id: 'gulv',         label: 'Gulv',         icon: '🟫', obligatorisk: true,  bibliotekKategorier: ['Gulv', 'Gulvplate'], mengdeFelt: 'gulvAreal' },
+  { id: 'etasjeskille', label: 'Etasjeskille', icon: '🟦', obligatorisk: false, bibliotekKategorier: ['Etasjeskille'], mengdeFelt: 'etasjeskilleAreal', kunHvisFlerEtasjes: true },
+  { id: 'grunnmur',     label: 'Grunnmur',     icon: '🟪', obligatorisk: false, bibliotekKategorier: ['Fundament', 'Betongdekke', 'Drenering'], mengdeFelt: 'grunnmurAreal' },
+]
+
+function getBibliotekForKategori(katIds) {
+  if (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return []
+  return BYGNINGSDEL_BIBLIOTEK.filter(bd => katIds.includes(bd.kategori))
+}
+
+function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob }) {
+  const [aktivKategori, setAktivKategori] = useState('yttervegg')
+
+  // Skjul etasjeskille hvis kun 1 etasje
+  const tilgjengeligeKategorier = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
+    if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+    return true
+  })
+
+  const aktivKat = tilgjengeligeKategorier.find(k => k.id === aktivKategori) || tilgjengeligeKategorier[0]
+  const tilgjengeligeBd = aktivKat ? getBibliotekForKategori(aktivKat.bibliotekKategorier) : []
+  const valgtBdId = veiviserData.valgteKonstruksjoner[aktivKategori]
+
+  return (
+    <div>
+      <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Velg konstruksjonstyper</h3>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg én konstruksjon per kategori. Yttervegg, tak og gulv er obligatorisk.</p>
+
+      {/* Kategori-tabber */}
+      <div style={{ display:'flex', gap:'6px', overflowX:'auto', marginBottom:'16px', paddingBottom:'4px', borderBottom:'1px solid #f1f5f9' }}>
+        {tilgjengeligeKategorier.map(k => {
+          const erValgt = !!veiviserData.valgteKonstruksjoner[k.id]
+          const erAktiv = aktivKategori === k.id
+          return (
+            <button key={k.id} onClick={() => setAktivKategori(k.id)}
+              style={{
+                background: erAktiv ? 'linear-gradient(135deg, #8b5cf6, #3b82f6)' : erValgt ? '#ecfdf5' : 'white',
+                color: erAktiv ? 'white' : erValgt ? '#065f46' : '#475569',
+                border: erValgt && !erAktiv ? '1.5px solid #a7f3d0' : '1.5px solid ' + (erAktiv ? 'transparent' : '#e2e8f0'),
+                borderRadius:'10px',
+                padding:'8px 14px',
+                cursor:'pointer',
+                fontSize:'12px',
+                fontWeight:'600',
+                whiteSpace:'nowrap',
+                display:'flex',
+                alignItems:'center',
+                gap:'6px',
+                flexShrink:0,
+              }}>
+              <span>{k.icon}</span>
+              <span>{k.label}</span>
+              {k.obligatorisk && !erValgt && <span style={{ color: erAktiv ? '#fbbf24' : '#dc2626', fontSize:'10px' }}>*</span>}
+              {erValgt && <span style={{ fontSize:'10px' }}>✓</span>}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Bibliotek-grid for aktiv kategori */}
+      <div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'10px' }}>
+          <h4 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>
+            {aktivKat?.icon} Velg {aktivKat?.label.toLowerCase()}
+            {aktivKat?.obligatorisk && <span style={{ color:'#dc2626', marginLeft:'6px' }}>*</span>}
+          </h4>
+          <span style={{ fontSize:'11px', color:'#94a3b8' }}>{tilgjengeligeBd.length} alternativer</span>
+        </div>
+
+        {tilgjengeligeBd.length === 0 ? (
+          <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8', background:'#f8fafc', borderRadius:'12px' }}>
+            <div style={{ fontSize:'32px', marginBottom:'8px' }}>📦</div>
+            <p style={{ margin:0, fontSize:'13px' }}>Ingen konstruksjoner tilgjengelig for denne kategorien.</p>
+          </div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(auto-fill, minmax(260px, 1fr))', gap:'10px' }}>
+            {tilgjengeligeBd.map(bd => {
+              const valgt = valgtBdId === bd.id
+              return (
+                <button key={bd.id} onClick={() => updateKonstruksjon(aktivKategori, bd.id)}
+                  style={{
+                    background: valgt ? 'linear-gradient(135deg, #f5f3ff, #eff6ff)' : 'white',
+                    border: valgt ? '2px solid #8b5cf6' : '1.5px solid #e2e8f0',
+                    borderRadius:'12px',
+                    padding:'12px 14px',
+                    cursor:'pointer',
+                    textAlign:'left',
+                    transition:'all 0.15s',
+                    position:'relative',
+                  }}>
+                  {valgt && (
+                    <div style={{ position:'absolute', top:'10px', right:'10px', background:'#8b5cf6', color:'white', borderRadius:'50%', width:'20px', height:'20px', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'700' }}>✓</div>
+                  )}
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'4px', paddingRight: valgt ? '24px' : '0' }}>{bd.name}</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.4, marginBottom:'8px' }}>{bd.beskrivelse}</div>
+                  <div style={{ display:'flex', gap:'8px', fontSize:'10px', color:'#94a3b8', borderTop:'1px solid #f1f5f9', paddingTop:'6px' }}>
+                    <span>⏱️ {(bd.arbeidsarter || []).length} arbeidsarter</span>
+                    <span>📦 {(bd.materialer || []).length} materialer</span>
+                    <span>per {bd.enhet || 'stk'}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Sammendrag */}
+      <div style={{ marginTop:'18px', padding:'12px 14px', background:'#f8fafc', borderRadius:'10px', fontSize:'12px' }}>
+        <div style={{ fontWeight:'700', color:'#475569', marginBottom:'6px' }}>Dine valg så langt:</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+          {tilgjengeligeKategorier.map(k => {
+            const valgtId = veiviserData.valgteKonstruksjoner[k.id]
+            const bd = valgtId ? BYGNINGSDEL_BIBLIOTEK.find(b => b.id === valgtId) : null
+            return (
+              <span key={k.id} style={{ padding:'3px 8px', borderRadius:'6px', background: bd ? '#ecfdf5' : '#fef3c7', color: bd ? '#065f46' : '#92400e', fontSize:'11px', fontWeight:'600' }}>
+                {k.icon} {k.label}: {bd ? bd.name : (k.obligatorisk ? 'Mangler' : 'Hopp over')}
+              </span>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── STEG 4: TEKNISKE FAG SOM RUNDSUM ────────────────────────────────────────
+function BimVeiviserSteg4({ veiviserData, update, isMob }) {
+  // Live-beregning av tekniske fag-kostnader
+  const teknisk = React.useMemo(() => {
+    return beregnTekniskRundsum({
+      bra: veiviserData.mengder?.bra || 0,
+      antallBad: veiviserData.antallBad,
+      antallBadMedBadekar: veiviserData.antallBadMedBadekar,
+      antallKjokken: veiviserData.antallKjokken,
+      antallVaskerom: veiviserData.antallVaskerom,
+      elektroNiva: veiviserData.elektroNiva,
+      ventilasjonType: veiviserData.ventilasjonType,
+    })
+  }, [veiviserData.mengder, veiviserData.antallBad, veiviserData.antallBadMedBadekar, veiviserData.antallKjokken, veiviserData.antallVaskerom, veiviserData.elektroNiva, veiviserData.ventilasjonType])
+
+  // Lagre i veiviserData
+  React.useEffect(() => { update('teknisk', teknisk) /* eslint-disable-next-line */ }, [teknisk])
+
+  const NumInput = ({ label, value, onChange, max = 10 }) => (
+    <div style={{ background:'white', borderRadius:'10px', padding:'10px 12px', border:'1.5px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+      <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'500' }}>{label}</span>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+        <button onClick={() => onChange(Math.max(0, (value || 0) - 1))} style={{ width:'28px', height:'28px', borderRadius:'8px', border:'1px solid #e2e8f0', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'#475569' }}>−</button>
+        <span style={{ minWidth:'24px', textAlign:'center', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{value || 0}</span>
+        <button onClick={() => onChange(Math.min(max, (value || 0) + 1))} style={{ width:'28px', height:'28px', borderRadius:'8px', border:'1px solid #e2e8f0', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'#8b5cf6' }}>+</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Tekniske fag</h3>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>VVS, elektro og ventilasjon legges som rundsum basert på erfaringstall — du kan justere senere i kalkylen.</p>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 320px', gap: isMob ? '20px' : '28px', alignItems:'flex-start' }}>
+
+        {/* Venstre: Inputs */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'18px' }}>
+
+          {/* VVS */}
+          <div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span>🚿</span><span>VVS — antall enheter</span>
+            </div>
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              <NumInput label={`Bad (standard) — ${BIM_TEKNISK_RUNDSUM.vvs_bad_standard.toLocaleString('nb-NO')} kr/stk`} value={veiviserData.antallBad} onChange={(v) => update('antallBad', v)} />
+              <NumInput label={`Bad med badekar — ${BIM_TEKNISK_RUNDSUM.vvs_bad_med_badekar.toLocaleString('nb-NO')} kr/stk`} value={veiviserData.antallBadMedBadekar} onChange={(v) => update('antallBadMedBadekar', v)} />
+              <NumInput label={`Kjøkken — ${BIM_TEKNISK_RUNDSUM.vvs_kjokken.toLocaleString('nb-NO')} kr/stk`} value={veiviserData.antallKjokken} onChange={(v) => update('antallKjokken', v)} />
+              <NumInput label={`Vaskerom — ${BIM_TEKNISK_RUNDSUM.vvs_vaskerom.toLocaleString('nb-NO')} kr/stk`} value={veiviserData.antallVaskerom} onChange={(v) => update('antallVaskerom', v)} />
+            </div>
+          </div>
+
+          {/* Elektro */}
+          <div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span>⚡</span><span>Elektro — installasjonsnivå</span>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+              {[
+                { id: 'standard', label: 'Standard', sats: BIM_TEKNISK_RUNDSUM.elektro_standard_per_m2, desc: 'Vanlige stikkontakter, brytere, lyspunkter' },
+                { id: 'utvidet', label: 'Utvidet', sats: BIM_TEKNISK_RUNDSUM.elektro_utvidet_per_m2, desc: 'Smarthus, mange punkter, downlights' },
+              ].map(n => {
+                const valgt = veiviserData.elektroNiva === n.id
+                return (
+                  <button key={n.id} onClick={() => update('elektroNiva', n.id)}
+                    style={{ background: valgt ? 'linear-gradient(135deg, #f5f3ff, #eff6ff)' : 'white', border: valgt ? '2px solid #8b5cf6' : '1.5px solid #e2e8f0', borderRadius:'10px', padding:'12px', cursor:'pointer', textAlign:'left' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{n.label}</div>
+                    <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>{n.sats} kr/m² BRA</div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'4px', lineHeight:1.3 }}>{n.desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Ventilasjon */}
+          <div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span>💨</span><span>Ventilasjon</span>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px' }}>
+              {[
+                { id: 'balansert', label: 'Balansert', sats: BIM_TEKNISK_RUNDSUM.ventilasjon_balansert_per_m2, desc: 'Med varmegjenvinning' },
+                { id: 'avtrekk', label: 'Avtrekk', sats: BIM_TEKNISK_RUNDSUM.ventilasjon_avtrekk_per_m2, desc: 'Enkelt avtrekk' },
+                { id: 'ingen', label: 'Ingen', sats: 0, desc: 'Naturlig vent.' },
+              ].map(n => {
+                const valgt = veiviserData.ventilasjonType === n.id
+                return (
+                  <button key={n.id} onClick={() => update('ventilasjonType', n.id)}
+                    style={{ background: valgt ? 'linear-gradient(135deg, #f5f3ff, #eff6ff)' : 'white', border: valgt ? '2px solid #8b5cf6' : '1.5px solid #e2e8f0', borderRadius:'10px', padding:'10px 8px', cursor:'pointer', textAlign:'center' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{n.label}</div>
+                    <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>{n.sats} kr/m²</div>
+                    <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>{n.desc}</div>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Høyre: Live preview */}
+        <div style={{ position: isMob ? 'static' : 'sticky', top:'0' }}>
+          <div style={{ background:'linear-gradient(135deg, #faf5ff, #eff6ff)', borderRadius:'14px', padding:'16px 18px', border:'1px solid #ddd6fe' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'12px' }}>
+              <span style={{ fontSize:'18px' }}>💰</span>
+              <strong style={{ fontSize:'14px', color:'#0f172a' }}>Tekniske fag-kostnad</strong>
+            </div>
+
+            <div style={{ background:'white', borderRadius:'10px', padding:'12px', marginBottom:'10px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px', color:'#475569' }}>
+                <span>🚿 VVS</span><strong style={{ color:'#0f172a' }}>{teknisk.vvs.toLocaleString('nb-NO')} kr</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px', color:'#475569' }}>
+                <span>⚡ Elektro</span><strong style={{ color:'#0f172a' }}>{teknisk.elektro.toLocaleString('nb-NO')} kr</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px', color:'#475569' }}>
+                <span>💨 Ventilasjon</span><strong style={{ color:'#0f172a' }}>{teknisk.ventilasjon.toLocaleString('nb-NO')} kr</strong>
+              </div>
+              <div style={{ borderTop:'1px solid #f1f5f9', marginTop:'6px', paddingTop:'8px', display:'flex', justifyContent:'space-between', fontSize:'14px', fontWeight:'700' }}>
+                <span style={{ color:'#0f172a' }}>Total</span>
+                <strong style={{ color:'#8b5cf6' }}>{teknisk.total.toLocaleString('nb-NO')} kr</strong>
+              </div>
+            </div>
+
+            <p style={{ margin:0, fontSize:'11px', color:'#64748b', lineHeight:1.5 }}>
+              Disse beløpene legges som rundsum-poster i en egen "Tekniske fag"-kalkyle. Du kan endre dem fritt etterpå.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── STEG 5: OPPSUMMERING OG OPPRETT KALKYLE ─────────────────────────────────
+function BimVeiviserSteg5({ veiviserData, isMob }) {
+  // Bygg liste over alle bygningsdeler som vil bli opprettet
+  const bygningsdelerForhandsvisning = React.useMemo(() => {
+    if (!veiviserData.mengder) return []
+    const result = []
+    BIM_KONSTRUKSJON_KATEGORIER.forEach(kat => {
+      const valgtId = veiviserData.valgteKonstruksjoner[kat.id]
+      if (!valgtId) return
+      if (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return
+      const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === valgtId)
+      if (!bd) return
+      const mengde = veiviserData.mengder[kat.mengdeFelt] || 0
+      // Estimer kostnad enkelt: arbeid (timer × 380) + materialer + UE
+      const arbeidstimer = (bd.arbeidsarter || []).reduce((s, a) => s + (parseFloat(a.grunntid) || 0), 0) * mengde
+      const arbeidskostnad = arbeidstimer * 380 // approximate
+      const materialkostnad = (bd.materialer || []).reduce((s, m) => s + (parseFloat(m.mengde) || 0) * (parseFloat(m.enhetspris) || 0), 0) * mengde
+      const uekostnad = (bd.underleverandorer || []).reduce((s, u) => s + (parseFloat(u.kostnad) || 0), 0) * mengde
+      const estimat = arbeidskostnad + materialkostnad + uekostnad
+      result.push({
+        kategoriLabel: kat.label,
+        kategoriIcon: kat.icon,
+        navn: bd.name,
+        mengde,
+        enhet: bd.enhet || 'stk',
+        timer: arbeidstimer,
+        estimat,
+        fag: bd.fag,
+      })
+    })
+    return result
+  }, [veiviserData.valgteKonstruksjoner, veiviserData.mengder])
+
+  const totalEstimat = bygningsdelerForhandsvisning.reduce((s, b) => s + b.estimat, 0) + (veiviserData.teknisk?.total || 0)
+  const totalTimer = bygningsdelerForhandsvisning.reduce((s, b) => s + b.timer, 0)
+  const bygningstype = BIM_BYGNINGSTYPER.find(t => t.id === veiviserData.bygningstype)
+
+  return (
+    <div>
+      <h3 style={{ margin:'0 0 6px', fontSize: isMob ? '17px' : '20px', fontWeight:'700', color:'#0f172a' }}>Oppsummering</h3>
+      <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Bekreft at alt ser riktig ut før du oppretter kalkylen. Du kan justere alt etterpå.</p>
+
+      <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 280px', gap:'16px' }}>
+
+        {/* Venstre: Detaljer */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+
+          {/* Bygningstype og mål */}
+          <div style={{ background:'white', borderRadius:'12px', padding:'14px 16px', border:'1px solid #e2e8f0' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'8px' }}>Prosjektet</div>
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'8px' }}>
+              <span style={{ fontSize:'24px' }}>{bygningstype?.icon}</span>
+              <div>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{bygningstype?.name}</div>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>
+                  {veiviserData.lengde}m × {veiviserData.bredde}m, {veiviserData.etasjer} etg, {veiviserData.taktype === 'flatt' ? 'flatt tak' : `${veiviserData.taktype} ${veiviserData.takvinkel}°`}
+                </div>
+              </div>
+            </div>
+            {veiviserData.mengder && (
+              <div style={{ display:'flex', gap:'14px', flexWrap:'wrap', fontSize:'12px', color:'#475569', borderTop:'1px solid #f1f5f9', paddingTop:'8px' }}>
+                <span><strong>BRA:</strong> {veiviserData.mengder.bra} m²</span>
+                <span><strong>Omkrets:</strong> {veiviserData.mengder.omkrets} lm</span>
+                <span><strong>Vinduer:</strong> {veiviserData.mengder.vinduer.antall} stk</span>
+                <span><strong>Ytterdører:</strong> {veiviserData.mengder.ytterdorer.antall} stk</span>
+              </div>
+            )}
+          </div>
+
+          {/* Bygningsdeler som vil bli opprettet */}
+          <div style={{ background:'white', borderRadius:'12px', padding:'14px 16px', border:'1px solid #e2e8f0' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>
+              Bygningsdeler som vil bli opprettet ({bygningsdelerForhandsvisning.length})
+            </div>
+            {bygningsdelerForhandsvisning.length === 0 ? (
+              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>Ingen bygningsdeler valgt.</p>
+            ) : (
+              bygningsdelerForhandsvisning.map((b, i) => (
+                <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 0', borderBottom: i < bygningsdelerForhandsvisning.length - 1 ? '1px solid #f8fafc' : 'none' }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>
+                      {b.kategoriIcon} {b.navn}
+                    </div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                      {b.mengde.toFixed(1)} {b.enhet} · {b.timer.toFixed(1)} timer · {b.fag}
+                    </div>
+                  </div>
+                  <strong style={{ fontSize:'13px', color:'#0f172a', flexShrink:0, marginLeft:'10px' }}>
+                    {Math.round(b.estimat).toLocaleString('nb-NO')} kr
+                  </strong>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Tekniske fag */}
+          {veiviserData.teknisk && veiviserData.teknisk.total > 0 && (
+            <div style={{ background:'white', borderRadius:'12px', padding:'14px 16px', border:'1px solid #e2e8f0' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', marginBottom:'10px' }}>
+                Tekniske fag (rundsum)
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}>
+                <span style={{ color:'#475569' }}>🚿 VVS</span><strong>{veiviserData.teknisk.vvs.toLocaleString('nb-NO')} kr</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}>
+                <span style={{ color:'#475569' }}>⚡ Elektro</span><strong>{veiviserData.teknisk.elektro.toLocaleString('nb-NO')} kr</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}>
+                <span style={{ color:'#475569' }}>💨 Ventilasjon</span><strong>{veiviserData.teknisk.ventilasjon.toLocaleString('nb-NO')} kr</strong>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Høyre: Total + opprett-info */}
+        <div>
+          <div style={{ background:'linear-gradient(135deg, #ecfdf5 0%, #f0fdf4 100%)', borderRadius:'14px', padding:'18px', border:'1px solid #a7f3d0', position: isMob ? 'static' : 'sticky', top:0 }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#065f46', textTransform:'uppercase', marginBottom:'8px' }}>Estimat totalt</div>
+            <div style={{ fontSize:'28px', fontWeight:'800', color:'#065f46', marginBottom:'4px' }}>
+              {Math.round(totalEstimat).toLocaleString('nb-NO')} kr
+            </div>
+            <div style={{ fontSize:'11px', color:'#047857', marginBottom:'14px' }}>eks. mva, før påslag og fortjeneste</div>
+
+            <div style={{ background:'white', borderRadius:'10px', padding:'10px 12px', fontSize:'12px', marginBottom:'12px' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
+                <span>Bygningsdeler</span><strong style={{ color:'#0f172a' }}>{bygningsdelerForhandsvisning.length}</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
+                <span>Timer (estimat)</span><strong style={{ color:'#0f172a' }}>{totalTimer.toFixed(0)}</strong>
+              </div>
+              <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
+                <span>Tekniske fag</span><strong style={{ color:'#0f172a' }}>{(veiviserData.teknisk?.total || 0).toLocaleString('nb-NO')} kr</strong>
+              </div>
+            </div>
+
+            <p style={{ margin:0, fontSize:'11px', color:'#065f46', lineHeight:1.5 }}>
+              ℹ️ Klikk <strong>"Opprett kalkyle"</strong> nederst for å lagre alt i en ny kalkyle. Du kan da justere mengder, priser og legge til mer.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BimKalkyleVeiviserModal({ onClose, onComplete }) {
   const [steg, setSteg] = useState(1)
   const [veiviserData, setVeiviserData] = useState({
@@ -35210,9 +35622,12 @@ function BimKalkyleVeiviserModal({ onClose, onComplete }) {
     if (steg === 1) return !!veiviserData.bygningstype
     if (steg === 2) return parseFloat(veiviserData.lengde) > 0 && parseFloat(veiviserData.bredde) > 0 && parseInt(veiviserData.etasjer) > 0
     if (steg === 3) {
-      // Minimum: yttervegg + tak + gulv valgt
-      const v = veiviserData.valgteKonstruksjoner
-      return !!v.yttervegg && !!v.tak && !!v.gulv
+      // Alle obligatoriske kategorier må være valgt (yttervegg, tak, gulv)
+      const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
+        if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+        return k.obligatorisk
+      })
+      return obligatoriske.every(k => !!veiviserData.valgteKonstruksjoner[k.id])
     }
     if (steg === 4) return true // alle defaults er gyldige
     return true
@@ -35278,52 +35693,15 @@ function BimKalkyleVeiviserModal({ onClose, onComplete }) {
           )}
 
           {steg === 3 && (
-            <div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Velg konstruksjonstyper</h3>
-              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Velg yttervegg, innervegg, tak og gulv fra konstruksjonsbiblioteket.</p>
-              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
-                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
-                <strong>Steg 3: Konstruksjoner</strong>
-                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Visuelle bibliotek-kort kommer i Patch 3c.</p>
-                <p style={{ margin:'12px 0 0', fontSize:'12px' }}>For å teste videre — placeholder-valg:</p>
-                <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginTop:'10px', maxWidth:'320px', margin:'10px auto 0' }}>
-                  {['yttervegg','innervegg','tak','gulv','grunnmur'].map(k => (
-                    <button key={k} onClick={() => updateKonstruksjon(k, `placeholder_${k}`)}
-                      style={{ padding:'8px 14px', borderRadius:'8px', border: veiviserData.valgteKonstruksjoner[k] ? '2px solid #059669' : '1px solid #fcd34d', background: veiviserData.valgteKonstruksjoner[k] ? '#ecfdf5' : 'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: veiviserData.valgteKonstruksjoner[k] ? '#065f46' : '#92400e', textAlign:'left' }}>
-                      {veiviserData.valgteKonstruksjoner[k] ? '✓ ' : ''}{k}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <BimVeiviserSteg3 veiviserData={veiviserData} updateKonstruksjon={updateKonstruksjon} isMob={isMob} />
           )}
 
           {steg === 4 && (
-            <div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Tekniske fag</h3>
-              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>VVS, elektro og ventilasjon — som rundsum basert på erfaringstall.</p>
-              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
-                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
-                <strong>Steg 4: Tekniske fag</strong>
-                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Inputfelter for bad/kjøkken/elektro/ventilasjon kommer i Patch 3c.</p>
-              </div>
-            </div>
+            <BimVeiviserSteg4 veiviserData={veiviserData} update={update} isMob={isMob} />
           )}
 
           {steg === 5 && (
-            <div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Oppsummering og opprett kalkyle</h3>
-              <p style={{ margin:'0 0 20px', fontSize:'13px', color:'#64748b' }}>Forhåndsvis bygningsdeler og kostnadsestimat før du oppretter kalkylen.</p>
-              <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e' }}>
-                <div style={{ fontSize:'32px', marginBottom:'8px' }}>🚧</div>
-                <strong>Steg 5: Oppsummering</strong>
-                <p style={{ margin:'6px 0 0', fontSize:'13px' }}>Forhåndsvisning + opprett-knapp kommer i Patch 3c.</p>
-                <div style={{ marginTop:'14px', padding:'12px', background:'white', borderRadius:'8px', textAlign:'left', fontSize:'11px', color:'#475569', fontFamily:'monospace' }}>
-                  <strong>veiviserData (debug):</strong>
-                  <pre style={{ margin:'4px 0 0', fontSize:'10px', whiteSpace:'pre-wrap', wordBreak:'break-word' }}>{JSON.stringify({ bygningstype: veiviserData.bygningstype, lengde: veiviserData.lengde, bredde: veiviserData.bredde, etasjer: veiviserData.etasjer, valgteKonstruksjoner: veiviserData.valgteKonstruksjoner }, null, 2)}</pre>
-                </div>
-              </div>
-            </div>
+            <BimVeiviserSteg5 veiviserData={veiviserData} isMob={isMob} />
           )}
         </div>
 
@@ -35342,9 +35720,9 @@ function BimKalkyleVeiviserModal({ onClose, onComplete }) {
               Neste →
             </button>
           ) : (
-            <button onClick={() => { if (onComplete) onComplete(veiviserData); onClose() }} disabled
-              style={{ padding: isMob ? '10px 16px' : '11px 22px', background:'#e2e8f0', color:'#94a3b8', border:'none', borderRadius:'10px', cursor:'not-allowed', fontSize: isMob ? '12px' : '13px', fontWeight:'700' }}>
-              Opprett kalkyle (Patch 3c)
+            <button onClick={() => { if (onComplete) onComplete(veiviserData) }}
+              style={{ padding: isMob ? '10px 16px' : '11px 22px', background:'linear-gradient(135deg, #059669, #10b981)', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'700', boxShadow:'0 4px 12px rgba(16,185,129,0.3)' }}>
+              ✓ Opprett kalkyle
             </button>
           )}
         </div>
@@ -36082,7 +36460,36 @@ function KalkulasjonPage({ onNavigate }) {
       )}
 
       {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
-      {showBimVeiviser && <BimKalkyleVeiviserModal onClose={() => setShowBimVeiviser(false)} onComplete={(data) => { console.log('BIM-Kalkyle veiviser fullført:', data); setShowBimVeiviser(false) }} />}
+      {showBimVeiviser && <BimKalkyleVeiviserModal onClose={() => setShowBimVeiviser(false)} onComplete={async (data) => {
+        try {
+          const { kalkyler: nyeKalkyler, faktorer } = byggKalkylerFraVeiviser(data)
+          if (nyeKalkyler.length === 0) { alert('Ingen bygningsdeler valgt. Gå tilbake og velg minst en konstruksjon.'); return }
+          // Hent eksisterende kalk-numre for å generere nytt nummer
+          const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+          const newKalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+          const bygningstype = BIM_BYGNINGSTYPER.find(t => t.id === data.bygningstype)
+          const tittel = `${bygningstype?.name || 'Prosjekt'} ${data.lengde}×${data.bredde}m, ${data.etasjer} etg`
+          const payload = {
+            title: tittel,
+            kalk_number: newKalkNr,
+            kalkyler: nyeKalkyler,
+            faktorer,
+            status: 'Utkast',
+            is_template: false,
+            created_by: user?.id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          }
+          const { data: created, error } = await supabase.from('calculations').insert(payload).select().single()
+          if (error) throw error
+          setShowBimVeiviser(false)
+          await load()
+          if (created) setViewKalk(created)
+        } catch(e) {
+          alert('Feil ved opprettelse: ' + e.message)
+          console.error('BIM-Kalkyle opprettelse feilet:', e)
+        }
+      }} />}
       {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
     </div>
   )
@@ -37061,6 +37468,142 @@ function bibliotekTilBygningsdel(bd, mengde) {
       kostnad: u.kostnad || 0,
     })),
   }
+}
+
+// ─── BIM-KALKYLE: BYGG KALKYLE FRA VEIVISER-DATA ─────────────────────────────
+// Tar inn veiviserData (bygningstype, mengder, valgte konstruksjoner, tekniske fag)
+// og returnerer en komplett payload som kan settes inn i calculations-tabellen.
+function byggKalkylerFraVeiviser(veiviserData) {
+  const mengder = veiviserData.mengder
+  if (!mengder) return { kalkyler: [], faktorer: {} }
+
+  // Grupper bygningsdeler per fag
+  const fagsBygningsdeler = {}  // { tomrer: [bd1, bd2], betong: [bd3] }
+
+  BIM_KONSTRUKSJON_KATEGORIER.forEach(kat => {
+    const valgtId = veiviserData.valgteKonstruksjoner[kat.id]
+    if (!valgtId) return
+    const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === valgtId)
+    if (!bd) return
+    const mengde = mengder[kat.mengdeFelt] || 1
+    const fag = bd.fag
+
+    // Konverter til runtime-format
+    const newBd = bibliotekTilBygningsdel(bd, mengde)
+
+    // For ytterveggen: legg inn vinduer og ytterdører som åpningstillegg automatisk
+    if (kat.id === 'yttervegg' && mengder.vinduer && mengder.ytterdorer) {
+      const apningstillegg = []
+      // Vinduer (typisk 1.8 m² → 1 stk åpningstillegg per vindu)
+      if (mengder.vinduer.antall > 0) {
+        apningstillegg.push({
+          id: Date.now() + 1000,
+          beskrivelse: `${mengder.vinduer.antall} vinduer`,
+          antall: mengder.vinduer.antall,
+          areal: mengder.vinduer.arealPerStk,
+          baerende: veiviserData.baerendeYttervegg !== false,
+          timer_per_tillegg: 0.5, // standard fra tømrertariff
+        })
+      }
+      // Ytterdører (typisk 2.1 m² → 1 stk åpningstillegg)
+      if (mengder.ytterdorer.antall > 0) {
+        apningstillegg.push({
+          id: Date.now() + 1100,
+          beskrivelse: `${mengder.ytterdorer.antall} ytterdører`,
+          antall: mengder.ytterdorer.antall,
+          areal: mengder.ytterdorer.arealPerStk,
+          baerende: veiviserData.baerendeYttervegg !== false,
+          timer_per_tillegg: 0.5,
+        })
+      }
+      newBd.apningstillegg = apningstillegg
+      // Aktivér fradrag for åpninger automatisk (default-oppførsel)
+      newBd.fradrag_apninger = true
+    }
+
+    if (!fagsBygningsdeler[fag]) fagsBygningsdeler[fag] = []
+    fagsBygningsdeler[fag].push(newBd)
+  })
+
+  // Bygg én kalkyle per fag
+  const kalkyler = []
+  let kalkyleId = Date.now()
+  Object.entries(fagsBygningsdeler).forEach(([fag, bygningsdeler]) => {
+    const fagInfo = FAGGRUPPER.find(f => f.id === fag)
+    kalkyler.push({
+      id: kalkyleId++,
+      name: `${fagInfo?.emoji || ''} ${fagInfo?.name || fag}`,
+      fag,
+      bygningsdeler,
+    })
+  })
+
+  // Tekniske fag som UE-poster i egen kalkyle
+  if (veiviserData.teknisk && veiviserData.teknisk.total > 0) {
+    const tekniskBygningsdeler = []
+    if (veiviserData.teknisk.vvs > 0) {
+      tekniskBygningsdeler.push({
+        id: Date.now() + 5000,
+        name: '🚿 VVS (rundsum)',
+        mengde: 1,
+        enhet: 'rs',
+        arbeidsarter: [],
+        materialer: [],
+        underleverandorer: [{
+          id: Date.now() + 5100,
+          navn: 'VVS-entreprenør',
+          beskrivelse: `Bad: ${veiviserData.antallBad}, bad m/badekar: ${veiviserData.antallBadMedBadekar}, kjøkken: ${veiviserData.antallKjokken}, vaskerom: ${veiviserData.antallVaskerom}`,
+          kostnad: veiviserData.teknisk.vvs,
+        }],
+      })
+    }
+    if (veiviserData.teknisk.elektro > 0) {
+      tekniskBygningsdeler.push({
+        id: Date.now() + 5200,
+        name: '⚡ Elektro (rundsum)',
+        mengde: 1,
+        enhet: 'rs',
+        arbeidsarter: [],
+        materialer: [],
+        underleverandorer: [{
+          id: Date.now() + 5300,
+          navn: 'Elektriker',
+          beskrivelse: `${veiviserData.elektroNiva} installasjon, ${mengder.bra} m² BRA`,
+          kostnad: veiviserData.teknisk.elektro,
+        }],
+      })
+    }
+    if (veiviserData.teknisk.ventilasjon > 0) {
+      tekniskBygningsdeler.push({
+        id: Date.now() + 5400,
+        name: '💨 Ventilasjon (rundsum)',
+        mengde: 1,
+        enhet: 'rs',
+        arbeidsarter: [],
+        materialer: [],
+        underleverandorer: [{
+          id: Date.now() + 5500,
+          navn: 'Ventilasjonsentreprenør',
+          beskrivelse: `${veiviserData.ventilasjonType}, ${mengder.bra} m² BRA`,
+          kostnad: veiviserData.teknisk.ventilasjon,
+        }],
+      })
+    }
+    if (tekniskBygningsdeler.length > 0) {
+      kalkyler.push({
+        id: kalkyleId++,
+        name: '🔧 Tekniske fag',
+        fag: 'ue',
+        bygningsdeler: tekniskBygningsdeler,
+      })
+    }
+  }
+
+  // Default faktorer per fag
+  const faktorer = {}
+  kalkyler.forEach(kl => { faktorer[kl.fag] = getDefaultFaktorer(kl.fag) })
+
+  return { kalkyler, faktorer }
 }
 
 // Oppdater materialpriser fra aktiv prisliste basert på NOBB
