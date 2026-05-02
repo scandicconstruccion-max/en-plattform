@@ -36592,6 +36592,7 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
 
 function KalkulasjonPage({ onNavigate }) {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const [kalks, setKalks] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -37170,7 +37171,10 @@ function KalkulasjonPage({ onNavigate }) {
       {showHurtigstart && <KalkHurtigstartModal onClose={() => setShowHurtigstart(false)} onComplete={async (data) => {
         try {
           const { kalkyler: nyeKalkyler, faktorer } = byggKalkylerFraVeiviser(data)
-          if (nyeKalkyler.length === 0) { alert('Ingen bygningsdeler valgt. Gå tilbake og velg minst en konstruksjon.'); return }
+          if (nyeKalkyler.length === 0) {
+            await appAlert({ message: 'Ingen bygningsdeler valgt', subMessage: 'Gå tilbake til Konstruksjoner og velg minst én bygningsdel.', kind: 'warning' })
+            return
+          }
           // Bruk prosjektinfo fra veiviser-data; fallback til auto-generert hvis tomt
           let kalkNr = data.kalk_number
           if (!kalkNr) {
@@ -37195,10 +37199,11 @@ function KalkulasjonPage({ onNavigate }) {
           })
           // Beregn totals slik editor gjør
           const totals = beregnProsjektTotal(nyeKalkyler, faktorer)
-          const payload = sanitizeDbPayload({
+          // Bygg payload defensivt — inkluder kun customer_id hvis vi har en gyldig
+          // (gjør oss robust mot ev. schema-cache-problemer i Supabase-klienten)
+          const basePayload = {
             title: tittel,
             kalk_number: kalkNr,
-            customer_id: customerId,
             customer_name: data.customer_name || '',
             customer_email: data.customer_email || '',
             customer_address: data.customer_address || '',
@@ -37214,15 +37219,21 @@ function KalkulasjonPage({ onNavigate }) {
             created_by: user?.id,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-          })
+          }
+          if (customerId) basePayload.customer_id = customerId
+          const payload = sanitizeDbPayload(basePayload)
           const { data: created, error } = await supabase.from('calculations').insert(payload).select().single()
           if (error) throw error
           setShowHurtigstart(false)
           await load()
           if (created) setViewKalk(created)
         } catch(e) {
-          alert('Feil ved opprettelse: ' + e.message)
           console.error('Hurtigstart opprettelse feilet:', e)
+          await appAlert({
+            message: 'Kunne ikke opprette kalkyle',
+            subMessage: e.message || 'En ukjent feil oppstod. Prøv igjen, eller kontakt support hvis problemet vedvarer.',
+            kind: 'error',
+          })
         }
       }} />}
       {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
