@@ -36562,6 +36562,539 @@ function closeIfcModel(api, modelID) {
   try { if (modelID >= 0) api.CloseModel(modelID) } catch(e) {}
 }
 
+// ─── MENGDE-EKSTRAKSJON FRA IFC ──────────────────────────────────────────────
+// Henter IFC Base Quantities (areal, lengde, høyde, volum) for hvert element.
+// ArchiCAD/Revit eksporterer disse i IfcElementQuantity-sett knyttet til
+// elementer via IfcRelDefinesByProperties.
+//
+// Prinsipp: vi bygger først en lookup fra elementId → quantitySet for å
+// unngå O(n²)-skanning. Så går vi gjennom hver element-kategori og henter
+// kvantiteter fra de relevante feltene (NetSideArea, GrossSideArea, Length,
+// Height, Volume etc.).
+
+// Bygger en Map<elementID, IfcElementQuantity-line> for hele modellen.
+// Brukes så vi kan slå opp kvantiteter per element raskt.
+function buildQuantityLookup(api, mod, modelID) {
+  const lookup = new Map()
+  try {
+    const relIds = api.GetLineIDsWithType(modelID, mod.IFCRELDEFINESBYPROPERTIES)
+    const numRels = relIds.size()
+    for (let i = 0; i < numRels; i++) {
+      const relId = relIds.get(i)
+      let rel
+      try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+      if (!rel || !rel.RelatingPropertyDefinition || !rel.RelatedObjects) continue
+      const propRef = rel.RelatingPropertyDefinition
+      // RelatingPropertyDefinition er en express-referanse {type, value}
+      const propId = propRef.value
+      if (!propId) continue
+      let propDef
+      try { propDef = api.GetLine(modelID, propId) } catch(e) { continue }
+      if (!propDef) continue
+      // Vi bare interesserer oss for IfcElementQuantity (har Quantities-felt)
+      if (!Array.isArray(propDef.Quantities)) continue
+      // Bind kvantiteten til hvert element som referer til den
+      const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
+      for (const tgt of targets) {
+        const tid = tgt?.value
+        if (tid) lookup.set(tid, propDef)
+      }
+    }
+  } catch(e) {
+    console.warn('[ifc] kunne ikke bygge quantity-lookup:', e)
+  }
+  return lookup
+}
+
+// Henter en numerisk verdi fra et IfcElementQuantity-sett basert på navn-match.
+// Prøver i prioritert rekkefølge — IFC-feltnavn varierer mellom verktøy.
+// Returnerer null hvis ikke funnet.
+function getQuantityValue(quantitySet, names) {
+  if (!quantitySet || !Array.isArray(quantitySet.Quantities)) return null
+  for (const want of names) {
+    for (const q of quantitySet.Quantities) {
+      // q er en express-referanse {type, value} — men i web-ifc er den
+      // ofte allerede ekspandert til en line med Name/AreaValue/LengthValue/VolumeValue
+      const qName = q?.Name?.value
+      if (qName && qName.toLowerCase() === want.toLowerCase()) {
+        // IfcQuantityArea har AreaValue, IfcQuantityLength har LengthValue, osv.
+        const val = q?.AreaValue?.value ?? q?.LengthValue?.value
+                  ?? q?.VolumeValue?.value ?? q?.CountValue?.value
+                  ?? q?.WeightValue?.value
+        if (typeof val === 'number') return val
+      }
+    }
+  }
+  return null
+}
+
+// Ekspanderer en IfcQuantity-referanse: web-ifc returnerer noen ganger {type, value}
+// (kun ID), andre ganger den fulle objekt-representasjonen. Vi normaliserer.
+function expandQuantities(api, modelID, quantitySet) {
+  if (!quantitySet || !Array.isArray(quantitySet.Quantities)) return quantitySet
+  const expanded = quantitySet.Quantities.map(q => {
+    if (q?.Name) return q  // allerede ekspandert
+    const id = q?.value
+    if (!id) return q
+    try { return api.GetLine(modelID, id) } catch(e) { return q }
+  })
+  return { ...quantitySet, Quantities: expanded }
+}
+
+// Sjekker om en vegg er ekstern (yttervegg) basert på IsExternal-property
+// fra Pset_WallCommon. Returnerer true/false/null (null = ukjent).
+function getWallIsExternal(api, mod, modelID, elementId, propLookup) {
+  try {
+    // Bygger lookup første gang og caacher
+    if (!propLookup._psetCache) {
+      propLookup._psetCache = new Map()
+      const relIds = api.GetLineIDsWithType(modelID, mod.IFCRELDEFINESBYPROPERTIES)
+      const numRels = relIds.size()
+      for (let i = 0; i < numRels; i++) {
+        const relId = relIds.get(i)
+        let rel; try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+        if (!rel?.RelatingPropertyDefinition || !rel?.RelatedObjects) continue
+        const propId = rel.RelatingPropertyDefinition.value
+        if (!propId) continue
+        let propDef; try { propDef = api.GetLine(modelID, propId) } catch(e) { continue }
+        // Pset_WallCommon har HasProperties, ikke Quantities
+        if (!Array.isArray(propDef?.HasProperties)) continue
+        const psetName = propDef?.Name?.value
+        if (!psetName || !/wallcommon/i.test(psetName)) continue
+        const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
+        for (const tgt of targets) {
+          const tid = tgt?.value
+          if (tid) propLookup._psetCache.set(tid, propDef)
+        }
+      }
+    }
+    const pset = propLookup._psetCache.get(elementId)
+    if (!pset) return null
+    // Finn IsExternal-property i HasProperties
+    for (const propRef of pset.HasProperties) {
+      let prop = propRef
+      if (!prop?.Name && propRef?.value) {
+        try { prop = api.GetLine(modelID, propRef.value) } catch(e) { continue }
+      }
+      if (prop?.Name?.value?.toLowerCase() === 'isexternal') {
+        return !!(prop?.NominalValue?.value)
+      }
+    }
+  } catch(e) { /* OK — ikke kritisk */ }
+  return null
+}
+
+// Hovedfunksjon: ekstraherer mengder per element-kategori.
+// Returnerer struktur:
+// {
+//   yttervegg: { antall, totalAreal, totalLengde, gjennomsnittHoyde, elementer: [...] },
+//   innervegg: { ... },
+//   tak:       { ... },
+//   gulv:      { ... },          // IfcSlab classified as floor
+//   etasjeskille: { ... },        // IfcSlab classified as floor between stories (not yet implemented)
+//   vindu:     { ... },
+//   dor:       { ... },
+//   trapp:     { ... },
+// }
+async function extractIfcQuantities(api, mod, modelID, onProgress) {
+  const result = {
+    yttervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
+    innervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
+    ukjent_vegg:  { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
+    tak:          { antall: 0, totalAreal: 0, totalVolum: 0, elementer: [] },
+    gulv:         { antall: 0, totalAreal: 0, totalVolum: 0, elementer: [] },
+    vindu:        { antall: 0, totalAreal: 0, gjennomsnittAreal: 0, elementer: [] },
+    dor:          { antall: 0, totalAreal: 0, gjennomsnittAreal: 0, elementer: [] },
+    trapp:        { antall: 0, elementer: [] },
+  }
+
+  if (onProgress) onProgress('Bygger mengde-indeks...')
+  const quantityLookup = buildQuantityLookup(api, mod, modelID)
+  const propLookup = {}
+
+  // --- VEGGER (IfcWall + IfcWallStandardCase) ---
+  if (onProgress) onProgress('Henter veggmengder...')
+  const wallTypes = ['IFCWALL', 'IFCWALLSTANDARDCASE']
+  let veggHoydeSum = 0, veggHoydeCount = 0
+  let veggHoydeSumIv = 0, veggHoydeCountIv = 0
+  for (const wType of wallTypes) {
+    const constant = mod[wType]
+    if (typeof constant === 'undefined') continue
+    const ids = api.GetLineIDsWithType(modelID, constant)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      let qSet = quantityLookup.get(elementId)
+      if (qSet) qSet = expandQuantities(api, modelID, qSet)
+      // Areal — bruk NetSideArea (etter trekk for åpninger), fallback til GrossSideArea
+      const areal = getQuantityValue(qSet, ['NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea']) || 0
+      const lengde = getQuantityValue(qSet, ['Length', 'NetLength', 'GrossLength']) || 0
+      const hoyde = getQuantityValue(qSet, ['Height', 'NetHeight', 'GrossHeight']) || 0
+      const volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume']) || 0
+
+      const isExt = getWallIsExternal(api, mod, modelID, elementId, propLookup)
+      const navn = element?.Name?.value || `Vegg #${elementId}`
+      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, isExternal: isExt }
+
+      let kat = 'ukjent_vegg'
+      if (isExt === true) kat = 'yttervegg'
+      else if (isExt === false) kat = 'innervegg'
+
+      result[kat].antall++
+      result[kat].totalAreal += areal
+      result[kat].totalLengde += lengde
+      result[kat].totalVolum += volum
+      result[kat].elementer.push(elInfo)
+      if (kat === 'yttervegg' && hoyde > 0) { veggHoydeSum += hoyde; veggHoydeCount++ }
+      if (kat === 'innervegg' && hoyde > 0) { veggHoydeSumIv += hoyde; veggHoydeCountIv++ }
+    }
+  }
+  result.yttervegg.gjennomsnittHoyde = veggHoydeCount > 0 ? veggHoydeSum / veggHoydeCount : 0
+  result.innervegg.gjennomsnittHoyde = veggHoydeCountIv > 0 ? veggHoydeSumIv / veggHoydeCountIv : 0
+
+  // --- TAK (IfcRoof) ---
+  if (onProgress) onProgress('Henter takmengder...')
+  if (typeof mod.IFCROOF !== 'undefined') {
+    const ids = api.GetLineIDsWithType(modelID, mod.IFCROOF)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      let qSet = quantityLookup.get(elementId)
+      if (qSet) qSet = expandQuantities(api, modelID, qSet)
+      const areal = getQuantityValue(qSet, ['ProjectedArea', 'NetArea', 'GrossArea']) || 0
+      const volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume']) || 0
+      const navn = element?.Name?.value || `Tak #${elementId}`
+      result.tak.antall++
+      result.tak.totalAreal += areal
+      result.tak.totalVolum += volum
+      result.tak.elementer.push({ id: elementId, navn, areal, volum })
+    }
+  }
+
+  // --- GULV/ETASJESKILLE (IfcSlab) ---
+  if (onProgress) onProgress('Henter gulvmengder...')
+  if (typeof mod.IFCSLAB !== 'undefined') {
+    const ids = api.GetLineIDsWithType(modelID, mod.IFCSLAB)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      let qSet = quantityLookup.get(elementId)
+      if (qSet) qSet = expandQuantities(api, modelID, qSet)
+      const areal = getQuantityValue(qSet, ['NetArea', 'GrossArea', 'GrossPlanArea']) || 0
+      const volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume']) || 0
+      const navn = element?.Name?.value || `Gulv #${elementId}`
+      // PredefinedType kan være 'FLOOR' eller 'ROOF' eller 'LANDING'
+      const predef = element?.PredefinedType?.value || ''
+      result.gulv.antall++
+      result.gulv.totalAreal += areal
+      result.gulv.totalVolum += volum
+      result.gulv.elementer.push({ id: elementId, navn, areal, volum, predef })
+    }
+  }
+
+  // --- VINDUER (IfcWindow) ---
+  if (onProgress) onProgress('Henter vindusmengder...')
+  if (typeof mod.IFCWINDOW !== 'undefined') {
+    const ids = api.GetLineIDsWithType(modelID, mod.IFCWINDOW)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      let qSet = quantityLookup.get(elementId)
+      if (qSet) qSet = expandQuantities(api, modelID, qSet)
+      // Vinduer har Width og Height, vi beregner areal
+      const width = getQuantityValue(qSet, ['Width', 'OverallWidth']) || (element?.OverallWidth?.value || 0)
+      const height = getQuantityValue(qSet, ['Height', 'OverallHeight']) || (element?.OverallHeight?.value || 0)
+      const areal = width * height
+      const navn = element?.Name?.value || `Vindu #${elementId}`
+      result.vindu.antall++
+      result.vindu.totalAreal += areal
+      result.vindu.elementer.push({ id: elementId, navn, width, height, areal })
+    }
+  }
+  result.vindu.gjennomsnittAreal = result.vindu.antall > 0 ? result.vindu.totalAreal / result.vindu.antall : 0
+
+  // --- DØRER (IfcDoor) ---
+  if (onProgress) onProgress('Henter dørmengder...')
+  if (typeof mod.IFCDOOR !== 'undefined') {
+    const ids = api.GetLineIDsWithType(modelID, mod.IFCDOOR)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      let qSet = quantityLookup.get(elementId)
+      if (qSet) qSet = expandQuantities(api, modelID, qSet)
+      const width = getQuantityValue(qSet, ['Width', 'OverallWidth']) || (element?.OverallWidth?.value || 0)
+      const height = getQuantityValue(qSet, ['Height', 'OverallHeight']) || (element?.OverallHeight?.value || 0)
+      const areal = width * height
+      const navn = element?.Name?.value || `Dør #${elementId}`
+      result.dor.antall++
+      result.dor.totalAreal += areal
+      result.dor.elementer.push({ id: elementId, navn, width, height, areal })
+    }
+  }
+  result.dor.gjennomsnittAreal = result.dor.antall > 0 ? result.dor.totalAreal / result.dor.antall : 0
+
+  // --- TRAPPER (IfcStair) ---
+  if (onProgress) onProgress('Henter trappmengder...')
+  if (typeof mod.IFCSTAIR !== 'undefined') {
+    const ids = api.GetLineIDsWithType(modelID, mod.IFCSTAIR)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      const navn = element?.Name?.value || `Trapp #${elementId}`
+      result.trapp.antall++
+      result.trapp.elementer.push({ id: elementId, navn })
+    }
+  }
+
+  // Konverter mm til meter hvis IFC bruker millimeter (typisk for ArchiCAD).
+  // Vi gjør en heuristisk sjekk: hvis gjennomsnitt-veggareal > 1000 så er det mm.
+  // Da deler vi alle areal-verdier på 1 000 000 (mm² → m²) og lengder på 1000.
+  const sampleAreal = (result.yttervegg.totalAreal + result.innervegg.totalAreal) / Math.max(1, result.yttervegg.antall + result.innervegg.antall)
+  const erMm = sampleAreal > 1000  // hvis snittareal > 1000, antar vi mm² (et reelt veggareal er ~10 m² = 10 000 000 mm²)
+  if (erMm) {
+    const konverterMengde = (kat) => {
+      result[kat].totalAreal /= 1_000_000
+      if (typeof result[kat].totalLengde !== 'undefined') result[kat].totalLengde /= 1000
+      if (typeof result[kat].totalVolum !== 'undefined') result[kat].totalVolum /= 1_000_000_000
+      if (typeof result[kat].gjennomsnittHoyde !== 'undefined') result[kat].gjennomsnittHoyde /= 1000
+      if (typeof result[kat].gjennomsnittAreal !== 'undefined') result[kat].gjennomsnittAreal /= 1_000_000
+      result[kat].elementer.forEach(e => {
+        if (typeof e.areal === 'number') e.areal /= 1_000_000
+        if (typeof e.lengde === 'number') e.lengde /= 1000
+        if (typeof e.hoyde === 'number') e.hoyde /= 1000
+        if (typeof e.volum === 'number') e.volum /= 1_000_000_000
+        if (typeof e.width === 'number') e.width /= 1000
+        if (typeof e.height === 'number') e.height /= 1000
+      })
+    }
+    Object.keys(result).forEach(konverterMengde)
+  }
+
+  return result
+}
+
+// ─── BIM MENGDE-VISNING (Patch 10) ───────────────────────────────────────────
+// Viser mengde-totaler per kategori med collapsible "vis detaljer"-toggle.
+// Bruker mengde-objektet returnert fra extractIfcQuantities().
+
+function BimMengdeVisning({ mengder, isMob }) {
+  // Hver kategori kan utvides for å vise individuelle elementer
+  const [utvidet, setUtvidet] = useState({})
+  const toggle = (key) => setUtvidet(u => ({ ...u, [key]: !u[key] }))
+
+  // Definer hvilke kategorier vi viser, og hva som vises i hver
+  const kategorier = [
+    {
+      key: 'yttervegg', label: 'Yttervegger', icon: '🧱', color: '#dc2626',
+      data: mengder.yttervegg,
+      formatter: (d) => [
+        { label: 'Antall', value: d.antall + ' stk' },
+        { label: 'Total areal (netto)', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
+        { label: 'Total lengde', value: d.totalLengde.toFixed(1) + ' lm' },
+        { label: 'Snitt høyde', value: d.gjennomsnittHoyde.toFixed(2) + ' m' },
+      ],
+      kolonner: ['Navn', 'Lengde', 'Høyde', 'Areal', 'Volum'],
+      formatRad: (e) => [
+        e.navn,
+        e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
+        e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      ],
+    },
+    {
+      key: 'innervegg', label: 'Innervegger', icon: '🚪', color: '#7c3aed',
+      data: mengder.innervegg,
+      formatter: (d) => [
+        { label: 'Antall', value: d.antall + ' stk' },
+        { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
+        { label: 'Total lengde', value: d.totalLengde.toFixed(1) + ' lm' },
+        { label: 'Snitt høyde', value: d.gjennomsnittHoyde.toFixed(2) + ' m' },
+      ],
+      kolonner: ['Navn', 'Lengde', 'Høyde', 'Areal', 'Volum'],
+      formatRad: (e) => [
+        e.navn,
+        e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
+        e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      ],
+    },
+    {
+      key: 'ukjent_vegg', label: 'Vegger uten klassifisering', icon: '⚠️', color: '#ca8a04',
+      data: mengder.ukjent_vegg,
+      kunHvis: mengder.ukjent_vegg.antall > 0,
+      formatter: (d) => [
+        { label: 'Antall', value: d.antall + ' stk' },
+        { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
+        { label: 'Hint', value: 'Mangler IsExternal-prop. Klassifiseres manuelt.' },
+      ],
+      kolonner: ['Navn', 'Lengde', 'Høyde', 'Areal'],
+      formatRad: (e) => [
+        e.navn,
+        e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
+        e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+      ],
+    },
+    {
+      key: 'tak', label: 'Tak', icon: '🏠', color: '#059669',
+      data: mengder.tak,
+      formatter: (d) => [
+        { label: 'Antall element', value: d.antall + ' stk' },
+        { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
+        { label: 'Total volum', value: d.totalVolum.toFixed(2) + ' m³' },
+      ],
+      kolonner: ['Navn', 'Areal', 'Volum'],
+      formatRad: (e) => [
+        e.navn,
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      ],
+    },
+    {
+      key: 'gulv', label: 'Gulv/etasjeskille', icon: '🟦', color: '#0891b2',
+      data: mengder.gulv,
+      formatter: (d) => [
+        { label: 'Antall element', value: d.antall + ' stk' },
+        { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
+        { label: 'Total volum', value: d.totalVolum.toFixed(2) + ' m³' },
+      ],
+      kolonner: ['Navn', 'Type', 'Areal', 'Volum'],
+      formatRad: (e) => [
+        e.navn,
+        e.predef || '—',
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      ],
+    },
+    {
+      key: 'vindu', label: 'Vinduer', icon: '🪟', color: '#0284c7',
+      data: mengder.vindu,
+      formatter: (d) => [
+        { label: 'Antall', value: d.antall + ' stk', primary: true },
+        { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²' },
+        { label: 'Snitt areal', value: d.gjennomsnittAreal.toFixed(2) + ' m²/stk' },
+      ],
+      kolonner: ['Navn', 'Bredde', 'Høyde', 'Areal'],
+      formatRad: (e) => [
+        e.navn,
+        e.width > 0 ? e.width.toFixed(2) + ' m' : '—',
+        e.height > 0 ? e.height.toFixed(2) + ' m' : '—',
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+      ],
+    },
+    {
+      key: 'dor', label: 'Dører', icon: '🚪', color: '#9333ea',
+      data: mengder.dor,
+      kunHvis: mengder.dor.antall > 0,
+      formatter: (d) => [
+        { label: 'Antall', value: d.antall + ' stk', primary: true },
+        { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²' },
+        { label: 'Snitt areal', value: d.gjennomsnittAreal.toFixed(2) + ' m²/stk' },
+      ],
+      kolonner: ['Navn', 'Bredde', 'Høyde', 'Areal'],
+      formatRad: (e) => [
+        e.navn,
+        e.width > 0 ? e.width.toFixed(2) + ' m' : '—',
+        e.height > 0 ? e.height.toFixed(2) + ' m' : '—',
+        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+      ],
+    },
+    {
+      key: 'trapp', label: 'Trapper', icon: '🪜', color: '#ea580c',
+      data: mengder.trapp,
+      formatter: (d) => [
+        { label: 'Antall', value: d.antall + ' stk', primary: true },
+      ],
+      kolonner: ['Navn'],
+      formatRad: (e) => [e.navn],
+    },
+  ]
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+      {kategorier.map(kat => {
+        if (kat.kunHvis === false) return null
+        if (!kat.data || kat.data.antall === 0) return null
+        const erUtvidet = !!utvidet[kat.key]
+        const stats = kat.formatter(kat.data)
+        return (
+          <div key={kat.key} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+            {/* Hovedrad — alltid synlig */}
+            <button onClick={() => toggle(kat.key)}
+              style={{ width:'100%', background:'transparent', border:'none', cursor:'pointer', padding: isMob ? '12px 14px' : '14px 18px', display:'flex', alignItems:'center', gap:'12px', textAlign:'left' }}>
+              <div style={{ width:'36px', height:'36px', borderRadius:'10px', background: kat.color + '15', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>
+                {kat.icon}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>{kat.label}</div>
+                <div style={{ display:'flex', flexWrap:'wrap', gap:'10px', fontSize:'12px', color:'#64748b' }}>
+                  {stats.map((s, i) => (
+                    <span key={i} style={{ color: s.primary ? kat.color : '#64748b', fontWeight: s.primary ? '700' : '500' }}>
+                      {s.label}: <strong>{s.value}</strong>
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div style={{ fontSize:'12px', color:'#94a3b8', flexShrink:0 }}>
+                {erUtvidet ? '▼' : '▶'} {erUtvidet ? 'Skjul' : 'Vis'} detaljer
+              </div>
+            </button>
+            {/* Detaljer — kun ved utvidet */}
+            {erUtvidet && (
+              <div style={{ borderTop:'1px solid #f1f5f9', maxHeight:'320px', overflowY:'auto' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                  <thead style={{ position:'sticky', top:0, background:'#f8fafc', zIndex:1 }}>
+                    <tr>
+                      {kat.kolonner.map((kol, i) => (
+                        <th key={i} style={{ padding:'8px 12px', textAlign: i === 0 ? 'left' : 'right', fontWeight:'700', color:'#475569', fontSize:'11px', textTransform:'uppercase', letterSpacing:'0.4px', borderBottom:'1px solid #e2e8f0' }}>
+                          {kol}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {kat.data.elementer.slice(0, 500).map((e, idx) => {
+                      const verdier = kat.formatRad(e)
+                      return (
+                        <tr key={idx} style={{ borderBottom:'1px solid #f8fafc' }}>
+                          {verdier.map((v, j) => (
+                            <td key={j} style={{ padding:'6px 12px', color: j === 0 ? '#0f172a' : '#475569', textAlign: j === 0 ? 'left' : 'right', whiteSpace: j === 0 ? 'normal' : 'nowrap', fontWeight: j === 0 ? '500' : '400' }}>
+                              {v}
+                            </td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                {kat.data.elementer.length > 500 && (
+                  <div style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'center', background:'#f8fafc' }}>
+                    Viser de første 500 av {kat.data.elementer.length} elementer
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 // ─── BIM-IMPORT FULL SIDEFLYT ────────────────────────────────────────────────
 // Erstatter BimImportPlaceholderModal når brukeren har bim_kalkyle-modulen.
 // Vises som full skjermflyt fordi parsing og bekreftelse er for kompleks for modal.
@@ -36611,7 +37144,7 @@ function BimImportPage({ onTilbake, onAlert }) {
     parseFil(f)
   }
 
-  // Parser IFC-fil: laster web-ifc, åpner modell, henter metadata, lukker modell
+  // Parser IFC-fil: laster web-ifc, åpner modell, henter metadata + mengder, lukker modell
   const parseFil = async (f) => {
     setFase('analysing')
     setProgress({ step: 'Laster IFC-bibliotek...', percent: 5 })
@@ -36622,21 +37155,27 @@ function BimImportPage({ onTilbake, onAlert }) {
       const loaded = await _loadWebIfc()
       api = loaded.api
       mod = loaded.mod
-      setProgress({ step: 'Leser fil...', percent: 25 })
+      setProgress({ step: 'Leser fil...', percent: 20 })
       const buffer = await f.arrayBuffer()
       const data = new Uint8Array(buffer)
-      setProgress({ step: 'Analyserer 3D-modell — dette kan ta opp til 1 minutt for store filer...', percent: 50 })
+      setProgress({ step: 'Analyserer 3D-modell — dette kan ta opp til 1 minutt for store filer...', percent: 40 })
       // OpenModel returnerer modelID
       modelID = api.OpenModel(data, { COORDINATE_TO_ORIGIN: true })
       if (modelID < 0) throw new Error('IFC-filen kunne ikke åpnes. Filen kan være korrupt eller i ikke-støttet versjon.')
-      setProgress({ step: 'Henter metadata og elementer...', percent: 80 })
+      setProgress({ step: 'Henter metadata og elementer...', percent: 60 })
       const meta = await extractIfcMetadata(api, mod, modelID)
       meta.fileName = f.name
       meta.fileSize = f.size
-      setMetadata(meta)
+      // Mengde-ekstraksjon (Patch 10)
+      setProgress({ step: 'Beregner mengder per element...', percent: 75 })
+      const mengder = await extractIfcQuantities(api, mod, modelID, (msg) => {
+        setProgress(p => ({ ...p, step: msg }))
+      })
+      meta.mengder = mengder
       setProgress({ step: 'Ferdig!', percent: 100 })
+      setMetadata(meta)
       setFase('analyzed')
-      // Lukk modell for å frigjøre minne (vi gjenåpner ved Patch 10+ for mengdeuthenting)
+      // Lukk modell for å frigjøre minne (vi gjenåpner ved Patch 12+ for matching)
       closeIfcModel(api, modelID)
       modelID = -1
     } catch(e) {
@@ -36822,11 +37361,19 @@ function BimImportPage({ onTilbake, onAlert }) {
             </div>
           </div>
 
+          {/* Mengder per kategori — Patch 10 */}
+          {metadata.mengder && (
+            <div style={{ marginTop:'18px' }}>
+              <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>📏 Mengder per kategori</h3>
+              <BimMengdeVisning mengder={metadata.mengder} isMob={isMob} />
+            </div>
+          )}
+
           {/* Neste-steg-info */}
           <div style={{ marginTop:'18px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
             <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i neste oppdatering</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              I neste oppdatering legges til mengdeekstraksjon (areal, lengde, volum per element), bibliotek-matching og automatisk kalkyle-generering. Akkurat nå viser systemet kun at det kan lese filen og hva den inneholder.
+              Neste oppdatering legger til lagstruktur-ekstraksjon, bibliotek-matching mot dine konstruksjoner, og automatisk kalkyle-generering. Akkurat nå ser du mengdene, men du kan ikke opprette en kalkyle ennå.
             </p>
           </div>
         </div>
