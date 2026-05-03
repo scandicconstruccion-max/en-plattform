@@ -36507,14 +36507,6 @@ async function _loadWebIfc() {
   return _ifcCache.loading
 }
 
-// Format file size for display
-function formatFileSize(bytes) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
-}
-
 // Henter grunnleggende metadata fra parsed IFC-modell og teller elementer.
 // Returnerer { project, building, elementCounts, totalElements }
 async function extractIfcMetadata(api, modelID) {
