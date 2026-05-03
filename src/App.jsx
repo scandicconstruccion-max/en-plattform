@@ -36368,22 +36368,23 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
             {/* Tom kalkyle */}
             <button onClick={onVelgTom}
               style={{
-                background:'white',
-                border:'2px solid #e2e8f0',
+                background:'linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%)',
+                border:'2px solid #c4b5fd',
                 borderRadius:'14px',
                 padding: isMob ? '18px 16px' : '22px 20px',
                 cursor:'pointer',
                 textAlign:'left',
                 transition:'all 0.15s',
+                boxShadow:'0 4px 16px rgba(139,92,246,0.1)',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#94a3b8' }}
-              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#e2e8f0' }}>
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#8b5cf6'; e.currentTarget.style.boxShadow = '0 6px 20px rgba(139,92,246,0.2)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#c4b5fd'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.1)' }}>
               <div style={{ fontSize:'36px', marginBottom:'10px' }}>📝</div>
               <h3 style={{ margin:'0 0 6px', fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>Tom kalkyle</h3>
               <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#475569', lineHeight:1.5 }}>
                 Bygg opp kalkylen manuelt — legg til fagkalkyler og bygningsdeler fra biblioteket etter behov.
               </p>
-              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'10px', fontSize:'11px', color:'#64748b' }}>
+              <div style={{ borderTop:'1px solid #e9d5ff', paddingTop:'10px', fontSize:'11px', color:'#7c3aed' }}>
                 💪 Full kontroll — perfekt for spesielle prosjekter eller egne maler
               </div>
             </button>
