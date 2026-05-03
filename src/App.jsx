@@ -36441,9 +36441,419 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
   )
 }
 
+// ─── BIM-KALKYLE: IFC-IMPORT INFRASTRUKTUR ───────────────────────────────────
+// Patch 9: Fundament — laster web-ifc fra CDN, parser IFC-fil i nettleseren,
+// henter metadata + element-statistikk. Mengdeekstraksjon kommer i Patch 10+.
+
+// Filstørrelse-grenser (i bytes)
+const IFC_SIZE_SOFT_LIMIT = 100 * 1024 * 1024   // 100 MB — advarsel
+const IFC_SIZE_HARD_LIMIT = 200 * 1024 * 1024   // 200 MB — avvises
+
+// IFC-element-typer vi gjenkjenner og kategoriserer.
+// Bruker IFC2X3-konstanter (samme som IFC4 for grunnleggende typer).
+// Disse mappes mot vårt BYGNINGSDEL_BIBLIOTEK i Patch 12.
+const IFC_ELEMENT_TYPES = [
+  { ifcType: 'IFCWALL',           label: 'Vegger',          icon: '🧱', kategori: 'yttervegg_eller_innervegg' },
+  { ifcType: 'IFCWALLSTANDARDCASE', label: 'Vegger (std.)', icon: '🧱', kategori: 'yttervegg_eller_innervegg' },
+  { ifcType: 'IFCSLAB',           label: 'Etasjeskille/gulv', icon: '🟦', kategori: 'etasjeskille_eller_gulv' },
+  { ifcType: 'IFCROOF',           label: 'Tak',             icon: '🏠', kategori: 'tak' },
+  { ifcType: 'IFCWINDOW',         label: 'Vinduer',         icon: '🪟', kategori: 'vinduer' },
+  { ifcType: 'IFCDOOR',           label: 'Dører',           icon: '🚪', kategori: 'dorer' },
+  { ifcType: 'IFCSTAIR',          label: 'Trapper',         icon: '🪜', kategori: 'innvendig_trapp' },
+  { ifcType: 'IFCSTAIRFLIGHT',    label: 'Trapp-løp',       icon: '🪜', kategori: 'innvendig_trapp' },
+  { ifcType: 'IFCRAILING',        label: 'Rekkverk',        icon: '🔲', kategori: 'ukjent' },
+  { ifcType: 'IFCBEAM',           label: 'Bjelker',         icon: '➖', kategori: 'ukjent' },
+  { ifcType: 'IFCCOLUMN',         label: 'Søyler',          icon: '🔺', kategori: 'ukjent' },
+  { ifcType: 'IFCFOOTING',        label: 'Fundament',       icon: '🟪', kategori: 'grunnmur' },
+  { ifcType: 'IFCCOVERING',       label: 'Himling/kledning', icon: '🟫', kategori: 'ukjent' },
+  { ifcType: 'IFCCURTAINWALL',    label: 'Glassfasade',     icon: '🪟', kategori: 'ukjent' },
+  { ifcType: 'IFCBUILDINGELEMENTPROXY', label: 'Andre elementer', icon: '📦', kategori: 'ukjent' },
+  { ifcType: 'IFCFURNISHINGELEMENT', label: 'Inventar',     icon: '🪑', kategori: 'ukjent' },
+  { ifcType: 'IFCFLOWSEGMENT',    label: 'Tekn. installasjon', icon: '⚙️', kategori: 'tekniske' },
+  { ifcType: 'IFCFLOWFITTING',    label: 'Tekn. koblinger', icon: '⚙️', kategori: 'tekniske' },
+]
+
+// Lazy-load web-ifc fra CDN. Returnerer { IfcAPI }-instans eller throws.
+// web-ifc er WebAssembly-basert — først en ~50KB JS-loader, så ~2MB WASM ved init.
+const _ifcCache = { module: null, api: null, loading: null }
+
+async function _loadWebIfc() {
+  if (_ifcCache.api) return _ifcCache.api
+  if (_ifcCache.loading) return _ifcCache.loading
+  _ifcCache.loading = (async () => {
+    // Last inn web-ifc UMD bundle fra CDN
+    if (!window.WebIFC) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script')
+        // unpkg er stabil for web-ifc; versjonen er lockad slik at vi
+        // ikke får uventede oppgraderinger
+        s.src = 'https://unpkg.com/web-ifc@0.0.57/web-ifc-api.js'
+        s.onload = resolve
+        s.onerror = () => reject(new Error('Kunne ikke laste web-ifc fra CDN. Sjekk nettverkstilkobling.'))
+        document.head.appendChild(s)
+      })
+    }
+    if (!window.WebIFC) {
+      throw new Error('web-ifc lastet ikke korrekt. Last siden på nytt.')
+    }
+    // Initialiser API. WASM-fil hentes fra samme CDN.
+    const api = new window.WebIFC.IfcAPI()
+    api.SetWasmPath('https://unpkg.com/web-ifc@0.0.57/')
+    await api.Init()
+    _ifcCache.api = api
+    _ifcCache.loading = null
+    return api
+  })()
+  return _ifcCache.loading
+}
+
+// Format file size for display
+function formatFileSize(bytes) {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`
+}
+
+// Henter grunnleggende metadata fra parsed IFC-modell og teller elementer.
+// Returnerer { project, building, elementCounts, totalElements }
+async function extractIfcMetadata(api, modelID) {
+  const result = {
+    project: { name: '', description: '', longName: '' },
+    building: { name: '', address: '' },
+    application: '', schema: '',
+    elementCounts: {}, totalElements: 0,
+  }
+  try {
+    // IFCPROJECT
+    const projectIds = api.GetLineIDsWithType(modelID, window.WebIFC.IFCPROJECT)
+    if (projectIds.size() > 0) {
+      const proj = api.GetLine(modelID, projectIds.get(0))
+      result.project.name = proj?.Name?.value || ''
+      result.project.description = proj?.Description?.value || ''
+      result.project.longName = proj?.LongName?.value || ''
+    }
+    // IFCBUILDING
+    const buildingIds = api.GetLineIDsWithType(modelID, window.WebIFC.IFCBUILDING)
+    if (buildingIds.size() > 0) {
+      const bld = api.GetLine(modelID, buildingIds.get(0))
+      result.building.name = bld?.Name?.value || ''
+    }
+    // Schema
+    result.schema = api.GetModelSchema ? api.GetModelSchema(modelID) : 'IFC2X3'
+  } catch(e) {
+    console.warn('[ifc] metadata-uthenting feilet (ikke-kritisk):', e)
+  }
+  // Tell elementer per type
+  for (const t of IFC_ELEMENT_TYPES) {
+    try {
+      const constName = t.ifcType
+      const ifcConstant = window.WebIFC[constName]
+      if (typeof ifcConstant === 'undefined') continue
+      const ids = api.GetLineIDsWithType(modelID, ifcConstant)
+      const count = ids.size()
+      if (count > 0) {
+        result.elementCounts[t.ifcType] = count
+        result.totalElements += count
+      }
+    } catch(e) {
+      // OK — element-type finnes ikke i denne IFC-versjonen
+    }
+  }
+  return result
+}
+
+// Frigjør modell-data fra web-ifc når vi er ferdig med den.
+function closeIfcModel(api, modelID) {
+  try { if (modelID >= 0) api.CloseModel(modelID) } catch(e) {}
+}
+
+// ─── BIM-IMPORT FULL SIDEFLYT ────────────────────────────────────────────────
+// Erstatter BimImportPlaceholderModal når brukeren har bim_kalkyle-modulen.
+// Vises som full skjermflyt fordi parsing og bekreftelse er for kompleks for modal.
+//
+// Patch 9 implementerer: Last opp → Analyser → vise statistikk
+// Patch 10+ legger på: Mengdeekstraksjon → Bibliotek-matching → Generering
+
+function BimImportPage({ onTilbake, onAlert }) {
+  // Sideflyt-fase: 'upload' (vis upload-area) | 'analysing' (parsing pågår) | 'analyzed' (vis resultat) | 'error'
+  const [fase, setFase] = useState('upload')
+  const [file, setFile] = useState(null)
+  const [progress, setProgress] = useState({ step: '', percent: 0 })
+  const [errorMsg, setErrorMsg] = useState('')
+  const [metadata, setMetadata] = useState(null)
+  const [storedFilePath, setStoredFilePath] = useState(null)
+  const [dragOver, setDragOver] = useState(false)
+  const fileInputRef = React.useRef(null)
+  const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const handler = () => setIsMob(window.innerWidth < 768)
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
+
+  // Validerer filstørrelse og endelse — returnerer feilmelding eller null
+  const validerFil = (f) => {
+    if (!f) return 'Ingen fil valgt'
+    const navn = f.name.toLowerCase()
+    if (!navn.endsWith('.ifc')) return 'Filen må være .ifc-format. Andre formater (DWG, PDF) kommer senere.'
+    if (f.size > IFC_SIZE_HARD_LIMIT) {
+      return `Filen er for stor (${formatFileSize(f.size)}). Maks ${formatFileSize(IFC_SIZE_HARD_LIMIT)}. Be arkitekten om å eksportere kun synlig etasje, eller kontakt support.`
+    }
+    return null
+  }
+
+  const handleFileSelect = (f) => {
+    if (!f) return
+    const feil = validerFil(f)
+    if (feil) {
+      setErrorMsg(feil)
+      setFase('error')
+      return
+    }
+    setFile(f)
+    setErrorMsg('')
+    // Start parsing automatisk
+    parseFil(f)
+  }
+
+  // Parser IFC-fil: laster web-ifc, åpner modell, henter metadata, lukker modell
+  const parseFil = async (f) => {
+    setFase('analysing')
+    setProgress({ step: 'Laster IFC-bibliotek...', percent: 5 })
+    let api = null
+    let modelID = -1
+    try {
+      api = await _loadWebIfc()
+      setProgress({ step: 'Leser fil...', percent: 25 })
+      const buffer = await f.arrayBuffer()
+      const data = new Uint8Array(buffer)
+      setProgress({ step: 'Analyserer 3D-modell — dette kan ta opp til 1 minutt for store filer...', percent: 50 })
+      // OpenModel returnerer modelID
+      modelID = api.OpenModel(data, { COORDINATE_TO_ORIGIN: true })
+      if (modelID < 0) throw new Error('IFC-filen kunne ikke åpnes. Filen kan være korrupt eller i ikke-støttet versjon.')
+      setProgress({ step: 'Henter metadata og elementer...', percent: 80 })
+      const meta = await extractIfcMetadata(api, modelID)
+      meta.fileName = f.name
+      meta.fileSize = f.size
+      setMetadata(meta)
+      setProgress({ step: 'Ferdig!', percent: 100 })
+      setFase('analyzed')
+      // Lukk modell for å frigjøre minne (vi gjenåpner ved Patch 10+ for mengdeuthenting)
+      closeIfcModel(api, modelID)
+      modelID = -1
+    } catch(e) {
+      console.error('[ifc] parsing feilet:', e)
+      setErrorMsg(e.message || 'Ukjent feil under parsing av IFC-filen.')
+      setFase('error')
+      if (modelID >= 0 && api) closeIfcModel(api, modelID)
+    }
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault(); setDragOver(false)
+    const f = e.dataTransfer.files?.[0]
+    if (f) handleFileSelect(f)
+  }
+
+  const reset = () => {
+    setFase('upload'); setFile(null); setMetadata(null); setProgress({ step:'', percent:0 }); setErrorMsg('')
+  }
+
+  // Stiler
+  const card = { background:'white', borderRadius:'14px', padding: isMob ? '20px' : '28px', border:'1px solid #e2e8f0', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }
+
+  return (
+    <div style={{ maxWidth:'1100px', margin:'0 auto', padding: isMob ? '16px' : '24px' }}>
+
+      {/* Header */}
+      <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'18px' }}>
+        <button onClick={onTilbake}
+          style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>
+          ← Tilbake
+        </button>
+        <div style={{ flex:1 }}>
+          <h2 style={{ margin:'0 0 2px', fontSize: isMob ? '20px' : '24px', fontWeight:'800', color:'#0f172a', display:'flex', alignItems:'center', gap:'8px' }}>
+            <span>📐</span><span>BIM-Kalkyle — IFC-import</span>
+          </h2>
+          <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>Last opp en IFC-fil fra ArchiCAD, Revit eller annet BIM-verktøy</p>
+        </div>
+      </div>
+
+      {/* Fase: Last opp */}
+      {fase === 'upload' && (
+        <div style={{ ...card, padding: isMob ? '24px' : '40px' }}>
+          <div
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              background: dragOver ? 'linear-gradient(135deg, #faf5ff, #eff6ff)' : '#fafbfc',
+              border: dragOver ? '3px dashed #8b5cf6' : '2.5px dashed #cbd5e1',
+              borderRadius:'14px',
+              padding: isMob ? '40px 20px' : '60px 30px',
+              textAlign:'center',
+              cursor:'pointer',
+              transition:'all 0.15s',
+            }}>
+            <div style={{ fontSize:'56px', marginBottom:'12px' }}>📂</div>
+            <h3 style={{ margin:'0 0 8px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>
+              {dragOver ? 'Slipp filen her' : 'Klikk eller dra IFC-fil hit'}
+            </h3>
+            <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>
+              Støtter .ifc-filer fra ArchiCAD, Revit, Allplan, Tekla og andre BIM-verktøy
+            </p>
+            <div style={{ fontSize:'12px', color:'#94a3b8' }}>
+              Maks {formatFileSize(IFC_SIZE_HARD_LIMIT)} • IFC2X3 og IFC4
+            </div>
+            <input ref={fileInputRef} type="file" accept=".ifc"
+              onChange={(e) => handleFileSelect(e.target.files?.[0])}
+              style={{ display:'none' }} />
+          </div>
+
+          <div style={{ marginTop:'18px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'14px 16px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'6px' }}>💡 Slik fungerer det</div>
+            <ol style={{ margin:0, padding:'0 0 0 18px', fontSize:'12px', color:'#1e3a8a', lineHeight:1.7 }}>
+              <li>Last opp IFC-fil fra arkitekten din</li>
+              <li>Systemet leser geometri og lagstruktur (kjører kun i din nettleser — filen forlater aldri din maskin)</li>
+              <li>Mengder beregnes automatisk: vegger, vinduer, dører, tak, gulv (kommer i neste oppdatering)</li>
+              <li>Konstruksjoner matches mot ditt bibliotek (kommer)</li>
+              <li>Kalkyle genereres med ekte mengder — du justerer, godkjenner og oppretter (kommer)</li>
+            </ol>
+          </div>
+        </div>
+      )}
+
+      {/* Fase: Parser */}
+      {fase === 'analysing' && (
+        <div style={{ ...card, textAlign:'center', padding: isMob ? '40px 20px' : '60px 30px' }}>
+          <div style={{ fontSize:'48px', marginBottom:'14px' }}>⚙️</div>
+          <h3 style={{ margin:'0 0 10px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Analyserer IFC-fil...</h3>
+          <p style={{ margin:'0 0 24px', fontSize:'13px', color:'#64748b' }}>{progress.step}</p>
+          {/* Progress bar */}
+          <div style={{ background:'#f1f5f9', height:'10px', borderRadius:'10px', overflow:'hidden', marginBottom:'12px', maxWidth:'500px', margin:'0 auto 12px' }}>
+            <div style={{
+              width: `${progress.percent}%`,
+              height:'100%',
+              background:'linear-gradient(90deg, #8b5cf6, #3b82f6)',
+              transition:'width 0.4s',
+            }} />
+          </div>
+          <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>{progress.percent}% — {file?.name} ({formatFileSize(file?.size || 0)})</p>
+          {file?.size > IFC_SIZE_SOFT_LIMIT && (
+            <p style={{ margin:'14px 0 0', fontSize:'12px', color:'#92400e', background:'#fef3c7', padding:'8px 14px', borderRadius:'8px', display:'inline-block' }}>
+              ⚠️ Stor fil — kan ta opptil 2 minutter
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Fase: Analysert */}
+      {fase === 'analyzed' && metadata && (
+        <div>
+          {/* Suksess-banner */}
+          <div style={{ background:'linear-gradient(135deg, #ecfdf5, #f0fdf4)', border:'1px solid #a7f3d0', borderRadius:'14px', padding:'16px 20px', marginBottom:'18px', display:'flex', alignItems:'center', gap:'14px' }}>
+            <span style={{ fontSize:'28px' }}>✅</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:'15px', fontWeight:'700', color:'#065f46', marginBottom:'2px' }}>IFC-fil analysert</div>
+              <div style={{ fontSize:'12px', color:'#047857' }}>{metadata.fileName} • {formatFileSize(metadata.fileSize)} • {metadata.totalElements} elementer funnet</div>
+            </div>
+            <button onClick={reset}
+              style={{ background:'white', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#065f46', cursor:'pointer' }}>
+              Last opp ny fil
+            </button>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'14px' }}>
+
+            {/* Prosjektinfo */}
+            <div style={card}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>Prosjektinfo fra IFC</div>
+              {metadata.project.name && (
+                <div style={{ marginBottom:'8px' }}>
+                  <div style={{ fontSize:'11px', color:'#64748b' }}>Prosjektnavn</div>
+                  <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{metadata.project.name}</div>
+                </div>
+              )}
+              {metadata.project.longName && metadata.project.longName !== metadata.project.name && (
+                <div style={{ marginBottom:'8px' }}>
+                  <div style={{ fontSize:'11px', color:'#64748b' }}>Beskrivelse</div>
+                  <div style={{ fontSize:'13px', color:'#475569' }}>{metadata.project.longName}</div>
+                </div>
+              )}
+              {metadata.building.name && (
+                <div style={{ marginBottom:'8px' }}>
+                  <div style={{ fontSize:'11px', color:'#64748b' }}>Bygning</div>
+                  <div style={{ fontSize:'13px', color:'#475569' }}>{metadata.building.name}</div>
+                </div>
+              )}
+              <div style={{ display:'flex', gap:'14px', marginTop:'12px', paddingTop:'12px', borderTop:'1px solid #f1f5f9' }}>
+                <div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8', textTransform:'uppercase' }}>Schema</div>
+                  <div style={{ fontSize:'12px', fontWeight:'600', color:'#475569' }}>{metadata.schema || 'IFC2X3'}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:'10px', color:'#94a3b8', textTransform:'uppercase' }}>Filstørrelse</div>
+                  <div style={{ fontSize:'12px', fontWeight:'600', color:'#475569' }}>{formatFileSize(metadata.fileSize)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Elementoversikt */}
+            <div style={card}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>Elementer i modellen</div>
+              {metadata.totalElements === 0 ? (
+                <p style={{ margin:0, fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>Ingen gjenkjente bygningselementer funnet.</p>
+              ) : (
+                <div>
+                  {IFC_ELEMENT_TYPES.filter(t => metadata.elementCounts[t.ifcType] > 0).map(t => (
+                    <div key={t.ifcType} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderBottom:'1px solid #f8fafc' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px', minWidth:0 }}>
+                        <span style={{ fontSize:'14px' }}>{t.icon}</span>
+                        <span style={{ fontSize:'13px', color:'#475569' }}>{t.label}</span>
+                      </div>
+                      <strong style={{ fontSize:'13px', color:'#0f172a' }}>{metadata.elementCounts[t.ifcType]}</strong>
+                    </div>
+                  ))}
+                  <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0 0', marginTop:'4px', borderTop:'2px solid #e2e8f0', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>
+                    <span>Totalt</span>
+                    <span>{metadata.totalElements} elementer</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Neste-steg-info */}
+          <div style={{ marginTop:'18px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i neste oppdatering</div>
+            <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
+              I neste oppdatering legges til mengdeekstraksjon (areal, lengde, volum per element), bibliotek-matching og automatisk kalkyle-generering. Akkurat nå viser systemet kun at det kan lese filen og hva den inneholder.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Fase: Feil */}
+      {fase === 'error' && (
+        <div style={{ ...card, textAlign:'center', padding: isMob ? '32px 20px' : '50px 30px' }}>
+          <div style={{ fontSize:'48px', marginBottom:'14px' }}>❌</div>
+          <h3 style={{ margin:'0 0 10px', fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Kunne ikke lese filen</h3>
+          <p style={{ margin:'0 0 24px', fontSize:'13px', color:'#64748b', maxWidth:'500px', margin:'0 auto 24px', lineHeight:1.5 }}>{errorMsg}</p>
+          <button onClick={reset}
+            style={{ background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'10px', padding:'10px 22px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+            ← Prøv igjen
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── BIM-IMPORT PLACEHOLDER MODAL ────────────────────────────────────────────
-// Vises når en bruker MED bim_kalkyle-modulen klikker "BIM-Kalkyle"-knappen.
-// Erstattes av ekte IFC/DWG/PDF-importflyt i Patch 6+.
+// Beholdes for nedoverkompatibilitet, men brukes ikke lenger fra Patch 9 og utover.
+// BimImportPage erstatter denne for brukere med bim_kalkyle-modulen.
 
 function BimImportPlaceholderModal({ onClose }) {
   return (
@@ -36787,6 +37197,8 @@ function KalkulasjonPage({ onNavigate }) {
   if (showBibliotekPage) return <KalkBibliotekPage onBack={() => setShowBibliotekPage(false)} />
 
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
+
+  if (showBimImport) return <BimImportPage onTilbake={() => setShowBimImport(false)} onAlert={appAlert} />
 
   // ── Sammenligningsvisning ──
   if (showCompare && compareIds.length === 2) {
@@ -37306,7 +37718,6 @@ function KalkulasjonPage({ onNavigate }) {
         }
       }} />}
       {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
-      {showBimImport && <BimImportPlaceholderModal onClose={() => setShowBimImport(false)} />}
     </div>
   )
 }
