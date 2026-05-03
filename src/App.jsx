@@ -36473,43 +36473,45 @@ const IFC_ELEMENT_TYPES = [
   { ifcType: 'IFCFLOWFITTING',    label: 'Tekn. koblinger', icon: '⚙️', kategori: 'tekniske' },
 ]
 
-// Lazy-load web-ifc fra CDN. Returnerer { IfcAPI }-instans eller throws.
-// web-ifc er WebAssembly-basert — først en ~50KB JS-loader, så ~2MB WASM ved init.
+// Lazy-load web-ifc fra CDN. web-ifc 0.0.57+ leveres som ES-modul (ESM),
+// så vi bruker dynamic import() i stedet for <script>-tag.
+// Cachen holder modulen og en initialisert IfcAPI-instans.
 const _ifcCache = { module: null, api: null, loading: null }
 
 async function _loadWebIfc() {
-  if (_ifcCache.api) return _ifcCache.api
+  if (_ifcCache.api && _ifcCache.module) return { api: _ifcCache.api, mod: _ifcCache.module }
   if (_ifcCache.loading) return _ifcCache.loading
   _ifcCache.loading = (async () => {
-    // Last inn web-ifc UMD bundle fra CDN
-    if (!window.WebIFC) {
-      await new Promise((resolve, reject) => {
-        const s = document.createElement('script')
-        // unpkg er stabil for web-ifc; versjonen er lockad slik at vi
-        // ikke får uventede oppgraderinger
-        s.src = 'https://unpkg.com/web-ifc@0.0.57/web-ifc-api.js'
-        s.onload = resolve
-        s.onerror = () => reject(new Error('Kunne ikke laste web-ifc fra CDN. Sjekk nettverkstilkobling.'))
-        document.head.appendChild(s)
-      })
+    try {
+      // Dynamic ESM import. jsDelivr har stabil ESM-distribusjon.
+      // Versjon 0.0.57 er låst slik at vi ikke får uventede oppgraderinger.
+      const mod = await import(/* @vite-ignore */ 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.57/web-ifc-api.js')
+      if (!mod || !mod.IfcAPI) {
+        throw new Error('web-ifc-modulen ble lastet, men IfcAPI-klassen mangler. CDN kan være feilkonfigurert.')
+      }
+      _ifcCache.module = mod
+      const api = new mod.IfcAPI()
+      // WASM-fil hentes fra samme CDN som modulen
+      api.SetWasmPath('https://cdn.jsdelivr.net/npm/web-ifc@0.0.57/')
+      await api.Init()
+      _ifcCache.api = api
+      return { api, mod }
+    } catch (e) {
+      console.error('[ifc] kunne ikke laste web-ifc:', e)
+      _ifcCache.loading = null  // tillat nytt forsøk neste gang
+      throw new Error(`Kunne ikke laste IFC-bibliotek (web-ifc) fra CDN: ${e.message || e}. Sjekk nettverkstilkobling og prøv igjen.`)
+    } finally {
+      _ifcCache.loading = null
     }
-    if (!window.WebIFC) {
-      throw new Error('web-ifc lastet ikke korrekt. Last siden på nytt.')
-    }
-    // Initialiser API. WASM-fil hentes fra samme CDN.
-    const api = new window.WebIFC.IfcAPI()
-    api.SetWasmPath('https://unpkg.com/web-ifc@0.0.57/')
-    await api.Init()
-    _ifcCache.api = api
-    _ifcCache.loading = null
-    return api
   })()
   return _ifcCache.loading
 }
 
 // Henter grunnleggende metadata fra parsed IFC-modell og teller elementer.
+// `mod` er web-ifc-modulen (importert via _loadWebIfc) — vi trenger den fordi
+// IFC-konstantene (IFCPROJECT, IFCWALL osv.) eksporteres fra modulen.
 // Returnerer { project, building, elementCounts, totalElements }
-async function extractIfcMetadata(api, modelID) {
+async function extractIfcMetadata(api, mod, modelID) {
   const result = {
     project: { name: '', description: '', longName: '' },
     building: { name: '', address: '' },
@@ -36518,7 +36520,7 @@ async function extractIfcMetadata(api, modelID) {
   }
   try {
     // IFCPROJECT
-    const projectIds = api.GetLineIDsWithType(modelID, window.WebIFC.IFCPROJECT)
+    const projectIds = api.GetLineIDsWithType(modelID, mod.IFCPROJECT)
     if (projectIds.size() > 0) {
       const proj = api.GetLine(modelID, projectIds.get(0))
       result.project.name = proj?.Name?.value || ''
@@ -36526,7 +36528,7 @@ async function extractIfcMetadata(api, modelID) {
       result.project.longName = proj?.LongName?.value || ''
     }
     // IFCBUILDING
-    const buildingIds = api.GetLineIDsWithType(modelID, window.WebIFC.IFCBUILDING)
+    const buildingIds = api.GetLineIDsWithType(modelID, mod.IFCBUILDING)
     if (buildingIds.size() > 0) {
       const bld = api.GetLine(modelID, buildingIds.get(0))
       result.building.name = bld?.Name?.value || ''
@@ -36540,7 +36542,7 @@ async function extractIfcMetadata(api, modelID) {
   for (const t of IFC_ELEMENT_TYPES) {
     try {
       const constName = t.ifcType
-      const ifcConstant = window.WebIFC[constName]
+      const ifcConstant = mod[constName]
       if (typeof ifcConstant === 'undefined') continue
       const ids = api.GetLineIDsWithType(modelID, ifcConstant)
       const count = ids.size()
@@ -36614,9 +36616,12 @@ function BimImportPage({ onTilbake, onAlert }) {
     setFase('analysing')
     setProgress({ step: 'Laster IFC-bibliotek...', percent: 5 })
     let api = null
+    let mod = null
     let modelID = -1
     try {
-      api = await _loadWebIfc()
+      const loaded = await _loadWebIfc()
+      api = loaded.api
+      mod = loaded.mod
       setProgress({ step: 'Leser fil...', percent: 25 })
       const buffer = await f.arrayBuffer()
       const data = new Uint8Array(buffer)
@@ -36625,7 +36630,7 @@ function BimImportPage({ onTilbake, onAlert }) {
       modelID = api.OpenModel(data, { COORDINATE_TO_ORIGIN: true })
       if (modelID < 0) throw new Error('IFC-filen kunne ikke åpnes. Filen kan være korrupt eller i ikke-støttet versjon.')
       setProgress({ step: 'Henter metadata og elementer...', percent: 80 })
-      const meta = await extractIfcMetadata(api, modelID)
+      const meta = await extractIfcMetadata(api, mod, modelID)
       meta.fileName = f.name
       meta.fileSize = f.size
       setMetadata(meta)
