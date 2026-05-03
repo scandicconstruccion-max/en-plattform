@@ -98,6 +98,48 @@ async function createBrandedPdf(options = {}) {
   const { orientation = 'p' } = options
   const { jsPDF } = await _loadJsPdf()
   const doc = new jsPDF(orientation, 'mm', 'a4')
+
+  // ── PDF-FONT FIX: Strip emoji og andre Unicode-tegn som standard jsPDF-fonter
+  // ikke har glyffer for. Uten dette blir emoji som 🧱 og 🔨 gjengitt som
+  // "Ø<ßxþ" eller andre mojibake-tegn i PDFen.
+  // Vi wrapper doc.text() globalt slik at all tekst — uansett hvor i appen
+  // PDFen genereres — automatisk renses før den skrives.
+  const stripPdfText = (s) => {
+    if (s == null) return ''
+    if (typeof s !== 'string') s = String(s)
+    return s
+      // Fjern emoji + symboler + piktogrammer + transport + suppl. ranges
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '')   // Misc symbols/pictographs/emoji
+      .replace(/[\u{2600}-\u{27BF}]/gu, '')      // Misc symbols + dingbats
+      .replace(/[\u{1FA00}-\u{1FAFF}]/gu, '')   // Symbols & pictographs ext
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')      // Dingbats
+      .replace(/[\u{FE0F}]/gu, '')               // Variation selector-16
+      .replace(/[\u{200D}]/gu, '')               // Zero-width joiner
+      // Trim eventuelle etterlatte mellomrom
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+  // Wrap doc.text() — håndterer både string og array av strings (multi-linje)
+  const _origText = doc.text.bind(doc)
+  doc.text = function(text, ...args) {
+    const cleaned = Array.isArray(text) ? text.map(stripPdfText) : stripPdfText(text)
+    return _origText(cleaned, ...args)
+  }
+  // Wrap autoTable hvis det brukes — det skriver tekst via egen pipeline
+  // (cell.raw / head / body kan inneholde strenger med emoji)
+  const _origAutoTable = doc.autoTable ? doc.autoTable.bind(doc) : null
+  if (_origAutoTable) {
+    doc.autoTable = function(opts) {
+      const cleanCell = (v) => (typeof v === 'string') ? stripPdfText(v) : v
+      const cleanRow = (row) => Array.isArray(row) ? row.map(cleanCell) : row
+      const cleaned = { ...opts }
+      if (Array.isArray(cleaned.head)) cleaned.head = cleaned.head.map(cleanRow)
+      if (Array.isArray(cleaned.body)) cleaned.body = cleaned.body.map(cleanRow)
+      if (Array.isArray(cleaned.foot)) cleaned.foot = cleaned.foot.map(cleanRow)
+      return _origAutoTable(cleaned)
+    }
+  }
+
   const brand = await _fetchBrandData()
   const settings = brand.settings || {}
   const logoDataUrl = brand.logoDataUrl
