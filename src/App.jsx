@@ -35175,18 +35175,19 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
 //   - en filterFn for spesifikke bygningsdeler innen samme kategori
 // flerVarianter: true betyr at brukeren kan velge flere konstruksjoner og
 //   fordele mengden mellom dem (per prosent eller direkte m²/stk).
+// Rekkefølge følger naturlig byggeprosess: grunnmur → råbygg → utvendig → innvendig
 const BIM_KONSTRUKSJON_KATEGORIER = [
-  { id: 'yttervegg',    label: 'Yttervegg',    icon: '🧱', obligatorisk: true,  bibliotekKategorier: ['Yttervegg', 'Fasade'], mengdeFelt: 'nettoYtterveggAreal' },
-  { id: 'innervegg',    label: 'Innervegg',    icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Innervegg', 'Vegg innvendig'], mengdeFelt: 'innerveggAreal', flerVarianter: true },
-  { id: 'tak',          label: 'Tak',          icon: '🏠', obligatorisk: true,  bibliotekKategorier: ['Yttertak', 'Tekking'], mengdeFelt: 'takAreal' },
-  { id: 'gulv',         label: 'Gulv',         icon: '🟫', obligatorisk: true,  bibliotekKategorier: ['Gulv', 'Gulvplate'], mengdeFelt: 'gulvAreal' },
-  { id: 'etasjeskille', label: 'Etasjeskille', icon: '🟦', obligatorisk: false, bibliotekKategorier: ['Etasjeskille'], mengdeFelt: 'etasjeskilleAreal', kunHvisFlerEtasjes: true },
   { id: 'grunnmur',     label: 'Grunnmur',     icon: '🟪', obligatorisk: false, bibliotekKategorier: ['Fundament', 'Betongdekke', 'Drenering'], mengdeFelt: 'grunnmurAreal' },
-  { id: 'innvendig_trapp', label: 'Innvendig trapp', icon: '🪜', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Trapper'], mengdeFelt: '__antall_trapp', kunHvisFlerEtasjes: true },
+  { id: 'yttervegg',    label: 'Yttervegg',    icon: '🧱', obligatorisk: true,  bibliotekKategorier: ['Yttervegg', 'Fasade'], mengdeFelt: 'nettoYtterveggAreal' },
+  { id: 'etasjeskille', label: 'Etasjeskille', icon: '🟦', obligatorisk: false, bibliotekKategorier: ['Etasjeskille'], mengdeFelt: 'etasjeskilleAreal', kunHvisFlerEtasjes: true },
+  { id: 'tak',          label: 'Tak',          icon: '🏠', obligatorisk: true,  bibliotekKategorier: ['Yttertak', 'Tekking'], mengdeFelt: 'takAreal' },
+  { id: 'innervegg',    label: 'Innervegg',    icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Innervegg', 'Vegg innvendig'], mengdeFelt: 'innerveggAreal', flerVarianter: true },
+  { id: 'gulv',         label: 'Gulv',         icon: '🟫', obligatorisk: true,  bibliotekKategorier: ['Gulv', 'Gulvplate'], mengdeFelt: 'gulvAreal' },
   // Vinduer/dører — egne underkategorier av "Dører/vinduer" filtrert på navn
   { id: 'vinduer',      label: 'Vinduer',      icon: '🪟', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /vindu/i.test(bd.name), mengdeFelt: 'vinduer.antall' },
-  { id: 'ytterdorer',   label: 'Ytterdører',   icon: '🚪', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /ytterdør/i.test(bd.name), mengdeFelt: 'ytterdorer.antall' },
   { id: 'innerdorer',   label: 'Innerdører',   icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /innerdør|skyvedør/i.test(bd.name), mengdeFelt: 'innerdorer.antall' },
+  { id: 'ytterdorer',   label: 'Ytterdører',   icon: '🚪', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /ytterdør/i.test(bd.name), mengdeFelt: 'ytterdorer.antall' },
+  { id: 'innvendig_trapp', label: 'Innvendig trapp', icon: '🪜', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Trapper'], mengdeFelt: '__antall_trapp', kunHvisFlerEtasjes: true },
 ]
 
 // Hjelper: hent verdi fra mengder-objektet via mengdeFelt-string ('a' eller 'a.b')
@@ -36075,8 +36076,9 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   }, [])
 
   // Aktiv kategori i steg 3 — styres her slik at Neste/Tilbake kan navigere
-  // sekvensielt mellom kategoriene uten å forlate steg 3
-  const [aktivKategori, setAktivKategori] = useState('yttervegg')
+  // sekvensielt mellom kategoriene uten å forlate steg 3.
+  // Default er første kategori i den naturlige byggesekvensen (grunnmur).
+  const [aktivKategori, setAktivKategori] = useState('grunnmur')
 
   // Ref til scroll-container slik at vi alltid kan scrolle til toppen
   // når brukeren bytter steg eller kategori
