@@ -38615,24 +38615,61 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
     if (!user?.id) return
     setLaster(true)
     try {
+      // Sanitiser søketerm — fjern spesialtegn som kan trippe Supabase .or() / .ilike()
+      // PostgREST skiller på komma, parenteser, og bruker spesialtegn som regex-syntaks
+      const sanitiserTerm = (s) => (s || '').replace(/[,()×*"'\\]/g, ' ').trim()
+      const renTerm = sanitiserTerm(term)
+
+      // Beskytt mot tom search — krever minst 2 tegn netto
+      if (!renTerm || renTerm.length < 2) {
+        setResultater([])
+        setLaster(false)
+        return
+      }
+
       let query = supabase.from('prisbok')
         .select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
       if (aktivPrislisteId) query = query.eq('prisliste_id', aktivPrislisteId)
       else query = query.eq('user_id', user.id)
 
-      if (term && term.length >= 2) {
-        // Splitt i ord, hvert ord må matche
-        const words = term.trim().split(/\s+/).filter(w => w.length >= 2)
-        if (words.length === 1 && /^\d+$/.test(words[0])) {
-          // Numerisk → søk i varenummer ELLER varenavn
-          query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
-        } else {
-          words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
-        }
+      const words = renTerm.split(/\s+/).filter(w => w.length >= 2)
+      if (words.length === 0) {
+        setResultater([])
+        setLaster(false)
+        return
+      }
+      if (words.length === 1 && /^\d+$/.test(words[0])) {
+        // Numerisk → søk i varenummer ELLER varenavn
+        query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+      } else {
+        words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
       }
 
-      const { data } = await query.order('varenavn').limit(8)
-      setResultater(data || [])
+      const { data, error } = await query.order('varenavn').limit(8)
+      if (error) {
+        console.warn('[prisbok] primær søk feilet, prøver fallback:', error.message, 'term:', renTerm)
+        // Fallback: Prøv uten prisliste-/user-filter (i tilfelle brukeren ikke har egne priser)
+        try {
+          let fb = supabase.from('prisbok').select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
+          if (words.length === 1 && /^\d+$/.test(words[0])) {
+            fb = fb.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+          } else {
+            words.forEach(w => { fb = fb.ilike('varenavn', `%${w}%`) })
+          }
+          const { data: fbData, error: fbError } = await fb.order('varenavn').limit(8)
+          if (fbError) {
+            console.warn('[prisbok] fallback søk feilet også:', fbError.message)
+            setResultater([])
+          } else {
+            setResultater(fbData || [])
+          }
+        } catch(e) {
+          console.warn('[prisbok] fallback exception:', e)
+          setResultater([])
+        }
+      } else {
+        setResultater(data || [])
+      }
     } catch(e) {
       console.warn('[prisbok] søkefeil:', e)
       setResultater([])
