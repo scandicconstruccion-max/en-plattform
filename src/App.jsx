@@ -38615,9 +38615,10 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
     if (!user?.id) return
     setLaster(true)
     try {
-      // Sanitiser søketerm — fjern spesialtegn som kan trippe Supabase .or() / .ilike()
-      // PostgREST skiller på komma, parenteser, og bruker spesialtegn som regex-syntaks
-      const sanitiserTerm = (s) => (s || '').replace(/[,()×*"'\\]/g, ' ').trim()
+      // Aggressiv sanitisering: behold KUN bokstaver (inkl. norske), tall, mellomrom og bindestrek
+      // Alt annet (komma, parenteser, skråstrek, multiplikasjonstegn osv.) erstattes med mellomrom
+      // Dette er nødvendig fordi PostgREST tolker mange tegn som syntaks-elementer
+      const sanitiserTerm = (s) => (s || '').replace(/[^a-zA-ZæøåÆØÅ0-9\s-]/g, ' ').trim()
       const renTerm = sanitiserTerm(term)
 
       // Beskytt mot tom search — krever minst 2 tegn netto
@@ -38642,7 +38643,8 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
         // Numerisk → søk i varenummer ELLER varenavn
         query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
       } else {
-        words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+        // Begrens til maks 3 ord for å unngå overdrevent kompleks query
+        words.slice(0, 3).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
       }
 
       const { data, error } = await query.order('varenavn').limit(8)
@@ -38654,7 +38656,7 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
           if (words.length === 1 && /^\d+$/.test(words[0])) {
             fb = fb.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
           } else {
-            words.forEach(w => { fb = fb.ilike('varenavn', `%${w}%`) })
+            words.slice(0, 3).forEach(w => { fb = fb.ilike('varenavn', `%${w}%`) })
           }
           const { data: fbData, error: fbError } = await fb.order('varenavn').limit(8)
           if (fbError) {
