@@ -36888,29 +36888,78 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   }
 
   // --- GULV/ETASJESKILLE (IfcSlab) ---
+  // ArchiCAD eksporterer ofte ikke kvantiteter på selve IfcSlab, men på
+  // IfcSlabType (typedefinisjonen). Vi har to fallbacks:
+  //   1. Utvidet liste av feltnavn (NetArea, GrossArea, Area, GrossPlanArea ...)
+  //   2. Fallback til mengder fra elementets SlabType (via IfcRelDefinesByType)
   if (onProgress) onProgress('Henter gulvmengder...')
+
+  // Bygg lookup: instanceId → typeId (via IfcRelDefinesByType)
+  const instanceToTypeLookup = new Map()
+  try {
+    const defByTypeIds = api.GetLineIDsWithType(modelID, mod.IFCRELDEFINESBYTYPE)
+    const numDefs = defByTypeIds.size()
+    for (let i = 0; i < numDefs; i++) {
+      const relId = defByTypeIds.get(i)
+      let rel; try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+      if (!rel?.RelatingType?.value || !rel?.RelatedObjects) continue
+      const typeId = rel.RelatingType.value
+      const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
+      for (const tgt of targets) {
+        const tid = tgt?.value
+        if (tid) instanceToTypeLookup.set(tid, typeId)
+      }
+    }
+  } catch(e) { console.warn('[ifc] kunne ikke bygge type-lookup:', e) }
+
   if (typeof mod.IFCSLAB !== 'undefined') {
     const ids = api.GetLineIDsWithType(modelID, mod.IFCSLAB)
     const num = ids.size()
+    let mengderFraInstans = 0, mengderFraType = 0, ingenMengder = 0
     for (let i = 0; i < num; i++) {
       const elementId = ids.get(i)
       let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
       if (!element) continue
       let qSet = quantityLookup.get(elementId)
       if (qSet) qSet = expandQuantities(api, modelID, qSet)
-      const areal = getQuantityValue(qSet, ['NetArea', 'GrossArea', 'GrossPlanArea']) || 0
-      const volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume']) || 0
+      // Utvidet feltsøk
+      const arealFelt = ['NetArea', 'GrossArea', 'NetPlanArea', 'GrossPlanArea',
+                          'Area', 'NetFloorArea', 'GrossFloorArea', 'TotalSurfaceArea']
+      const volumFelt = ['NetVolume', 'GrossVolume', 'Volume']
+      let areal = getQuantityValue(qSet, arealFelt) || 0
+      let volum = getQuantityValue(qSet, volumFelt) || 0
+      let kilde = 'instans'
+
+      // Fallback 1: hent fra typedefinisjonen
+      if (areal === 0) {
+        const typeId = instanceToTypeLookup.get(elementId)
+        if (typeId) {
+          let typeQSet = quantityLookup.get(typeId)
+          if (typeQSet) typeQSet = expandQuantities(api, modelID, typeQSet)
+          const typeAreal = getQuantityValue(typeQSet, arealFelt) || 0
+          const typeVolum = getQuantityValue(typeQSet, volumFelt) || 0
+          if (typeAreal > 0) { areal = typeAreal; volum = typeVolum; kilde = 'type' }
+        }
+      }
+
+      if (areal > 0 && kilde === 'instans') mengderFraInstans++
+      else if (areal > 0 && kilde === 'type') mengderFraType++
+      else ingenMengder++
+
       const navn = element?.Name?.value || `Gulv #${elementId}`
-      // PredefinedType kan være 'FLOOR' eller 'ROOF' eller 'LANDING'
       const predef = element?.PredefinedType?.value || ''
       result.gulv.antall++
       result.gulv.totalAreal += areal
       result.gulv.totalVolum += volum
       result.gulv.elementer.push({ id: elementId, navn, areal, volum, predef })
     }
+    console.log(`[ifc] slab mengder: ${mengderFraInstans} fra instans, ${mengderFraType} fra type, ${ingenMengder} uten mengder`)
   }
 
   // --- VINDUER (IfcWindow) ---
+  // Henter også paneltype fra IfcWindowStyle.PartitioningType når tilgjengelig.
+  // Verdier: SINGLE_PANEL (fast karm/ett-fags), DOUBLE_PANEL_VERTICAL (to-fags),
+  // TRIPLE_PANEL_*, USERDEFINED, NOTDEFINED.
   if (onProgress) onProgress('Henter vindusmengder...')
   if (typeof mod.IFCWINDOW !== 'undefined') {
     const ids = api.GetLineIDsWithType(modelID, mod.IFCWINDOW)
@@ -36921,14 +36970,25 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       if (!element) continue
       let qSet = quantityLookup.get(elementId)
       if (qSet) qSet = expandQuantities(api, modelID, qSet)
-      // Vinduer har Width og Height, vi beregner areal
       const width = getQuantityValue(qSet, ['Width', 'OverallWidth']) || (element?.OverallWidth?.value || 0)
       const height = getQuantityValue(qSet, ['Height', 'OverallHeight']) || (element?.OverallHeight?.value || 0)
       const areal = width * height
       const navn = element?.Name?.value || `Vindu #${elementId}`
+
+      // Hent paneltype fra koblet IfcWindowStyle
+      let partitioningType = null
+      const typeId = instanceToTypeLookup.get(elementId)
+      if (typeId) {
+        try {
+          const winStyle = api.GetLine(modelID, typeId)
+          // PartitioningType er en enum: SINGLE_PANEL, DOUBLE_PANEL_VERTICAL etc.
+          partitioningType = winStyle?.PartitioningType?.value || winStyle?.PartitioningType || null
+        } catch(e) { /* OK */ }
+      }
+
       result.vindu.antall++
       result.vindu.totalAreal += areal
-      result.vindu.elementer.push({ id: elementId, navn, width, height, areal })
+      result.vindu.elementer.push({ id: elementId, navn, width, height, areal, partitioningType })
     }
   }
   result.vindu.gjennomsnittAreal = result.vindu.antall > 0 ? result.vindu.totalAreal / result.vindu.antall : 0
@@ -37009,22 +37069,25 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   })
 
   // TYPEGRUPPERING — for vinduer og dører gruppererer vi etter dimensjoner
-  // slik at kalkulatøren ser "24 stk vindu 600×2100" i stedet for 24 separate rader.
+  // (og paneltype for vinduer) slik at kalkulatøren ser "24 stk vindu 600×2100"
+  // i stedet for 24 separate rader.
   // Toleranse: 5 mm (= 0.005 m) for å gruppere som "samme type".
-  const grupperEtterDimensjoner = (elementer) => {
+  const grupperEtterDimensjoner = (elementer, inkluderPaneltype = false) => {
     const grupper = new Map()
     elementer.forEach(e => {
       const w = e.width || 0
       const h = e.height || 0
       // Rund av til nærmeste 5 mm = 0.005 m
-      const wKey = Math.round(w * 200) / 200  // 0.005 m presisjon
+      const wKey = Math.round(w * 200) / 200
       const hKey = Math.round(h * 200) / 200
-      const key = `${wKey}x${hKey}`
+      const partKey = inkluderPaneltype ? (e.partitioningType || 'UKJENT') : ''
+      const key = `${wKey}x${hKey}${partKey ? ':' + partKey : ''}`
       if (!grupper.has(key)) {
         grupper.set(key, {
           dimensjonsKey: key,
           width: wKey,
           height: hKey,
+          partitioningType: partKey || null,
           antall: 0,
           arealPerStk: w * h,
           totalAreal: 0,
@@ -37035,14 +37098,30 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       g.antall++
       g.totalAreal += e.areal || 0
     })
-    // Sorter desc etter antall, så de mest frekvente vises først
     return Array.from(grupper.values()).sort((a, b) => b.antall - a.antall)
   }
 
-  result.vindu.typer = grupperEtterDimensjoner(result.vindu.elementer)
-  result.dor.typer = grupperEtterDimensjoner(result.dor.elementer)
+  result.vindu.typer = grupperEtterDimensjoner(result.vindu.elementer, true)
+  result.dor.typer = grupperEtterDimensjoner(result.dor.elementer, false)
   result.vindu.antallTyper = result.vindu.typer.length
   result.dor.antallTyper = result.dor.typer.length
+
+  // Diagnostikk: logge fordeling av yttervegg/innervegg slik at vi ser om
+  // arkitekten har klassifisert riktig
+  console.log(`[ifc] vegg-fordeling: ${result.yttervegg.antall} yttervegg, ${result.innervegg.antall} innervegg, ${result.ukjent_vegg.antall} ukjent klassifisering`)
+  const totVegger = result.yttervegg.antall + result.innervegg.antall + result.ukjent_vegg.antall
+  if (totVegger > 0) {
+    const ytterAndel = result.yttervegg.antall / totVegger
+    const innerAndel = result.innervegg.antall / totVegger
+    if (ytterAndel > 0.8 || innerAndel > 0.8 || result.innervegg.antall < 3) {
+      console.warn(`[ifc] ⚠️ Mistenkelig vegg-fordeling — ${(ytterAndel*100).toFixed(0)}% yttervegg, ${(innerAndel*100).toFixed(0)}% innervegg. Filen kan ha feil/manglende IsExternal-egenskaper.`)
+      result._advarsler = result._advarsler || []
+      result._advarsler.push({
+        type: 'vegg_klassifisering',
+        melding: `Filen markerer ${result.yttervegg.antall} vegger som yttervegg og bare ${result.innervegg.antall} som innervegg. For et bygg av denne størrelsen er dette uvanlig — arkitekten har sannsynligvis ikke satt IsExternal-egenskap riktig på alle innervegger. Du kan klassifisere dem manuelt i bibliotek-matching (kommer i neste oppdatering), eller be arkitekten oppdatere modellen.`,
+      })
+    }
+  }
 
   return result
 }
@@ -37055,6 +37134,26 @@ function BimMengdeVisning({ mengder, isMob }) {
   // Hver kategori kan utvides for å vise individuelle elementer
   const [utvidet, setUtvidet] = useState({})
   const toggle = (key) => setUtvidet(u => ({ ...u, [key]: !u[key] }))
+
+  // Norsk oversettelse av IFC PartitioningType (paneltype)
+  const oversettPanelType = (pt) => {
+    if (!pt) return 'Ikke spesifisert'
+    const map = {
+      SINGLE_PANEL: 'Ett-fags / fast karm',
+      DOUBLE_PANEL_VERTICAL: 'To-fags vertikal',
+      DOUBLE_PANEL_HORIZONTAL: 'To-fags horisontal',
+      TRIPLE_PANEL_VERTICAL: 'Tre-fags vertikal',
+      TRIPLE_PANEL_HORIZONTAL: 'Tre-fags horisontal',
+      TRIPLE_PANEL_BOTTOM: 'Tre-fags m/bunn',
+      TRIPLE_PANEL_TOP: 'Tre-fags m/topp',
+      TRIPLE_PANEL_LEFT: 'Tre-fags m/venstre',
+      TRIPLE_PANEL_RIGHT: 'Tre-fags m/høyre',
+      USERDEFINED: 'Egendefinert',
+      NOTDEFINED: 'Ikke spesifisert',
+      UKJENT: 'Ikke spesifisert',
+    }
+    return map[pt] || pt
+  }
 
   // Definer hvilke kategorier vi viser, og hva som vises i hver
   const kategorier = [
@@ -37151,9 +37250,10 @@ function BimMengdeVisning({ mengder, isMob }) {
         { label: 'Unike typer', value: (d.antallTyper || 0) + ' typer' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²' },
       ],
-      kolonner: ['Type (B × H)', 'Antall', 'Areal/stk', 'Total areal'],
+      kolonner: ['Type (B × H)', 'Åpningsfunksjon', 'Antall', 'Areal/stk', 'Total areal'],
       formatRad: (g) => [
         `${(g.width * 1000).toFixed(0)} × ${(g.height * 1000).toFixed(0)} mm`,
+        oversettPanelType(g.partitioningType),
         g.antall + ' stk',
         g.arealPerStk > 0 ? g.arealPerStk.toFixed(2) + ' m²' : '—',
         g.totalAreal > 0 ? g.totalAreal.toFixed(2) + ' m²' : '—',
@@ -37190,6 +37290,20 @@ function BimMengdeVisning({ mengder, isMob }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+      {/* Advarsler om mistenkelige fordelinger fra IFC-filen */}
+      {Array.isArray(mengder._advarsler) && mengder._advarsler.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'4px' }}>
+          {mengder._advarsler.map((adv, i) => (
+            <div key={i} style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'12px 16px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
+              <span style={{ fontSize:'18px', flexShrink:0 }}>⚠️</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'4px' }}>Uvanlig fordeling i IFC-filen</div>
+                <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.5 }}>{adv.melding}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       {kategorier.map(kat => {
         if (kat.kunHvis === false) return null
         if (!kat.data || kat.data.antall === 0) return null
