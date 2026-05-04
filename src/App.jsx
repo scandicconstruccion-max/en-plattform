@@ -37193,7 +37193,11 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       if (typeof e.height === 'number') e.height *= lf
     })
   }
-  Object.keys(result).forEach(konverterMengde)
+  Object.keys(result).forEach(kat => {
+    // Hopp over interne metadata-keys (_proxyStats, _kvalitet, _advarsler)
+    if (kat.startsWith('_')) return
+    konverterMengde(kat)
+  })
 
   // For vinduer/dører kommer arealet fra width × height. Etter konvertering
   // er width og height i m, men areal ble beregnet før konvertering — så det
