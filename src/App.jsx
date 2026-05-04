@@ -38084,6 +38084,25 @@ function materialGruppe(navn) {
   return 'annet'
 }
 
+// SIGNATUR (Patch 13 Sesjon C.2.A) — stabil hash av et IFC-lagsett basert på
+// materialgrupper + tykkelser (i 5mm-grupper for robusthet mot avrunding).
+// Brukes for å gjenkjenne samme lagstruktur på tvers av filer/prosjekter selv
+// om arkitekten gir den et annet navn neste gang.
+function lagsettSignatur(lagsett) {
+  if (!lagsett?.layers || lagsett.layers.length === 0) return null
+  const lagFingeravtrykk = lagsett.layers
+    .filter(l => l.tykkelse > 0)
+    .map(l => {
+      const grp = materialGruppe(l.navn)
+      // Rund tykkelse til nærmeste 5mm for robusthet
+      const tyk5mm = Math.round((l.tykkelse || 0) / 5) * 5
+      return `${grp}:${tyk5mm}`
+    })
+    .sort()  // sortere for å være uavhengig av rekkefølge
+    .join('|')
+  return lagFingeravtrykk || null
+}
+
 // Parser tykkelse fra et material-navn i biblioteket.
 // Eksempler: "Bjelker 48×198 c/c 600" → 198 (det største tallet)
 //            "Lydisolasjon 200mm" → 200
@@ -39014,33 +39033,183 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
 function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
+  const { user } = useAuth()
 
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
   const [aapenDialog, setAapenDialog] = useState(null)
 
-  // Liste av nye konstruksjoner brukeren har laget i denne sesjonen
-  // (Faktisk Supabase-lagring kommer i Sesjon C.2 — for nå er disse i state)
-  const [nyeKonstruksjoner, setNyeKonstruksjoner] = useState([])
+  // Bruker-bibliotek (egne konstruksjoner fra bruker_bibliotek-tabellen)
+  // Hentes ved oppstart og merges med BYGNINGSDEL_BIBLIOTEK i matching-algoritmen
+  const [brukerBibliotek, setBrukerBibliotek] = useState([])
+  const [eksisterendeMatcher, setEksisterendeMatcher] = useState({})  // signatur → { konstruksjon_id, kilde, navn }
+  const [lasterBibliotek, setLasterBibliotek] = useState(true)
+  const [autoBekreftet, setAutoBekreftet] = useState({})  // signatur → true (for å vise banner)
+
+  // Konverter bruker_bibliotek-rad til konstruksjon-format
+  const brukerMalToKonstruksjon = (mal) => ({
+    id: mal.id,
+    name: mal.name,
+    kategori: mal.kategori,
+    fag: mal.fag,
+    enhet: mal.data?.enhet || 'm²',
+    beskrivelse: mal.data?.beskrivelse || 'Egen mal',
+    materialer: mal.data?.materialer || [],
+    arbeidsarter: mal.data?.arbeidsarter || [],
+    underleverandorer: mal.data?.underleverandorer || [],
+    lag: mal.data?.lag || [],
+    _bedrift: true,
+  })
+
+  // Hent bruker-bibliotek + eksisterende matchinger ved oppstart
+  useEffect(() => {
+    const lastDataFraSupabase = async () => {
+      if (!user?.id) { setLasterBibliotek(false); return }
+      try {
+        // Hent brukerens egne konstruksjoner — kun de som er fra BIM-flyten
+        // (vi filtrerer på kategori siden bruker_bibliotek også brukes av Kalkulasjon-modulen)
+        const { data: maler } = await supabase.from('bruker_bibliotek')
+          .select('*')
+          .eq('user_id', user.id)
+          .in('kategori', ['Yttervegg', 'Innervegg', 'Sokkel', 'Etasjeskille', 'Bunnplate', 'Tak', 'Egne maler'])
+          .order('created_at', { ascending: false })
+        setBrukerBibliotek((maler || []).map(brukerMalToKonstruksjon))
+
+        // Hent eksisterende matchinger for å auto-gjenkjenne lagsett
+        const { data: matchinger } = await supabase.from('bim_lagsett_matching')
+          .select('*')
+          .eq('user_id', user.id)
+        const matchMap = {}
+        ;(matchinger || []).forEach(m => {
+          matchMap[m.ifc_lagsett_signatur] = {
+            konstruksjon_id: m.konstruksjon_id,
+            konstruksjon_kilde: m.konstruksjon_kilde,
+            konstruksjon_navn: m.konstruksjon_navn,
+            bruker_kategori: m.bruker_kategori,
+            opprettet_at: m.opprettet_at,
+          }
+        })
+        setEksisterendeMatcher(matchMap)
+      } catch(e) {
+        console.warn('[bim] kunne ikke hente bibliotek/matchinger:', e)
+      }
+      setLasterBibliotek(false)
+    }
+    lastDataFraSupabase()
+  }, [user?.id])
+
+  // Utvidet bibliotek = standard + bruker
+  const utvidetBibliotek = React.useMemo(() => {
+    return [...BYGNINGSDEL_BIBLIOTEK, ...brukerBibliotek]
+  }, [brukerBibliotek])
+
+  // Auto-bekreft eksisterende matchinger ved oppstart
+  useEffect(() => {
+    if (lasterBibliotek) return
+    if (Object.keys(eksisterendeMatcher).length === 0) return
+
+    let endret = false
+    const autoSet = {}
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv'].forEach(katNavn => {
+      const lagsettListe = mengder[katNavn]?.lagsett
+      if (!lagsettListe) return
+      lagsettListe.forEach(ls => {
+        if (ls.matchedKonstruksjon) return  // allerede bekreftet
+        const sig = lagsettSignatur(ls)
+        if (!sig) return
+        const lagret = eksisterendeMatcher[sig]
+        if (!lagret) return
+        // Finn konstruksjonen i biblioteket
+        const k = utvidetBibliotek.find(b => String(b.id) === String(lagret.konstruksjon_id))
+        if (!k) return
+        // Auto-bekreft
+        ls.matchedKonstruksjon = k
+        ls.matchKilde = 'auto'
+        ls._signatur = sig
+        autoSet[sig] = true
+        endret = true
+      })
+    })
+    if (endret) {
+      setAutoBekreftet(autoSet)
+      setOppdater(o => o + 1)
+    }
+  }, [lasterBibliotek, eksisterendeMatcher, utvidetBibliotek, mengder])
 
   const aapneNyDialog = (lagsett, mal, kategori) => {
     setAapenDialog({ lagsett, mal, kategori })
   }
   const lukkDialog = () => setAapenDialog(null)
 
-  const handleLagreNy = (konstruksjon) => {
-    // Legg til i lokal state-liste
-    setNyeKonstruksjoner(prev => [...prev, konstruksjon])
-    // Auto-bekreft som match for det aktuelle lagsettet
-    if (aapenDialog?.lagsett) {
-      aapenDialog.lagsett.matchedKonstruksjon = konstruksjon
-      aapenDialog.lagsett.matchKilde = aapenDialog.mal ? 'mal' : 'ny'
+  // Lagre matching-signatur til Supabase
+  const lagreMatchingSignatur = async (lagsett, konstruksjon, kilde) => {
+    if (!user?.id) return
+    const sig = lagsettSignatur(lagsett)
+    if (!sig) return
+    try {
+      // Upsert — overskriver hvis signaturen finnes fra før
+      await supabase.from('bim_lagsett_matching').upsert({
+        user_id: user.id,
+        ifc_lagsett_navn: lagsett.navn,
+        ifc_lagsett_signatur: sig,
+        konstruksjon_kilde: kilde === 'auto' ? 'standard' : (konstruksjon._bedrift ? 'bruker' : 'standard'),
+        konstruksjon_id: String(konstruksjon.id),
+        konstruksjon_navn: konstruksjon.name,
+        bruker_kategori: lagsett.brukerKategori,
+      }, { onConflict: 'user_id,ifc_lagsett_signatur' })
+    } catch(e) {
+      console.warn('[bim] kunne ikke lagre matching:', e)
     }
+  }
+
+  const handleLagreNy = async (konstruksjon) => {
+    if (!aapenDialog?.lagsett) return
+    const lagsett = aapenDialog.lagsett
+
+    // 1. Lagre konstruksjon til bruker_bibliotek (Supabase)
+    let lagretId = konstruksjon.id  // fallback til lokal id
+    if (user?.id) {
+      try {
+        const { data, error } = await supabase.from('bruker_bibliotek').insert({
+          user_id: user.id,
+          fag: konstruksjon.fag,
+          kategori: konstruksjon.kategori,
+          name: konstruksjon.name,
+          data: {
+            enhet: konstruksjon.enhet,
+            beskrivelse: konstruksjon.beskrivelse,
+            lag: konstruksjon.lag || [],
+            materialer: konstruksjon.materialer || [],
+            arbeidsarter: konstruksjon.arbeidsarter || [],
+            underleverandorer: konstruksjon.underleverandorer || [],
+          },
+        }).select().single()
+        if (error) throw error
+        if (data) {
+          lagretId = data.id
+          konstruksjon.id = data.id
+          konstruksjon._bedrift = true
+          // Legg den nye til i utvidet bibliotek
+          setBrukerBibliotek(prev => [brukerMalToKonstruksjon(data), ...prev])
+        }
+      } catch(e) {
+        console.warn('[bim] kunne ikke lagre konstruksjon til bruker_bibliotek:', e)
+        await appAlert('Kunne ikke lagre permanent — konstruksjonen er lagret midlertidig.\n\nFeil: ' + e.message)
+      }
+    }
+
+    // 2. Bekreft match for lagsett
+    lagsett.matchedKonstruksjon = konstruksjon
+    lagsett.matchKilde = aapenDialog.mal ? 'mal' : 'ny'
+
+    // 3. Lagre matching-signatur
+    await lagreMatchingSignatur(lagsett, konstruksjon, lagsett.matchKilde)
+
     setOppdater(o => o + 1)
     if (onChange) onChange()
     lukkDialog()
-    appAlert(`Konstruksjonen "${konstruksjon.name}" er lagret midlertidig.\n\n(Permanent lagring til ditt bibliotek kommer i Sesjon C.2)`)
   }
+
 
   // Samle alle lagsett som skal matches (vegger + gulv, men ikke usikker/ignorer)
   const alleLagsett = React.useMemo(() => {
@@ -39060,37 +39229,69 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   }, [mengder, oppdater])
 
   // Beregn match-resultat for hvert lagsett — gjøres på fly slik at endringer
-  // i klassifisering automatisk oppdaterer matching
+  // i klassifisering automatisk oppdaterer matching.
+  // Bruker utvidetBibliotek (standard + bruker_bibliotek) for matching.
   const matchResultater = React.useMemo(() => {
     return alleLagsett.map(({ lagsett, type, opprinneligKat, idx }) => {
-      const result = matchLagsettMotBibliotek(lagsett, lagsett.brukerKategori, BYGNINGSDEL_BIBLIOTEK)
+      const result = matchLagsettMotBibliotek(lagsett, lagsett.brukerKategori, utvidetBibliotek)
       return { lagsett, type, opprinneligKat, idx, ...result }
     })
-  }, [alleLagsett, oppdater])
+  }, [alleLagsett, utvidetBibliotek, oppdater])
 
-  const settMatch = (lagsett, valgtKonstruksjon, kilde) => {
-    // kilde = 'eksakt' | 'mal' | 'ny'
+  const settMatch = async (lagsett, valgtKonstruksjon, kilde) => {
+    // kilde = 'eksakt' | 'mal' | 'ny' | 'hoppet'
     lagsett.matchedKonstruksjon = valgtKonstruksjon
     lagsett.matchKilde = kilde
     setOppdater(o => o + 1)
     if (onChange) onChange()
+    // Lagre signatur (men ikke for "hoppet")
+    if (kilde !== 'hoppet' && valgtKonstruksjon && !valgtKonstruksjon._hoppet) {
+      await lagreMatchingSignatur(lagsett, valgtKonstruksjon, kilde)
+    }
   }
 
-  const fjernMatch = (lagsett) => {
+  const fjernMatch = async (lagsett) => {
+    const sig = lagsettSignatur(lagsett)
     lagsett.matchedKonstruksjon = null
     lagsett.matchKilde = null
     setOppdater(o => o + 1)
     if (onChange) onChange()
+    // Slett signatur fra Supabase også slik at auto-gjenkjenning ikke gjenoppretter den
+    if (user?.id && sig) {
+      try {
+        await supabase.from('bim_lagsett_matching')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('ifc_lagsett_signatur', sig)
+        // Fjern fra eksisterendeMatcher state også
+        setEksisterendeMatcher(prev => {
+          const ny = { ...prev }
+          delete ny[sig]
+          return ny
+        })
+        setAutoBekreftet(prev => {
+          const ny = { ...prev }
+          delete ny[sig]
+          return ny
+        })
+      } catch(e) {
+        console.warn('[bim] kunne ikke slette matching:', e)
+      }
+    }
   }
 
   if (alleLagsett.length === 0) return null
 
   // Sammendrag-tellinger
   const tellinger = React.useMemo(() => {
-    const t = { eksakt: 0, ingen: 0, hoppet: 0, bekreftet: 0 }
+    const t = { eksakt: 0, ingen: 0, hoppet: 0, bekreftet: 0, auto: 0 }
     matchResultater.forEach(r => {
       if (r.lagsett.matchedKonstruksjon) {
-        t.bekreftet++
+        if (r.lagsett.matchKilde === 'auto') {
+          t.auto++
+        } else {
+          t.bekreftet++
+        }
       } else if (r.status === 'eksakt') {
         t.eksakt++
       } else if (r.lagsett.brukerKategori === 'usikker' || r.lagsett.brukerKategori === 'ignorer' || !r.lagsett.brukerKategori) {
@@ -39122,6 +39323,15 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
       {/* Sammendrag */}
       <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'12px' }}>
+        {tellinger.auto > 0 && (
+          <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
+            <span style={{ fontSize:'14px' }}>🔄</span>
+            <div>
+              <div style={{ fontSize:'10px', color:'#854d0e', textTransform:'uppercase', letterSpacing:'0.4px' }}>Husket fra før</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#713f12' }}>{tellinger.auto} lagsett</div>
+            </div>
+          </div>
+        )}
         {tellinger.bekreftet > 0 && (
           <div style={{ background: farger.bekreftet + '12', border: '1px solid ' + farger.bekreftet + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
             <span style={{ fontSize:'14px' }}>✓</span>
@@ -39166,8 +39376,9 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
           const { lagsett, status, match, maler, malScores, malForskjeller, begrunnelse } = r
           const erHoppet = lagsett.brukerKategori === 'usikker' || lagsett.brukerKategori === 'ignorer' || !lagsett.brukerKategori
           const erBekreftet = !!lagsett.matchedKonstruksjon
-          const aktivStatus = erBekreftet ? 'bekreftet' : (erHoppet ? 'hoppet' : status)
-          const aktivFarge = farger[aktivStatus] || '#94a3b8'
+          const erAuto = erBekreftet && lagsett.matchKilde === 'auto'
+          const aktivStatus = erAuto ? 'auto' : (erBekreftet ? 'bekreftet' : (erHoppet ? 'hoppet' : status))
+          const aktivFarge = erAuto ? '#ca8a04' : (farger[aktivStatus] || '#94a3b8')
 
           return (
             <div key={i} style={{ ...card, padding: isMob ? '10px' : '12px 14px', borderLeft: `3px solid ${aktivFarge}` }}>
@@ -39183,7 +39394,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                 </div>
                 {/* Status-pill */}
                 <div style={{ background: aktivFarge + '20', color: aktivFarge, padding:'3px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700', flexShrink:0 }}>
-                  {aktivStatus === 'bekreftet' ? '✓ Bekreftet' :
+                  {aktivStatus === 'auto' ? '🔄 Husket fra før' :
+                   aktivStatus === 'bekreftet' ? '✓ Bekreftet' :
                    aktivStatus === 'eksakt' ? '🎯 Match funnet' :
                    aktivStatus === 'hoppet' ? '⏸ Hoppet over' : '⚠ Ingen match'}
                 </div>
@@ -39191,17 +39403,29 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
               {/* Bekreftet match — vis valgt konstruksjon */}
               {erBekreftet && (
-                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'8px 12px', marginBottom:'8px' }}>
-                  <div style={{ fontSize:'11px', color:'#1e40af', fontWeight:'700', marginBottom:'2px' }}>
-                    {lagsett.matchKilde === 'eksakt' ? '✓ Brukes:' : lagsett.matchKilde === 'mal' ? '📋 Basert på mal:' : '✨ Ny konstruksjon:'}
+                <div style={{ background: lagsett.matchKilde === 'auto' ? '#fefce8' : '#eff6ff',
+                              border: '1px solid ' + (lagsett.matchKilde === 'auto' ? '#fde68a' : '#bfdbfe'),
+                              borderRadius:'8px', padding:'8px 12px', marginBottom:'8px' }}>
+                  <div style={{ fontSize:'11px', color: lagsett.matchKilde === 'auto' ? '#854d0e' : '#1e40af', fontWeight:'700', marginBottom:'2px' }}>
+                    {lagsett.matchKilde === 'auto' ? '🔄 Husket fra forrige prosjekt:'
+                      : lagsett.matchKilde === 'eksakt' ? '✓ Brukes:'
+                      : lagsett.matchKilde === 'mal' ? '📋 Basert på mal:'
+                      : '✨ Ny konstruksjon:'}
                   </div>
-                  <div style={{ fontSize:'12px', color:'#1e3a8a', fontWeight:'600' }}>
+                  <div style={{ fontSize:'12px', color: lagsett.matchKilde === 'auto' ? '#713f12' : '#1e3a8a', fontWeight:'600' }}>
                     {lagsett.matchedKonstruksjon.name}
                   </div>
+                  {lagsett.matchKilde === 'auto' && (
+                    <div style={{ fontSize:'10px', color:'#854d0e', marginTop:'2px', fontStyle:'italic' }}>
+                      Du valgte denne for samme lagstruktur tidligere. Trykk "Endre valg" hvis du vil velge noe annet.
+                    </div>
+                  )}
                   <div style={{ marginTop:'6px' }}>
                     <button onClick={() => fjernMatch(lagsett)}
-                      style={{ background:'transparent', border:'none', color:'#1e40af', fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
-                      Fjern valg
+                      style={{ background:'transparent', border:'none',
+                               color: lagsett.matchKilde === 'auto' ? '#854d0e' : '#1e40af',
+                               fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
+                      {lagsett.matchKilde === 'auto' ? 'Endre valg' : 'Fjern valg'}
                     </button>
                   </div>
                 </div>
@@ -39303,12 +39527,13 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
       {/* Info om neste steg */}
       <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px' }}>
-        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Sesjon C.1 — hva som fungerer nå</div>
+        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Sesjon C.2.A — hva som fungerer nå</div>
         <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
-          Du kan nå opprette nye konstruksjoner via "Lag ny" eller "Bruk som mal". Konstruksjonene lagres midlertidig i denne sesjonen — Prisbok-søk per lag og permanent lagring i biblioteket ditt kommer i Sesjon C.2.
-          {nyeKonstruksjoner.length > 0 && (
-            <span> <strong>{nyeKonstruksjoner.length} nye konstruksjon{nyeKonstruksjoner.length > 1 ? 'er' : ''}</strong> opprettet i denne sesjonen.</span>
+          Konstruksjoner du lager lagres permanent i ditt eget bibliotek og er tilgjengelige også i Kalkulasjon-modulen. Lagsett du har bekreftet tidligere blir auto-gjenkjent ved neste IFC-import (gul "Husket fra forrige prosjekt"-banner).
+          {brukerBibliotek.length > 0 && (
+            <span> Du har <strong>{brukerBibliotek.length} egne konstruksjon{brukerBibliotek.length > 1 ? 'er' : ''}</strong> i biblioteket.</span>
           )}
+          <br/>Prisbok-søk per material kommer i Sesjon C.2.B.
         </p>
       </div>
 
