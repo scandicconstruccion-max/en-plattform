@@ -38264,23 +38264,25 @@ function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
 }
 
 // Beskriver forskjellen mellom IFC-lag og bibliotek-lag for visning til brukeren.
-// Returner en kort tekstuell beskrivelse av hvor de avviker.
+// Returnerer en kort tekstuell beskrivelse av hvor de avviker.
+//
+// MERK: Vi viser IKKE total tykkelse-sammenligning lenger. Bibliotek-konstruksjonene
+// har bare materialnavn, og parsing av tykkelse fra "48×148 c/c 600" er upålitelig
+// (tar lett bredde-tall i stedet for tykkelse). Vi nøyer oss med lag-antall og
+// hvilke materialgrupper som mangler/er forskjellige.
 function beskrivForskjeller(ifcLag, biblioLag) {
   const forskjeller = []
   if (ifcLag.length !== biblioLag.length) {
     forskjeller.push(`${ifcLag.length} vs ${biblioLag.length} lag`)
   }
-  const ifcTot = ifcLag.reduce((s, l) => s + l.tykkelse, 0)
-  const biblioTot = biblioLag.reduce((s, l) => s + l.tykkelse, 0)
-  if (Math.abs(ifcTot - biblioTot) > 5) {
-    forskjeller.push(`tykkelse ${ifcTot}mm vs ${biblioTot}mm`)
-  }
-  // Sjekk lag som finnes i IFC men ikke i bibliotek
-  const ifcGrupper = ifcLag.map(l => l.gruppe)
-  const biblioGrupper = biblioLag.map(l => l.gruppe)
-  const mangler = ifcGrupper.filter(g => !biblioGrupper.includes(g))
-  if (mangler.length > 0) forskjeller.push(`mangler ${[...new Set(mangler)].join(', ')}`)
-  return forskjeller.join('; ') || 'små avvik i tykkelse'
+  // Hvilke materialgrupper finnes i IFC men ikke i bibliotek?
+  const ifcGrupper = new Set(ifcLag.map(l => l.gruppe))
+  const biblioGrupper = new Set(biblioLag.map(l => l.gruppe))
+  const ifcMangler = [...ifcGrupper].filter(g => !biblioGrupper.has(g))
+  const biblioMangler = [...biblioGrupper].filter(g => !ifcGrupper.has(g))
+  if (ifcMangler.length > 0) forskjeller.push(`malen mangler ${ifcMangler.join(', ')}`)
+  if (biblioMangler.length > 0) forskjeller.push(`malen har ${biblioMangler.join(', ')} (ikke i IFC)`)
+  return forskjeller.join('; ') || 'små avvik i lagstruktur'
 }
 
 // ─── BIM KLASSIFISERINGS-SEKSJON (Patch 13 Sesjon A) ─────────────────────────
