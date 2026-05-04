@@ -36696,6 +36696,76 @@ function getWallIsExternal(api, mod, modelID, elementId, propLookup) {
 //   dor:       { ... },
 //   trapp:     { ... },
 // }
+// Leser IfcUnitAssignment fra IFC-filen og returnerer faktorer for å konvertere
+// til SI-baseenheter (meter, kvadratmeter, kubikkmeter).
+//
+// IFC har eksplisitt deklarert sine enheter via IFCSIUNIT (med prefix som MILLI, CENTI etc.)
+// eller IFCCONVERSIONBASEDUNIT (med navngitte konverteringer).
+//
+// Returnerer { length, area, volume } — multiplikatorer som tar verdier i filens
+// enheter og gir m, m², m³.
+function extractIfcUnits(api, mod, modelID) {
+  const result = { length: 1, area: 1, volume: 1, lengthUnit: 'METRE', areaUnit: 'SQUARE_METRE', volumeUnit: 'CUBIC_METRE' }
+  const SI_PREFIX = {
+    EXA: 1e18, PETA: 1e15, TERA: 1e12, GIGA: 1e9, MEGA: 1e6, KILO: 1e3, HECTO: 1e2, DECA: 1e1,
+    DECI: 1e-1, CENTI: 1e-2, MILLI: 1e-3, MICRO: 1e-6, NANO: 1e-9, PICO: 1e-12, FEMTO: 1e-15, ATTO: 1e-18,
+  }
+
+  try {
+    const projectIds = api.GetLineIDsWithType(modelID, mod.IFCPROJECT)
+    if (projectIds.size() === 0) return result
+    const proj = api.GetLine(modelID, projectIds.get(0))
+    if (!proj?.UnitsInContext) return result
+    const unitsCtxId = proj.UnitsInContext.value
+    if (!unitsCtxId) return result
+    const unitsCtx = api.GetLine(modelID, unitsCtxId)
+    if (!unitsCtx?.Units) return result
+
+    const unitRefs = Array.isArray(unitsCtx.Units) ? unitsCtx.Units : [unitsCtx.Units]
+    for (const unitRef of unitRefs) {
+      const uid = unitRef?.value
+      if (!uid) continue
+      let unit; try { unit = api.GetLine(modelID, uid) } catch(e) { continue }
+      if (!unit) continue
+
+      const unitType = unit?.UnitType?.value || unit?.UnitType
+      if (!unitType) continue
+
+      let multiplier = 1
+      const isSI = (unit?.Prefix !== undefined) || (unit?.Name?.value !== undefined)
+      if (isSI && unit.Prefix) {
+        const prefixVal = unit.Prefix?.value || unit.Prefix
+        if (typeof prefixVal === 'string' && SI_PREFIX[prefixVal]) {
+          multiplier = SI_PREFIX[prefixVal]
+        }
+      }
+      if (!isSI && unit?.ConversionFactor) {
+        const cfId = unit.ConversionFactor.value
+        if (cfId) {
+          let cf; try { cf = api.GetLine(modelID, cfId) } catch(e) { cf = null }
+          if (cf?.ValueComponent) {
+            const v = cf.ValueComponent.value ?? cf.ValueComponent
+            if (typeof v === 'number') multiplier = v
+          }
+        }
+      }
+
+      if (unitType === 'LENGTHUNIT') {
+        result.length = multiplier
+      } else if (unitType === 'AREAUNIT') {
+        // For SQUARE_METRE med MILLI-prefix: prefix gjelder lengde, kvadreres for areal
+        result.area = multiplier * multiplier
+      } else if (unitType === 'VOLUMEUNIT') {
+        result.volume = multiplier * multiplier * multiplier
+      }
+    }
+  } catch(e) {
+    console.warn('[ifc] kunne ikke lese IfcUnitAssignment, bruker defaults:', e)
+  }
+  console.log('[ifc] enheter detektert:', result)
+  return result
+}
+
 async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const result = {
     yttervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
@@ -36755,7 +36825,28 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   result.innervegg.gjennomsnittHoyde = veggHoydeCountIv > 0 ? veggHoydeSumIv / veggHoydeCountIv : 0
 
   // --- TAK (IfcRoof) ---
+  // ArchiCAD eksporterer ofte ikke kvantiteter direkte på IfcRoof, men på
+  // de underliggende IfcSlab-elementene som er aggregert til taket via
+  // IfcRelAggregates. Vi prøver først å hente direkte fra Roof-elementet,
+  // og faller tilbake til å summere aggregerte slabs hvis det gir 0.
   if (onProgress) onProgress('Henter takmengder...')
+
+  // Bygg lookup: roofId → array av aggregerte child-IDs (slabs etc.)
+  const roofChildLookup = new Map()
+  try {
+    const aggIds = api.GetLineIDsWithType(modelID, mod.IFCRELAGGREGATES)
+    const numAgg = aggIds.size()
+    for (let i = 0; i < numAgg; i++) {
+      const relId = aggIds.get(i)
+      let rel; try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+      if (!rel?.RelatingObject?.value || !rel?.RelatedObjects) continue
+      const parentId = rel.RelatingObject.value
+      const children = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
+      const childIds = children.map(c => c?.value).filter(Boolean)
+      if (childIds.length > 0) roofChildLookup.set(parentId, childIds)
+    }
+  } catch(e) { console.warn('[ifc] kunne ikke bygge roof-aggregat-lookup:', e) }
+
   if (typeof mod.IFCROOF !== 'undefined') {
     const ids = api.GetLineIDsWithType(modelID, mod.IFCROOF)
     const num = ids.size()
@@ -36765,8 +36856,29 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       if (!element) continue
       let qSet = quantityLookup.get(elementId)
       if (qSet) qSet = expandQuantities(api, modelID, qSet)
-      const areal = getQuantityValue(qSet, ['ProjectedArea', 'NetArea', 'GrossArea']) || 0
-      const volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume']) || 0
+      // Utvidet feltnavn-prioritering — ArchiCAD bruker ulike konvensjoner
+      let areal = getQuantityValue(qSet, [
+        'ProjectedArea', 'NetArea', 'GrossArea', 'TotalSurfaceArea',
+        'GrossFootprintArea', 'NetFootprintArea', 'Area',
+      ]) || 0
+      let volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume', 'Volume']) || 0
+
+      // Fallback: summer fra aggregerte slabs hvis taket selv ikke har mengder
+      if (areal === 0 && roofChildLookup.has(elementId)) {
+        const childIds = roofChildLookup.get(elementId)
+        for (const cid of childIds) {
+          let cQSet = quantityLookup.get(cid)
+          if (cQSet) cQSet = expandQuantities(api, modelID, cQSet)
+          const cArea = getQuantityValue(cQSet, [
+            'NetArea', 'GrossArea', 'GrossFootprintArea', 'NetFootprintArea',
+            'GrossPlanArea', 'NetPlanArea', 'Area',
+          ]) || 0
+          const cVol = getQuantityValue(cQSet, ['NetVolume', 'GrossVolume', 'Volume']) || 0
+          areal += cArea
+          volum += cVol
+        }
+      }
+
       const navn = element?.Name?.value || `Tak #${elementId}`
       result.tak.antall++
       result.tak.totalAreal += areal
@@ -36858,29 +36970,79 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     }
   }
 
-  // Konverter mm til meter hvis IFC bruker millimeter (typisk for ArchiCAD).
-  // Vi gjør en heuristisk sjekk: hvis gjennomsnitt-veggareal > 1000 så er det mm.
-  // Da deler vi alle areal-verdier på 1 000 000 (mm² → m²) og lengder på 1000.
-  const sampleAreal = (result.yttervegg.totalAreal + result.innervegg.totalAreal) / Math.max(1, result.yttervegg.antall + result.innervegg.antall)
-  const erMm = sampleAreal > 1000  // hvis snittareal > 1000, antar vi mm² (et reelt veggareal er ~10 m² = 10 000 000 mm²)
-  if (erMm) {
-    const konverterMengde = (kat) => {
-      result[kat].totalAreal /= 1_000_000
-      if (typeof result[kat].totalLengde !== 'undefined') result[kat].totalLengde /= 1000
-      if (typeof result[kat].totalVolum !== 'undefined') result[kat].totalVolum /= 1_000_000_000
-      if (typeof result[kat].gjennomsnittHoyde !== 'undefined') result[kat].gjennomsnittHoyde /= 1000
-      if (typeof result[kat].gjennomsnittAreal !== 'undefined') result[kat].gjennomsnittAreal /= 1_000_000
-      result[kat].elementer.forEach(e => {
-        if (typeof e.areal === 'number') e.areal /= 1_000_000
-        if (typeof e.lengde === 'number') e.lengde /= 1000
-        if (typeof e.hoyde === 'number') e.hoyde /= 1000
-        if (typeof e.volum === 'number') e.volum /= 1_000_000_000
-        if (typeof e.width === 'number') e.width /= 1000
-        if (typeof e.height === 'number') e.height /= 1000
-      })
-    }
-    Object.keys(result).forEach(konverterMengde)
+  // ENHETSKONVERTERING — bruker IfcUnitAssignment fra filen for korrekt
+  // konvertering til SI-baseenheter (m, m², m³). Dette er mer pålitelig
+  // enn å gjette basert på tallstørrelse.
+  const units = extractIfcUnits(api, mod, modelID)
+  const lf = units.length     // lengde-faktor (f.eks. 0.001 hvis filen bruker mm)
+  const af = units.area       // areal-faktor (f.eks. 0.000001 for mm²)
+  const vf = units.volume     // volum-faktor
+
+  const konverterMengde = (kat) => {
+    if (typeof result[kat].totalAreal === 'number')        result[kat].totalAreal        *= af
+    if (typeof result[kat].totalLengde === 'number')       result[kat].totalLengde       *= lf
+    if (typeof result[kat].totalVolum === 'number')        result[kat].totalVolum        *= vf
+    if (typeof result[kat].gjennomsnittHoyde === 'number') result[kat].gjennomsnittHoyde *= lf
+    if (typeof result[kat].gjennomsnittAreal === 'number') result[kat].gjennomsnittAreal *= af
+    result[kat].elementer.forEach(e => {
+      if (typeof e.areal  === 'number') e.areal  *= af
+      if (typeof e.lengde === 'number') e.lengde *= lf
+      if (typeof e.hoyde  === 'number') e.hoyde  *= lf
+      if (typeof e.volum  === 'number') e.volum  *= vf
+      if (typeof e.width  === 'number') e.width  *= lf
+      if (typeof e.height === 'number') e.height *= lf
+    })
   }
+  Object.keys(result).forEach(konverterMengde)
+
+  // For vinduer/dører kommer arealet fra width × height. Etter konvertering
+  // er width og height i m, men areal ble beregnet før konvertering — så det
+  // er nå feil (har blitt delt på én faktor for mye). Vi må regne om.
+  ;['vindu', 'dor'].forEach(kat => {
+    let total = 0
+    result[kat].elementer.forEach(e => {
+      e.areal = (typeof e.width === 'number' && typeof e.height === 'number') ? e.width * e.height : 0
+      total += e.areal
+    })
+    result[kat].totalAreal = total
+    result[kat].gjennomsnittAreal = result[kat].antall > 0 ? total / result[kat].antall : 0
+  })
+
+  // TYPEGRUPPERING — for vinduer og dører gruppererer vi etter dimensjoner
+  // slik at kalkulatøren ser "24 stk vindu 600×2100" i stedet for 24 separate rader.
+  // Toleranse: 5 mm (= 0.005 m) for å gruppere som "samme type".
+  const grupperEtterDimensjoner = (elementer) => {
+    const grupper = new Map()
+    elementer.forEach(e => {
+      const w = e.width || 0
+      const h = e.height || 0
+      // Rund av til nærmeste 5 mm = 0.005 m
+      const wKey = Math.round(w * 200) / 200  // 0.005 m presisjon
+      const hKey = Math.round(h * 200) / 200
+      const key = `${wKey}x${hKey}`
+      if (!grupper.has(key)) {
+        grupper.set(key, {
+          dimensjonsKey: key,
+          width: wKey,
+          height: hKey,
+          antall: 0,
+          arealPerStk: w * h,
+          totalAreal: 0,
+          eksempelnavn: e.navn,
+        })
+      }
+      const g = grupper.get(key)
+      g.antall++
+      g.totalAreal += e.areal || 0
+    })
+    // Sorter desc etter antall, så de mest frekvente vises først
+    return Array.from(grupper.values()).sort((a, b) => b.antall - a.antall)
+  }
+
+  result.vindu.typer = grupperEtterDimensjoner(result.vindu.elementer)
+  result.dor.typer = grupperEtterDimensjoner(result.dor.elementer)
+  result.vindu.antallTyper = result.vindu.typer.length
+  result.dor.antallTyper = result.dor.typer.length
 
   return result
 }
@@ -36983,34 +37145,36 @@ function BimMengdeVisning({ mengder, isMob }) {
     {
       key: 'vindu', label: 'Vinduer', icon: '🪟', color: '#0284c7',
       data: mengder.vindu,
+      kilde: 'typer',  // Bruk typer-array i stedet for elementer
       formatter: (d) => [
         { label: 'Antall', value: d.antall + ' stk', primary: true },
+        { label: 'Unike typer', value: (d.antallTyper || 0) + ' typer' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²' },
-        { label: 'Snitt areal', value: d.gjennomsnittAreal.toFixed(2) + ' m²/stk' },
       ],
-      kolonner: ['Navn', 'Bredde', 'Høyde', 'Areal'],
-      formatRad: (e) => [
-        e.navn,
-        e.width > 0 ? e.width.toFixed(2) + ' m' : '—',
-        e.height > 0 ? e.height.toFixed(2) + ' m' : '—',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+      kolonner: ['Type (B × H)', 'Antall', 'Areal/stk', 'Total areal'],
+      formatRad: (g) => [
+        `${(g.width * 1000).toFixed(0)} × ${(g.height * 1000).toFixed(0)} mm`,
+        g.antall + ' stk',
+        g.arealPerStk > 0 ? g.arealPerStk.toFixed(2) + ' m²' : '—',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(2) + ' m²' : '—',
       ],
     },
     {
       key: 'dor', label: 'Dører', icon: '🚪', color: '#9333ea',
       data: mengder.dor,
       kunHvis: mengder.dor.antall > 0,
+      kilde: 'typer',
       formatter: (d) => [
         { label: 'Antall', value: d.antall + ' stk', primary: true },
+        { label: 'Unike typer', value: (d.antallTyper || 0) + ' typer' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²' },
-        { label: 'Snitt areal', value: d.gjennomsnittAreal.toFixed(2) + ' m²/stk' },
       ],
-      kolonner: ['Navn', 'Bredde', 'Høyde', 'Areal'],
-      formatRad: (e) => [
-        e.navn,
-        e.width > 0 ? e.width.toFixed(2) + ' m' : '—',
-        e.height > 0 ? e.height.toFixed(2) + ' m' : '—',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+      kolonner: ['Type (B × H)', 'Antall', 'Areal/stk', 'Total areal'],
+      formatRad: (g) => [
+        `${(g.width * 1000).toFixed(0)} × ${(g.height * 1000).toFixed(0)} mm`,
+        g.antall + ' stk',
+        g.arealPerStk > 0 ? g.arealPerStk.toFixed(2) + ' m²' : '—',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(2) + ' m²' : '—',
       ],
     },
     {
@@ -37067,7 +37231,7 @@ function BimMengdeVisning({ mengder, isMob }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {kat.data.elementer.slice(0, 500).map((e, idx) => {
+                    {(kat.kilde === 'typer' ? (kat.data.typer || []) : kat.data.elementer).slice(0, 500).map((e, idx) => {
                       const verdier = kat.formatRad(e)
                       return (
                         <tr key={idx} style={{ borderBottom:'1px solid #f8fafc' }}>
@@ -37081,11 +37245,17 @@ function BimMengdeVisning({ mengder, isMob }) {
                     })}
                   </tbody>
                 </table>
-                {kat.data.elementer.length > 500 && (
-                  <div style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'center', background:'#f8fafc' }}>
-                    Viser de første 500 av {kat.data.elementer.length} elementer
-                  </div>
-                )}
+                {(() => {
+                  const total = kat.kilde === 'typer' ? (kat.data.typer || []).length : kat.data.elementer.length
+                  if (total > 500) {
+                    return (
+                      <div style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'center', background:'#f8fafc' }}>
+                        Viser de første 500 av {total} {kat.kilde === 'typer' ? 'typer' : 'elementer'}
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
               </div>
             )}
           </div>
