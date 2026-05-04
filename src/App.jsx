@@ -37551,50 +37551,60 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   klassifiserAlle('innervegg')
   klassifiserAlle('ukjent_vegg')
 
-  // Klassifiser gulv — skill mellom etasjeskille og dekke på grunn (bunnplate)
-  // Heuristikk:
-  //   - Inneholder trykkfast isolasjon → bunnplate (typisk under bakken)
-  //   - Tykk konstruksjon (>300mm) eller massiv betong → bunnplate
-  //   - Navn parser: "Dekke 500"/"Dekke 800" — tall >= 350 antas bunnplate
-  //   - Annet → etasjeskille
-  const parseTykkelseFraNavn = (navn) => {
-    // Henter første tall fra navn som "Dekke 500", "Dekke 1500" osv.
-    const m = (navn || '').match(/(\d{2,5})/)
-    return m ? parseInt(m[1], 10) : null
-  }
-
+  // Klassifiser gulv — skill mellom etasjeskille og dekke på grunn (bunnplate).
+  // Default er ETASJESKILLE (mest vanlig — sikrere antakelse).
+  // Vi flagger som "dekke på grunn" KUN ved klare materialsignaler:
+  //   - Trykkfast isolasjon (XPS/EPS)
+  //   - Massiv betong (få lag, hovedsakelig betong)
+  //   - Navn inneholder "grunn"/"bunn"/"fundament"
+  // Tall i navn (f.eks. "Dekke 2417") er IKKE pålitelige som tykkelse —
+  // de er ofte ArchiCAD-koordinater eller type-IDer.
   const klassifiserGulv = (lagsett) => {
-    if (!lagsett) return { foreslattKategori: 'ukjent', sikkerhet: 'lav', begrunnelse: '' }
+    if (!lagsett) return { foreslattKategori: 'etasjeskille', sikkerhet: 'lav', begrunnelse: '' }
     const navn = (lagsett.navn || '').toLowerCase()
     const layers = lagsett.layers || []
     const totT = lagsett.totalTykkelse || 0
     const harTrykkfast = inneholderMateriale(layers, ['trykkfast', 'xps', 'eps'])
     const harBetong = inneholderMateriale(layers, ['betong'])
-    const tykkelseFraNavn = parseTykkelseFraNavn(navn)
+    const harBjelker = inneholderMateriale(layers, ['bjelke', 'i-bjelke', 'limtre'])
+    const harGips = inneholderMateriale(layers, ['gips'])
+    const harLydsperre = inneholderMateriale(layers, ['lyd', 'trinnlyd', 'lydmatte'])
 
-    // Navn-basert
-    if (/grunn|bunnplate|fundament/.test(navn)) {
+    // Beregn betong-andel for å avgjøre "massiv betong"
+    let betongTykkelse = 0
+    layers.forEach(l => {
+      if (/betong/.test((l.navn || '').toLowerCase())) betongTykkelse += (l.tykkelse || 0)
+    })
+    const betongAndel = totT > 0 ? betongTykkelse / totT : 0
+
+    // Sterkt signal 1: Navn-basert
+    if (/\bgrunn\b|bunnplate|\bbunn\b|fundament/.test(navn)) {
       return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'høy',
         begrunnelse: `Navnet "${lagsett.navn}" indikerer dekke på grunn` }
     }
-    // Trykkfast isolasjon → bunnplate
+    // Sterkt signal 2: Trykkfast isolasjon → bunnplate (typisk under bakken)
     if (harTrykkfast) {
       return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'høy',
         begrunnelse: 'Trykkfast isolasjon — typisk for bunnplate på grunn' }
     }
-    // Tykk konstruksjon (>300mm)
-    if (totT > 300 || (tykkelseFraNavn && tykkelseFraNavn >= 350)) {
-      return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'middels',
-        begrunnelse: `Tykk konstruksjon (${totT > 0 ? totT.toFixed(0) : tykkelseFraNavn}mm) — sannsynligvis bunnplate` }
-    }
-    // Massiv betong uten andre lag → bunnplate eller fundament-relatert
-    if (harBetong && layers.length <= 2 && totT > 150) {
+    // Middels signal: Massiv betong (mer enn 80% betong, lite annet)
+    if (harBetong && betongAndel > 0.8 && layers.length <= 2) {
       return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'middels',
         begrunnelse: 'Massiv betong-konstruksjon — sannsynligvis bunnplate' }
     }
-    // Default: etasjeskille
-    return { foreslattKategori: 'etasjeskille', sikkerhet: 'middels',
-      begrunnelse: tykkelseFraNavn ? `Antatt etasjeskille (${tykkelseFraNavn}mm tykk)` : 'Standard gulv-konstruksjon — antatt etasjeskille' }
+    // Sterkt signal for etasjeskille: bjelkelag
+    if (harBjelker) {
+      return { foreslattKategori: 'etasjeskille', sikkerhet: 'høy',
+        begrunnelse: 'Bjelkelag i lagstrukturen — typisk etasjeskille' }
+    }
+    // Middels signal for etasjeskille: gips på undersiden + lyddemping
+    if (harGips && (harLydsperre || layers.length >= 3)) {
+      return { foreslattKategori: 'etasjeskille', sikkerhet: 'middels',
+        begrunnelse: 'Sammensatt konstruksjon med gips/lyddemping — antatt etasjeskille' }
+    }
+    // Default: etasjeskille (vanligste kategori, sikrere antakelse)
+    return { foreslattKategori: 'etasjeskille', sikkerhet: 'lav',
+      begrunnelse: layers.length === 0 ? 'Ingen lagstruktur — antatt etasjeskille (verifiser manuelt)' : 'Standard gulv-konstruksjon — antatt etasjeskille' }
   }
 
   if (result.gulv.lagsett) {
@@ -38114,14 +38124,15 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
     color: erValgt ? 'white' : kategoriFarge(kat),
     border: '1px solid ' + kategoriFarge(kat) + (erValgt ? '' : '50'),
     borderRadius: '6px',
-    padding: '3px 8px',
-    fontSize: '11px',
+    padding: '4px 9px',
+    fontSize: '10px',
     fontWeight: erValgt ? '700' : '500',
+    letterSpacing: '0.2px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
-    gap: '3px',
-    lineHeight: 1.4,
+    gap: '4px',
+    lineHeight: 1.5,
     transition: 'all 0.1s',
   })
 
