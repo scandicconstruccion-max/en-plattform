@@ -38556,6 +38556,215 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
   )
 }
 
+// ─── PRISBOK-SØKEFELT (Patch 13 Sesjon C.2.B) ────────────────────────────────
+// Gjenbrukbart søkefelt mot prisbok-tabellen i Supabase.
+// Brukt i BimNyKonstruksjonDialog for å fylle ut materialer raskt.
+//
+// Props:
+//   value: { varenavn, nobb, enhet, enhetspris } — gjeldende valg
+//   onChange: (newValue) => void — kalles når brukeren velger et resultat
+//   foreslagSoek: string — auto-foreslag-søk (basert på materialgruppe)
+//   placeholder: string
+//
+// Funksjonalitet:
+//   - Bruker debounced søk (300ms) for å unngå for mange API-kall
+//   - Henter aktiv prisliste først, faller tilbake til user_id
+//   - Viser opp til 8 treff med fokuserings-styling
+//   - Auto-foreslag når feltet får fokus uten tekst (basert på materialgruppe)
+//   - Klikk utenfor lukker dropdown
+
+function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) {
+  const { user } = useAuth()
+  const [soekTekst, setSoekTekst] = useState(value?.varenavn || '')
+  const [resultater, setResultater] = useState([])
+  const [aapenDropdown, setAapenDropdown] = useState(false)
+  const [laster, setLaster] = useState(false)
+  const [aktivPrislisteId, setAktivPrislisteId] = useState(null)
+  const containerRef = React.useRef(null)
+  const inputRef = React.useRef(null)
+  const soekTimeoutRef = React.useRef(null)
+
+  // Synkroniser visning når value endres utenfra (f.eks. ved redigering)
+  useEffect(() => {
+    if (value?.varenavn !== soekTekst && !aapenDropdown) {
+      setSoekTekst(value?.varenavn || '')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value?.varenavn])
+
+  // Hent aktiv prisliste én gang
+  useEffect(() => {
+    const hentPrisliste = async () => {
+      if (!user?.id) return
+      try {
+        const { data: pl } = await supabase.from('prislister')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('aktiv', true)
+          .limit(1).single()
+        if (pl?.id) setAktivPrislisteId(pl.id)
+      } catch(e) {
+        // Ingen aktiv prisliste — det er OK, vi faller tilbake til user_id
+      }
+    }
+    hentPrisliste()
+  }, [user?.id])
+
+  // Søkefunksjon mot prisbok
+  const utforSoek = async (term) => {
+    if (!user?.id) return
+    setLaster(true)
+    try {
+      let query = supabase.from('prisbok')
+        .select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
+      if (aktivPrislisteId) query = query.eq('prisliste_id', aktivPrislisteId)
+      else query = query.eq('user_id', user.id)
+
+      if (term && term.length >= 2) {
+        // Splitt i ord, hvert ord må matche
+        const words = term.trim().split(/\s+/).filter(w => w.length >= 2)
+        if (words.length === 1 && /^\d+$/.test(words[0])) {
+          // Numerisk → søk i varenummer ELLER varenavn
+          query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+        } else {
+          words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+        }
+      }
+
+      const { data } = await query.order('varenavn').limit(8)
+      setResultater(data || [])
+    } catch(e) {
+      console.warn('[prisbok] søkefeil:', e)
+      setResultater([])
+    }
+    setLaster(false)
+  }
+
+  // Debounced søk når brukeren skriver
+  useEffect(() => {
+    if (!aapenDropdown) return
+    if (soekTimeoutRef.current) clearTimeout(soekTimeoutRef.current)
+    soekTimeoutRef.current = setTimeout(() => {
+      const term = soekTekst.trim() || foreslagSoek || ''
+      if (term.length >= 2) utforSoek(term)
+      else setResultater([])
+    }, 300)
+    return () => { if (soekTimeoutRef.current) clearTimeout(soekTimeoutRef.current) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [soekTekst, aapenDropdown, aktivPrislisteId])
+
+  // Lukk dropdown ved klikk utenfor
+  useEffect(() => {
+    const handleKlikk = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setAapenDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleKlikk)
+    return () => document.removeEventListener('mousedown', handleKlikk)
+  }, [])
+
+  const aapneOgVisAuto = () => {
+    setAapenDropdown(true)
+    // Vis auto-foreslag når brukeren fokuserer på feltet
+    const term = soekTekst.trim() || foreslagSoek || ''
+    if (term.length >= 2) utforSoek(term)
+  }
+
+  const velgResultat = (rad) => {
+    onChange({
+      varenavn: rad.varenavn,
+      nobb: rad.varenummer || '',
+      enhet: rad.enhet || 'stk',
+      enhetspris: Number(rad.pris_per_enhet) || 0,
+    })
+    setSoekTekst(rad.varenavn)
+    setAapenDropdown(false)
+  }
+
+  const handleInput = (e) => {
+    const ny = e.target.value
+    setSoekTekst(ny)
+    // Brukeren skriver — propager også som "fritt" varenavn
+    // (men ikke nobb/pris — det skal kreve eksplisitt valg)
+    onChange({
+      ...value,
+      varenavn: ny,
+    })
+    if (!aapenDropdown) setAapenDropdown(true)
+  }
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <input
+        ref={inputRef}
+        type="text"
+        value={soekTekst}
+        onChange={handleInput}
+        onFocus={aapneOgVisAuto}
+        placeholder={placeholder || 'Søk i prisbok...'}
+        style={{
+          width: '100%', padding: '6px 10px', fontSize: '12px',
+          border: '1px solid #cbd5e1', borderRadius: '6px',
+          background: 'white', color: '#0f172a',
+        }}
+      />
+      {value?.nobb && !aapenDropdown && (
+        <div style={{ fontSize: '9px', color: '#10b981', fontWeight: '700', marginTop: '2px' }}>
+          ✓ NOBB {value.nobb} · {value.enhetspris} kr/{value.enhet}
+        </div>
+      )}
+      {aapenDropdown && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0,
+          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          marginTop: '2px', maxHeight: '300px', overflowY: 'auto',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.1)', zIndex: 100,
+        }}>
+          {laster && (
+            <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+              Søker...
+            </div>
+          )}
+          {!laster && resultater.length === 0 && soekTekst.trim().length < 2 && !foreslagSoek && (
+            <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+              Skriv minst 2 tegn for å søke i prisboken
+            </div>
+          )}
+          {!laster && resultater.length === 0 && (soekTekst.trim().length >= 2 || foreslagSoek) && (
+            <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+              Ingen treff i prisboken — skriv inn manuelt
+            </div>
+          )}
+          {!laster && resultater.length > 0 && foreslagSoek && !soekTekst.trim() && (
+            <div style={{ padding: '6px 12px', fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
+              Foreslag basert på materialgruppe
+            </div>
+          )}
+          {resultater.map(rad => (
+            <div key={rad.id} onClick={() => velgResultat(rad)}
+              style={{
+                padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f8fafc',
+                fontSize: '11px',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.background = '#eff6ff'}
+              onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
+              <div style={{ color: '#0f172a', fontWeight: '600', marginBottom: '1px' }}>
+                {rad.varenavn}
+              </div>
+              <div style={{ color: '#64748b', fontSize: '10px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                {rad.varenummer && <span>NOBB: {rad.varenummer}</span>}
+                {rad.pris_per_enhet > 0 && <span><strong>{Number(rad.pris_per_enhet).toFixed(2)} kr/{rad.enhet || 'stk'}</strong></span>}
+                {rad.kategori && <span>· {rad.kategori}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── BIM NY KONSTRUKSJON DIALOG (Patch 13 Sesjon C.1) ────────────────────────
 // Dialog (popup) for å opprette en ny konstruksjon basert på IFC-data,
 // eventuelt forhåndsutfylt fra en mal-konstruksjon i biblioteket.
@@ -38781,11 +38990,6 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
         {/* Innhold (scrollbar) */}
         <div style={{ flex: 1, overflowY: 'auto', padding: isMob ? '12px' : '16px 18px' }}>
 
-          {/* Info-banner */}
-          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', fontSize: '11px', color: '#9a3412', lineHeight: 1.5 }}>
-            <strong>📌 Sesjon C.1:</strong> Skjelett av dialogen — manuelle felter for nå. Prisbok-søk per lag og lagring i biblioteket kommer i Sesjon C.2.
-          </div>
-
           {/* === KONSTRUKSJONSDETALJER === */}
           <div style={sectionStil}>
             <div style={seksjonsTittel}>Konstruksjonsdetaljer</div>
@@ -38905,7 +39109,7 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
               <button onClick={leggTilMaterial} style={litenKnappStil}>+ Legg til</button>
             </div>
             <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic', marginBottom: '8px' }}>
-              Prisbok-søk pr lag kommer i Sesjon C.2 — for nå kan du fylle inn manuelt.
+              Søk i prisboken eller skriv inn manuelt. Velg fra dropdown for å auto-fylle NOBB-kode og pris.
             </div>
             {materialer.length === 0 ? (
               <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '8px' }}>
@@ -38913,35 +39117,66 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                {materialer.map((m, idx) => (
-                  <div key={idx} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '3fr 1fr 1fr 0.7fr 1fr auto', gap: '6px', alignItems: 'flex-end' }}>
-                      <div>
-                        <label style={labelStil}>Varenavn</label>
-                        <input type="text" value={m.varenavn} onChange={e => oppdaterMaterial(idx, 'varenavn', e.target.value)} style={inputStil} />
-                      </div>
-                      <div>
-                        <label style={labelStil}>NOBB</label>
-                        <input type="text" value={m.nobb} onChange={e => oppdaterMaterial(idx, 'nobb', e.target.value)} style={inputStil} placeholder="7-sifret" />
-                      </div>
-                      <div>
-                        <label style={labelStil}>Mengde</label>
-                        <input type="number" value={m.mengde} onChange={e => oppdaterMaterial(idx, 'mengde', Number(e.target.value))} style={inputStil} step="0.01" />
-                      </div>
-                      <div>
-                        <label style={labelStil}>Enhet</label>
-                        <input type="text" value={m.enhet} onChange={e => oppdaterMaterial(idx, 'enhet', e.target.value)} style={inputStil} />
-                      </div>
-                      <div>
-                        <label style={labelStil}>Pris/enh</label>
-                        <input type="number" value={m.enhetspris} onChange={e => oppdaterMaterial(idx, 'enhetspris', Number(e.target.value))} style={inputStil} />
-                      </div>
-                      <div style={{ paddingBottom: '2px' }}>
-                        <button onClick={() => slettMaterial(idx)} style={slettKnappStil}>×</button>
+                {materialer.map((m, idx) => {
+                  // Bestem auto-foreslag-søk basert på materialgruppen for varenavnet
+                  // Eksempel: "Stenderverk 36×70" → gruppe "stender" → søkeord "stenderverk"
+                  const gruppeForSoek = materialGruppe(m.varenavn || '')
+                  const foreslagSoekTekst = gruppeForSoek === 'annet' ? '' : ({
+                    stender: 'stenderverk',
+                    bjelke: 'bjelke',
+                    isolasjon: 'isolasjon',
+                    gips: 'gipsplate',
+                    sponplate: 'sponplate',
+                    vindsperre: 'vindsperre',
+                    dampsperre: 'dampsperre',
+                    lufting: 'lekt',
+                    trekledning: 'trekledning',
+                    betong: 'betong',
+                    puss: 'puss',
+                    utforing: 'utforing',
+                    fasadeplate: 'fasadeplate',
+                    maling: 'maling',
+                  }[gruppeForSoek] || '')
+                  return (
+                    <div key={idx} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '3fr 1fr 0.7fr 1fr auto', gap: '6px', alignItems: 'flex-end' }}>
+                        <div>
+                          <label style={labelStil}>Varenavn (søk i prisbok)</label>
+                          <PrisbokSoekFelt
+                            value={{ varenavn: m.varenavn, nobb: m.nobb, enhet: m.enhet, enhetspris: m.enhetspris }}
+                            foreslagSoek={foreslagSoekTekst}
+                            placeholder="Søk eller skriv inn manuelt..."
+                            isMob={isMob}
+                            onChange={(nyVerdi) => {
+                              setMaterialer(prev => prev.map((mat, i) => i === idx ? {
+                                ...mat,
+                                varenavn: nyVerdi.varenavn ?? mat.varenavn,
+                                nobb: nyVerdi.nobb ?? mat.nobb,
+                                enhet: nyVerdi.enhet ?? mat.enhet,
+                                enhetspris: nyVerdi.enhetspris ?? mat.enhetspris,
+                              } : mat))
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={labelStil}>Mengde</label>
+                          <input type="number" value={m.mengde} onChange={e => oppdaterMaterial(idx, 'mengde', Number(e.target.value))} style={inputStil} step="0.01" />
+                        </div>
+                        <div>
+                          <label style={labelStil}>Enhet</label>
+                          <input type="text" value={m.enhet} onChange={e => oppdaterMaterial(idx, 'enhet', e.target.value)} style={inputStil} />
+                        </div>
+                        <div>
+                          <label style={labelStil}>Pris/enh</label>
+                          <input type="number" value={m.enhetspris} onChange={e => oppdaterMaterial(idx, 'enhetspris', Number(e.target.value))} style={inputStil} />
+                        </div>
+                        <div style={{ paddingBottom: '2px' }}>
+                          <button onClick={() => slettMaterial(idx)} style={slettKnappStil}>×</button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
@@ -39527,13 +39762,13 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
       {/* Info om neste steg */}
       <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px' }}>
-        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Sesjon C.2.A — hva som fungerer nå</div>
+        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Sesjon C.2 — hva som fungerer nå</div>
         <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
-          Konstruksjoner du lager lagres permanent i ditt eget bibliotek og er tilgjengelige også i Kalkulasjon-modulen. Lagsett du har bekreftet tidligere blir auto-gjenkjent ved neste IFC-import (gul "Husket fra forrige prosjekt"-banner).
+          Konstruksjoner du lager lagres permanent i ditt eget bibliotek. Materialer fylles automatisk via prisbok-søk. Lagsett du har bekreftet tidligere blir auto-gjenkjent ved neste IFC-import (gul "Husket fra forrige prosjekt"-banner).
           {brukerBibliotek.length > 0 && (
             <span> Du har <strong>{brukerBibliotek.length} egne konstruksjon{brukerBibliotek.length > 1 ? 'er' : ''}</strong> i biblioteket.</span>
           )}
-          <br/>Prisbok-søk per material kommer i Sesjon C.2.B.
+          <br/>Neste opp: brukerklassifisering for proxy-elementer + sammendragsskjerm før kalkyle-generering (Sesjon C.3).
         </p>
       </div>
 
