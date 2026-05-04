@@ -38222,8 +38222,11 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
       <h3 style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
         🧭 Klassifiser lagsett
       </h3>
+      <p style={{ margin:'0 0 6px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+        Lagsett med tydelig lagstruktur er auto-klassifisert (markert <strong style={{ color:'#10b981' }}>✓ Høy sikkerhet</strong>). Lagsett uten klar lagstruktur har fått en default-antakelse (markert <strong style={{ color:'#f59e0b' }}>⚠ Middels</strong> eller <strong style={{ color:'#94a3b8' }}>? Lav sikkerhet</strong>) — disse må du <strong>verifisere manuelt</strong>.
+      </p>
       <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
-        Vi har auto-klassifisert lagsettene basert på lagstrukturen. Bekreft eller endre klassifisering før du går videre til bibliotek-matching.
+        Gå gjennom listen og bekreft eller endre klassifisering før du går videre til bibliotek-matching.
       </p>
 
       {/* VEGGER-SEKSJON */}
