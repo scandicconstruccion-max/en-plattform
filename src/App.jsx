@@ -37030,6 +37030,146 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     }
   }
 
+  // --- IFCBUILDINGELEMENTPROXY (navn-basert fallback) ---
+  // Mange ArchiCAD-eksporter (særlig tidligfase/nabovarsel) modellerer
+  // dekker, dører og spesialelementer som generiske BuildingElementProxy
+  // i stedet for ekte IfcSlab, IfcDoor osv. Vi inspiserer navn og typenavn
+  // og klassifiserer dem heuristisk basert på norske og engelske termer.
+  //
+  // Disse markeres med kilde='proxy_*' slik at brukeren ser hvor mengdene
+  // kommer fra og kan vurdere kvaliteten.
+  const proxyKategoriserer = (navn, typenavn) => {
+    const tekst = ((navn || '') + ' ' + (typenavn || '')).toLowerCase()
+    if (/dekke|etasjeskille|gulv\b|floor\b|slab/.test(tekst)) return 'gulv'
+    if (/yttervegg|fasadevegg|external.*wall|outer.*wall/.test(tekst)) return 'yttervegg'
+    if (/innervegg|interior.*wall|inner.*wall|skillevegg/.test(tekst)) return 'innervegg'
+    if (/\bvegg\b|\bwall\b/.test(tekst)) return 'ukjent_vegg'
+    if (/skyved|ytterdør|innerdør|\bdør\b|\bdoor\b/.test(tekst)) return 'dor'
+    if (/vindu|window/.test(tekst)) return 'vindu'
+    if (/\btak\b|\broof\b/.test(tekst)) return 'tak'
+    if (/trapp|stair/.test(tekst)) return 'trapp'
+    return null
+  }
+
+  // Tracking for kvalitetsrapport
+  result._proxyStats = {
+    totalProxy: 0,
+    klassifisert: { gulv: 0, yttervegg: 0, innervegg: 0, ukjent_vegg: 0, dor: 0, vindu: 0, tak: 0, trapp: 0 },
+    ukategorisert: 0,
+    ukategoriserteEksempler: [],
+  }
+
+  if (onProgress) onProgress('Analyserer BuildingElementProxy-elementer...')
+  if (typeof mod.IFCBUILDINGELEMENTPROXY !== 'undefined') {
+    const ids = api.GetLineIDsWithType(modelID, mod.IFCBUILDINGELEMENTPROXY)
+    const num = ids.size()
+    for (let i = 0; i < num; i++) {
+      const elementId = ids.get(i)
+      let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+      if (!element) continue
+      result._proxyStats.totalProxy++
+      const navn = element?.Name?.value || ''
+
+      // Hent typenavn fra IfcBuildingElementProxyType
+      let typenavn = ''
+      const typeId = instanceToTypeLookup.get(elementId)
+      if (typeId) {
+        try {
+          const typeElem = api.GetLine(modelID, typeId)
+          typenavn = typeElem?.Name?.value || ''
+        } catch(e) {}
+      }
+
+      const kat = proxyKategoriserer(navn, typenavn)
+      if (!kat) {
+        result._proxyStats.ukategorisert++
+        if (result._proxyStats.ukategoriserteEksempler.length < 10) {
+          const eksempel = typenavn || navn || `Proxy #${elementId}`
+          if (!result._proxyStats.ukategoriserteEksempler.includes(eksempel)) {
+            result._proxyStats.ukategoriserteEksempler.push(eksempel)
+          }
+        }
+        continue
+      }
+
+      result._proxyStats.klassifisert[kat]++
+
+      // Hent quantities — fra instans eller fra type (samme metode som slab)
+      let qSet = quantityLookup.get(elementId)
+      if (qSet) qSet = expandQuantities(api, modelID, qSet)
+      const arealFelt = ['NetArea', 'GrossArea', 'NetPlanArea', 'GrossPlanArea', 'Area',
+                          'NetFloorArea', 'GrossFloorArea', 'TotalSurfaceArea',
+                          'NetSideArea', 'GrossSideArea']
+      const volumFelt = ['NetVolume', 'GrossVolume', 'Volume']
+      const lengdeFelt = ['Length', 'NetLength', 'GrossLength', 'Width', 'OverallWidth']
+      const hoydeFelt = ['Height', 'NetHeight', 'GrossHeight', 'OverallHeight']
+      let areal = getQuantityValue(qSet, arealFelt) || 0
+      let volum = getQuantityValue(qSet, volumFelt) || 0
+      let lengde = getQuantityValue(qSet, lengdeFelt) || 0
+      let hoyde = getQuantityValue(qSet, hoydeFelt) || 0
+      let kilde = 'proxy_instans'
+
+      if (areal === 0 && typeId) {
+        let typeQSet = quantityLookup.get(typeId)
+        if (typeQSet) typeQSet = expandQuantities(api, modelID, typeQSet)
+        const typeAreal = getQuantityValue(typeQSet, arealFelt) || 0
+        if (typeAreal > 0) {
+          areal = typeAreal
+          volum = getQuantityValue(typeQSet, volumFelt) || 0
+          lengde = getQuantityValue(typeQSet, lengdeFelt) || 0
+          hoyde = getQuantityValue(typeQSet, hoydeFelt) || 0
+          kilde = 'proxy_type'
+        }
+      }
+
+      const elInfo = {
+        id: elementId,
+        navn: navn || typenavn || `Proxy #${elementId}`,
+        typenavn,
+        areal, volum, lengde, hoyde,
+        kilde,
+        erProxy: true,
+      }
+
+      // Legg i riktig kategori
+      if (kat === 'gulv') {
+        result.gulv.antall++
+        result.gulv.totalAreal += areal
+        result.gulv.totalVolum += volum
+        result.gulv.elementer.push({ ...elInfo, predef: 'PROXY' })
+      } else if (kat === 'yttervegg' || kat === 'innervegg' || kat === 'ukjent_vegg') {
+        result[kat].antall++
+        result[kat].totalAreal += areal
+        result[kat].totalLengde += lengde
+        result[kat].totalVolum += volum
+        result[kat].elementer.push(elInfo)
+      } else if (kat === 'dor') {
+        result.dor.antall++
+        const width = lengde || 0
+        const height = hoyde || 0
+        result.dor.elementer.push({ ...elInfo, width, height })
+      } else if (kat === 'vindu') {
+        result.vindu.antall++
+        const width = lengde || 0
+        const height = hoyde || 0
+        result.vindu.elementer.push({ ...elInfo, width, height, partitioningType: null })
+      } else if (kat === 'tak') {
+        result.tak.antall++
+        result.tak.totalAreal += areal
+        result.tak.totalVolum += volum
+        result.tak.elementer.push({ id: elementId, navn: elInfo.navn, areal, volum, kilde: 'proxy' })
+      } else if (kat === 'trapp') {
+        result.trapp.antall++
+        result.trapp.elementer.push({ id: elementId, navn: elInfo.navn })
+      }
+    }
+    console.log(`[ifc] proxy: ${result._proxyStats.totalProxy} totalt, ${result._proxyStats.totalProxy - result._proxyStats.ukategorisert} klassifisert, ${result._proxyStats.ukategorisert} ukategorisert`)
+    console.log(`[ifc] proxy-fordeling:`, result._proxyStats.klassifisert)
+    if (result._proxyStats.ukategoriserteEksempler.length > 0) {
+      console.log(`[ifc] eksempler ukategorisert:`, result._proxyStats.ukategoriserteEksempler)
+    }
+  }
+
   // ENHETSKONVERTERING — bruker IfcUnitAssignment fra filen for korrekt
   // konvertering til SI-baseenheter (m, m², m³). Dette er mer pålitelig
   // enn å gjette basert på tallstørrelse.
@@ -37106,15 +37246,49 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   result.vindu.antallTyper = result.vindu.typer.length
   result.dor.antallTyper = result.dor.typer.length
 
+  // KVALITETSRAPPORT — sammenstille hvor mengdene kommer fra
+  // For hver kategori: hvor mange er fra ekte IFC-typer (IfcWall, IfcSlab etc.)
+  // og hvor mange er fra IfcBuildingElementProxy-fallback?
+  const tellEkte = (kat) => result[kat].elementer.filter(e => !e.erProxy).length
+  const tellProxy = (kat) => result[kat].elementer.filter(e => e.erProxy).length
+
+  result._kvalitet = {
+    yttervegg:    { ekte: tellEkte('yttervegg'),    proxy: tellProxy('yttervegg') },
+    innervegg:    { ekte: tellEkte('innervegg'),    proxy: tellProxy('innervegg') },
+    ukjent_vegg:  { ekte: tellEkte('ukjent_vegg'),  proxy: tellProxy('ukjent_vegg') },
+    gulv:         { ekte: tellEkte('gulv'),         proxy: tellProxy('gulv') },
+    tak:          { ekte: tellEkte('tak'),          proxy: tellProxy('tak') },
+    vindu:        { ekte: tellEkte('vindu'),        proxy: tellProxy('vindu') },
+    dor:          { ekte: tellEkte('dor'),          proxy: tellProxy('dor') },
+    trapp:        { ekte: result.trapp.elementer.filter(e => !e.kilde || e.kilde !== 'proxy').length,
+                    proxy: result.trapp.elementer.filter(e => e.kilde === 'proxy').length },
+  }
+  // Total andel fra proxy
+  let totEkte = 0, totProxy = 0
+  Object.values(result._kvalitet).forEach(v => { totEkte += v.ekte; totProxy += v.proxy })
+  result._kvalitet.totalEkte = totEkte
+  result._kvalitet.totalProxy = totProxy
+  result._kvalitet.proxyAndel = totEkte + totProxy > 0 ? totProxy / (totEkte + totProxy) : 0
+
+  // Advarsel hvis mer enn 30% av mengdene kommer fra proxy
+  if (result._kvalitet.proxyAndel > 0.3) {
+    result._advarsler = result._advarsler || []
+    result._advarsler.push({
+      type: 'tidligfase_modell',
+      melding: `${(result._kvalitet.proxyAndel * 100).toFixed(0)}% av elementene er modellert som generiske BuildingElementProxy i stedet for riktige IFC-typer (IfcSlab, IfcDoor osv.). Dette er typisk for tidligfase-modeller som "Ramme/nabovarsel". Mengdene er hentet best mulig basert på navn-heuristikk, men noe nøyaktighet kan mangle. For best resultat: be arkitekten levere en ferdig IFC fra "Detaljprosjekt"-fasen.`,
+    })
+  }
+
   // Diagnostikk: logge fordeling av yttervegg/innervegg slik at vi ser om
   // arkitekten har klassifisert riktig
   console.log(`[ifc] vegg-fordeling: ${result.yttervegg.antall} yttervegg, ${result.innervegg.antall} innervegg, ${result.ukjent_vegg.antall} ukjent klassifisering`)
+  console.log(`[ifc] kvalitet: ${result._kvalitet.totalEkte} ekte typer, ${result._kvalitet.totalProxy} fra proxy (${(result._kvalitet.proxyAndel * 100).toFixed(1)}%)`)
   const totVegger = result.yttervegg.antall + result.innervegg.antall + result.ukjent_vegg.antall
   if (totVegger > 0) {
     const ytterAndel = result.yttervegg.antall / totVegger
     const innerAndel = result.innervegg.antall / totVegger
     if (ytterAndel > 0.8 || innerAndel > 0.8 || result.innervegg.antall < 3) {
-      console.warn(`[ifc] ⚠️ Mistenkelig vegg-fordeling — ${(ytterAndel*100).toFixed(0)}% yttervegg, ${(innerAndel*100).toFixed(0)}% innervegg. Filen kan ha feil/manglende IsExternal-egenskaper.`)
+      console.warn(`[ifc] ⚠️ Mistenkelig vegg-fordeling — ${(ytterAndel*100).toFixed(0)}% yttervegg, ${(innerAndel*100).toFixed(0)}% innervegg.`)
       result._advarsler = result._advarsler || []
       result._advarsler.push({
         type: 'vegg_klassifisering',
@@ -37166,9 +37340,10 @@ function BimMengdeVisning({ mengder, isMob }) {
         { label: 'Total lengde', value: d.totalLengde.toFixed(1) + ' lm' },
         { label: 'Snitt høyde', value: d.gjennomsnittHoyde.toFixed(2) + ' m' },
       ],
-      kolonner: ['Navn', 'Lengde', 'Høyde', 'Areal', 'Volum'],
+      kolonner: ['Navn', 'Kilde', 'Lengde', 'Høyde', 'Areal', 'Volum'],
       formatRad: (e) => [
         e.navn,
+        e.erProxy ? '📦 Proxy' : '✓ IfcWall',
         e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
         e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
         e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
@@ -37184,9 +37359,10 @@ function BimMengdeVisning({ mengder, isMob }) {
         { label: 'Total lengde', value: d.totalLengde.toFixed(1) + ' lm' },
         { label: 'Snitt høyde', value: d.gjennomsnittHoyde.toFixed(2) + ' m' },
       ],
-      kolonner: ['Navn', 'Lengde', 'Høyde', 'Areal', 'Volum'],
+      kolonner: ['Navn', 'Kilde', 'Lengde', 'Høyde', 'Areal', 'Volum'],
       formatRad: (e) => [
         e.navn,
+        e.erProxy ? '📦 Proxy' : '✓ IfcWall',
         e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
         e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
         e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
@@ -37202,9 +37378,10 @@ function BimMengdeVisning({ mengder, isMob }) {
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Hint', value: 'Mangler IsExternal-prop. Klassifiseres manuelt.' },
       ],
-      kolonner: ['Navn', 'Lengde', 'Høyde', 'Areal'],
+      kolonner: ['Navn', 'Kilde', 'Lengde', 'Høyde', 'Areal'],
       formatRad: (e) => [
         e.navn,
+        e.erProxy ? '📦 Proxy' : '✓ IfcWall',
         e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
         e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
         e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
@@ -37218,9 +37395,10 @@ function BimMengdeVisning({ mengder, isMob }) {
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Total volum', value: d.totalVolum.toFixed(2) + ' m³' },
       ],
-      kolonner: ['Navn', 'Areal', 'Volum'],
+      kolonner: ['Navn', 'Kilde', 'Areal', 'Volum'],
       formatRad: (e) => [
         e.navn,
+        e.kilde === 'proxy' ? '📦 Proxy' : '✓ IfcRoof',
         e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
         e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
       ],
@@ -37233,9 +37411,10 @@ function BimMengdeVisning({ mengder, isMob }) {
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Total volum', value: d.totalVolum.toFixed(2) + ' m³' },
       ],
-      kolonner: ['Navn', 'Type', 'Areal', 'Volum'],
+      kolonner: ['Navn', 'Kilde', 'Type', 'Areal', 'Volum'],
       formatRad: (e) => [
         e.navn,
+        e.erProxy ? '📦 Proxy' : '✓ IfcSlab',
         e.predef || '—',
         e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
         e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
@@ -37290,6 +37469,53 @@ function BimMengdeVisning({ mengder, isMob }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+      {/* IFC-kvalitetsrapport — viser hvor stor andel av elementene som er
+          modellert med riktige IFC-typer vs som BuildingElementProxy */}
+      {mengder._kvalitet && (mengder._kvalitet.totalEkte + mengder._kvalitet.totalProxy > 0) && (() => {
+        const kv = mengder._kvalitet
+        const tot = kv.totalEkte + kv.totalProxy
+        const proxyPct = (kv.proxyAndel * 100).toFixed(0)
+        const ektePct = (100 - parseFloat(proxyPct)).toFixed(0)
+        const erBraKvalitet = kv.proxyAndel < 0.15
+        const erMidlerigKvalitet = kv.proxyAndel >= 0.15 && kv.proxyAndel < 0.5
+        const farge = erBraKvalitet ? '#10b981' : erMidlerigKvalitet ? '#f59e0b' : '#ef4444'
+        const bg = erBraKvalitet ? '#ecfdf5' : erMidlerigKvalitet ? '#fefce8' : '#fef2f2'
+        const tekst = erBraKvalitet ? 'Høy kvalitet' : erMidlerigKvalitet ? 'Midlere kvalitet' : 'Lav kvalitet (tidligfase-modell)'
+        return (
+          <div style={{ background: bg, border: `1px solid ${farge}40`, borderRadius:'12px', padding:'14px 18px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'10px', marginBottom:'10px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', minWidth:0 }}>
+                <div style={{ width:'36px', height:'36px', borderRadius:'10px', background: farge + '20', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', flexShrink:0 }}>
+                  {erBraKvalitet ? '✅' : erMidlerigKvalitet ? '⚠️' : '🔶'}
+                </div>
+                <div>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>IFC-kvalitet: {tekst}</div>
+                  <div style={{ fontSize:'12px', color:'#64748b' }}>{ektePct}% riktig modellert · {proxyPct}% fra proxy-fallback</div>
+                </div>
+              </div>
+            </div>
+            {/* Visuell stolpe med riktig/proxy/ukategorisert */}
+            <div style={{ display:'flex', height:'10px', borderRadius:'6px', overflow:'hidden', background:'#f1f5f9', marginBottom:'10px' }}>
+              <div style={{ width: `${ektePct}%`, background: farge, transition:'width 0.3s' }} title={`${kv.totalEkte} ekte IFC-typer`} />
+              <div style={{ width: `${proxyPct}%`, background: farge + '60' }} title={`${kv.totalProxy} fra BuildingElementProxy`} />
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'12px', fontSize:'11px', color:'#64748b' }}>
+              <span><strong style={{ color: farge }}>{kv.totalEkte}</strong> elementer fra ekte IFC-typer (IfcWall, IfcSlab, IfcDoor osv.)</span>
+              <span><strong style={{ color: farge }}>{kv.totalProxy}</strong> fra BuildingElementProxy (klassifisert via navn)</span>
+              {mengder._proxyStats && mengder._proxyStats.ukategorisert > 0 && (
+                <span style={{ color:'#94a3b8' }}>{mengder._proxyStats.ukategorisert} ukategoriserte proxies (ikke inkludert i mengdene)</span>
+              )}
+            </div>
+            {mengder._proxyStats && mengder._proxyStats.ukategoriserteEksempler.length > 0 && (
+              <div style={{ marginTop:'10px', paddingTop:'10px', borderTop:'1px solid ' + farge + '20', fontSize:'11px', color:'#64748b' }}>
+                <strong>Eksempler ukategorisert:</strong> {mengder._proxyStats.ukategoriserteEksempler.slice(0, 5).join(', ')}
+                {mengder._proxyStats.ukategoriserteEksempler.length > 5 ? '…' : ''}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
       {/* Advarsler om mistenkelige fordelinger fra IFC-filen */}
       {Array.isArray(mengder._advarsler) && mengder._advarsler.length > 0 && (
         <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'4px' }}>
@@ -37297,7 +37523,9 @@ function BimMengdeVisning({ mengder, isMob }) {
             <div key={i} style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'12px 16px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
               <span style={{ fontSize:'18px', flexShrink:0 }}>⚠️</span>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'4px' }}>Uvanlig fordeling i IFC-filen</div>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'4px' }}>
+                  {adv.type === 'tidligfase_modell' ? 'Tidligfase-modell oppdaget' : 'Uvanlig fordeling i IFC-filen'}
+                </div>
                 <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.5 }}>{adv.melding}</p>
               </div>
             </div>
