@@ -38537,6 +38537,473 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
   )
 }
 
+// ─── BIM NY KONSTRUKSJON DIALOG (Patch 13 Sesjon C.1) ────────────────────────
+// Dialog (popup) for å opprette en ny konstruksjon basert på IFC-data,
+// eventuelt forhåndsutfylt fra en mal-konstruksjon i biblioteket.
+//
+// I C.1 er dette skjelettet — uten Prisbok-søk og uten Supabase-lagring.
+// Brukeren får mulighet til å redigere alle felter og se total selvkost-estimat.
+// "Lagre"-knappen kaller onLagre(konstruksjonObjekt) — kalleren håndterer det.
+
+function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, onLagre }) {
+  const appAlert = useAppAlert()
+
+  // Initiell state — basert på mal hvis valgt, ellers tomt
+  const [navn, setNavn] = useState(() => {
+    if (mal) return mal.name + ' (kopi)'
+    if (ifcLagsett) return ifcLagsett.navn || 'Ny konstruksjon'
+    return 'Ny konstruksjon'
+  })
+  const [kategoriValg, setKategoriValg] = useState(() => {
+    if (mal) return mal.kategori
+    // Map IFC bruker-kategori → bibliotek-kategori
+    const map = { yttervegg: 'Yttervegg', innervegg: 'Innervegg', fundament: 'Sokkel',
+                  etasjeskille: 'Etasjeskille', dekke_paa_grunn: 'Bunnplate', tak: 'Tak' }
+    return map[kategori] || 'Yttervegg'
+  })
+  const [fag, setFag] = useState(() => mal?.fag || 'tomrer')
+  const [enhet, setEnhet] = useState(() => mal?.enhet || 'm²')
+  const [beskrivelse, setBeskrivelse] = useState(() => mal?.beskrivelse || '')
+
+  // Lag-struktur — fra mal hvis valgt, ellers fra IFC
+  const [lag, setLag] = useState(() => {
+    if (mal) {
+      // Bygg lag-struktur fra mal sine materialer (parse tykkelser)
+      const lagListe = []
+      for (const m of (mal.materialer || [])) {
+        const grp = materialGruppe(m.varenavn)
+        if (grp === 'annet') continue  // hopp over festemateriell osv.
+        const tyk = parseLagTykkelse(m.varenavn)
+        lagListe.push({
+          navn: m.varenavn,
+          gruppe: grp,
+          tykkelse: tyk,
+          kilde: 'mal',
+        })
+      }
+      return lagListe
+    }
+    if (ifcLagsett?.layers) {
+      return ifcLagsett.layers.map(l => ({
+        navn: l.navn,
+        gruppe: materialGruppe(l.navn),
+        tykkelse: l.tykkelse || 0,
+        kilde: 'ifc',
+      }))
+    }
+    return []
+  })
+
+  // Materialer — fra mal hvis valgt
+  const [materialer, setMaterialer] = useState(() => {
+    if (mal?.materialer) {
+      return mal.materialer.map(m => ({
+        varenavn: m.varenavn,
+        nobb: m.nobb || '',
+        mengde: m.mengde || 1,
+        enhet: m.enhet || enhet,
+        enhetspris: m.enhetspris || 0,
+      }))
+    }
+    return []
+  })
+
+  // Arbeidsarter — fra mal hvis valgt
+  const [arbeidsarter, setArbeidsarter] = useState(() => {
+    if (mal?.arbeidsarter) {
+      return mal.arbeidsarter.map(a => ({
+        beskrivelse: a.beskrivelse,
+        grunntid: a.grunntid || 0.1,
+      }))
+    }
+    return []
+  })
+
+  // Hva ble brukerens timepris hentet fra? Vi bruker en fast standard for nå (720 kr/t).
+  // I Patch 14 vil vi koble dette mot bedriftens reelle timepris.
+  const TIMEPRIS = 720
+
+  // Live-beregning av total selvkost per enhet
+  const totalMaterialPris = React.useMemo(() => {
+    return materialer.reduce((s, m) => s + (Number(m.mengde || 0) * Number(m.enhetspris || 0)), 0)
+  }, [materialer])
+  const totalTimer = React.useMemo(() => {
+    return arbeidsarter.reduce((s, a) => s + Number(a.grunntid || 0), 0)
+  }, [arbeidsarter])
+  const totalArbeidPris = totalTimer * TIMEPRIS
+  const totalSelvkost = totalMaterialPris + totalArbeidPris
+
+  // Handlere
+  const oppdaterLag = (idx, felt, verdi) => {
+    setLag(prev => prev.map((l, i) => i === idx ? { ...l, [felt]: verdi } : l))
+  }
+  const slettLag = (idx) => setLag(prev => prev.filter((_, i) => i !== idx))
+  const leggTilLag = () => setLag(prev => [...prev, { navn: '', gruppe: 'annet', tykkelse: 0, kilde: 'manuell' }])
+
+  const oppdaterMaterial = (idx, felt, verdi) => {
+    setMaterialer(prev => prev.map((m, i) => i === idx ? { ...m, [felt]: verdi } : m))
+  }
+  const slettMaterial = (idx) => setMaterialer(prev => prev.filter((_, i) => i !== idx))
+  const leggTilMaterial = () => setMaterialer(prev => [...prev, {
+    varenavn: '', nobb: '', mengde: 1, enhet: enhet, enhetspris: 0
+  }])
+
+  const oppdaterArbeidsart = (idx, felt, verdi) => {
+    setArbeidsarter(prev => prev.map((a, i) => i === idx ? { ...a, [felt]: verdi } : a))
+  }
+  const slettArbeidsart = (idx) => setArbeidsarter(prev => prev.filter((_, i) => i !== idx))
+  const leggTilArbeidsart = () => setArbeidsarter(prev => [...prev, { beskrivelse: '', grunntid: 0.1 }])
+
+  // Bruke IFC-tykkelse for et lag (rask justering)
+  const brukIfcTykkelse = (lagIdx) => {
+    if (!ifcLagsett?.layers) return
+    const ifcLag = ifcLagsett.layers
+    const aktuellLag = lag[lagIdx]
+    if (!aktuellLag) return
+    // Finn IFC-lag med samme materialgruppe
+    const matchIfc = ifcLag.find(l => materialGruppe(l.navn) === aktuellLag.gruppe)
+    if (!matchIfc) {
+      appAlert(`Fant ingen IFC-lag i samme materialgruppe (${aktuellLag.gruppe})`)
+      return
+    }
+    oppdaterLag(lagIdx, 'tykkelse', matchIfc.tykkelse)
+  }
+
+  const handleLagre = async () => {
+    // Validering
+    if (!navn.trim()) {
+      await appAlert('Konstruksjonen må ha et navn')
+      return
+    }
+    if (lag.length === 0) {
+      await appAlert('Konstruksjonen må ha minst ett lag')
+      return
+    }
+    // Bygg konstruksjon-objekt
+    const konstruksjon = {
+      id: `bedrift_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+      name: navn,
+      kategori: kategoriValg,
+      fag,
+      enhet,
+      beskrivelse,
+      lag,
+      materialer,
+      arbeidsarter,
+      underleverandorer: [],
+      _bedrift: true,  // markerer at dette er en bedrift-spesifikk konstruksjon
+      _opprettet: new Date().toISOString(),
+      _ifcLagsettSignatur: ifcLagsett?.navn || null,
+    }
+    onLagre(konstruksjon)
+  }
+
+  // Stiler
+  const overlayStil = {
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    background: 'rgba(15, 23, 42, 0.5)', zIndex: 1000,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    padding: isMob ? '0' : '20px',
+  }
+  const dialogStil = {
+    background: 'white',
+    borderRadius: isMob ? '0' : '14px',
+    width: '100%', maxWidth: '900px',
+    maxHeight: isMob ? '100vh' : '90vh',
+    display: 'flex', flexDirection: 'column',
+    overflow: 'hidden',
+  }
+  const sectionStil = {
+    background: '#f8fafc', border: '1px solid #e2e8f0',
+    borderRadius: '8px', padding: '12px 14px', marginBottom: '12px',
+  }
+  const seksjonsTittel = {
+    fontSize: '11px', fontWeight: '700', color: '#475569',
+    textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px',
+  }
+  const inputStil = {
+    width: '100%', padding: '6px 10px', fontSize: '12px',
+    border: '1px solid #cbd5e1', borderRadius: '6px',
+    background: 'white', color: '#0f172a',
+  }
+  const labelStil = {
+    fontSize: '10px', fontWeight: '600', color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: '0.3px', marginBottom: '3px',
+    display: 'block',
+  }
+  const litenKnappStil = {
+    background: 'white', color: '#475569', border: '1px solid #cbd5e1',
+    borderRadius: '6px', padding: '3px 8px', fontSize: '10px',
+    fontWeight: '500', cursor: 'pointer',
+  }
+  const slettKnappStil = {
+    background: 'transparent', color: '#dc2626', border: 'none',
+    fontSize: '14px', cursor: 'pointer', padding: '2px 6px',
+  }
+
+  return (
+    <div style={overlayStil} onClick={(e) => { if (e.target === e.currentTarget) onAvbryt() }}>
+      <div style={dialogStil}>
+        {/* Header */}
+        <div style={{ padding: '14px 18px', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+          <div>
+            <div style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>
+              {mal ? '📋 Lag ny basert på mal' : '✨ Lag helt ny konstruksjon'}
+            </div>
+            {ifcLagsett && (
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                IFC-lagsett: <strong>{ifcLagsett.navn}</strong> · {ifcLagsett.antall} stk · {ifcLagsett.totalAreal?.toFixed(1)} m²
+              </div>
+            )}
+          </div>
+          <button onClick={onAvbryt} style={{ background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#64748b', padding: '4px 8px' }}>×</button>
+        </div>
+
+        {/* Innhold (scrollbar) */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMob ? '12px' : '16px 18px' }}>
+
+          {/* Info-banner */}
+          <div style={{ background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: '8px', padding: '8px 12px', marginBottom: '12px', fontSize: '11px', color: '#9a3412', lineHeight: 1.5 }}>
+            <strong>📌 Sesjon C.1:</strong> Skjelett av dialogen — manuelle felter for nå. Prisbok-søk per lag og lagring i biblioteket kommer i Sesjon C.2.
+          </div>
+
+          {/* === KONSTRUKSJONSDETALJER === */}
+          <div style={sectionStil}>
+            <div style={seksjonsTittel}>Konstruksjonsdetaljer</div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '2fr 1fr 1fr', gap: '10px', marginBottom: '8px' }}>
+              <div>
+                <label style={labelStil}>Navn</label>
+                <input type="text" value={navn} onChange={e => setNavn(e.target.value)} style={inputStil} />
+              </div>
+              <div>
+                <label style={labelStil}>Kategori</label>
+                <select value={kategoriValg} onChange={e => setKategoriValg(e.target.value)} style={inputStil}>
+                  <option value="Yttervegg">Yttervegg</option>
+                  <option value="Innervegg">Innervegg</option>
+                  <option value="Sokkel">Sokkel/Fundament</option>
+                  <option value="Etasjeskille">Etasjeskille</option>
+                  <option value="Bunnplate">Bunnplate/Dekke på grunn</option>
+                  <option value="Tak">Tak</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelStil}>Enhet</label>
+                <select value={enhet} onChange={e => setEnhet(e.target.value)} style={inputStil}>
+                  <option value="m²">m²</option>
+                  <option value="lm">lm</option>
+                  <option value="m³">m³</option>
+                  <option value="stk">stk</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label style={labelStil}>Beskrivelse</label>
+              <input type="text" value={beskrivelse} onChange={e => setBeskrivelse(e.target.value)} style={inputStil}
+                placeholder="Kort beskrivelse av konstruksjonen..." />
+            </div>
+          </div>
+
+          {/* === LAG-STRUKTUR === */}
+          <div style={sectionStil}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div style={{ ...seksjonsTittel, marginBottom: 0 }}>Lagstruktur ({lag.length} lag)</div>
+              <button onClick={leggTilLag} style={litenKnappStil}>+ Legg til lag</button>
+            </div>
+
+            {/* IFC-referansepanel — viser hva IFC-en faktisk har */}
+            {ifcLagsett?.layers && ifcLagsett.layers.length > 0 && (
+              <div style={{ background: '#eff6ff', border: '1px dashed #bfdbfe', borderRadius: '6px', padding: '6px 10px', marginBottom: '10px' }}>
+                <div style={{ fontSize: '9px', fontWeight: '700', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '4px' }}>
+                  IFC-referanse (utenfra → innover)
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                  {ifcLagsett.layers.map((il, i) => (
+                    <div key={i} style={{ background: 'white', border: '1px solid #bfdbfe', borderRadius: '4px', padding: '2px 6px', fontSize: '10px', color: '#1e3a8a' }}>
+                      <strong>{il.navn}</strong>
+                      {il.tykkelse > 0 && <span style={{ color: '#64748b', marginLeft: '4px' }}>{il.tykkelse.toFixed(0)} mm</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Lag-liste */}
+            {lag.length === 0 ? (
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '8px' }}>
+                Ingen lag ennå. Klikk "+ Legg til lag" for å starte.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {lag.map((l, idx) => (
+                  <div key={idx} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '3fr 1.5fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                      <div>
+                        <label style={labelStil}>Lag-navn</label>
+                        <input type="text" value={l.navn} onChange={e => oppdaterLag(idx, 'navn', e.target.value)} style={inputStil} placeholder="f.eks. Bindingsverk - Isolert" />
+                      </div>
+                      <div>
+                        <label style={labelStil}>Materialgruppe</label>
+                        <select value={l.gruppe} onChange={e => oppdaterLag(idx, 'gruppe', e.target.value)} style={inputStil}>
+                          <option value="annet">Annet</option>
+                          <option value="stender">Stender/bindingsverk</option>
+                          <option value="bjelke">Bjelke</option>
+                          <option value="isolasjon">Isolasjon</option>
+                          <option value="gips">Gips/plate</option>
+                          <option value="sponplate">Sponplate</option>
+                          <option value="vindsperre">Vindsperre</option>
+                          <option value="dampsperre">Dampsperre</option>
+                          <option value="lufting">Lufting/lekt</option>
+                          <option value="trekledning">Trekledning</option>
+                          <option value="betong">Betong</option>
+                          <option value="puss">Puss</option>
+                          <option value="utforing">Utforing</option>
+                          <option value="fasadeplate">Fasadeplate</option>
+                          <option value="maling">Maling</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label style={labelStil}>Tykkelse (mm)</label>
+                        <input type="number" value={l.tykkelse} onChange={e => oppdaterLag(idx, 'tykkelse', Number(e.target.value))} style={inputStil} min="0" max="500" />
+                      </div>
+                      <div style={{ display: 'flex', gap: '4px', paddingBottom: '2px' }}>
+                        {ifcLagsett?.layers && (
+                          <button onClick={() => brukIfcTykkelse(idx)} title="Bruk tykkelse fra IFC for samme materialgruppe"
+                            style={{ ...litenKnappStil, padding: '5px 8px', whiteSpace: 'nowrap' }}>📐 IFC</button>
+                        )}
+                        <button onClick={() => slettLag(idx)} style={slettKnappStil} title="Slett lag">×</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* === MATERIALER === */}
+          <div style={sectionStil}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div style={{ ...seksjonsTittel, marginBottom: 0 }}>Materialer ({materialer.length})</div>
+              <button onClick={leggTilMaterial} style={litenKnappStil}>+ Legg til</button>
+            </div>
+            <div style={{ fontSize: '10px', color: '#94a3b8', fontStyle: 'italic', marginBottom: '8px' }}>
+              Prisbok-søk pr lag kommer i Sesjon C.2 — for nå kan du fylle inn manuelt.
+            </div>
+            {materialer.length === 0 ? (
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '8px' }}>
+                Ingen materialer ennå.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {materialer.map((m, idx) => (
+                  <div key={idx} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '3fr 1fr 1fr 0.7fr 1fr auto', gap: '6px', alignItems: 'flex-end' }}>
+                      <div>
+                        <label style={labelStil}>Varenavn</label>
+                        <input type="text" value={m.varenavn} onChange={e => oppdaterMaterial(idx, 'varenavn', e.target.value)} style={inputStil} />
+                      </div>
+                      <div>
+                        <label style={labelStil}>NOBB</label>
+                        <input type="text" value={m.nobb} onChange={e => oppdaterMaterial(idx, 'nobb', e.target.value)} style={inputStil} placeholder="7-sifret" />
+                      </div>
+                      <div>
+                        <label style={labelStil}>Mengde</label>
+                        <input type="number" value={m.mengde} onChange={e => oppdaterMaterial(idx, 'mengde', Number(e.target.value))} style={inputStil} step="0.01" />
+                      </div>
+                      <div>
+                        <label style={labelStil}>Enhet</label>
+                        <input type="text" value={m.enhet} onChange={e => oppdaterMaterial(idx, 'enhet', e.target.value)} style={inputStil} />
+                      </div>
+                      <div>
+                        <label style={labelStil}>Pris/enh</label>
+                        <input type="number" value={m.enhetspris} onChange={e => oppdaterMaterial(idx, 'enhetspris', Number(e.target.value))} style={inputStil} />
+                      </div>
+                      <div style={{ paddingBottom: '2px' }}>
+                        <button onClick={() => slettMaterial(idx)} style={slettKnappStil}>×</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* === ARBEIDSARTER === */}
+          <div style={sectionStil}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+              <div style={{ ...seksjonsTittel, marginBottom: 0 }}>Arbeidsarter ({arbeidsarter.length})</div>
+              <button onClick={leggTilArbeidsart} style={litenKnappStil}>+ Legg til</button>
+            </div>
+            {arbeidsarter.length === 0 ? (
+              <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', padding: '8px' }}>
+                Ingen arbeidsarter ennå.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {arbeidsarter.map((a, idx) => (
+                  <div key={idx} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '4fr 1fr auto', gap: '6px', alignItems: 'flex-end' }}>
+                      <div>
+                        <label style={labelStil}>Beskrivelse</label>
+                        <input type="text" value={a.beskrivelse} onChange={e => oppdaterArbeidsart(idx, 'beskrivelse', e.target.value)} style={inputStil} placeholder="f.eks. Oppsetting bindingsverk 198mm" />
+                      </div>
+                      <div>
+                        <label style={labelStil}>Timer/enh</label>
+                        <input type="number" value={a.grunntid} onChange={e => oppdaterArbeidsart(idx, 'grunntid', Number(e.target.value))} style={inputStil} step="0.01" />
+                      </div>
+                      <div style={{ paddingBottom: '2px' }}>
+                        <button onClick={() => slettArbeidsart(idx)} style={slettKnappStil}>×</button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* === SELVKOST-OVERSIKT === */}
+          <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '12px 14px', marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              Total selvkost pr {enhet}
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : 'repeat(3, 1fr)', gap: '10px' }}>
+              <div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>Materialer</div>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>{totalMaterialPris.toFixed(0)} kr</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>Arbeid ({totalTimer.toFixed(2)} t × {TIMEPRIS} kr)</div>
+                <div style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a' }}>{totalArbeidPris.toFixed(0)} kr</div>
+              </div>
+              <div>
+                <div style={{ fontSize: '10px', color: '#64748b' }}>Total selvkost</div>
+                <div style={{ fontSize: '16px', fontWeight: '700', color: '#166534' }}>{totalSelvkost.toFixed(0)} kr/{enhet}</div>
+              </div>
+            </div>
+            {ifcLagsett && (
+              <div style={{ fontSize: '11px', color: '#15803d', marginTop: '8px', paddingTop: '8px', borderTop: '1px solid #bbf7d0' }}>
+                Ved {ifcLagsett.totalAreal?.toFixed(0)} {enhet} ({ifcLagsett.antall} elementer): <strong>{(totalSelvkost * (ifcLagsett.totalAreal || 0)).toFixed(0)} kr</strong> total selvkost
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* Footer med knapper */}
+        <div style={{ padding: '12px 18px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '8px', flexShrink: 0, background: '#f8fafc' }}>
+          <button onClick={onAvbryt}
+            style={{ background: 'white', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>
+            Avbryt
+          </button>
+          <button onClick={handleLagre}
+            style={{ background: '#3b82f6', color: 'white', border: 'none', borderRadius: '8px', padding: '8px 16px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>
+            ✓ Lagre konstruksjon
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── BIM MATCHING-SEKSJON (Patch 13 Sesjon B) ────────────────────────────────
 // Viser bibliotek-matching for hvert klassifisert lagsett.
 // Tre statuser per lagsett:
@@ -38547,6 +39014,33 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
 function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
+
+  // Dialog-state for "Lag ny konstruksjon"
+  // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
+  const [aapenDialog, setAapenDialog] = useState(null)
+
+  // Liste av nye konstruksjoner brukeren har laget i denne sesjonen
+  // (Faktisk Supabase-lagring kommer i Sesjon C.2 — for nå er disse i state)
+  const [nyeKonstruksjoner, setNyeKonstruksjoner] = useState([])
+
+  const aapneNyDialog = (lagsett, mal, kategori) => {
+    setAapenDialog({ lagsett, mal, kategori })
+  }
+  const lukkDialog = () => setAapenDialog(null)
+
+  const handleLagreNy = (konstruksjon) => {
+    // Legg til i lokal state-liste
+    setNyeKonstruksjoner(prev => [...prev, konstruksjon])
+    // Auto-bekreft som match for det aktuelle lagsettet
+    if (aapenDialog?.lagsett) {
+      aapenDialog.lagsett.matchedKonstruksjon = konstruksjon
+      aapenDialog.lagsett.matchKilde = aapenDialog.mal ? 'mal' : 'ny'
+    }
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+    lukkDialog()
+    appAlert(`Konstruksjonen "${konstruksjon.name}" er lagret midlertidig.\n\n(Permanent lagring til ditt bibliotek kommer i Sesjon C.2)`)
+  }
 
   // Samle alle lagsett som skal matches (vegger + gulv, men ikke usikker/ignorer)
   const alleLagsett = React.useMemo(() => {
@@ -38742,7 +39236,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                       style={{ background:'#10b981', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>
                       ✓ Bekreft og bruk
                     </button>
-                    <button onClick={() => appAlert('Lag ny konstruksjon-modal kommer i Sesjon C')}
+                    <button onClick={() => aapneNyDialog(lagsett, null, lagsett.brukerKategori)}
                       style={{ background:'white', color:'#475569', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'500', cursor:'pointer' }}>
                       Lag ny i stedet
                     </button>
@@ -38779,7 +39273,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                                 </div>
                               )}
                             </div>
-                            <button onClick={() => appAlert('"Lag ny basert på mal"-modal kommer i Sesjon C\n\nMal: ' + mal.name)}
+                            <button onClick={() => aapneNyDialog(lagsett, mal, lagsett.brukerKategori)}
                               style={{ background:'white', color:'#475569', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'4px 10px', fontSize:'10px', fontWeight:'600', cursor:'pointer', flexShrink:0 }}>
                               Bruk som mal
                             </button>
@@ -38791,7 +39285,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
                   {/* Knapper for "Lag ny" og "Hopp over" */}
                   <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
-                    <button onClick={() => appAlert('Lag ny konstruksjon-modal kommer i Sesjon C')}
+                    <button onClick={() => aapneNyDialog(lagsett, null, lagsett.brukerKategori)}
                       style={{ background:'#3b82f6', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>
                       ✨ Lag helt ny konstruksjon
                     </button>
@@ -38809,11 +39303,26 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
       {/* Info om neste steg */}
       <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px' }}>
-        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Hva som skjer videre</div>
+        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Sesjon C.1 — hva som fungerer nå</div>
         <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
-          "Lag ny konstruksjon"-modalen kommer i neste oppdatering. Der vil du få forhåndsutfylt skjema basert på IFC-data, med Prisbok-søk for hvert lag, og lagring av konstruksjonen i biblioteket ditt for fremtidige prosjekter.
+          Du kan nå opprette nye konstruksjoner via "Lag ny" eller "Bruk som mal". Konstruksjonene lagres midlertidig i denne sesjonen — Prisbok-søk per lag og permanent lagring i biblioteket ditt kommer i Sesjon C.2.
+          {nyeKonstruksjoner.length > 0 && (
+            <span> <strong>{nyeKonstruksjoner.length} nye konstruksjon{nyeKonstruksjoner.length > 1 ? 'er' : ''}</strong> opprettet i denne sesjonen.</span>
+          )}
         </p>
       </div>
+
+      {/* Dialog for å lage ny konstruksjon */}
+      {aapenDialog && (
+        <BimNyKonstruksjonDialog
+          ifcLagsett={aapenDialog.lagsett}
+          mal={aapenDialog.mal}
+          kategori={aapenDialog.kategori}
+          isMob={isMob}
+          onAvbryt={lukkDialog}
+          onLagre={handleLagreNy}
+        />
+      )}
     </div>
   )
 }
@@ -39104,9 +39613,11 @@ function BimImportPage({ onTilbake, onAlert }) {
 
           {/* Neste-steg-info */}
           <div style={{ marginTop:'18px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i neste oppdatering</div>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i Sesjon C.2 og videre</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              "Lag ny konstruksjon"-modalen kommer i neste oppdatering. Der vil du få et forhåndsutfylt skjema basert på IFC-data, med Prisbok-søk for hvert lag og lagring i ditt eget bibliotek.
+              <strong>Sesjon C.1 (denne):</strong> Du kan nå opprette nye konstruksjoner manuelt via dialogen.<br/>
+              <strong>Sesjon C.2 (neste):</strong> Prisbok-søk per lag + permanent lagring i bedriftens eget bibliotek.<br/>
+              <strong>Patch 14:</strong> Auto-generering av komplett kalkyle fra IFC-data og bibliotek.
             </p>
           </div>
         </div>
