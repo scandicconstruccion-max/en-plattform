@@ -38038,6 +38038,251 @@ function BimMengdeVisning({ mengder, isMob }) {
   )
 }
 
+// ─── BIBLIOTEK-MATCHING (Patch 13 Sesjon B) ──────────────────────────────────
+// Matcher IFC-lagsett mot konstruksjoner i BYGNINGSDEL_BIBLIOTEK basert på
+// EKSAKT match-prinsipp: alle materialgrupper og tykkelser må stemme innen ±2mm.
+// Hvis ingen eksakt match: returner nærmeste konstruksjon som "mal-utgangspunkt"
+// (men markert tydelig som "ikke en match").
+
+// Mapping fra IFC bruker-kategori → bibliotek kategori-navn
+const KATEGORI_MAPPING = {
+  yttervegg: 'Yttervegg',
+  innervegg: 'Innervegg',
+  fundament: 'Sokkel',  // kan også matche "Fundament" — vi sjekker begge
+  etasjeskille: 'Etasjeskille',
+  dekke_paa_grunn: 'Bunnplate',  // kan også matche "Gulv på grunn"
+  tak: 'Tak',
+}
+
+// Synonym-grupper for materialer. Brukes for å normalisere materialnavn
+// slik at "Bindingsverk - Isolert" og "Stenderverk 48×148" begge gjenkjennes
+// som samme materialgruppe ("stender").
+const MATERIAL_GRUPPER = [
+  { gruppe: 'stender',     monstre: ['stender', 'bindingsverk', 'treverk'] },
+  { gruppe: 'bjelke',      monstre: ['bjelke', 'i-bjelke', 'limtre'] },
+  { gruppe: 'isolasjon',   monstre: ['isolasjon', 'mineralull', 'glassull', 'cellulose', 'rockwool'] },
+  { gruppe: 'gips',        monstre: ['gips', 'platekledning'] },
+  { gruppe: 'sponplate',   monstre: ['sponplate'] },
+  { gruppe: 'vindsperre',  monstre: ['vindsperre', 'underlagspapp', 'undertak'] },
+  { gruppe: 'dampsperre',  monstre: ['dampsperre', 'fuktsperre'] },
+  { gruppe: 'lufting',     monstre: ['lufting', 'lekt', 'utlekting', 'sløyfer'] },
+  { gruppe: 'trekledning', monstre: ['bordkledning', 'trekledning', 'trepanel'] },
+  { gruppe: 'betong',      monstre: ['betong'] },
+  { gruppe: 'puss',        monstre: ['puss'] },
+  { gruppe: 'utforing',    monstre: ['utforing'] },
+  { gruppe: 'fasadeplate', monstre: ['fasadeplate', 'tegl'] },
+  { gruppe: 'maling',      monstre: ['maling'] },
+]
+
+// Returner materialgruppe for et navn, eller 'annet' hvis ikke gjenkjent
+function materialGruppe(navn) {
+  if (!navn) return 'annet'
+  const n = navn.toLowerCase()
+  for (const g of MATERIAL_GRUPPER) {
+    if (g.monstre.some(m => n.includes(m))) return g.gruppe
+  }
+  return 'annet'
+}
+
+// Parser tykkelse fra et material-navn i biblioteket.
+// Eksempler: "Bjelker 48×198 c/c 600" → 198 (det største tallet)
+//            "Lydisolasjon 200mm" → 200
+//            "Gipsplate 13mm" → 13
+//            "Stenderverk 48×148 c/c 600" → 148
+function parseLagTykkelse(varenavn) {
+  if (!varenavn) return 0
+  // Finn alle tall i strengen — tykkelse er typisk det største <=300
+  const tall = []
+  const re = /(\d{2,4})/g
+  let m
+  while ((m = re.exec(varenavn)) !== null) {
+    const v = parseInt(m[1], 10)
+    if (v >= 5 && v <= 500) tall.push(v)  // realistiske lag-tykkelser
+  }
+  if (tall.length === 0) return 0
+  // For konstruksjon "48×148 c/c 600": vi vil ha 148, ikke 48 eller 600
+  // Heuristikk: ta nest største (det første er ofte hovedtykkelse,
+  // men sponplate-bredder/c/c-mål kan være større)
+  // Trygg løsning: returner det største <=300mm (tykkelse er sjelden større)
+  const filtered = tall.filter(t => t <= 300)
+  if (filtered.length === 0) return Math.min(...tall)
+  return Math.max(...filtered)
+}
+
+// Bygger en "lag-fingeravtrykk"-array fra en bibliotek-konstruksjon.
+// Returnerer [{ gruppe: 'stender', tykkelse: 148 }, { gruppe: 'isolasjon', tykkelse: 150 }, ...]
+// Filtrerer ut materialer som ikke er "lag" (spiker, sparkelmasse osv.).
+function biblioLagFingeravtrykk(konstruksjon) {
+  if (!konstruksjon?.materialer) return []
+  const lagListe = []
+  for (const mat of konstruksjon.materialer) {
+    const gruppe = materialGruppe(mat.varenavn)
+    // Hopp over "ikke-lag" materialer
+    if (gruppe === 'annet') continue
+    const tykkelse = parseLagTykkelse(mat.varenavn)
+    if (tykkelse === 0) continue  // hopp over hvis vi ikke kan parse tykkelse
+    lagListe.push({ gruppe, tykkelse, varenavn: mat.varenavn })
+  }
+  return lagListe
+}
+
+// Bygger fingeravtrykk for et IFC-lagsett.
+// IFC-lag har allerede tykkelse — vi normaliserer materialnavn til gruppe.
+function ifcLagFingeravtrykk(lagsett) {
+  if (!lagsett?.layers) return []
+  return lagsett.layers
+    .filter(l => l.tykkelse > 0)  // hopp over lag uten tykkelse
+    .map(l => ({
+      gruppe: materialGruppe(l.navn),
+      tykkelse: l.tykkelse,
+      navn: l.navn,
+    }))
+}
+
+// Sjekker om to lag-arrays er "eksakt like" — alle materialgrupper og tykkelser
+// må stemme. Tolerance ±2mm på tykkelse for å håndtere avrunding.
+// Lagrekkefølge sammenlignes som uordnet sett (multiset) — ikke ordnet liste.
+function erEksaktMatch(ifcLag, biblioLag) {
+  if (ifcLag.length !== biblioLag.length) return false
+  // For hvert IFC-lag, finn et matching bibliotek-lag som ikke er brukt
+  const brukt = new Array(biblioLag.length).fill(false)
+  for (const ifcL of ifcLag) {
+    let funnet = false
+    for (let i = 0; i < biblioLag.length; i++) {
+      if (brukt[i]) continue
+      const bl = biblioLag[i]
+      if (bl.gruppe === ifcL.gruppe && Math.abs(bl.tykkelse - ifcL.tykkelse) <= 2) {
+        brukt[i] = true
+        funnet = true
+        break
+      }
+    }
+    if (!funnet) return false
+  }
+  return true
+}
+
+// Beregner "likhet"-score for å rangere mal-kandidater når ingen eksakt match.
+// Score 0-100. Brukes ikke for "match"-bestemmelse (det er binært), bare for å
+// sortere mal-forslag.
+function malLikhetsScore(ifcLag, biblioLag) {
+  if (ifcLag.length === 0 || biblioLag.length === 0) return 0
+  let score = 0
+  // Antall matchende grupper (av maks)
+  const ifcGrupper = new Set(ifcLag.map(l => l.gruppe))
+  const biblioGrupper = new Set(biblioLag.map(l => l.gruppe))
+  const felles = [...ifcGrupper].filter(g => biblioGrupper.has(g)).length
+  const maxGrupper = Math.max(ifcGrupper.size, biblioGrupper.size)
+  score += (felles / maxGrupper) * 60
+  // Likhet i antall lag
+  const lagDiff = Math.abs(ifcLag.length - biblioLag.length)
+  score += Math.max(0, 20 - lagDiff * 5)
+  // Likhet i total tykkelse
+  const ifcTot = ifcLag.reduce((s, l) => s + l.tykkelse, 0)
+  const biblioTot = biblioLag.reduce((s, l) => s + l.tykkelse, 0)
+  const totDiff = Math.abs(ifcTot - biblioTot)
+  if (totDiff < 20) score += 20
+  else if (totDiff < 50) score += 10
+  return Math.round(score)
+}
+
+// Hovedfunksjonen: matcher et IFC-lagsett mot biblioteket.
+// `brukerKategori` er kategorien brukeren har valgt (yttervegg/innervegg/etc.)
+// Returnerer:
+// {
+//   status: 'eksakt' | 'mal' | 'ingen',
+//   match: <konstruksjon>,        // hvis status === 'eksakt'
+//   maler: [<konstruksjon>, ...], // sorterte mal-forslag (max 3)
+//   begrunnelse: 'string'
+// }
+function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
+  // Skip kategorier som ikke skal matches
+  if (brukerKategori === 'usikker' || brukerKategori === 'ignorer' || !brukerKategori) {
+    return { status: 'ingen', maler: [], begrunnelse: 'Ikke klassifisert ennå' }
+  }
+
+  const biblioKategori = KATEGORI_MAPPING[brukerKategori]
+  if (!biblioKategori) {
+    return { status: 'ingen', maler: [], begrunnelse: 'Ukjent kategori' }
+  }
+
+  // Finn aktuelle kandidater i biblioteket — match på kategori
+  // Spesialhåndtering: fundament kan matche både "Sokkel", "Fundament", "Grunnmur"
+  // Spesialhåndtering: dekke_paa_grunn kan matche "Bunnplate", "Gulv på grunn"
+  let kandidater = bibliotek.filter(b => b.kategori === biblioKategori)
+  if (brukerKategori === 'fundament') {
+    kandidater = bibliotek.filter(b => /sokkel|fundament|grunnmur/i.test(b.kategori))
+  } else if (brukerKategori === 'dekke_paa_grunn') {
+    kandidater = bibliotek.filter(b => /bunnplate|grunn/i.test(b.kategori))
+  }
+
+  if (kandidater.length === 0) {
+    return { status: 'ingen', maler: [],
+      begrunnelse: `Ingen konstruksjoner i kategori "${biblioKategori}" finnes i biblioteket ennå` }
+  }
+
+  const ifcLag = ifcLagFingeravtrykk(lagsett)
+  if (ifcLag.length === 0) {
+    // Lagsett uten parsbar lagstruktur — kan ikke matches eksakt.
+    // Returner kandidatene som maler.
+    return {
+      status: 'ingen',
+      maler: kandidater.slice(0, 3),
+      begrunnelse: 'Lagsettet har ikke nok lagstruktur-data for eksakt matching',
+    }
+  }
+
+  // Sjekk hver kandidat for eksakt match
+  for (const k of kandidater) {
+    const biblioLag = biblioLagFingeravtrykk(k)
+    if (biblioLag.length === 0) continue  // bibliotek-konstruksjonen har ikke parsbar struktur
+    if (erEksaktMatch(ifcLag, biblioLag)) {
+      return {
+        status: 'eksakt',
+        match: k,
+        maler: [],
+        begrunnelse: `Alle ${ifcLag.length} lag matcher (materialer + tykkelser innen ±2mm)`,
+      }
+    }
+  }
+
+  // Ingen eksakt match — finn de 3 nærmeste som maler
+  const medScore = kandidater.map(k => {
+    const bLag = biblioLagFingeravtrykk(k)
+    return { konstruksjon: k, score: malLikhetsScore(ifcLag, bLag), biblioLag: bLag }
+  })
+  medScore.sort((a, b) => b.score - a.score)
+  const topp3 = medScore.slice(0, 3).filter(x => x.score > 0)
+
+  return {
+    status: 'ingen',
+    maler: topp3.map(x => x.konstruksjon),
+    malScores: topp3.map(x => x.score),
+    malForskjeller: topp3.map(x => beskrivForskjeller(ifcLag, x.biblioLag)),
+    begrunnelse: 'Ingen konstruksjon i biblioteket matcher eksakt',
+  }
+}
+
+// Beskriver forskjellen mellom IFC-lag og bibliotek-lag for visning til brukeren.
+// Returner en kort tekstuell beskrivelse av hvor de avviker.
+function beskrivForskjeller(ifcLag, biblioLag) {
+  const forskjeller = []
+  if (ifcLag.length !== biblioLag.length) {
+    forskjeller.push(`${ifcLag.length} vs ${biblioLag.length} lag`)
+  }
+  const ifcTot = ifcLag.reduce((s, l) => s + l.tykkelse, 0)
+  const biblioTot = biblioLag.reduce((s, l) => s + l.tykkelse, 0)
+  if (Math.abs(ifcTot - biblioTot) > 5) {
+    forskjeller.push(`tykkelse ${ifcTot}mm vs ${biblioTot}mm`)
+  }
+  // Sjekk lag som finnes i IFC men ikke i bibliotek
+  const ifcGrupper = ifcLag.map(l => l.gruppe)
+  const biblioGrupper = biblioLag.map(l => l.gruppe)
+  const mangler = ifcGrupper.filter(g => !biblioGrupper.includes(g))
+  if (mangler.length > 0) forskjeller.push(`mangler ${[...new Set(mangler)].join(', ')}`)
+  return forskjeller.join('; ') || 'små avvik i tykkelse'
+}
+
 // ─── BIM KLASSIFISERINGS-SEKSJON (Patch 13 Sesjon A) ─────────────────────────
 // Lar brukeren se og overstyre auto-foreslått klassifisering for hvert lagsett.
 // Mottar mengder-objektet og en callback som kalles når brukeren har endret
@@ -38284,6 +38529,287 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
         <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Hva som skjer videre</div>
         <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
           Når du går til neste steg (bibliotek-matching, kommer i neste oppdatering), vil systemet sammenligne hvert lagsett mot din konstruksjons-bibliotek. Hvis det finnes en eksakt match, brukes den. Hvis ikke, får du valg om å lage ny konstruksjon basert på IFC-data.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── BIM MATCHING-SEKSJON (Patch 13 Sesjon B) ────────────────────────────────
+// Viser bibliotek-matching for hvert klassifisert lagsett.
+// Tre statuser per lagsett:
+//   ✓ EKSAKT MATCH — biblioteket inneholder konstruksjon som matcher 100%
+//   ⚠ INGEN MATCH — viser nærmeste mal-konstruksjoner og lar brukeren lage ny
+//   ⏸ HOPPET OVER — for usikker/ignorer-klassifisering
+
+function BimMatchingSeksjon({ mengder, isMob, onChange }) {
+  const [oppdater, setOppdater] = useState(0)
+  const appAlert = useAppAlert()
+
+  // Samle alle lagsett som skal matches (vegger + gulv, men ikke usikker/ignorer)
+  const alleLagsett = React.useMemo(() => {
+    const liste = []
+    ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(opprinnelig => {
+      if (!mengder[opprinnelig]?.lagsett) return
+      mengder[opprinnelig].lagsett.forEach((ls, idx) => {
+        liste.push({ lagsett: ls, type: 'vegg', opprinneligKat: opprinnelig, idx })
+      })
+    })
+    if (mengder.gulv?.lagsett) {
+      mengder.gulv.lagsett.forEach((ls, idx) => {
+        liste.push({ lagsett: ls, type: 'gulv', opprinneligKat: 'gulv', idx })
+      })
+    }
+    return liste
+  }, [mengder, oppdater])
+
+  // Beregn match-resultat for hvert lagsett — gjøres på fly slik at endringer
+  // i klassifisering automatisk oppdaterer matching
+  const matchResultater = React.useMemo(() => {
+    return alleLagsett.map(({ lagsett, type, opprinneligKat, idx }) => {
+      const result = matchLagsettMotBibliotek(lagsett, lagsett.brukerKategori, BYGNINGSDEL_BIBLIOTEK)
+      return { lagsett, type, opprinneligKat, idx, ...result }
+    })
+  }, [alleLagsett, oppdater])
+
+  const settMatch = (lagsett, valgtKonstruksjon, kilde) => {
+    // kilde = 'eksakt' | 'mal' | 'ny'
+    lagsett.matchedKonstruksjon = valgtKonstruksjon
+    lagsett.matchKilde = kilde
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+  }
+
+  const fjernMatch = (lagsett) => {
+    lagsett.matchedKonstruksjon = null
+    lagsett.matchKilde = null
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+  }
+
+  if (alleLagsett.length === 0) return null
+
+  // Sammendrag-tellinger
+  const tellinger = React.useMemo(() => {
+    const t = { eksakt: 0, ingen: 0, hoppet: 0, bekreftet: 0 }
+    matchResultater.forEach(r => {
+      if (r.lagsett.matchedKonstruksjon) {
+        t.bekreftet++
+      } else if (r.status === 'eksakt') {
+        t.eksakt++
+      } else if (r.lagsett.brukerKategori === 'usikker' || r.lagsett.brukerKategori === 'ignorer' || !r.lagsett.brukerKategori) {
+        t.hoppet++
+      } else {
+        t.ingen++
+      }
+    })
+    return t
+  }, [matchResultater, oppdater])
+
+  // Stiler
+  const card = { background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', overflow:'hidden' }
+  const farger = {
+    eksakt: '#10b981',
+    ingen: '#ef4444',
+    hoppet: '#94a3b8',
+    bekreftet: '#3b82f6',
+  }
+
+  return (
+    <div style={{ marginTop:'18px' }}>
+      <h3 style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
+        🎯 Match mot biblioteket
+      </h3>
+      <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+        For hvert klassifisert lagsett sjekker vi om biblioteket inneholder en <strong>eksakt match</strong> (alle materialgrupper og tykkelser stemmer). Hvis ikke, kan du lage ny konstruksjon basert på en mal eller fra blanke ark.
+      </p>
+
+      {/* Sammendrag */}
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'12px' }}>
+        {tellinger.bekreftet > 0 && (
+          <div style={{ background: farger.bekreftet + '12', border: '1px solid ' + farger.bekreftet + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
+            <span style={{ fontSize:'14px' }}>✓</span>
+            <div>
+              <div style={{ fontSize:'10px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>Bekreftet</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{tellinger.bekreftet} lagsett</div>
+            </div>
+          </div>
+        )}
+        {tellinger.eksakt > 0 && (
+          <div style={{ background: farger.eksakt + '12', border: '1px solid ' + farger.eksakt + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
+            <span style={{ fontSize:'14px' }}>🎯</span>
+            <div>
+              <div style={{ fontSize:'10px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>Match funnet</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{tellinger.eksakt} lagsett</div>
+            </div>
+          </div>
+        )}
+        {tellinger.ingen > 0 && (
+          <div style={{ background: farger.ingen + '12', border: '1px solid ' + farger.ingen + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
+            <span style={{ fontSize:'14px' }}>⚠️</span>
+            <div>
+              <div style={{ fontSize:'10px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>Ingen match</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{tellinger.ingen} lagsett</div>
+            </div>
+          </div>
+        )}
+        {tellinger.hoppet > 0 && (
+          <div style={{ background: farger.hoppet + '12', border: '1px solid ' + farger.hoppet + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
+            <span style={{ fontSize:'14px' }}>⏸</span>
+            <div>
+              <div style={{ fontSize:'10px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>Hoppet over</div>
+              <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{tellinger.hoppet} lagsett</div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Liste av lagsett med match-status */}
+      <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+        {matchResultater.map((r, i) => {
+          const { lagsett, status, match, maler, malScores, malForskjeller, begrunnelse } = r
+          const erHoppet = lagsett.brukerKategori === 'usikker' || lagsett.brukerKategori === 'ignorer' || !lagsett.brukerKategori
+          const erBekreftet = !!lagsett.matchedKonstruksjon
+          const aktivStatus = erBekreftet ? 'bekreftet' : (erHoppet ? 'hoppet' : status)
+          const aktivFarge = farger[aktivStatus] || '#94a3b8'
+
+          return (
+            <div key={i} style={{ ...card, padding: isMob ? '10px' : '12px 14px', borderLeft: `3px solid ${aktivFarge}` }}>
+              {/* Topprad */}
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'8px' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
+                    {lagsett.navn}
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#64748b' }}>
+                    {lagsett.antall} stk · {lagsett.totalAreal.toFixed(1)} m² · {lagsett.brukerKategori || 'ukategorisert'}
+                  </div>
+                </div>
+                {/* Status-pill */}
+                <div style={{ background: aktivFarge + '20', color: aktivFarge, padding:'3px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700', flexShrink:0 }}>
+                  {aktivStatus === 'bekreftet' ? '✓ Bekreftet' :
+                   aktivStatus === 'eksakt' ? '🎯 Match funnet' :
+                   aktivStatus === 'hoppet' ? '⏸ Hoppet over' : '⚠ Ingen match'}
+                </div>
+              </div>
+
+              {/* Bekreftet match — vis valgt konstruksjon */}
+              {erBekreftet && (
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'8px', padding:'8px 12px', marginBottom:'8px' }}>
+                  <div style={{ fontSize:'11px', color:'#1e40af', fontWeight:'700', marginBottom:'2px' }}>
+                    {lagsett.matchKilde === 'eksakt' ? '✓ Brukes:' : lagsett.matchKilde === 'mal' ? '📋 Basert på mal:' : '✨ Ny konstruksjon:'}
+                  </div>
+                  <div style={{ fontSize:'12px', color:'#1e3a8a', fontWeight:'600' }}>
+                    {lagsett.matchedKonstruksjon.name}
+                  </div>
+                  <div style={{ marginTop:'6px' }}>
+                    <button onClick={() => fjernMatch(lagsett)}
+                      style={{ background:'transparent', border:'none', color:'#1e40af', fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
+                      Fjern valg
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Hoppet over — info */}
+              {!erBekreftet && erHoppet && (
+                <div style={{ fontSize:'11px', color:'#64748b', fontStyle:'italic', padding:'6px 0' }}>
+                  Klassifiser lagsettet (i seksjonen over) før du kan matche mot biblioteket.
+                </div>
+              )}
+
+              {/* Eksakt match funnet — vis "Bekreft og bruk"-knapp */}
+              {!erBekreftet && !erHoppet && status === 'eksakt' && (
+                <div>
+                  <div style={{ background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px' }}>
+                    <div style={{ fontSize:'11px', color:'#065f46', fontWeight:'700', marginBottom:'2px' }}>
+                      🎯 Eksakt match i biblioteket:
+                    </div>
+                    <div style={{ fontSize:'13px', color:'#047857', fontWeight:'700', marginBottom:'4px' }}>
+                      {match.name}
+                    </div>
+                    <div style={{ fontSize:'11px', color:'#047857' }}>
+                      {match.beskrivelse}
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#065f46', marginTop:'4px', fontStyle:'italic' }}>
+                      {begrunnelse}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                    <button onClick={() => settMatch(lagsett, match, 'eksakt')}
+                      style={{ background:'#10b981', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>
+                      ✓ Bekreft og bruk
+                    </button>
+                    <button onClick={() => appAlert('Lag ny konstruksjon-modal kommer i Sesjon C')}
+                      style={{ background:'white', color:'#475569', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'500', cursor:'pointer' }}>
+                      Lag ny i stedet
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Ingen match — vis maler og lag ny-knapper */}
+              {!erBekreftet && !erHoppet && status === 'ingen' && (
+                <div>
+                  <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px' }}>
+                    <div style={{ fontSize:'11px', color:'#991b1b', fontWeight:'700', marginBottom:'4px' }}>
+                      ⚠️ Ingen eksakt match i biblioteket
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#7f1d1d', fontStyle:'italic' }}>
+                      {begrunnelse}
+                    </div>
+                  </div>
+
+                  {/* Lignende konstruksjoner som maler */}
+                  {maler && maler.length > 0 && (
+                    <div style={{ marginBottom:'8px' }}>
+                      <div style={{ fontSize:'10px', color:'#64748b', fontWeight:'700', marginBottom:'4px', textTransform:'uppercase', letterSpacing:'0.3px' }}>
+                        Lignende konstruksjoner (kan brukes som mal):
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {maler.map((mal, mi) => (
+                          <div key={mi} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 10px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:'11px', color:'#0f172a', fontWeight:'600' }}>{mal.name}</div>
+                              {malForskjeller && malForskjeller[mi] && (
+                                <div style={{ fontSize:'10px', color:'#dc2626', fontStyle:'italic' }}>
+                                  Avvik: {malForskjeller[mi]}
+                                </div>
+                              )}
+                            </div>
+                            <button onClick={() => appAlert('"Lag ny basert på mal"-modal kommer i Sesjon C\n\nMal: ' + mal.name)}
+                              style={{ background:'white', color:'#475569', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'4px 10px', fontSize:'10px', fontWeight:'600', cursor:'pointer', flexShrink:0 }}>
+                              Bruk som mal
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Knapper for "Lag ny" og "Hopp over" */}
+                  <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                    <button onClick={() => appAlert('Lag ny konstruksjon-modal kommer i Sesjon C')}
+                      style={{ background:'#3b82f6', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>
+                      ✨ Lag helt ny konstruksjon
+                    </button>
+                    <button onClick={() => settMatch(lagsett, { name: '(hoppet over)', _hoppet: true }, 'hoppet')}
+                      style={{ background:'white', color:'#94a3b8', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'500', cursor:'pointer' }}>
+                      Hopp over
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Info om neste steg */}
+      <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px' }}>
+        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Hva som skjer videre</div>
+        <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
+          "Lag ny konstruksjon"-modalen kommer i neste oppdatering. Der vil du få forhåndsutfylt skjema basert på IFC-data, med Prisbok-søk for hvert lag, og lagring av konstruksjonen i biblioteket ditt for fremtidige prosjekter.
         </p>
       </div>
     </div>
@@ -38569,11 +39095,16 @@ function BimImportPage({ onTilbake, onAlert }) {
             <BimKlassifiseringSeksjon mengder={metadata.mengder} isMob={isMob} />
           )}
 
+          {/* Bibliotek-matching — Patch 13 Sesjon B */}
+          {metadata.mengder && (
+            <BimMatchingSeksjon mengder={metadata.mengder} isMob={isMob} />
+          )}
+
           {/* Neste-steg-info */}
           <div style={{ marginTop:'18px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
             <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i neste oppdatering</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              Bibliotek-matching og kalkyle-generering kommer i neste oppdatering. Akkurat nå kan du klassifisere lagsettene som yttervegg/innervegg, men ikke opprette en kalkyle ennå.
+              "Lag ny konstruksjon"-modalen kommer i neste oppdatering. Der vil du få et forhåndsutfylt skjema basert på IFC-data, med Prisbok-søk for hvert lag og lagring i ditt eget bibliotek.
             </p>
           </div>
         </div>
