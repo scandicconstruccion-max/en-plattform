@@ -36766,6 +36766,115 @@ function extractIfcUnits(api, mod, modelID) {
   return result
 }
 
+// ─── LAGSTRUKTUR-EKSTRAKSJON (Patch 12) ──────────────────────────────────────
+// Henter materialets lagstruktur fra IFC. Hver vegg/tak/dekke kan ha en
+// IfcMaterialLayerSet med en ordnet liste av lag (gips, isolasjon, bindingsverk osv.)
+// Dette er nødvendig for matching mot bibliotek (Patch 13).
+//
+// IFC-strukturen ser slik ut:
+//   IfcWall → IfcRelAssociatesMaterial → IfcMaterialLayerSetUsage
+//                                         → IfcMaterialLayerSet
+//                                            → ordnet liste IfcMaterialLayer
+//                                               { Material: "Gips", LayerThickness: 13 }
+
+// Ekspanderer en Material-referanse til {navn, id}
+function expandMaterial(api, modelID, ref) {
+  if (!ref) return null
+  const id = ref?.value ?? ref
+  if (!id) return null
+  try {
+    const mat = api.GetLine(modelID, id)
+    return { id, navn: mat?.Name?.value || `Material #${id}` }
+  } catch(e) { return null }
+}
+
+// Gitt en IfcMaterialLayerSet-line, returner en strukturert lagstruktur:
+//   { navn: "Trestender 98mm...", layers: [{ navn: "Gips", tykkelse: 13 }, ...], totalTykkelse: 261 }
+// Tykkelse er i samme enhet som filen (typisk mm) — kalleren konverterer til m.
+function expandLayerSet(api, modelID, layerSet) {
+  if (!layerSet) return null
+  const navn = layerSet?.LayerSetName?.value || layerSet?.Name?.value || 'Lagsett'
+  const layers = []
+  let totalTykkelse = 0
+  const layerRefs = Array.isArray(layerSet.MaterialLayers) ? layerSet.MaterialLayers : (layerSet.MaterialLayers ? [layerSet.MaterialLayers] : [])
+  for (const layerRef of layerRefs) {
+    const layerId = layerRef?.value
+    if (!layerId) continue
+    let layer; try { layer = api.GetLine(modelID, layerId) } catch(e) { continue }
+    if (!layer) continue
+    const tykkelse = layer?.LayerThickness?.value || 0
+    const mat = expandMaterial(api, modelID, layer.Material)
+    layers.push({
+      navn: mat?.navn || 'Ukjent material',
+      tykkelse,
+    })
+    totalTykkelse += tykkelse
+  }
+  return { navn, layers, totalTykkelse, antallLag: layers.length }
+}
+
+// Bygger Map<elementID → lagstruktur> ved å traversere alle IFCRELASSOCIATESMATERIAL.
+// Håndterer både direkte IfcMaterialLayerSet (for slabs) og IfcMaterialLayerSetUsage (for vegger).
+function buildMaterialLayerLookup(api, mod, modelID) {
+  const lookup = new Map()
+  try {
+    const relIds = api.GetLineIDsWithType(modelID, mod.IFCRELASSOCIATESMATERIAL)
+    const numRels = relIds.size()
+    for (let i = 0; i < numRels; i++) {
+      const relId = relIds.get(i)
+      let rel; try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+      if (!rel?.RelatingMaterial?.value || !rel?.RelatedObjects) continue
+      const matRefId = rel.RelatingMaterial.value
+      let materialDef; try { materialDef = api.GetLine(modelID, matRefId) } catch(e) { continue }
+      if (!materialDef) continue
+
+      // Resolver: kan være IfcMaterialLayerSetUsage, IfcMaterialLayerSet, IfcMaterial, IfcMaterialList
+      let layerSetData = null
+      // Tilfelle 1: IfcMaterialLayerSetUsage → ForLayerSet
+      if (materialDef?.ForLayerSet?.value) {
+        try {
+          const lsId = materialDef.ForLayerSet.value
+          const ls = api.GetLine(modelID, lsId)
+          layerSetData = expandLayerSet(api, modelID, ls)
+        } catch(e) {}
+      }
+      // Tilfelle 2: IfcMaterialLayerSet direkte (har MaterialLayers-felt)
+      else if (Array.isArray(materialDef?.MaterialLayers) || materialDef?.MaterialLayers) {
+        layerSetData = expandLayerSet(api, modelID, materialDef)
+      }
+      // Tilfelle 3: IfcMaterial enkel — bare ett "lag"
+      else if (materialDef?.Name?.value) {
+        layerSetData = {
+          navn: materialDef.Name.value,
+          layers: [{ navn: materialDef.Name.value, tykkelse: 0 }],
+          totalTykkelse: 0,
+          antallLag: 1,
+        }
+      }
+      // Tilfelle 4: IfcMaterialList (sjelden) — flere materialer uten tykkelse
+      else if (Array.isArray(materialDef?.Materials)) {
+        const mats = materialDef.Materials.map(m => expandMaterial(api, modelID, m)).filter(Boolean)
+        layerSetData = {
+          navn: mats.map(m => m.navn).join(' + '),
+          layers: mats.map(m => ({ navn: m.navn, tykkelse: 0 })),
+          totalTykkelse: 0,
+          antallLag: mats.length,
+        }
+      }
+
+      if (!layerSetData) continue
+      const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
+      for (const tgt of targets) {
+        const tid = tgt?.value
+        if (tid) lookup.set(tid, layerSetData)
+      }
+    }
+  } catch(e) {
+    console.warn('[ifc] kunne ikke bygge material-lookup:', e)
+  }
+  return lookup
+}
+
 async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const result = {
     yttervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
@@ -36781,6 +36890,30 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   if (onProgress) onProgress('Bygger mengde-indeks...')
   const quantityLookup = buildQuantityLookup(api, mod, modelID)
   const propLookup = {}
+
+  // Bygg lagstruktur-lookup (Patch 12) — slår opp lagstruktur per element
+  if (onProgress) onProgress('Bygger lagstruktur-indeks...')
+  const layerLookup = buildMaterialLayerLookup(api, mod, modelID)
+  console.log(`[ifc] lagstruktur-lookup: ${layerLookup.size} elementer har lagstruktur`)
+
+  // Bygg type-lookup: instanceId → typeId (via IfcRelDefinesByType)
+  // Trengs flere steder (slabs, windows, doors, proxies) — derfor bygges først
+  const instanceToTypeLookup = new Map()
+  try {
+    const defByTypeIds = api.GetLineIDsWithType(modelID, mod.IFCRELDEFINESBYTYPE)
+    const numDefs = defByTypeIds.size()
+    for (let i = 0; i < numDefs; i++) {
+      const relId = defByTypeIds.get(i)
+      let rel; try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+      if (!rel?.RelatingType?.value || !rel?.RelatedObjects) continue
+      const typeId = rel.RelatingType.value
+      const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
+      for (const tgt of targets) {
+        const tid = tgt?.value
+        if (tid) instanceToTypeLookup.set(tid, typeId)
+      }
+    }
+  } catch(e) { console.warn('[ifc] kunne ikke bygge type-lookup:', e) }
 
   // --- VEGGER (IfcWall + IfcWallStandardCase) ---
   if (onProgress) onProgress('Henter veggmengder...')
@@ -36806,7 +36939,14 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
 
       const isExt = getWallIsExternal(api, mod, modelID, elementId, propLookup)
       const navn = element?.Name?.value || `Vegg #${elementId}`
-      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, isExternal: isExt }
+      // Hent lagstruktur — først fra instans, fallback til type
+      let lagstruktur = layerLookup.get(elementId) || null
+      if (!lagstruktur) {
+        // Fallback: er det en type?
+        const typeId = instanceToTypeLookup.get(elementId)
+        if (typeId) lagstruktur = layerLookup.get(typeId) || null
+      }
+      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, isExternal: isExt, lagstruktur }
 
       let kat = 'ukjent_vegg'
       if (isExt === true) kat = 'yttervegg'
@@ -36880,10 +37020,16 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       }
 
       const navn = element?.Name?.value || `Tak #${elementId}`
+      // Hent lagstruktur
+      let lagstruktur = layerLookup.get(elementId) || null
+      if (!lagstruktur) {
+        const typeId = instanceToTypeLookup.get(elementId)
+        if (typeId) lagstruktur = layerLookup.get(typeId) || null
+      }
       result.tak.antall++
       result.tak.totalAreal += areal
       result.tak.totalVolum += volum
-      result.tak.elementer.push({ id: elementId, navn, areal, volum })
+      result.tak.elementer.push({ id: elementId, navn, areal, volum, lagstruktur })
     }
   }
 
@@ -36893,24 +37039,6 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   //   1. Utvidet liste av feltnavn (NetArea, GrossArea, Area, GrossPlanArea ...)
   //   2. Fallback til mengder fra elementets SlabType (via IfcRelDefinesByType)
   if (onProgress) onProgress('Henter gulvmengder...')
-
-  // Bygg lookup: instanceId → typeId (via IfcRelDefinesByType)
-  const instanceToTypeLookup = new Map()
-  try {
-    const defByTypeIds = api.GetLineIDsWithType(modelID, mod.IFCRELDEFINESBYTYPE)
-    const numDefs = defByTypeIds.size()
-    for (let i = 0; i < numDefs; i++) {
-      const relId = defByTypeIds.get(i)
-      let rel; try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
-      if (!rel?.RelatingType?.value || !rel?.RelatedObjects) continue
-      const typeId = rel.RelatingType.value
-      const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
-      for (const tgt of targets) {
-        const tid = tgt?.value
-        if (tid) instanceToTypeLookup.set(tid, typeId)
-      }
-    }
-  } catch(e) { console.warn('[ifc] kunne ikke bygge type-lookup:', e) }
 
   if (typeof mod.IFCSLAB !== 'undefined') {
     const ids = api.GetLineIDsWithType(modelID, mod.IFCSLAB)
@@ -36948,10 +37076,16 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
 
       const navn = element?.Name?.value || `Gulv #${elementId}`
       const predef = element?.PredefinedType?.value || ''
+      // Hent lagstruktur (fra instans eller type)
+      let lagstruktur = layerLookup.get(elementId) || null
+      if (!lagstruktur) {
+        const typeId = instanceToTypeLookup.get(elementId)
+        if (typeId) lagstruktur = layerLookup.get(typeId) || null
+      }
       result.gulv.antall++
       result.gulv.totalAreal += areal
       result.gulv.totalVolum += volum
-      result.gulv.elementer.push({ id: elementId, navn, areal, volum, predef })
+      result.gulv.elementer.push({ id: elementId, navn, areal, volum, predef, lagstruktur })
     }
     console.log(`[ifc] slab mengder: ${mengderFraInstans} fra instans, ${mengderFraType} fra type, ${ingenMengder} uten mengder`)
   }
@@ -37122,6 +37256,10 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         }
       }
 
+      // Hent lagstruktur for proxy (fra instans eller type)
+      let proxyLagstruktur = layerLookup.get(elementId) || null
+      if (!proxyLagstruktur && typeId) proxyLagstruktur = layerLookup.get(typeId) || null
+
       const elInfo = {
         id: elementId,
         navn: navn || typenavn || `Proxy #${elementId}`,
@@ -37129,6 +37267,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         areal, volum, lengde, hoyde,
         kilde,
         erProxy: true,
+        lagstruktur: proxyLagstruktur,
       }
 
       // Legg i riktig kategori
@@ -37157,7 +37296,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         result.tak.antall++
         result.tak.totalAreal += areal
         result.tak.totalVolum += volum
-        result.tak.elementer.push({ id: elementId, navn: elInfo.navn, areal, volum, kilde: 'proxy' })
+        result.tak.elementer.push({ id: elementId, navn: elInfo.navn, areal, volum, kilde: 'proxy', lagstruktur: proxyLagstruktur })
       } else if (kat === 'trapp') {
         result.trapp.antall++
         result.trapp.elementer.push({ id: elementId, navn: elInfo.navn })
@@ -37177,6 +37316,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const lf = units.length     // lengde-faktor (f.eks. 0.001 hvis filen bruker mm)
   const af = units.area       // areal-faktor (f.eks. 0.000001 for mm²)
   const vf = units.volume     // volum-faktor
+  result._units = units       // lagre for senere bruk (lag-tykkelse-formatering)
 
   const konverterMengde = (kat) => {
     if (typeof result[kat].totalAreal === 'number')        result[kat].totalAreal        *= af
@@ -37191,6 +37331,8 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       if (typeof e.volum  === 'number') e.volum  *= vf
       if (typeof e.width  === 'number') e.width  *= lf
       if (typeof e.height === 'number') e.height *= lf
+      // Lagstruktur-tykkelser beholdes i mm for visning ("148 mm" er mer leselig).
+      // De konverteres ikke her.
     })
   }
   Object.keys(result).forEach(kat => {
@@ -37249,6 +37391,62 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   result.dor.typer = grupperEtterDimensjoner(result.dor.elementer, false)
   result.vindu.antallTyper = result.vindu.typer.length
   result.dor.antallTyper = result.dor.typer.length
+
+  // LAGSETT-GRUPPERING — gruppere vegger/tak/gulv etter lagstruktur-navn
+  // Slik at brukeren ser "Trestender 98mm — 145 stk, 1247 m²" i stedet for
+  // 145 individuelle rader.
+  const grupperEtterLagsett = (elementer) => {
+    const grupper = new Map()
+    let utenLagsett = { antall: 0, totalAreal: 0, totalLengde: 0, totalVolum: 0, elementer: [] }
+    elementer.forEach(e => {
+      const ls = e.lagstruktur
+      if (!ls) {
+        utenLagsett.antall++
+        utenLagsett.totalAreal += (e.areal || 0)
+        utenLagsett.totalLengde += (e.lengde || 0)
+        utenLagsett.totalVolum += (e.volum || 0)
+        utenLagsett.elementer.push(e)
+        return
+      }
+      const key = ls.navn
+      if (!grupper.has(key)) {
+        grupper.set(key, {
+          navn: ls.navn,
+          layers: ls.layers,
+          totalTykkelse: ls.totalTykkelse,
+          antallLag: ls.antallLag,
+          antall: 0,
+          totalAreal: 0,
+          totalLengde: 0,
+          totalVolum: 0,
+          elementer: [],
+        })
+      }
+      const g = grupper.get(key)
+      g.antall++
+      g.totalAreal += (e.areal || 0)
+      g.totalLengde += (e.lengde || 0)
+      g.totalVolum += (e.volum || 0)
+      g.elementer.push(e)
+    })
+    const result = Array.from(grupper.values()).sort((a, b) => b.totalAreal - a.totalAreal)
+    if (utenLagsett.antall > 0) {
+      utenLagsett.navn = '(uten lagstruktur)'
+      utenLagsett.layers = []
+      utenLagsett.totalTykkelse = 0
+      utenLagsett.antallLag = 0
+      result.push(utenLagsett)
+    }
+    return result
+  }
+
+  result.yttervegg.lagsett = grupperEtterLagsett(result.yttervegg.elementer)
+  result.innervegg.lagsett = grupperEtterLagsett(result.innervegg.elementer)
+  result.ukjent_vegg.lagsett = grupperEtterLagsett(result.ukjent_vegg.elementer)
+  result.tak.lagsett = grupperEtterLagsett(result.tak.elementer)
+  result.gulv.lagsett = grupperEtterLagsett(result.gulv.elementer)
+
+  console.log(`[ifc] lagsett: yttervegg=${result.yttervegg.lagsett.length}, innervegg=${result.innervegg.lagsett.length}, gulv=${result.gulv.lagsett.length}, tak=${result.tak.lagsett.length}`)
 
   // KVALITETSRAPPORT — sammenstille hvor mengdene kommer fra
   // For hver kategori: hvor mange er fra ekte IFC-typer (IfcWall, IfcSlab etc.)
@@ -37338,91 +37536,100 @@ function BimMengdeVisning({ mengder, isMob }) {
     {
       key: 'yttervegg', label: 'Yttervegger', icon: '🧱', color: '#dc2626',
       data: mengder.yttervegg,
+      kilde: 'lagsett',
       formatter: (d) => [
         { label: 'Antall', value: d.antall + ' stk' },
         { label: 'Total areal (netto)', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Total lengde', value: d.totalLengde.toFixed(1) + ' lm' },
-        { label: 'Snitt høyde', value: d.gjennomsnittHoyde.toFixed(2) + ' m' },
+        { label: 'Lagsett-typer', value: (d.lagsett ? d.lagsett.length : 0) + ' typer' },
       ],
-      kolonner: ['Navn', 'Kilde', 'Lengde', 'Høyde', 'Areal', 'Volum'],
-      formatRad: (e) => [
-        e.navn,
-        e.erProxy ? '📦 Proxy' : '✓ IfcWall',
-        e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
-        e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
-        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      kolonner: ['Lagsett', 'Antall', 'Areal', 'Lengde', 'Tykkelse'],
+      formatRad: (g) => [
+        g.navn + (g.layers && g.layers.length > 0 ? ` (${g.layers.length} lag)` : ''),
+        g.antall + ' stk',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(1) + ' m²' : '—',
+        g.totalLengde > 0 ? g.totalLengde.toFixed(1) + ' lm' : '—',
+        g.totalTykkelse > 0 ? g.totalTykkelse.toFixed(0) + ' mm' : '—',
       ],
+      lagDetaljer: (g) => g.layers,  // for ekspansjon av enkelt-lagsett
     },
     {
       key: 'innervegg', label: 'Innervegger', icon: '🚪', color: '#7c3aed',
       data: mengder.innervegg,
+      kilde: 'lagsett',
       formatter: (d) => [
         { label: 'Antall', value: d.antall + ' stk' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Total lengde', value: d.totalLengde.toFixed(1) + ' lm' },
-        { label: 'Snitt høyde', value: d.gjennomsnittHoyde.toFixed(2) + ' m' },
+        { label: 'Lagsett-typer', value: (d.lagsett ? d.lagsett.length : 0) + ' typer' },
       ],
-      kolonner: ['Navn', 'Kilde', 'Lengde', 'Høyde', 'Areal', 'Volum'],
-      formatRad: (e) => [
-        e.navn,
-        e.erProxy ? '📦 Proxy' : '✓ IfcWall',
-        e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
-        e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
-        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      kolonner: ['Lagsett', 'Antall', 'Areal', 'Lengde', 'Tykkelse'],
+      formatRad: (g) => [
+        g.navn + (g.layers && g.layers.length > 0 ? ` (${g.layers.length} lag)` : ''),
+        g.antall + ' stk',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(1) + ' m²' : '—',
+        g.totalLengde > 0 ? g.totalLengde.toFixed(1) + ' lm' : '—',
+        g.totalTykkelse > 0 ? g.totalTykkelse.toFixed(0) + ' mm' : '—',
       ],
+      lagDetaljer: (g) => g.layers,
     },
     {
       key: 'ukjent_vegg', label: 'Vegger uten klassifisering', icon: '⚠️', color: '#ca8a04',
       data: mengder.ukjent_vegg,
       kunHvis: mengder.ukjent_vegg.antall > 0,
+      kilde: 'lagsett',
       formatter: (d) => [
         { label: 'Antall', value: d.antall + ' stk' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Hint', value: 'Mangler IsExternal-prop. Klassifiseres manuelt.' },
       ],
-      kolonner: ['Navn', 'Kilde', 'Lengde', 'Høyde', 'Areal'],
-      formatRad: (e) => [
-        e.navn,
-        e.erProxy ? '📦 Proxy' : '✓ IfcWall',
-        e.lengde > 0 ? e.lengde.toFixed(2) + ' m' : '—',
-        e.hoyde > 0 ? e.hoyde.toFixed(2) + ' m' : '—',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
+      kolonner: ['Lagsett', 'Antall', 'Areal', 'Lengde', 'Tykkelse'],
+      formatRad: (g) => [
+        g.navn + (g.layers && g.layers.length > 0 ? ` (${g.layers.length} lag)` : ''),
+        g.antall + ' stk',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(1) + ' m²' : '—',
+        g.totalLengde > 0 ? g.totalLengde.toFixed(1) + ' lm' : '—',
+        g.totalTykkelse > 0 ? g.totalTykkelse.toFixed(0) + ' mm' : '—',
       ],
+      lagDetaljer: (g) => g.layers,
     },
     {
       key: 'tak', label: 'Tak', icon: '🏠', color: '#059669',
       data: mengder.tak,
+      kilde: 'lagsett',
       formatter: (d) => [
         { label: 'Antall element', value: d.antall + ' stk' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Total volum', value: d.totalVolum.toFixed(2) + ' m³' },
       ],
-      kolonner: ['Navn', 'Kilde', 'Areal', 'Volum'],
-      formatRad: (e) => [
-        e.navn,
-        e.kilde === 'proxy' ? '📦 Proxy' : '✓ IfcRoof',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
-        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      kolonner: ['Lagsett', 'Antall', 'Areal', 'Volum', 'Tykkelse'],
+      formatRad: (g) => [
+        g.navn + (g.layers && g.layers.length > 0 ? ` (${g.layers.length} lag)` : ''),
+        g.antall + ' stk',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(1) + ' m²' : '—',
+        g.totalVolum > 0 ? g.totalVolum.toFixed(2) + ' m³' : '—',
+        g.totalTykkelse > 0 ? g.totalTykkelse.toFixed(0) + ' mm' : '—',
       ],
+      lagDetaljer: (g) => g.layers,
     },
     {
       key: 'gulv', label: 'Gulv/etasjeskille', icon: '🟦', color: '#0891b2',
       data: mengder.gulv,
+      kilde: 'lagsett',
       formatter: (d) => [
         { label: 'Antall element', value: d.antall + ' stk' },
         { label: 'Total areal', value: d.totalAreal.toFixed(1) + ' m²', primary: true },
         { label: 'Total volum', value: d.totalVolum.toFixed(2) + ' m³' },
       ],
-      kolonner: ['Navn', 'Kilde', 'Type', 'Areal', 'Volum'],
-      formatRad: (e) => [
-        e.navn,
-        e.erProxy ? '📦 Proxy' : '✓ IfcSlab',
-        e.predef || '—',
-        e.areal > 0 ? e.areal.toFixed(2) + ' m²' : '—',
-        e.volum > 0 ? e.volum.toFixed(3) + ' m³' : '—',
+      kolonner: ['Lagsett', 'Antall', 'Areal', 'Volum', 'Tykkelse'],
+      formatRad: (g) => [
+        g.navn + (g.layers && g.layers.length > 0 ? ` (${g.layers.length} lag)` : ''),
+        g.antall + ' stk',
+        g.totalAreal > 0 ? g.totalAreal.toFixed(1) + ' m²' : '—',
+        g.totalVolum > 0 ? g.totalVolum.toFixed(2) + ' m³' : '—',
+        g.totalTykkelse > 0 ? g.totalTykkelse.toFixed(0) + ' mm' : '—',
       ],
+      lagDetaljer: (g) => g.layers,
     },
     {
       key: 'vindu', label: 'Vinduer', icon: '🪟', color: '#0284c7',
@@ -37577,26 +37784,53 @@ function BimMengdeVisning({ mengder, isMob }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {(kat.kilde === 'typer' ? (kat.data.typer || []) : kat.data.elementer).slice(0, 500).map((e, idx) => {
-                      const verdier = kat.formatRad(e)
-                      return (
-                        <tr key={idx} style={{ borderBottom:'1px solid #f8fafc' }}>
-                          {verdier.map((v, j) => (
-                            <td key={j} style={{ padding:'6px 12px', color: j === 0 ? '#0f172a' : '#475569', textAlign: j === 0 ? 'left' : 'right', whiteSpace: j === 0 ? 'normal' : 'nowrap', fontWeight: j === 0 ? '500' : '400' }}>
-                              {v}
-                            </td>
-                          ))}
-                        </tr>
-                      )
-                    })}
+                    {(() => {
+                      let rows
+                      if (kat.kilde === 'typer') rows = kat.data.typer || []
+                      else if (kat.kilde === 'lagsett') rows = kat.data.lagsett || []
+                      else rows = kat.data.elementer
+                      return rows.slice(0, 500).map((e, idx) => {
+                        const verdier = kat.formatRad(e)
+                        const lagDetaljer = kat.lagDetaljer ? kat.lagDetaljer(e) : null
+                        return (
+                          <React.Fragment key={idx}>
+                            <tr style={{ borderBottom:'1px solid #f8fafc' }}>
+                              {verdier.map((v, j) => (
+                                <td key={j} style={{ padding:'6px 12px', color: j === 0 ? '#0f172a' : '#475569', textAlign: j === 0 ? 'left' : 'right', whiteSpace: j === 0 ? 'normal' : 'nowrap', fontWeight: j === 0 ? '500' : '400' }}>
+                                  {v}
+                                </td>
+                              ))}
+                            </tr>
+                            {lagDetaljer && lagDetaljer.length > 0 && (
+                              <tr>
+                                <td colSpan={verdier.length} style={{ padding:'4px 16px 8px 28px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
+                                  <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'4px' }}>Lag (utenfra → innover)</div>
+                                  <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                                    {lagDetaljer.map((lag, k) => (
+                                      <div key={k} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'4px 8px', fontSize:'11px', color:'#475569' }}>
+                                        <strong>{lag.navn}</strong>
+                                        {lag.tykkelse > 0 && <span style={{ color:'#94a3b8', marginLeft:'6px' }}>{lag.tykkelse.toFixed(0)} mm</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        )
+                      })
+                    })()}
                   </tbody>
                 </table>
                 {(() => {
-                  const total = kat.kilde === 'typer' ? (kat.data.typer || []).length : kat.data.elementer.length
+                  let total
+                  if (kat.kilde === 'typer') total = (kat.data.typer || []).length
+                  else if (kat.kilde === 'lagsett') total = (kat.data.lagsett || []).length
+                  else total = kat.data.elementer.length
                   if (total > 500) {
                     return (
                       <div style={{ padding:'10px 14px', fontSize:'11px', color:'#94a3b8', textAlign:'center', background:'#f8fafc' }}>
-                        Viser de første 500 av {total} {kat.kilde === 'typer' ? 'typer' : 'elementer'}
+                        Viser de første 500 av {total} {kat.kilde === 'typer' ? 'typer' : kat.kilde === 'lagsett' ? 'lagsett' : 'elementer'}
                       </div>
                     )
                   }
