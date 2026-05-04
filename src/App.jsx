@@ -38616,8 +38616,6 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
     setLaster(true)
     try {
       // Aggressiv sanitisering: behold KUN bokstaver (inkl. norske), tall, mellomrom og bindestrek
-      // Alt annet (komma, parenteser, skråstrek, multiplikasjonstegn osv.) erstattes med mellomrom
-      // Dette er nødvendig fordi PostgREST tolker mange tegn som syntaks-elementer
       const sanitiserTerm = (s) => (s || '').replace(/[^a-zA-ZæøåÆØÅ0-9\s-]/g, ' ').trim()
       const renTerm = sanitiserTerm(term)
 
@@ -38639,30 +38637,38 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
         setLaster(false)
         return
       }
-      if (words.length === 1 && /^\d+$/.test(words[0])) {
-        // Numerisk → søk i varenummer ELLER varenavn
-        query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+
+      // FORENKLET STRATEGI: Bruker bare det første ordet som søkebegrep
+      // Multi-ilike (flere AND-betingelser) ser ut til å trippe Supabase 500.
+      // Bedre å returnere flere treff og la brukeren velge enn å feile.
+      const forsteOrd = words[0]
+      if (/^\d+$/.test(forsteOrd)) {
+        // Numerisk: søk i varenummer ELLER varenavn
+        query = query.or(`varenummer.ilike.%${forsteOrd}%,varenavn.ilike.%${forsteOrd}%`)
       } else {
-        // Begrens til maks 3 ord for å unngå overdrevent kompleks query
-        words.slice(0, 3).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+        // Tekst: enkel ilike på varenavn
+        query = query.ilike('varenavn', `%${forsteOrd}%`)
       }
 
-      const { data, error } = await query.order('varenavn').limit(8)
+      console.log('[prisbok] søker:', { term: renTerm, forsteOrd, aktivPrislisteId, words: words.length })
+      const { data, error } = await query.order('varenavn').limit(20)  // hent flere så brukeren har valg
+
       if (error) {
-        console.warn('[prisbok] primær søk feilet, prøver fallback:', error.message, 'term:', renTerm)
-        // Fallback: Prøv uten prisliste-/user-filter (i tilfelle brukeren ikke har egne priser)
+        console.warn('[prisbok] primær søk feilet:', error.message, 'term:', renTerm, 'fullError:', error)
+        // Fallback: Prøv uten prisliste-/user-filter
         try {
           let fb = supabase.from('prisbok').select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
-          if (words.length === 1 && /^\d+$/.test(words[0])) {
-            fb = fb.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
+          if (/^\d+$/.test(forsteOrd)) {
+            fb = fb.or(`varenummer.ilike.%${forsteOrd}%,varenavn.ilike.%${forsteOrd}%`)
           } else {
-            words.slice(0, 3).forEach(w => { fb = fb.ilike('varenavn', `%${w}%`) })
+            fb = fb.ilike('varenavn', `%${forsteOrd}%`)
           }
-          const { data: fbData, error: fbError } = await fb.order('varenavn').limit(8)
+          const { data: fbData, error: fbError } = await fb.order('varenavn').limit(20)
           if (fbError) {
-            console.warn('[prisbok] fallback søk feilet også:', fbError.message)
+            console.warn('[prisbok] fallback søk feilet også:', fbError.message, 'fullError:', fbError)
             setResultater([])
           } else {
+            console.log('[prisbok] fallback funnet:', (fbData || []).length, 'rader')
             setResultater(fbData || [])
           }
         } catch(e) {
@@ -38670,7 +38676,18 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
           setResultater([])
         }
       } else {
-        setResultater(data || [])
+        // Hvis vi har flere ord, filtrer i JS for de som matcher alle
+        let filtered = data || []
+        if (words.length > 1 && filtered.length > 0) {
+          const restWords = words.slice(1).map(w => w.toLowerCase())
+          filtered = filtered.filter(rad => {
+            const navn = (rad.varenavn || '').toLowerCase()
+            return restWords.every(w => navn.includes(w))
+          })
+          // Hvis filteret eliminerte alt, vis original-resultatene heller enn ingenting
+          if (filtered.length === 0) filtered = (data || []).slice(0, 8)
+        }
+        setResultater(filtered.slice(0, 8))
       }
     } catch(e) {
       console.warn('[prisbok] søkefeil:', e)
