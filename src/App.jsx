@@ -37477,34 +37477,55 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     }
     const layers = lagsett.layers
     const totT = lagsett.totalTykkelse || 0
+    const navn = (lagsett.navn || '').toLowerCase()
     const harVindsperre = inneholderMateriale(layers, ['vindsperre', 'underlagspapp'])
     const harLufting = inneholderMateriale(layers, ['lufting', 'lekt'])
     const harYtterKledning = inneholderMateriale(layers, ['bordkledning', 'trekledning', 'fasadeplate', 'puss', 'tegl'])
     const harBetong = inneholderMateriale(layers, ['betong'])
+    const harTrykkfastIsolasjon = inneholderMateriale(layers, ['trykkfast', 'xps', 'eps'])
     const harIsolasjon = inneholderMateriale(layers, ['isolasjon', 'mineralull', 'glassull', 'cellulose'])
     const harStender = inneholderMateriale(layers, ['stender', 'bindingsverk', 'bjelke'])
+
+    // Beregn betong-andel av total tykkelse — sterkt signal for fundament
+    let betongTykkelse = 0
+    layers.forEach(l => {
+      if (/betong/.test((l.navn || '').toLowerCase())) betongTykkelse += (l.tykkelse || 0)
+    })
+    const betongAndel = totT > 0 ? betongTykkelse / totT : 0
+
+    // Regel A (fundament/sokkel) — kommer FØR yttervegg-regelen
+    // Navn-basert: "sokkel", "fundament", "kjeller" → fundament
+    if (/sokkel|fundament|kjeller|grunnmur/.test(navn)) {
+      return { foreslattKategori: 'fundament', sikkerhet: 'høy',
+        begrunnelse: `Navnet "${lagsett.navn}" indikerer fundament/sokkel-konstruksjon` }
+    }
+    // Massiv betong (kun ett lag, eller >70% betong) → fundament
+    if (harBetong && (layers.length === 1 || betongAndel > 0.7)) {
+      return { foreslattKategori: 'fundament', sikkerhet: 'høy',
+        begrunnelse: `Massiv betong-konstruksjon (${(betongAndel*100).toFixed(0)}% av tykkelsen)` }
+    }
+    // Trykkfast isolasjon + betong → typisk sokkel under bakken
+    if (harTrykkfastIsolasjon && harBetong) {
+      return { foreslattKategori: 'fundament', sikkerhet: 'høy',
+        begrunnelse: 'Trykkfast isolasjon + betong — typisk sokkel/kjellervegg under bakken' }
+    }
 
     // Regel 1: Tydelig yttervegg-konstruksjon
     if (harVindsperre || (harYtterKledning && harLufting)) {
       return { foreslattKategori: 'yttervegg', sikkerhet: 'høy',
         begrunnelse: 'Inneholder ' + [harVindsperre ? 'vindsperre' : null, harYtterKledning ? 'utvendig kledning' : null, harLufting ? 'lufting' : null].filter(Boolean).join(' + ') }
     }
-    // Regel 2: Tykk konstruksjon med betong (sokkel/kjellervegg)
-    if (harBetong && totT > 200) {
-      return { foreslattKategori: 'yttervegg', sikkerhet: 'høy',
-        begrunnelse: `Tykk konstruksjon (${totT.toFixed(0)}mm) med betong — sannsynligvis sokkel/kjellervegg` }
-    }
-    // Regel 3: Symmetrisk lagstruktur (typisk innervegg)
+    // Regel 2: Symmetrisk lagstruktur (typisk innervegg)
     if (erSymmetrisk(layers) && layers.length <= 5 && totT < 200) {
       return { foreslattKategori: 'innervegg', sikkerhet: 'høy',
         begrunnelse: 'Symmetrisk konstruksjon — plate på begge sider' }
     }
-    // Regel 4: Tynn vegg uten yttervegg-tegn
+    // Regel 3: Tynn vegg uten yttervegg-tegn
     if (totT < 150 && !harYtterKledning) {
       return { foreslattKategori: 'innervegg', sikkerhet: 'middels',
         begrunnelse: `Tynn konstruksjon (${totT.toFixed(0)}mm) uten utvendig kledning` }
     }
-    // Regel 5: Stender + isolasjon men ingen vindsperre — vanligvis innervegg
+    // Regel 4: Stender + isolasjon men ingen vindsperre — vanligvis innervegg
     if (harStender && harIsolasjon && !harVindsperre && !harYtterKledning) {
       return { foreslattKategori: 'innervegg', sikkerhet: 'middels',
         begrunnelse: 'Bindingsverk med isolasjon, men ingen vindsperre/utvendig kledning' }
@@ -37530,9 +37551,65 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   klassifiserAlle('innervegg')
   klassifiserAlle('ukjent_vegg')
 
+  // Klassifiser gulv — skill mellom etasjeskille og dekke på grunn (bunnplate)
+  // Heuristikk:
+  //   - Inneholder trykkfast isolasjon → bunnplate (typisk under bakken)
+  //   - Tykk konstruksjon (>300mm) eller massiv betong → bunnplate
+  //   - Navn parser: "Dekke 500"/"Dekke 800" — tall >= 350 antas bunnplate
+  //   - Annet → etasjeskille
+  const parseTykkelseFraNavn = (navn) => {
+    // Henter første tall fra navn som "Dekke 500", "Dekke 1500" osv.
+    const m = (navn || '').match(/(\d{2,5})/)
+    return m ? parseInt(m[1], 10) : null
+  }
+
+  const klassifiserGulv = (lagsett) => {
+    if (!lagsett) return { foreslattKategori: 'ukjent', sikkerhet: 'lav', begrunnelse: '' }
+    const navn = (lagsett.navn || '').toLowerCase()
+    const layers = lagsett.layers || []
+    const totT = lagsett.totalTykkelse || 0
+    const harTrykkfast = inneholderMateriale(layers, ['trykkfast', 'xps', 'eps'])
+    const harBetong = inneholderMateriale(layers, ['betong'])
+    const tykkelseFraNavn = parseTykkelseFraNavn(navn)
+
+    // Navn-basert
+    if (/grunn|bunnplate|fundament/.test(navn)) {
+      return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'høy',
+        begrunnelse: `Navnet "${lagsett.navn}" indikerer dekke på grunn` }
+    }
+    // Trykkfast isolasjon → bunnplate
+    if (harTrykkfast) {
+      return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'høy',
+        begrunnelse: 'Trykkfast isolasjon — typisk for bunnplate på grunn' }
+    }
+    // Tykk konstruksjon (>300mm)
+    if (totT > 300 || (tykkelseFraNavn && tykkelseFraNavn >= 350)) {
+      return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'middels',
+        begrunnelse: `Tykk konstruksjon (${totT > 0 ? totT.toFixed(0) : tykkelseFraNavn}mm) — sannsynligvis bunnplate` }
+    }
+    // Massiv betong uten andre lag → bunnplate eller fundament-relatert
+    if (harBetong && layers.length <= 2 && totT > 150) {
+      return { foreslattKategori: 'dekke_paa_grunn', sikkerhet: 'middels',
+        begrunnelse: 'Massiv betong-konstruksjon — sannsynligvis bunnplate' }
+    }
+    // Default: etasjeskille
+    return { foreslattKategori: 'etasjeskille', sikkerhet: 'middels',
+      begrunnelse: tykkelseFraNavn ? `Antatt etasjeskille (${tykkelseFraNavn}mm tykk)` : 'Standard gulv-konstruksjon — antatt etasjeskille' }
+  }
+
+  if (result.gulv.lagsett) {
+    result.gulv.lagsett.forEach(ls => {
+      const k = klassifiserGulv(ls)
+      ls.foreslattKategori = k.foreslattKategori
+      ls.foreslattSikkerhet = k.sikkerhet
+      ls.foreslattBegrunnelse = k.begrunnelse
+      ls.brukerKategori = k.foreslattKategori
+    })
+  }
+
   // Logger fordeling
   const tellForslag = () => {
-    const tot = { yttervegg: 0, innervegg: 0, usikker: 0, ukjent: 0 }
+    const tot = { yttervegg: 0, innervegg: 0, fundament: 0, usikker: 0, ukjent: 0 }
     ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(kat => {
       result[kat].lagsett.forEach(ls => {
         tot[ls.foreslattKategori] = (tot[ls.foreslattKategori] || 0) + 1
@@ -37540,7 +37617,17 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     })
     return tot
   }
-  console.log(`[ifc] auto-klassifisering forslag:`, tellForslag())
+  const tellForslagGulv = () => {
+    const tot = { etasjeskille: 0, dekke_paa_grunn: 0, ukjent: 0 }
+    if (result.gulv.lagsett) {
+      result.gulv.lagsett.forEach(ls => {
+        tot[ls.foreslattKategori] = (tot[ls.foreslattKategori] || 0) + 1
+      })
+    }
+    return tot
+  }
+  console.log(`[ifc] auto-klassifisering vegger:`, tellForslag())
+  console.log(`[ifc] auto-klassifisering gulv:`, tellForslagGulv())
 
   console.log(`[ifc] lagsett: yttervegg=${result.yttervegg.lagsett.length}, innervegg=${result.innervegg.lagsett.length}, gulv=${result.gulv.lagsett.length}, tak=${result.tak.lagsett.length}`)
 
@@ -37949,8 +38036,7 @@ function BimMengdeVisning({ mengder, isMob }) {
 function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
   const [oppdater, setOppdater] = useState(0)
 
-  // Samle alle lagsett fra alle vegg-kategorier — vi trenger dem som flat liste
-  // siden brukeren kan flytte fra yttervegg → innervegg fritt.
+  // Samle alle lagsett fra alle vegg-kategorier — flat liste
   const alleVeggLagsett = React.useMemo(() => {
     const liste = []
     ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(opprinnelig => {
@@ -37962,15 +38048,23 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
     return liste
   }, [mengder, oppdater])
 
+  // Samle gulv-lagsett separat (egen klassifisering)
+  const alleGulvLagsett = React.useMemo(() => {
+    if (!mengder.gulv?.lagsett) return []
+    return mengder.gulv.lagsett.map((ls, idx) => ({ lagsett: ls, idx }))
+  }, [mengder, oppdater])
+
   const settBrukerKategori = (lagsett, nyKat) => {
     lagsett.brukerKategori = nyKat
     setOppdater(o => o + 1)
     if (onChange) onChange()
   }
 
-  // Tellinger basert på brukerens valg
-  const tellinger = React.useMemo(() => {
-    const t = { yttervegg: { antall: 0, areal: 0 }, innervegg: { antall: 0, areal: 0 }, usikker: { antall: 0, areal: 0 }, ignorer: { antall: 0, areal: 0 } }
+  // Tellinger for vegger
+  const veggTellinger = React.useMemo(() => {
+    const t = { yttervegg: { antall: 0, areal: 0 }, innervegg: { antall: 0, areal: 0 },
+                fundament: { antall: 0, areal: 0 }, usikker: { antall: 0, areal: 0 },
+                ignorer: { antall: 0, areal: 0 } }
     alleVeggLagsett.forEach(({ lagsett }) => {
       const kat = lagsett.brukerKategori || 'usikker'
       if (!t[kat]) t[kat] = { antall: 0, areal: 0 }
@@ -37980,22 +38074,137 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
     return t
   }, [alleVeggLagsett, oppdater])
 
-  if (alleVeggLagsett.length === 0) return null
+  // Tellinger for gulv
+  const gulvTellinger = React.useMemo(() => {
+    const t = { etasjeskille: { antall: 0, areal: 0 }, dekke_paa_grunn: { antall: 0, areal: 0 },
+                ignorer: { antall: 0, areal: 0 } }
+    alleGulvLagsett.forEach(({ lagsett }) => {
+      const kat = lagsett.brukerKategori || 'etasjeskille'
+      if (!t[kat]) t[kat] = { antall: 0, areal: 0 }
+      t[kat].antall += lagsett.antall || 0
+      t[kat].areal += lagsett.totalAreal || 0
+    })
+    return t
+  }, [alleGulvLagsett, oppdater])
+
+  if (alleVeggLagsett.length === 0 && alleGulvLagsett.length === 0) return null
 
   // Hjelpestiler
-  const card = { background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', overflow:'hidden' }
+  const card = { background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', overflow:'hidden' }
   const sikkerhetFarge = (s) => s === 'høy' ? '#10b981' : s === 'middels' ? '#f59e0b' : '#94a3b8'
   const kategoriFarge = (k) => ({
-    yttervegg: '#dc2626', innervegg: '#7c3aed', usikker: '#ca8a04',
-    ignorer: '#6b7280', ukjent: '#94a3b8',
+    yttervegg: '#dc2626', innervegg: '#7c3aed', fundament: '#475569',
+    etasjeskille: '#0891b2', dekke_paa_grunn: '#0e7490',
+    usikker: '#ca8a04', ignorer: '#6b7280', ukjent: '#94a3b8',
   }[k] || '#94a3b8')
   const kategoriIkon = (k) => ({
-    yttervegg: '🧱', innervegg: '🚪', usikker: '⚠️', ignorer: '🚫', ukjent: '❓',
+    yttervegg: '🧱', innervegg: '🚪', fundament: '🟪',
+    etasjeskille: '🟦', dekke_paa_grunn: '🟫',
+    usikker: '⚠️', ignorer: '🚫', ukjent: '❓',
   }[k] || '❓')
   const kategoriLabel = (k) => ({
-    yttervegg: 'Yttervegg', innervegg: 'Innervegg', usikker: 'Usikker',
-    ignorer: 'Ignorér', ukjent: 'Ukjent',
+    yttervegg: 'Yttervegg', innervegg: 'Innervegg', fundament: 'Fundament',
+    etasjeskille: 'Etasjeskille', dekke_paa_grunn: 'Dekke på grunn',
+    usikker: 'Usikker', ignorer: 'Ignorér', ukjent: 'Ukjent',
   }[k] || k)
+
+  // Komprimerte knappestiler — mindre padding, mindre font
+  const knappStil = (kat, erValgt) => ({
+    background: erValgt ? kategoriFarge(kat) : 'white',
+    color: erValgt ? 'white' : kategoriFarge(kat),
+    border: '1px solid ' + kategoriFarge(kat) + (erValgt ? '' : '50'),
+    borderRadius: '6px',
+    padding: '3px 8px',
+    fontSize: '11px',
+    fontWeight: erValgt ? '700' : '500',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '3px',
+    lineHeight: 1.4,
+    transition: 'all 0.1s',
+  })
+
+  // Sammendrag-kort komponent
+  const SammendragKort = ({ kat, t }) => (
+    <div style={{ background: kategoriFarge(kat) + '12', border: '1px solid ' + kategoriFarge(kat) + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'104px' }}>
+      <span style={{ fontSize:'14px' }}>{kategoriIkon(kat)}</span>
+      <div>
+        <div style={{ fontSize:'10px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>{kategoriLabel(kat)}</div>
+        <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>
+          {t.antall} stk · {t.areal.toFixed(0)} m²
+        </div>
+      </div>
+    </div>
+  )
+
+  // Lagsett-rad komponent (gjenbrukbart for vegger og gulv)
+  const LagsettRad = ({ lagsett, kategorier, kategoriPlaceholder }) => {
+    const aktivKat = lagsett.brukerKategori || kategoriPlaceholder || 'usikker'
+    const erEndret = lagsett.brukerKategori !== lagsett.foreslattKategori
+    return (
+      <div style={{ ...card, padding: isMob ? '10px' : '12px 14px', borderColor: kategoriFarge(aktivKat) + '40' }}>
+        {/* Topprad: navn + nåværende kategori */}
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'8px' }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'1px' }}>
+              {lagsett.navn}
+            </div>
+            <div style={{ fontSize:'11px', color:'#64748b' }}>
+              {lagsett.antall} stk · {lagsett.totalAreal.toFixed(1)} m² · {lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse.toFixed(0) + ' mm' : 'tykkelse ukjent'} · {lagsett.antallLag} lag
+            </div>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+            {erEndret && <span style={{ fontSize:'9px', color:'#6366f1', background:'#eef2ff', padding:'2px 6px', borderRadius:'6px', fontWeight:'700' }}>ENDRET</span>}
+            <div style={{ background: kategoriFarge(aktivKat) + '20', color: kategoriFarge(aktivKat), padding:'3px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700', display:'flex', alignItems:'center', gap:'3px' }}>
+              <span>{kategoriIkon(aktivKat)}</span>
+              <span>{kategoriLabel(aktivKat)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Lag-visning */}
+        {lagsett.layers && lagsett.layers.length > 0 && (
+          <div style={{ marginBottom:'8px' }}>
+            <div style={{ fontSize:'9px', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px', fontWeight:'700', marginBottom:'3px' }}>
+              Lag (utenfra → innover)
+            </div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'3px' }}>
+              {lagsett.layers.map((lag, li) => (
+                <div key={li} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'5px', padding:'2px 7px', fontSize:'10px', color:'#475569' }}>
+                  <strong>{lag.navn}</strong>
+                  {lag.tykkelse > 0 && <span style={{ color:'#94a3b8', marginLeft:'4px' }}>{lag.tykkelse.toFixed(0)} mm</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Begrunnelse */}
+        {lagsett.foreslattBegrunnelse && (
+          <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:'6px', padding:'6px 10px', fontSize:'10px', color:'#475569', marginBottom:'8px' }}>
+            <strong style={{ color: sikkerhetFarge(lagsett.foreslattSikkerhet) }}>
+              {lagsett.foreslattSikkerhet === 'høy' ? '✓' : lagsett.foreslattSikkerhet === 'middels' ? '⚠' : '?'} {lagsett.foreslattSikkerhet === 'høy' ? 'Høy' : lagsett.foreslattSikkerhet === 'middels' ? 'Middels' : 'Lav'} sikkerhet:
+            </strong>{' '}
+            {lagsett.foreslattBegrunnelse}
+          </div>
+        )}
+
+        {/* Knapper for å endre kategori — kompakte */}
+        <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+          {kategorier.map(kat => {
+            const erValgt = aktivKat === kat
+            return (
+              <button key={kat} onClick={() => settBrukerKategori(lagsett, kat)} style={knappStil(kat, erValgt)}>
+                <span>{kategoriIkon(kat)}</span>
+                <span>{kategoriLabel(kat)}</span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{ marginTop:'18px' }}>
@@ -38006,114 +38215,60 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
         Vi har auto-klassifisert lagsettene basert på lagstrukturen. Bekreft eller endre klassifisering før du går videre til bibliotek-matching.
       </p>
 
-      {/* Sammendrag-kort */}
-      <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', marginBottom:'12px' }}>
-        {['yttervegg', 'innervegg', 'usikker', 'ignorer'].map(k => {
-          const t = tellinger[k] || { antall: 0, areal: 0 }
-          if (t.antall === 0 && k !== 'usikker') return null
-          return (
-            <div key={k} style={{ background: kategoriFarge(k) + '12', border: '1px solid ' + kategoriFarge(k) + '40', borderRadius:'10px', padding:'8px 12px', display:'flex', alignItems:'center', gap:'8px', minWidth:'120px' }}>
-              <span style={{ fontSize:'16px' }}>{kategoriIkon(k)}</span>
-              <div>
-                <div style={{ fontSize:'11px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>{kategoriLabel(k)}</div>
-                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>
-                  {t.antall} stk · {t.areal.toFixed(0)} m²
-                </div>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* VEGGER-SEKSJON */}
+      {alleVeggLagsett.length > 0 && (
+        <div style={{ marginBottom:'18px' }}>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>
+            Vegger ({alleVeggLagsett.length} lagsett)
+          </div>
+          {/* Sammendrag-kort */}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'10px' }}>
+            {['yttervegg', 'innervegg', 'fundament', 'usikker', 'ignorer'].map(k => {
+              const t = veggTellinger[k] || { antall: 0, areal: 0 }
+              if (t.antall === 0 && k !== 'usikker') return null
+              return <SammendragKort key={k} kat={k} t={t} />
+            })}
+          </div>
+          {/* Liste */}
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {alleVeggLagsett.map(({ lagsett, opprinneligKat, idx }) => (
+              <LagsettRad key={`v-${opprinneligKat}-${idx}`} lagsett={lagsett}
+                kategorier={['yttervegg', 'innervegg', 'fundament', 'usikker', 'ignorer']}
+                kategoriPlaceholder="usikker" />
+            ))}
+          </div>
+        </div>
+      )}
 
-      {/* Liste av lagsett */}
-      <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-        {alleVeggLagsett.map(({ lagsett, opprinneligKat, idx }, i) => {
-          const aktivKat = lagsett.brukerKategori || 'usikker'
-          const erEndret = lagsett.brukerKategori !== lagsett.foreslattKategori
-          return (
-            <div key={`${opprinneligKat}-${idx}`} style={{ ...card, padding: isMob ? '12px' : '14px 18px', borderColor: kategoriFarge(aktivKat) + '40' }}>
-              {/* Topprad: navn + nåværende kategori */}
-              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'12px', flexWrap:'wrap', marginBottom:'10px' }}>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
-                    {lagsett.navn}
-                  </div>
-                  <div style={{ fontSize:'12px', color:'#64748b' }}>
-                    {lagsett.antall} stk · {lagsett.totalAreal.toFixed(1)} m² · {lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse.toFixed(0) + ' mm tykk' : 'tykkelse ukjent'} · {lagsett.antallLag} lag
-                  </div>
-                </div>
-                {/* Pill med nåværende kategori */}
-                <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
-                  {erEndret && <span style={{ fontSize:'10px', color:'#6366f1', background:'#eef2ff', padding:'2px 8px', borderRadius:'8px', fontWeight:'700' }}>ENDRET</span>}
-                  <div style={{ background: kategoriFarge(aktivKat) + '20', color: kategoriFarge(aktivKat), padding:'4px 10px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', gap:'4px' }}>
-                    <span>{kategoriIkon(aktivKat)}</span>
-                    <span>{kategoriLabel(aktivKat)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Lag-visning (utenfra → innover) */}
-              {lagsett.layers && lagsett.layers.length > 0 && (
-                <div style={{ marginBottom:'10px' }}>
-                  <div style={{ fontSize:'10px', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px', fontWeight:'700', marginBottom:'4px' }}>
-                    Lag (utenfra → innover)
-                  </div>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
-                    {lagsett.layers.map((lag, li) => (
-                      <div key={li} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', color:'#475569' }}>
-                        <strong>{lag.navn}</strong>
-                        {lag.tykkelse > 0 && <span style={{ color:'#94a3b8', marginLeft:'5px' }}>{lag.tykkelse.toFixed(0)} mm</span>}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Begrunnelse for forslaget */}
-              {lagsett.foreslattBegrunnelse && (
-                <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:'8px', padding:'8px 12px', fontSize:'11px', color:'#475569', marginBottom:'10px' }}>
-                  <strong style={{ color: sikkerhetFarge(lagsett.foreslattSikkerhet) }}>
-                    {lagsett.foreslattSikkerhet === 'høy' ? '✓ Høy sikkerhet' : lagsett.foreslattSikkerhet === 'middels' ? '⚠ Middels sikkerhet' : '? Lav sikkerhet'}:
-                  </strong>{' '}
-                  {lagsett.foreslattBegrunnelse}
-                </div>
-              )}
-
-              {/* Knapper for å endre kategori */}
-              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
-                {['yttervegg', 'innervegg', 'usikker', 'ignorer'].map(kat => {
-                  const erValgt = aktivKat === kat
-                  return (
-                    <button key={kat} onClick={() => settBrukerKategori(lagsett, kat)}
-                      style={{
-                        background: erValgt ? kategoriFarge(kat) : 'white',
-                        color: erValgt ? 'white' : kategoriFarge(kat),
-                        border: '1px solid ' + kategoriFarge(kat) + (erValgt ? '' : '60'),
-                        borderRadius: '8px',
-                        padding: '6px 12px',
-                        fontSize: '12px',
-                        fontWeight: erValgt ? '700' : '500',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        transition: 'all 0.1s',
-                      }}>
-                      <span>{kategoriIkon(kat)}</span>
-                      <span>{kategoriLabel(kat)}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+      {/* GULV-SEKSJON */}
+      {alleGulvLagsett.length > 0 && (
+        <div style={{ marginBottom:'18px' }}>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'8px' }}>
+            Gulv & dekker ({alleGulvLagsett.length} lagsett)
+          </div>
+          {/* Sammendrag-kort */}
+          <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'10px' }}>
+            {['etasjeskille', 'dekke_paa_grunn', 'ignorer'].map(k => {
+              const t = gulvTellinger[k] || { antall: 0, areal: 0 }
+              if (t.antall === 0) return null
+              return <SammendragKort key={k} kat={k} t={t} />
+            })}
+          </div>
+          {/* Liste */}
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {alleGulvLagsett.map(({ lagsett, idx }) => (
+              <LagsettRad key={`g-${idx}`} lagsett={lagsett}
+                kategorier={['etasjeskille', 'dekke_paa_grunn', 'ignorer']}
+                kategoriPlaceholder="etasjeskille" />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Info om neste steg */}
-      <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'12px 16px' }}>
-        <div style={{ fontSize:'12px', fontWeight:'700', color:'#1e40af', marginBottom:'4px' }}>📌 Hva som skjer videre</div>
-        <p style={{ margin:0, fontSize:'11px', color:'#1e3a8a', lineHeight:1.5 }}>
+      <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px' }}>
+        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Hva som skjer videre</div>
+        <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
           Når du går til neste steg (bibliotek-matching, kommer i neste oppdatering), vil systemet sammenligne hvert lagsett mot din konstruksjons-bibliotek. Hvis det finnes en eksakt match, brukes den. Hvis ikke, får du valg om å lage ny konstruksjon basert på IFC-data.
         </p>
       </div>
