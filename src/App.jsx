@@ -37446,6 +37446,102 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   result.tak.lagsett = grupperEtterLagsett(result.tak.elementer)
   result.gulv.lagsett = grupperEtterLagsett(result.gulv.elementer)
 
+  // AUTO-KLASSIFISERING (Patch 13 Sesjon A)
+  // Analyserer lagstruktur og foreslår yttervegg/innervegg-klassifisering.
+  // Returnerer { foreslattKategori, sikkerhet, begrunnelse }
+  //
+  // Heuristikk for vegger:
+  //   1. Inneholder vindsperre/lufting/bordkledning → yttervegg
+  //   2. Tykkelse > 200mm med betong → yttervegg/sokkel
+  //   3. Symmetrisk lagstruktur (samme material begge sider) → innervegg
+  //   4. Tykkelse < 150mm → sannsynligvis innervegg
+  //   5. Inneholder "isolasjon"+"stender" uten vindsperre → uklart, men oftest innervegg
+  //   6. Annet → uklart
+  const inneholderMateriale = (layers, monstre) => {
+    const tekst = layers.map(l => (l.navn || '').toLowerCase()).join(' ')
+    return monstre.some(m => tekst.includes(m))
+  }
+  const erSymmetrisk = (layers) => {
+    if (layers.length < 3) return false
+    // Sammenlign første og siste lag — samme materialgruppe?
+    const f = (layers[0].navn || '').toLowerCase()
+    const s = (layers[layers.length - 1].navn || '').toLowerCase()
+    // Begge må være "plate"-typer (gips, plate, kledning)
+    const erPlate = (n) => /gips|plate|kledning/.test(n)
+    return erPlate(f) && erPlate(s)
+  }
+
+  const klassifiserLagsett = (lagsett) => {
+    if (!lagsett || !lagsett.layers || lagsett.layers.length === 0) {
+      return { foreslattKategori: 'ukjent', sikkerhet: 'lav', begrunnelse: 'Ingen lagstruktur funnet' }
+    }
+    const layers = lagsett.layers
+    const totT = lagsett.totalTykkelse || 0
+    const harVindsperre = inneholderMateriale(layers, ['vindsperre', 'underlagspapp'])
+    const harLufting = inneholderMateriale(layers, ['lufting', 'lekt'])
+    const harYtterKledning = inneholderMateriale(layers, ['bordkledning', 'trekledning', 'fasadeplate', 'puss', 'tegl'])
+    const harBetong = inneholderMateriale(layers, ['betong'])
+    const harIsolasjon = inneholderMateriale(layers, ['isolasjon', 'mineralull', 'glassull', 'cellulose'])
+    const harStender = inneholderMateriale(layers, ['stender', 'bindingsverk', 'bjelke'])
+
+    // Regel 1: Tydelig yttervegg-konstruksjon
+    if (harVindsperre || (harYtterKledning && harLufting)) {
+      return { foreslattKategori: 'yttervegg', sikkerhet: 'høy',
+        begrunnelse: 'Inneholder ' + [harVindsperre ? 'vindsperre' : null, harYtterKledning ? 'utvendig kledning' : null, harLufting ? 'lufting' : null].filter(Boolean).join(' + ') }
+    }
+    // Regel 2: Tykk konstruksjon med betong (sokkel/kjellervegg)
+    if (harBetong && totT > 200) {
+      return { foreslattKategori: 'yttervegg', sikkerhet: 'høy',
+        begrunnelse: `Tykk konstruksjon (${totT.toFixed(0)}mm) med betong — sannsynligvis sokkel/kjellervegg` }
+    }
+    // Regel 3: Symmetrisk lagstruktur (typisk innervegg)
+    if (erSymmetrisk(layers) && layers.length <= 5 && totT < 200) {
+      return { foreslattKategori: 'innervegg', sikkerhet: 'høy',
+        begrunnelse: 'Symmetrisk konstruksjon — plate på begge sider' }
+    }
+    // Regel 4: Tynn vegg uten yttervegg-tegn
+    if (totT < 150 && !harYtterKledning) {
+      return { foreslattKategori: 'innervegg', sikkerhet: 'middels',
+        begrunnelse: `Tynn konstruksjon (${totT.toFixed(0)}mm) uten utvendig kledning` }
+    }
+    // Regel 5: Stender + isolasjon men ingen vindsperre — vanligvis innervegg
+    if (harStender && harIsolasjon && !harVindsperre && !harYtterKledning) {
+      return { foreslattKategori: 'innervegg', sikkerhet: 'middels',
+        begrunnelse: 'Bindingsverk med isolasjon, men ingen vindsperre/utvendig kledning' }
+    }
+    // Default: usikker
+    return { foreslattKategori: 'usikker', sikkerhet: 'lav',
+      begrunnelse: 'Ingen klar yttervegg- eller innervegg-indikator. Krever manuell vurdering.' }
+  }
+
+  // Klassifiser hvert lagsett i alle vegg-kategorier
+  const klassifiserAlle = (kat) => {
+    if (!result[kat].lagsett) return
+    result[kat].lagsett.forEach(ls => {
+      const k = klassifiserLagsett(ls)
+      ls.foreslattKategori = k.foreslattKategori
+      ls.foreslattSikkerhet = k.sikkerhet
+      ls.foreslattBegrunnelse = k.begrunnelse
+      // brukerKategori starter likt med forslag, men kan overstyres i UI
+      ls.brukerKategori = k.foreslattKategori
+    })
+  }
+  klassifiserAlle('yttervegg')
+  klassifiserAlle('innervegg')
+  klassifiserAlle('ukjent_vegg')
+
+  // Logger fordeling
+  const tellForslag = () => {
+    const tot = { yttervegg: 0, innervegg: 0, usikker: 0, ukjent: 0 }
+    ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(kat => {
+      result[kat].lagsett.forEach(ls => {
+        tot[ls.foreslattKategori] = (tot[ls.foreslattKategori] || 0) + 1
+      })
+    })
+    return tot
+  }
+  console.log(`[ifc] auto-klassifisering forslag:`, tellForslag())
+
   console.log(`[ifc] lagsett: yttervegg=${result.yttervegg.lagsett.length}, innervegg=${result.innervegg.lagsett.length}, gulv=${result.gulv.lagsett.length}, tak=${result.tak.lagsett.length}`)
 
   // KVALITETSRAPPORT — sammenstille hvor mengdene kommer fra
@@ -37845,6 +37941,186 @@ function BimMengdeVisning({ mengder, isMob }) {
   )
 }
 
+// ─── BIM KLASSIFISERINGS-SEKSJON (Patch 13 Sesjon A) ─────────────────────────
+// Lar brukeren se og overstyre auto-foreslått klassifisering for hvert lagsett.
+// Mottar mengder-objektet og en callback som kalles når brukeren har endret
+// klassifisering. Lagsettene mutres direkte (brukerKategori-feltet).
+
+function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
+  const [oppdater, setOppdater] = useState(0)
+
+  // Samle alle lagsett fra alle vegg-kategorier — vi trenger dem som flat liste
+  // siden brukeren kan flytte fra yttervegg → innervegg fritt.
+  const alleVeggLagsett = React.useMemo(() => {
+    const liste = []
+    ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(opprinnelig => {
+      if (!mengder[opprinnelig]?.lagsett) return
+      mengder[opprinnelig].lagsett.forEach((ls, idx) => {
+        liste.push({ lagsett: ls, opprinneligKat: opprinnelig, idx })
+      })
+    })
+    return liste
+  }, [mengder, oppdater])
+
+  const settBrukerKategori = (lagsett, nyKat) => {
+    lagsett.brukerKategori = nyKat
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+  }
+
+  // Tellinger basert på brukerens valg
+  const tellinger = React.useMemo(() => {
+    const t = { yttervegg: { antall: 0, areal: 0 }, innervegg: { antall: 0, areal: 0 }, usikker: { antall: 0, areal: 0 }, ignorer: { antall: 0, areal: 0 } }
+    alleVeggLagsett.forEach(({ lagsett }) => {
+      const kat = lagsett.brukerKategori || 'usikker'
+      if (!t[kat]) t[kat] = { antall: 0, areal: 0 }
+      t[kat].antall += lagsett.antall || 0
+      t[kat].areal += lagsett.totalAreal || 0
+    })
+    return t
+  }, [alleVeggLagsett, oppdater])
+
+  if (alleVeggLagsett.length === 0) return null
+
+  // Hjelpestiler
+  const card = { background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', overflow:'hidden' }
+  const sikkerhetFarge = (s) => s === 'høy' ? '#10b981' : s === 'middels' ? '#f59e0b' : '#94a3b8'
+  const kategoriFarge = (k) => ({
+    yttervegg: '#dc2626', innervegg: '#7c3aed', usikker: '#ca8a04',
+    ignorer: '#6b7280', ukjent: '#94a3b8',
+  }[k] || '#94a3b8')
+  const kategoriIkon = (k) => ({
+    yttervegg: '🧱', innervegg: '🚪', usikker: '⚠️', ignorer: '🚫', ukjent: '❓',
+  }[k] || '❓')
+  const kategoriLabel = (k) => ({
+    yttervegg: 'Yttervegg', innervegg: 'Innervegg', usikker: 'Usikker',
+    ignorer: 'Ignorér', ukjent: 'Ukjent',
+  }[k] || k)
+
+  return (
+    <div style={{ marginTop:'18px' }}>
+      <h3 style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
+        🧭 Klassifiser lagsett
+      </h3>
+      <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+        Vi har auto-klassifisert lagsettene basert på lagstrukturen. Bekreft eller endre klassifisering før du går videre til bibliotek-matching.
+      </p>
+
+      {/* Sammendrag-kort */}
+      <div style={{ display:'flex', flexWrap:'wrap', gap:'8px', marginBottom:'12px' }}>
+        {['yttervegg', 'innervegg', 'usikker', 'ignorer'].map(k => {
+          const t = tellinger[k] || { antall: 0, areal: 0 }
+          if (t.antall === 0 && k !== 'usikker') return null
+          return (
+            <div key={k} style={{ background: kategoriFarge(k) + '12', border: '1px solid ' + kategoriFarge(k) + '40', borderRadius:'10px', padding:'8px 12px', display:'flex', alignItems:'center', gap:'8px', minWidth:'120px' }}>
+              <span style={{ fontSize:'16px' }}>{kategoriIkon(k)}</span>
+              <div>
+                <div style={{ fontSize:'11px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>{kategoriLabel(k)}</div>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>
+                  {t.antall} stk · {t.areal.toFixed(0)} m²
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Liste av lagsett */}
+      <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+        {alleVeggLagsett.map(({ lagsett, opprinneligKat, idx }, i) => {
+          const aktivKat = lagsett.brukerKategori || 'usikker'
+          const erEndret = lagsett.brukerKategori !== lagsett.foreslattKategori
+          return (
+            <div key={`${opprinneligKat}-${idx}`} style={{ ...card, padding: isMob ? '12px' : '14px 18px', borderColor: kategoriFarge(aktivKat) + '40' }}>
+              {/* Topprad: navn + nåværende kategori */}
+              <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'12px', flexWrap:'wrap', marginBottom:'10px' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
+                    {lagsett.navn}
+                  </div>
+                  <div style={{ fontSize:'12px', color:'#64748b' }}>
+                    {lagsett.antall} stk · {lagsett.totalAreal.toFixed(1)} m² · {lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse.toFixed(0) + ' mm tykk' : 'tykkelse ukjent'} · {lagsett.antallLag} lag
+                  </div>
+                </div>
+                {/* Pill med nåværende kategori */}
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+                  {erEndret && <span style={{ fontSize:'10px', color:'#6366f1', background:'#eef2ff', padding:'2px 8px', borderRadius:'8px', fontWeight:'700' }}>ENDRET</span>}
+                  <div style={{ background: kategoriFarge(aktivKat) + '20', color: kategoriFarge(aktivKat), padding:'4px 10px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', gap:'4px' }}>
+                    <span>{kategoriIkon(aktivKat)}</span>
+                    <span>{kategoriLabel(aktivKat)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lag-visning (utenfra → innover) */}
+              {lagsett.layers && lagsett.layers.length > 0 && (
+                <div style={{ marginBottom:'10px' }}>
+                  <div style={{ fontSize:'10px', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.4px', fontWeight:'700', marginBottom:'4px' }}>
+                    Lag (utenfra → innover)
+                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'4px' }}>
+                    {lagsett.layers.map((lag, li) => (
+                      <div key={li} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'3px 8px', fontSize:'11px', color:'#475569' }}>
+                        <strong>{lag.navn}</strong>
+                        {lag.tykkelse > 0 && <span style={{ color:'#94a3b8', marginLeft:'5px' }}>{lag.tykkelse.toFixed(0)} mm</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Begrunnelse for forslaget */}
+              {lagsett.foreslattBegrunnelse && (
+                <div style={{ background:'#f8fafc', border:'1px dashed #cbd5e1', borderRadius:'8px', padding:'8px 12px', fontSize:'11px', color:'#475569', marginBottom:'10px' }}>
+                  <strong style={{ color: sikkerhetFarge(lagsett.foreslattSikkerhet) }}>
+                    {lagsett.foreslattSikkerhet === 'høy' ? '✓ Høy sikkerhet' : lagsett.foreslattSikkerhet === 'middels' ? '⚠ Middels sikkerhet' : '? Lav sikkerhet'}:
+                  </strong>{' '}
+                  {lagsett.foreslattBegrunnelse}
+                </div>
+              )}
+
+              {/* Knapper for å endre kategori */}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                {['yttervegg', 'innervegg', 'usikker', 'ignorer'].map(kat => {
+                  const erValgt = aktivKat === kat
+                  return (
+                    <button key={kat} onClick={() => settBrukerKategori(lagsett, kat)}
+                      style={{
+                        background: erValgt ? kategoriFarge(kat) : 'white',
+                        color: erValgt ? 'white' : kategoriFarge(kat),
+                        border: '1px solid ' + kategoriFarge(kat) + (erValgt ? '' : '60'),
+                        borderRadius: '8px',
+                        padding: '6px 12px',
+                        fontSize: '12px',
+                        fontWeight: erValgt ? '700' : '500',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.1s',
+                      }}>
+                      <span>{kategoriIkon(kat)}</span>
+                      <span>{kategoriLabel(kat)}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Info om neste steg */}
+      <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'12px 16px' }}>
+        <div style={{ fontSize:'12px', fontWeight:'700', color:'#1e40af', marginBottom:'4px' }}>📌 Hva som skjer videre</div>
+        <p style={{ margin:0, fontSize:'11px', color:'#1e3a8a', lineHeight:1.5 }}>
+          Når du går til neste steg (bibliotek-matching, kommer i neste oppdatering), vil systemet sammenligne hvert lagsett mot din konstruksjons-bibliotek. Hvis det finnes en eksakt match, brukes den. Hvis ikke, får du valg om å lage ny konstruksjon basert på IFC-data.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── BIM-IMPORT FULL SIDEFLYT ────────────────────────────────────────────────
 // Erstatter BimImportPlaceholderModal når brukeren har bim_kalkyle-modulen.
 // Vises som full skjermflyt fordi parsing og bekreftelse er for kompleks for modal.
@@ -38119,11 +38395,16 @@ function BimImportPage({ onTilbake, onAlert }) {
             </div>
           )}
 
+          {/* Klassifiserings-seksjon — Patch 13 Sesjon A */}
+          {metadata.mengder && (
+            <BimKlassifiseringSeksjon mengder={metadata.mengder} isMob={isMob} />
+          )}
+
           {/* Neste-steg-info */}
           <div style={{ marginTop:'18px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
             <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i neste oppdatering</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              Neste oppdatering legger til lagstruktur-ekstraksjon, bibliotek-matching mot dine konstruksjoner, og automatisk kalkyle-generering. Akkurat nå ser du mengdene, men du kan ikke opprette en kalkyle ennå.
+              Bibliotek-matching og kalkyle-generering kommer i neste oppdatering. Akkurat nå kan du klassifisere lagsettene som yttervegg/innervegg, men ikke opprette en kalkyle ennå.
             </p>
           </div>
         </div>
