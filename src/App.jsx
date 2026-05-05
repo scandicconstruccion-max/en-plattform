@@ -39951,6 +39951,9 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const appAlert = useAppAlert()
   const { user } = useAuth()
 
+  // Patch 15.C: Lagsett som vises i 2D-tegning (null = lukket)
+  const [tegningLagsett, setTegningLagsett] = useState(null)
+
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
   const [aapenDialog, setAapenDialog] = useState(null)
@@ -40349,8 +40352,30 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                 </div>
               </div>
 
-              {/* IFC-detaljer (kollapsbar) — Patch 14 Steg A */}
-              <BimLagsettDetaljer lagsett={lagsett} isMob={isMob} />
+              {/* IFC-detaljer + 2D-tegning-knapp (Patch 14 Steg A + Patch 15.C) */}
+              <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'8px' }}>
+                <BimLagsettDetaljer lagsett={lagsett} isMob={isMob} />
+                {(lagsett.elementer || []).some(e => e.fotavtrykk) && (
+                  <button
+                    onClick={() => setTegningLagsett(lagsett)}
+                    style={{
+                      background:'#f0fdf4',
+                      border:'1px solid #bbf7d0',
+                      color:'#15803d',
+                      borderRadius:'8px',
+                      padding:'6px 10px',
+                      fontSize:'11px',
+                      fontWeight:'600',
+                      cursor:'pointer',
+                      display:'inline-flex',
+                      alignItems:'center',
+                      gap:'6px',
+                    }}>
+                    <span style={{ fontSize:'12px' }}>🗺️</span>
+                    <span>Vis i tegning</span>
+                  </button>
+                )}
+              </div>
 
               {/* Bekreftet match — vis valgt konstruksjon */}
               {erBekreftet && (
@@ -40497,6 +40522,18 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
           isMob={isMob}
           onAvbryt={lukkDialog}
           onLagre={handleLagreNy}
+        />
+      )}
+
+      {/* Patch 15.C: 2D-tegning-modal */}
+      {tegningLagsett && (
+        <BimTegningModal
+          mengder={mengder}
+          valgtLagsett={tegningLagsett}
+          lagsettListe={alleLagsett.map(({ lagsett }) => lagsett)}
+          onClose={() => setTegningLagsett(null)}
+          onVelgLagsett={(ls) => setTegningLagsett(ls)}
+          isMob={isMob}
         />
       )}
     </div>
@@ -40829,6 +40866,345 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
 // Viser en strukturert rapport om hvor godt geometri-ekstraksjonen gikk.
 // Brukes for å avgjøre om en 2D-viewer er praktisk gjennomførbar for denne IFC-fila.
 // Kalles fra "Analysert"-banneret i BimImportPage.
+
+// ─── PATCH 15.B: 2D-TEGNING-MODAL ────────────────────────────────────────────
+// Viser bygget som 2D-grunnplan med etasjevelger. Lagsett kan høylyses i grønt.
+// Bruker bounding-box-projeksjon (XY-flate) per element fra Patch 15.A.
+//
+// Auto-detektør enheter ved oppstart: sammenligner totalAreal fra mengde-data
+// (kjent korrekt i m²) mot summert bounding-box-areal. Hvis bbox-arealet er
+// ~1 000 000× større er det åpenbart millimeter — vi deler alle koordinater på 1000.
+
+function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
+  const svgRef = React.useRef(null)
+  const [valgtEtasjeId, setValgtEtasjeId] = useState(null)  // null = "Alle"
+  const [activeLagsett, setActiveLagsett] = useState(valgtLagsett || null)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [drag, setDrag] = useState(null)  // { startX, startY, startPan }
+
+  const etasjer = mengder?._geometri?.etasjer || []
+
+  // ── Enhets-deteksjon ────────────────────────────────────────────────────
+  // Sammenlign mengde-areal (m²) mot summert bounding-box-areal.
+  // Hvis bbox-arealet er > 100x mengde-arealet, er det mm — del på 1000.
+  const enhetsFaktor = React.useMemo(() => {
+    let mengdeArealM2 = 0
+    let bboxArealRaw = 0
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
+      const kategoriData = mengder[kat]
+      if (!kategoriData) return
+      mengdeArealM2 += (kategoriData.totalAreal || 0)
+      ;(kategoriData.elementer || []).forEach(e => {
+        if (!e.fotavtrykk) return
+        const w = e.fotavtrykk.maxX - e.fotavtrykk.minX
+        const d = e.fotavtrykk.maxY - e.fotavtrykk.minY
+        const h = e.fotavtrykk.maxZ - e.fotavtrykk.minZ
+        // For vegger: side-areal er bredde × høyde (eller dybde × høyde)
+        // For gulv/tak: areal er bredde × dybde
+        if (kat === 'gulv' || kat === 'tak') {
+          bboxArealRaw += w * d
+        } else {
+          // Bruk største side-flate
+          bboxArealRaw += Math.max(w * h, d * h)
+        }
+      })
+    })
+    if (mengdeArealM2 < 0.01 || bboxArealRaw < 0.01) return 1  // ikke nok data
+    const ratio = bboxArealRaw / mengdeArealM2
+    // Hvis bbox er ~1 000 000x (= 1000² mm² per m²), er enheten mm
+    if (ratio > 100000) return 0.001  // mm → m
+    if (ratio > 100) return 0.01  // cm → m
+    return 1  // allerede m
+  }, [mengder])
+
+  // ── Samle alle elementer som skal tegnes ───────────────────────────────
+  const alleElementer = React.useMemo(() => {
+    const liste = []
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
+      const elementer = mengder[kat]?.elementer || []
+      elementer.forEach(e => {
+        if (!e.fotavtrykk) return
+        const ef = e.fotavtrykk
+        liste.push({
+          id: e.id,
+          kategori: kat,
+          fotavtrykk: {
+            minX: ef.minX * enhetsFaktor,
+            maxX: ef.maxX * enhetsFaktor,
+            minY: ef.minY * enhetsFaktor,
+            maxY: ef.maxY * enhetsFaktor,
+            minZ: ef.minZ * enhetsFaktor,
+            maxZ: ef.maxZ * enhetsFaktor,
+          },
+          etasjeId: e.etasje?.etasjeId || null,
+          etasjeNavn: e.etasje?.etasjeNavn || null,
+        })
+      })
+    })
+    return liste
+  }, [mengder, enhetsFaktor])
+
+  // ── Hvilke element-IDer hører til aktivt lagsett? ──────────────────────
+  const aktiveIDer = React.useMemo(() => {
+    if (!activeLagsett) return new Set()
+    return new Set((activeLagsett.elementer || []).map(e => e.id))
+  }, [activeLagsett])
+
+  // ── Filtrer elementer etter valgt etasje ───────────────────────────────
+  const synligeElementer = React.useMemo(() => {
+    if (!valgtEtasjeId) return alleElementer
+    return alleElementer.filter(e => e.etasjeId === valgtEtasjeId)
+  }, [alleElementer, valgtEtasjeId])
+
+  // ── Beregn bounding-box for synlige elementer (for auto-skalering) ─────
+  const synligBbox = React.useMemo(() => {
+    if (synligeElementer.length === 0) return null
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    synligeElementer.forEach(e => {
+      if (e.fotavtrykk.minX < minX) minX = e.fotavtrykk.minX
+      if (e.fotavtrykk.maxX > maxX) maxX = e.fotavtrykk.maxX
+      if (e.fotavtrykk.minY < minY) minY = e.fotavtrykk.minY
+      if (e.fotavtrykk.maxY > maxY) maxY = e.fotavtrykk.maxY
+    })
+    return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY }
+  }, [synligeElementer])
+
+  // Reset pan/zoom når etasje endres
+  useEffect(() => {
+    setPan({ x: 0, y: 0 })
+    setZoom(1)
+  }, [valgtEtasjeId])
+
+  // ── SVG-dimensjoner og auto-skalering ──────────────────────────────────
+  // Vi bruker viewBox for å auto-skalere innholdet til canvasen.
+  // Padding: 5 % på hver side så elementer ikke klistrer seg til kanten.
+  const svgViewBox = React.useMemo(() => {
+    if (!synligBbox || synligBbox.w <= 0 || synligBbox.h <= 0) {
+      return '0 0 100 100'
+    }
+    const padding = 0.05
+    const padX = synligBbox.w * padding
+    const padY = synligBbox.h * padding
+    const vbMinX = synligBbox.minX - padX
+    const vbMinY = synligBbox.minY - padY
+    const vbW = synligBbox.w + 2 * padX
+    const vbH = synligBbox.h + 2 * padY
+    return `${vbMinX} ${-(vbMinY + vbH)} ${vbW} ${vbH}`
+    // Y-aksen flippes (negativ) fordi SVG har Y nedover, IFC har Y oppover
+  }, [synligBbox])
+
+  // ── Mus-event handlers for pan/zoom ────────────────────────────────────
+  const handleWheel = (e) => {
+    e.preventDefault()
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    setZoom(z => Math.max(0.2, Math.min(10, z * delta)))
+  }
+  const handleMouseDown = (e) => {
+    setDrag({ startX: e.clientX, startY: e.clientY, startPan: { ...pan } })
+  }
+  const handleMouseMove = (e) => {
+    if (!drag) return
+    setPan({
+      x: drag.startPan.x + (e.clientX - drag.startX) / zoom,
+      y: drag.startPan.y + (e.clientY - drag.startY) / zoom,
+    })
+  }
+  const handleMouseUp = () => setDrag(null)
+
+  // ── Farger per status ──────────────────────────────────────────────────
+  const fargeFor = (el) => {
+    if (aktiveIDer.has(el.id)) return { fill: '#86efac', stroke: '#16a34a', sw: 0.05 }  // høylyst grønn
+    return { fill: '#e2e8f0', stroke: '#94a3b8', sw: 0.02 }  // grå (default)
+  }
+
+  // ── Tellinger ──────────────────────────────────────────────────────────
+  const synligeAktive = synligeElementer.filter(e => aktiveIDer.has(e.id)).length
+  const totalAktive = aktiveIDer.size
+
+  // ── Listen over lagsett til venstre ────────────────────────────────────
+  const visningsListe = lagsettListe || []
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.55)' }}
+        onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '14px' : '18px', width:'100%', height: isMob ? '95vh' : '90vh', maxWidth:'1400px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding: isMob ? '12px 16px' : '16px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
+          <div style={{ minWidth:0, flex:1 }}>
+            <h2 style={{ margin:0, fontSize: isMob ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>
+              🗺️ 2D-tegning fra IFC
+            </h2>
+            {activeLagsett && (
+              <p style={{ margin:'2px 0 0', fontSize:'12px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {activeLagsett.navn} — {synligeAktive} av {totalAktive} synlig
+              </p>
+            )}
+          </div>
+          <button onClick={onClose}
+            style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>
+            ×
+          </button>
+        </div>
+
+        {/* Etasjevelger */}
+        {etasjer.length > 0 && (
+          <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#fafbfc' }}>
+            <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', marginRight:'4px' }}>Etasje:</span>
+            <button
+              onClick={() => setValgtEtasjeId(null)}
+              style={{ background: !valgtEtasjeId ? '#3b82f6' : 'white', color: !valgtEtasjeId ? 'white' : '#475569', border: '1px solid ' + (!valgtEtasjeId ? '#3b82f6' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+              Alle
+            </button>
+            {etasjer.map(et => (
+              <button
+                key={et.id}
+                onClick={() => setValgtEtasjeId(et.id)}
+                style={{ background: valgtEtasjeId === et.id ? '#3b82f6' : 'white', color: valgtEtasjeId === et.id ? 'white' : '#475569', border: '1px solid ' + (valgtEtasjeId === et.id ? '#3b82f6' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
+                {et.navn}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Body — split layout: lagsett-liste til venstre, SVG til høyre */}
+        <div style={{ flex:1, display:'flex', minHeight:0, flexDirection: isMob ? 'column' : 'row' }}>
+
+          {/* Venstre: lagsett-liste */}
+          {!isMob && visningsListe.length > 0 && (
+            <div style={{ width:'260px', flexShrink:0, borderRight:'1px solid #f1f5f9', overflow:'auto', padding:'10px' }}>
+              <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', padding:'4px 6px 8px' }}>
+                Lagsett — klikk for å høylyse
+              </div>
+              {visningsListe.map((ls, idx) => {
+                const aktiv = activeLagsett?.navn === ls.navn
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setActiveLagsett(ls)
+                      if (onVelgLagsett) onVelgLagsett(ls)
+                    }}
+                    style={{ display:'block', width:'100%', textAlign:'left', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius:'8px', padding:'8px 10px', marginBottom:'4px', cursor:'pointer', fontSize:'12px' }}>
+                    <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ls.navn}</div>
+                    <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>
+                      {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Høyre: SVG-canvas */}
+          <div style={{ flex:1, position:'relative', background:'#f8fafc', overflow:'hidden', minHeight: isMob ? '300px' : 'auto' }}>
+            {synligeElementer.length === 0 ? (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#94a3b8', fontSize:'13px', padding:'20px', textAlign:'center' }}>
+                Ingen elementer med geometri på denne etasjen.
+              </div>
+            ) : (
+              <svg
+                ref={svgRef}
+                viewBox={svgViewBox}
+                preserveAspectRatio="xMidYMid meet"
+                style={{ width:'100%', height:'100%', cursor: drag ? 'grabbing' : 'grab', userSelect:'none' }}
+                onWheel={handleWheel}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseUp}
+              >
+                <g transform={`translate(${pan.x} ${pan.y}) scale(${zoom})`} transform-origin="center">
+                  {/* Først grå (bakgrunn) */}
+                  {synligeElementer.filter(e => !aktiveIDer.has(e.id)).map(e => {
+                    const f = fargeFor(e)
+                    return (
+                      <rect
+                        key={e.id}
+                        x={e.fotavtrykk.minX}
+                        y={-e.fotavtrykk.maxY}
+                        width={e.fotavtrykk.maxX - e.fotavtrykk.minX}
+                        height={e.fotavtrykk.maxY - e.fotavtrykk.minY}
+                        fill={f.fill}
+                        stroke={f.stroke}
+                        strokeWidth={f.sw}
+                        opacity={0.7}
+                      />
+                    )
+                  })}
+                  {/* Deretter grønne (i forgrunn) */}
+                  {synligeElementer.filter(e => aktiveIDer.has(e.id)).map(e => {
+                    const f = fargeFor(e)
+                    return (
+                      <rect
+                        key={e.id}
+                        x={e.fotavtrykk.minX}
+                        y={-e.fotavtrykk.maxY}
+                        width={e.fotavtrykk.maxX - e.fotavtrykk.minX}
+                        height={e.fotavtrykk.maxY - e.fotavtrykk.minY}
+                        fill={f.fill}
+                        stroke={f.stroke}
+                        strokeWidth={f.sw}
+                        opacity={0.95}
+                      />
+                    )
+                  })}
+                </g>
+              </svg>
+            )}
+
+            {/* Floating zoom-controls */}
+            <div style={{ position:'absolute', bottom:'12px', right:'12px', display:'flex', flexDirection:'column', gap:'4px', background:'white', borderRadius:'8px', padding:'4px', boxShadow:'0 2px 8px rgba(0,0,0,0.1)' }}>
+              <button onClick={() => setZoom(z => Math.min(10, z * 1.2))}
+                style={{ width:'32px', height:'32px', border:'none', borderRadius:'6px', background:'#f8fafc', cursor:'pointer', fontSize:'16px', fontWeight:'700' }}>+</button>
+              <button onClick={() => setZoom(z => Math.max(0.2, z * 0.83))}
+                style={{ width:'32px', height:'32px', border:'none', borderRadius:'6px', background:'#f8fafc', cursor:'pointer', fontSize:'16px', fontWeight:'700' }}>−</button>
+              <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}
+                style={{ width:'32px', height:'32px', border:'none', borderRadius:'6px', background:'#f8fafc', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>⊙</button>
+            </div>
+
+            {/* Floating info-overlay */}
+            <div style={{ position:'absolute', top:'12px', left:'12px', background:'rgba(255,255,255,0.95)', borderRadius:'8px', padding:'6px 10px', fontSize:'11px', color:'#475569', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
+              {synligeElementer.length} elementer · {valgtEtasjeId ? etasjer.find(e => e.id === valgtEtasjeId)?.navn : 'alle etasjer'}
+              {enhetsFaktor !== 1 && <span style={{ color:'#92400e' }}> · enhet: {enhetsFaktor === 0.001 ? 'mm' : 'cm'} → m</span>}
+            </div>
+          </div>
+
+          {/* Mobile: lagsett-liste under SVG */}
+          {isMob && visningsListe.length > 0 && (
+            <div style={{ flexShrink:0, borderTop:'1px solid #f1f5f9', overflow:'auto', maxHeight:'30vh', padding:'8px' }}>
+              <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', padding:'4px 6px' }}>
+                Lagsett
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                {visningsListe.map((ls, idx) => {
+                  const aktiv = activeLagsett?.navn === ls.navn
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setActiveLagsett(ls)
+                        if (onVelgLagsett) onVelgLagsett(ls)
+                      }}
+                      style={{ display:'block', width:'100%', textAlign:'left', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'12px' }}>
+                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{ls.navn}</div>
+                      <div style={{ fontSize:'10px', color:'#64748b' }}>
+                        {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  )
+}
 
 function visGeometriDiagnose(metadata, onAlert) {
   const geo = metadata?.mengder?._geometri
