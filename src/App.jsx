@@ -8673,15 +8673,62 @@ function ConfirmProvider({ children }) {
       {dialog && (
         <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
           <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => respond(false)} />
-          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
-            <div style={{ padding:'24px 24px 0' }}>
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth: dialog.details ? '460px' : '420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden', maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
+            <div style={{ padding:'24px 24px 0', overflowY:'auto', flex:1 }}>
               <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: visual.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
                 {visual.emoji}
               </div>
               <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{dialog.message}</h3>
               {dialog.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{dialog.subMessage}</p>}
+
+              {/* Strukturerte detaljer — stats-blokker + notes (Patch 14 popup-redesign) */}
+              {dialog.details && (
+                <div style={{ marginTop:'16px' }}>
+                  {/* Stats-kort: hver blokk har overskrift + tabell-rader */}
+                  {Array.isArray(dialog.details.stats) && dialog.details.stats.map((blokk, bi) => (
+                    <div key={bi} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'14px 16px', marginBottom:'10px' }}>
+                      {(blokk.title || blokk.subtitle) && (
+                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', paddingBottom:'8px', borderBottom:'1px solid #e2e8f0', marginBottom:'8px', gap:'8px' }}>
+                          {blokk.title && <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>{blokk.title}</span>}
+                          {blokk.subtitle && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{blokk.subtitle}</span>}
+                        </div>
+                      )}
+                      {Array.isArray(blokk.items) && blokk.items.map((rad, ri) => (
+                        <div key={ri} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', padding:'4px 0', gap:'10px' }}>
+                          <span style={{ color:'#475569' }}>{rad.label}</span>
+                          <span style={{
+                            color: rad.highlight ? '#059669' : '#0f172a',
+                            fontWeight: rad.highlight ? 700 : 600,
+                            fontVariantNumeric: 'tabular-nums',
+                            whiteSpace: 'nowrap',
+                          }}>{rad.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+
+                  {/* Notes: små info-bokser med ikon + tekst */}
+                  {Array.isArray(dialog.details.notes) && dialog.details.notes.map((note, ni) => {
+                    // kind-farger: 'warn' = gul, 'info' = grå, 'success' = grønn, 'error' = rød
+                    const noteFarger = {
+                      warn:    { bg:'#fef3c7', border:'#fde68a', tekst:'#854d0e' },
+                      info:    { bg:'#f1f5f9', border:'#e2e8f0', tekst:'#475569' },
+                      success: { bg:'#f0fdf4', border:'#bbf7d0', tekst:'#15803d' },
+                      error:   { bg:'#fef2f2', border:'#fecaca', tekst:'#991b1b' },
+                    }
+                    const f = noteFarger[note.kind] || noteFarger.info
+                    return (
+                      <div key={ni} style={{ background: f.bg, border: `1px solid ${f.border}`, borderRadius:'10px', padding:'10px 12px', marginBottom:'8px', display:'flex', gap:'8px', alignItems:'flex-start' }}>
+                        {note.icon && <span style={{ fontSize:'14px', flexShrink:0, lineHeight:1.5 }}>{note.icon}</span>}
+                        <span style={{ fontSize:'12px', color: f.tekst, lineHeight:1.5 }}
+                          dangerouslySetInnerHTML={{ __html: note.text || '' }} />
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end' }}>
+            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end', flexShrink:0, borderTop: dialog.details ? '1px solid #f1f5f9' : 'none' }}>
               {!dialog.alertOnly && (
                 <button onClick={() => respond(false)}
                   style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
@@ -40676,20 +40723,63 @@ function BimImportPage({ onTilbake, onAlert }) {
                   // Beregn totals slik editor gjør (bruk eksisterende helper)
                   const totals = beregnProsjektTotal(kalkyler, faktorer)
 
-                  // Vis resultat-sammendrag for testing
+                  // Bygg strukturert details-objekt for det nye popup-formatet
                   const totalBd = kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler?.length || 0), 0)
-                  const fagListe = kalkyler.map(kl => kl.name).join(', ')
-                  const stdInfo = meta.standardBruktFor.length > 0
-                    ? `\n\n📌 Standard ble brukt for: ${meta.standardBruktFor.join(', ')}`
-                    : ''
-                  const hoppetInfo = meta.hoppedeAntall > 0
-                    ? `\n\n⚠️ ${meta.hoppedeAntall} lagsett ble hoppet over (ikke matchet)`
-                    : ''
+                  const formaterKr = (n) => `${(n || 0).toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr`
+
+                  // Stats-blokk: ett kort per fag med selvkost + pris med fortjeneste
+                  const stats = kalkyler.map(kl => {
+                    const fagInfo = FAGGRUPPER.find(f => f.id === kl.fag)
+                    const fagTotals = beregnProsjektTotal([kl], { [kl.fag]: faktorer[kl.fag] })
+                    return {
+                      title: `${fagInfo?.emoji || ''} ${fagInfo?.name || kl.fag}`,
+                      subtitle: `${kl.bygningsdeler?.length || 0} bygningsdeler`,
+                      items: [
+                        { label: 'Selvkost', value: formaterKr(fagTotals.totSelvkost) },
+                        { label: `Med fortjeneste (${fagTotals.fortjenesteProsent.toFixed(1)} %)`, value: formaterKr(fagTotals.totMedFortjeneste), highlight: true },
+                      ],
+                    }
+                  })
+
+                  // Legg til totalsum-kort hvis det er flere fag
+                  if (kalkyler.length > 1) {
+                    stats.push({
+                      title: '💰 Total',
+                      subtitle: `${kalkyler.length} fag`,
+                      items: [
+                        { label: 'Selvkost', value: formaterKr(totals.totSelvkost) },
+                        { label: `Med fortjeneste (${totals.fortjenesteProsent.toFixed(1)} %)`, value: formaterKr(totals.totMedFortjeneste), highlight: true },
+                      ],
+                    })
+                  }
+
+                  // Notes-blokk: standard-bruk + hoppede lagsett
+                  const notes = []
+                  if (meta.standardBruktFor.length > 0) {
+                    notes.push({
+                      kind: 'warn',
+                      icon: '📌',
+                      text: `Standard brukt for <strong>${meta.standardBruktFor.join(', ')}</strong> — juster i kalkylen etter generering`,
+                    })
+                  }
+                  if (meta.hoppedeAntall > 0) {
+                    notes.push({
+                      kind: 'info',
+                      icon: '⚠️',
+                      text: `<strong>${meta.hoppedeAntall} lagsett</strong> ble hoppet over (ikke matchet i Steg 2)`,
+                    })
+                  }
+                  notes.push({
+                    kind: 'info',
+                    icon: '🚧',
+                    text: 'Lagring og navigasjon kommer i <strong>Patch 14.C</strong>',
+                  })
 
                   onAlert({
-                    message: `✅ Kalkyle bygget — ${kalkyler.length} fag, ${totalBd} bygningsdeler`,
-                    subMessage: `Fag: ${fagListe}\nSelvkost: ${totals.totSelvkost.toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr\nMed fortjeneste: ${totals.totMedFortjeneste.toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr (${totals.fortjenesteProsent.toFixed(1)} %)${stdInfo}${hoppetInfo}\n\n🚧 Lagring + navigasjon kommer i Patch 14.C.`,
-                    kind: 'info',
+                    message: 'Kalkyle bygget',
+                    subMessage: `${totalBd} bygningsdeler fordelt på ${kalkyler.length} fag`,
+                    kind: 'success',
+                    details: { stats, notes },
                   })
                   console.log('[Patch 14.B] Generert kalkyle-payload:', { kalkyler, faktorer, meta, totals })
                 } catch(e) {
