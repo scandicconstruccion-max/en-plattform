@@ -39544,6 +39544,189 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
 //   ⚠ INGEN MATCH — viser nærmeste mal-konstruksjoner og lar brukeren lage ny
 //   ⏸ HOPPET OVER — for usikker/ignorer-klassifisering
 
+// ─── BIM LAGSETT-DETALJER (Patch 14 Steg A — vis IFC-detaljer) ───────────────
+// Kollapsbar visning av all data IFC-fila har om et bestemt lagsett:
+//   - Geometri-grid (antall, total areal, total lengde, total volum, snitt-høyde)
+//   - Lagstruktur (alle materiallag fra IFC med tykkelse)
+//   - Eksempel-elementer (de første 5 for å bekrefte hva man ser)
+//
+// Brukes inne i lagsett-kort i BimMatchingSeksjon (og potensielt
+// BimKlassifiseringSeksjon senere). Lukket som standard for å unngå støy
+// — brukeren klikker for å utforske.
+
+function BimLagsettDetaljer({ lagsett, isMob }) {
+  const [aapen, setAapen] = useState(false)
+
+  // Beregn snitt-høyde fra elementer (gulv/tak har ikke høyde — gir 0 da)
+  const snittTall = React.useMemo(() => {
+    const elementer = lagsett.elementer || []
+    if (elementer.length === 0) return { snittHoyde: 0, snittLengde: 0, snittAreal: 0 }
+    let sumHoyde = 0, antallMedHoyde = 0
+    let sumLengde = 0, antallMedLengde = 0
+    let sumAreal = 0
+    elementer.forEach(e => {
+      if (e.hoyde > 0) { sumHoyde += e.hoyde; antallMedHoyde++ }
+      if (e.lengde > 0) { sumLengde += e.lengde; antallMedLengde++ }
+      sumAreal += (e.areal || 0)
+    })
+    return {
+      snittHoyde: antallMedHoyde > 0 ? sumHoyde / antallMedHoyde : 0,
+      snittLengde: antallMedLengde > 0 ? sumLengde / antallMedLengde : 0,
+      snittAreal: elementer.length > 0 ? sumAreal / elementer.length : 0,
+    }
+  }, [lagsett])
+
+  const harLengde = (lagsett.totalLengde || 0) > 0
+  const harVolum = (lagsett.totalVolum || 0) > 0
+  const harHoyde = snittTall.snittHoyde > 0
+  const lagListe = (lagsett.layers || []).filter(l => l && (l.material || l.thickness))
+  const eksempler = (lagsett.elementer || []).slice(0, 5)
+
+  // Cellestil for geometri-grid
+  const cellStyle = {
+    background: 'white',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    padding: '6px 9px',
+  }
+
+  return (
+    <div style={{ marginBottom: '8px' }}>
+      {/* Toggle-knapp */}
+      <button
+        onClick={() => setAapen(a => !a)}
+        style={{
+          background: aapen ? '#eff6ff' : '#f8fafc',
+          border: '1px solid ' + (aapen ? '#bfdbfe' : '#e2e8f0'),
+          color: aapen ? '#1e40af' : '#475569',
+          borderRadius: '8px',
+          padding: '6px 10px',
+          fontSize: '11px',
+          fontWeight: '600',
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}
+      >
+        <span style={{ fontSize: '12px' }}>🔍</span>
+        <span>{aapen ? 'Skjul detaljer' : 'Vis detaljer fra IFC'}</span>
+        <span style={{ color: '#94a3b8', fontSize: '10px' }}>{aapen ? '▲' : '▼'}</span>
+      </button>
+
+      {/* Detalj-panel */}
+      {aapen && (
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginTop: '8px' }}>
+
+          {/* Geometri-grid */}
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+              Geometri (fra IFC)
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: isMob ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '6px' }}>
+              <div style={cellStyle}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Antall</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{lagsett.antall || 0} stk</div>
+              </div>
+              <div style={cellStyle}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Total areal</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{(lagsett.totalAreal || 0).toFixed(1)} m²</div>
+              </div>
+              {harLengde && (
+                <div style={cellStyle}>
+                  <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Total lengde</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{lagsett.totalLengde.toFixed(1)} lm</div>
+                </div>
+              )}
+              {harVolum && (
+                <div style={cellStyle}>
+                  <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Total volum</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{lagsett.totalVolum.toFixed(1)} m³</div>
+                </div>
+              )}
+              {harHoyde && (
+                <div style={cellStyle}>
+                  <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Snitt høyde</div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{snittTall.snittHoyde.toFixed(2)} m</div>
+                </div>
+              )}
+              <div style={cellStyle}>
+                <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Snitt areal</div>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{snittTall.snittAreal.toFixed(1)} m²</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Lagstruktur */}
+          {lagListe.length > 0 && (
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                Lagstruktur (fra IFC)
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                {lagListe.map((lag, idx) => {
+                  const tykkelseMm = lag.thickness ? Math.round(lag.thickness * 1000) : null
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', borderBottom: idx < lagListe.length - 1 ? '1px solid #f1f5f9' : 'none', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', minWidth: 0, flex: 1 }}>
+                        <span style={{ background: '#fef3c7', color: '#854d0e', padding: '1px 5px', borderRadius: '3px', fontSize: '9px', fontWeight: '700', flexShrink: 0 }}>{idx + 1}</span>
+                        <span style={{ fontSize: '11px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{lag.material || 'Ukjent material'}</span>
+                      </div>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                        {tykkelseMm !== null ? `${tykkelseMm} mm` : '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+                {(lagsett.totalTykkelse || 0) > 0 && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 10px', borderTop: '1px solid #e2e8f0', background: '#f8fafc' }}>
+                    <span style={{ fontSize: '11px', color: '#475569', fontWeight: '600' }}>Total tykkelse</span>
+                    <span style={{ fontSize: '11px', color: '#0f172a', fontWeight: '700' }}>{lagsett.totalTykkelse.toFixed(0)} mm</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Eksempel-elementer */}
+          {eksempler.length > 0 && (
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                  Eksempler (fra IFC)
+                </div>
+                {(lagsett.elementer || []).length > 5 && (
+                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>Viser 5 av {lagsett.elementer.length}</span>
+                )}
+              </div>
+              <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
+                {eksempler.map((e, idx) => {
+                  const detaljer = []
+                  if (e.lengde > 0) detaljer.push(`${e.lengde.toFixed(1)} lm`)
+                  if (e.areal > 0) detaljer.push(`${e.areal.toFixed(1)} m²`)
+                  if (e.hoyde > 0) detaljer.push(`${e.hoyde.toFixed(2)}m høy`)
+                  if (e.volum > 0 && !e.hoyde) detaljer.push(`${e.volum.toFixed(2)} m³`)
+                  return (
+                    <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px', borderBottom: idx < eksempler.length - 1 ? '1px solid #f1f5f9' : 'none', gap: '8px' }}>
+                      <span style={{ fontSize: '10px', color: '#475569', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1 }}>
+                        {e.navn || `Element ${e.id}`}
+                      </span>
+                      <span style={{ fontSize: '10px', color: '#94a3b8', whiteSpace: 'nowrap' }}>
+                        {detaljer.join(' · ') || '—'}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
@@ -39946,6 +40129,9 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                    aktivStatus === 'hoppet' ? '⏸ Hoppet over' : '⚠ Ingen match'}
                 </div>
               </div>
+
+              {/* IFC-detaljer (kollapsbar) — Patch 14 Steg A */}
+              <BimLagsettDetaljer lagsett={lagsett} isMob={isMob} />
 
               {/* Bekreftet match — vis valgt konstruksjon */}
               {erBekreftet && (
