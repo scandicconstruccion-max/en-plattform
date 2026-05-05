@@ -38483,11 +38483,45 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
     )
   }
 
+  // Status-pille: hvor mange er klassifisert vs hvor mange "usikker" gjenstår
+  const stegStatus = React.useMemo(() => {
+    const totalt = alleVeggLagsett.length + alleGulvLagsett.length
+    if (totalt === 0) return { ferdig: true, tekst: 'Ingen lagsett', farge: 'graa' }
+    const usikre = alleVeggLagsett.filter(({ lagsett }) =>
+      !lagsett.brukerKategori || lagsett.brukerKategori === 'usikker'
+    ).length
+    const ferdig = totalt - usikre
+    if (usikre === 0) return { ferdig: true, tekst: '✓ Ferdig', farge: 'gronn' }
+    return { ferdig: false, tekst: `${ferdig} av ${totalt} klassifisert`, farge: 'blaa' }
+  }, [alleVeggLagsett, alleGulvLagsett, oppdater])
+
+  const stegFarger = {
+    gronn: { bg: '#d1fae5', tekst: '#065f46', sirkel_bg: '#10b981' },
+    blaa:  { bg: '#dbeafe', tekst: '#1e40af', sirkel_bg: '#3b82f6' },
+    graa:  { bg: '#f1f5f9', tekst: '#64748b', sirkel_bg: '#94a3b8' },
+  }
+  const farger = stegFarger[stegStatus.farge]
+
   return (
-    <div style={{ marginTop:'18px' }}>
-      <h3 style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
-        🧭 Klassifiser lagsett
-      </h3>
+    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+      {/* Header med steg-merke + status-pille */}
+      <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
+        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: farger.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>1</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <h3 style={{ margin:0, fontSize: isMob ? '15px' : '16px', fontWeight:'700', color:'#0f172a' }}>
+            🧭 Klassifiser lagsett
+          </h3>
+          <p style={{ margin:'2px 0 0', fontSize:'12px', color:'#64748b' }}>
+            Bekreft eller endre auto-klassifisering før matching
+          </p>
+        </div>
+        <div style={{ background: farger.bg, color: farger.tekst, padding:'5px 11px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
+          {stegStatus.tekst}
+        </div>
+      </div>
+
+      <div style={{ height:'1px', background:'#f1f5f9', margin:'0 0 14px' }} />
+
       <p style={{ margin:'0 0 6px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
         Lagsett med tydelig lagstruktur er auto-klassifisert (markert <strong style={{ color:'#10b981' }}>✓ Høy sikkerhet</strong>). Lagsett uten klar lagstruktur har fått en default-antakelse (markert <strong style={{ color:'#f59e0b' }}>⚠ Middels</strong> eller <strong style={{ color:'#94a3b8' }}>? Lav sikkerhet</strong>) — disse må du <strong>verifisere manuelt</strong>.
       </p>
@@ -39743,11 +39777,43 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
     bekreftet: '#3b82f6',
   }
 
+  // Status-pille: hvor mange er bekreftet/auto-matchet vs total
+  const stegStatus = React.useMemo(() => {
+    const totalt = matchResultater.length
+    if (totalt === 0) return { tekst: 'Ingen lagsett', farge: 'graa' }
+    const fullfort = tellinger.bekreftet + tellinger.auto
+    if (fullfort === totalt) return { tekst: '✓ Ferdig', farge: 'gronn' }
+    if (fullfort === 0) return { tekst: `0 av ${totalt} matchet`, farge: 'graa' }
+    return { tekst: `${fullfort} av ${totalt} matchet`, farge: 'blaa' }
+  }, [matchResultater, tellinger, oppdater])
+
+  const stegFarger = {
+    gronn: { bg: '#d1fae5', tekst: '#065f46', sirkel_bg: '#10b981' },
+    blaa:  { bg: '#dbeafe', tekst: '#1e40af', sirkel_bg: '#3b82f6' },
+    graa:  { bg: '#f1f5f9', tekst: '#64748b', sirkel_bg: '#94a3b8' },
+  }
+  const stegFarge = stegFarger[stegStatus.farge]
+
   return (
-    <div style={{ marginTop:'18px' }}>
-      <h3 style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
-        🎯 Match mot biblioteket
-      </h3>
+    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+      {/* Header med steg-merke + status-pille */}
+      <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
+        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: stegFarge.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>2</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <h3 style={{ margin:0, fontSize: isMob ? '15px' : '16px', fontWeight:'700', color:'#0f172a' }}>
+            🎯 Match mot biblioteket
+          </h3>
+          <p style={{ margin:'2px 0 0', fontSize:'12px', color:'#64748b' }}>
+            Koble lagsettene til ferdige konstruksjoner
+          </p>
+        </div>
+        <div style={{ background: stegFarge.bg, color: stegFarge.tekst, padding:'5px 11px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
+          {stegStatus.tekst}
+        </div>
+      </div>
+
+      <div style={{ height:'1px', background:'#f1f5f9', margin:'0 0 14px' }} />
+
       <p style={{ margin:'0 0 12px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
         For hvert klassifisert lagsett sjekker vi om biblioteket inneholder en <strong>eksakt match</strong> (alle materialgrupper og tykkelser stemmer). Hvis ikke, kan du lage ny konstruksjon basert på en mal eller fra blanke ark.
       </p>
@@ -40251,7 +40317,7 @@ function BimImportPage({ onTilbake, onAlert }) {
 
           {/* Mengder per kategori — Patch 10 */}
           {metadata.mengder && (
-            <div style={{ marginTop:'18px' }}>
+            <div style={{ marginTop:'18px', marginBottom:'28px' }}>
               <h3 style={{ margin:'0 0 12px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>📏 Mengder per kategori</h3>
               <BimMengdeVisning mengder={metadata.mengder} isMob={isMob} />
             </div>
@@ -40268,7 +40334,7 @@ function BimImportPage({ onTilbake, onAlert }) {
           )}
 
           {/* Neste-steg-info */}
-          <div style={{ marginTop:'18px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
+          <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
             <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i Sesjon C.2 og videre</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
               <strong>Sesjon C.1 (denne):</strong> Du kan nå opprette nye konstruksjoner manuelt via dialogen.<br/>
