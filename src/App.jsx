@@ -38556,7 +38556,236 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
   )
 }
 
-// ─── PRISBOK-SØKEFELT (Patch 13 Sesjon C.2.B) ────────────────────────────────
+// ─── PRISBOK-SØK (Patch 13.B.5) — sentral, smart, gjenbrukbar ────────────────
+// Én hook for alle prisbok-søk i hele appen. Sentralisert logikk gir konsistent
+// adferd, lik relevans-rangering, og lettere vedlikehold.
+//
+// Bruksmønster:
+//   const { sok, lasterSok, aktivPrislisteKlar } = usePrisbokSoek()
+//   const treff = await sok('rockwool 100mm', { maxResultater: 10 })
+
+// Cache aktiv prisliste én gang per session — globalt.
+let _aktivPrislisteCache = null
+let _aktivPrislisteCacheUserId = null
+let _aktivPrislistePromise = null  // for å forhindre parallelle oppslag
+
+const hentAktivPrislisteCached = async (userId) => {
+  if (!userId) return null
+  if (_aktivPrislisteCacheUserId === userId && _aktivPrislisteCache !== null) {
+    return _aktivPrislisteCache
+  }
+  if (_aktivPrislistePromise) return _aktivPrislistePromise
+  _aktivPrislistePromise = (async () => {
+    try {
+      const { data } = await supabase.from('prislister')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('aktiv', true)
+        .limit(1).maybeSingle()
+      _aktivPrislisteCache = data?.id || null
+      _aktivPrislisteCacheUserId = userId
+      return _aktivPrislisteCache
+    } catch (e) {
+      _aktivPrislisteCache = null
+      return null
+    } finally {
+      _aktivPrislistePromise = null
+    }
+  })()
+  return _aktivPrislistePromise
+}
+
+// Sanitiser søketerm — fjern tegn som forstyrrer PostgREST
+const sanitiserSoeketerm = (s) => (s || '').replace(/[^a-zA-ZæøåÆØÅ0-9\s-]/g, ' ').trim()
+
+// Smart relevans-rangering. Tar et søkeresultat og en søketerm, returnerer en score 0-1000.
+// Høyere score = mer relevant.
+//
+// Vekt-system:
+//   Alle søkeord matcher i navnet:        +500
+//   Eksakt navn-match (hele søkestrengen): +300
+//   Søkeordene står i samme rekkefølge:   +150
+//   Søkeord i begynnelsen av navnet:      +100 per ord
+//   Kort navn (mer presist):              +1 per tegn under 50 (omvendt)
+//   Hvert ekstra match-ord:               +50
+//
+// Penalisering:
+//   Søkeord finnes som del av annet ord (f.eks. "isolasjon" i "isolasjonsfest"):  -30
+function rangerTreff(rad, soeketermSanitisert, soekeOrd) {
+  const navn = (rad.varenavn || '').toLowerCase()
+  const navnUtenSpesial = navn.replace(/[^a-zA-ZæøåÆØÅ0-9\s]/g, ' ')
+  let score = 0
+
+  // Eksakt match (hele søkestrengen finnes som sammenhengende substreng)
+  if (navn.includes(soeketermSanitisert.toLowerCase())) {
+    score += 300
+  }
+
+  // Match per søkeord
+  const navnOrd = navnUtenSpesial.split(/\s+/).filter(Boolean)
+  let antallEksakteOrdMatch = 0
+  let antallDelvisMatch = 0
+  let posisjonsBonus = 0
+
+  for (const w of soekeOrd) {
+    const wLower = w.toLowerCase()
+    // Sjekk om hele søkeordet finnes som eget ord (eksakt match)
+    const eksaktOrdMatch = navnOrd.some(no => no === wLower)
+    if (eksaktOrdMatch) {
+      antallEksakteOrdMatch++
+      // Bonus hvis det er i begynnelsen
+      const indeks = navnOrd.indexOf(wLower)
+      if (indeks === 0) posisjonsBonus += 100
+      else if (indeks <= 2) posisjonsBonus += 50
+    } else if (navn.includes(wLower)) {
+      antallDelvisMatch++
+      // Penalisering hvis det er som del av et annet ord
+      // (f.eks. "isolasjon" i "isolasjonsfest")
+      const erDelAvLengreOrd = navnOrd.some(no => no !== wLower && no.includes(wLower))
+      if (erDelAvLengreOrd) score -= 30
+    }
+  }
+
+  // Bonus for hvert eksakte ord-match
+  score += antallEksakteOrdMatch * 50
+  score += antallDelvisMatch * 10
+  score += posisjonsBonus
+
+  // Hvis ALLE søkeord matcher (eksakt eller delvis): stor bonus
+  if (antallEksakteOrdMatch + antallDelvisMatch >= soekeOrd.length) {
+    score += 500
+  }
+
+  // Sekvens-bonus: forekommer søkeordene i samme rekkefølge?
+  if (soekeOrd.length >= 2) {
+    let lastIndex = -1
+    let allInOrder = true
+    for (const w of soekeOrd) {
+      const idx = navn.indexOf(w.toLowerCase(), lastIndex + 1)
+      if (idx === -1) { allInOrder = false; break }
+      lastIndex = idx
+    }
+    if (allInOrder) score += 150
+  }
+
+  // Korthet-bonus: kortere navn er mer presise (50 - lengde, max 1 per tegn)
+  const lengdeBonus = Math.max(0, 50 - navn.length)
+  score += lengdeBonus
+
+  // NOBB-match (eksakt varenummer)
+  if (rad.varenummer && soekeOrd.length === 1 && /^\d+$/.test(soekeOrd[0])) {
+    if (rad.varenummer === soekeOrd[0]) score += 1000  // perfekt NOBB-treff
+    else if (rad.varenummer.startsWith(soekeOrd[0])) score += 500
+    else if (rad.varenummer.includes(soekeOrd[0])) score += 200
+  }
+
+  return Math.max(0, score)
+}
+
+// Hovedsøkefunksjonen. Returnerer rangerte, dedupliserte resultater.
+async function utforPrisbokSoek({
+  userId,
+  soeketerm,
+  maxResultater = 10,
+  kategoriFilter = null,
+}) {
+  if (!userId) return []
+  const renTerm = sanitiserSoeketerm(soeketerm)
+  if (!renTerm || renTerm.length < 2) return []
+
+  const soekeOrd = renTerm.split(/\s+/).filter(w => w.length >= 2)
+  if (soekeOrd.length === 0) return []
+
+  // Hent aktiv prisliste fra cache
+  const prislisteId = await hentAktivPrislisteCached(userId)
+
+  // Strategi: hent rikelig med kandidater på første søkeord (trigram-indeks gjør det raskt),
+  // så ranger og filtrer i JavaScript. Dette er pålitelig og rask.
+  const forsteOrd = soekeOrd[0]
+  const erNumerisk = /^\d+$/.test(forsteOrd)
+
+  // Bygg PRIMÆR-spørring (med prisliste eller user-filter)
+  const byggQuery = (medFilter) => {
+    let q = supabase.from('prisbok')
+      .select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
+    if (medFilter) {
+      if (prislisteId) q = q.eq('prisliste_id', prislisteId)
+      else q = q.eq('user_id', userId)
+    }
+    if (erNumerisk) {
+      // NOBB-søk: leter både i varenummer og varenavn
+      q = q.or(`varenummer.ilike.${forsteOrd}%,varenavn.ilike.%${forsteOrd}%`)
+    } else {
+      q = q.ilike('varenavn', `%${forsteOrd}%`)
+    }
+    if (kategoriFilter) q = q.eq('kategori', kategoriFilter)
+    return q.limit(100)  // hent rikelig med kandidater for å kunne ranger
+  }
+
+  let rader = []
+  try {
+    const { data, error } = await byggQuery(true)
+    if (error) {
+      console.warn('[prisbok] søk med filter feilet, prøver uten filter:', error.message)
+      const { data: fbData } = await byggQuery(false)
+      rader = fbData || []
+    } else {
+      rader = data || []
+    }
+  } catch (e) {
+    console.warn('[prisbok] søk-exception:', e)
+    return []
+  }
+
+  // Dedupliser på varenummer (samme NOBB-kode kan finnes i flere prislister)
+  const sett = new Map()
+  for (const r of rader) {
+    const key = r.varenummer || `_${r.id}`
+    if (!sett.has(key)) sett.set(key, r)
+  }
+  const unike = Array.from(sett.values())
+
+  // Rang hver rad
+  const medScore = unike.map(r => ({
+    ...r,
+    _score: rangerTreff(r, renTerm, soekeOrd),
+  }))
+
+  // Sorter etter score (desc), så alfabetisk sekundært
+  medScore.sort((a, b) => {
+    if (b._score !== a._score) return b._score - a._score
+    return (a.varenavn || '').localeCompare(b.varenavn || '', 'nb')
+  })
+
+  // Filtrer bort rader med score 0 (ingen treff på søkeord)
+  const filtrert = medScore.filter(r => r._score > 0)
+
+  return filtrert.slice(0, maxResultater)
+}
+
+// React hook som wrapper utforPrisbokSoek
+function usePrisbokSoek() {
+  const { user } = useAuth()
+  const [aktivPrislisteKlar, setAktivPrislisteKlar] = useState(false)
+
+  // Forhåndsinnlast aktiv prisliste når brukeren er klar
+  useEffect(() => {
+    if (!user?.id) return
+    hentAktivPrislisteCached(user.id).then(() => setAktivPrislisteKlar(true))
+  }, [user?.id])
+
+  const sok = React.useCallback(async (soeketerm, opts = {}) => {
+    return utforPrisbokSoek({
+      userId: user?.id,
+      soeketerm,
+      ...opts,
+    })
+  }, [user?.id])
+
+  return { sok, aktivPrislisteKlar }
+}
+
+// ─── PRISBOK-SØKEFELT (Patch 13 Sesjon C.2.B, refaktorert i Patch 13.B.5) ─────
 // Gjenbrukbart søkefelt mot prisbok-tabellen i Supabase.
 // Brukt i BimNyKonstruksjonDialog for å fylle ut materialer raskt.
 //
@@ -38574,15 +38803,15 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
 //   - Klikk utenfor lukker dropdown
 
 function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) {
-  const { user } = useAuth()
+  const { sok } = usePrisbokSoek()
   const [soekTekst, setSoekTekst] = useState(value?.varenavn || '')
   const [resultater, setResultater] = useState([])
   const [aapenDropdown, setAapenDropdown] = useState(false)
   const [laster, setLaster] = useState(false)
-  const [aktivPrislisteId, setAktivPrislisteId] = useState(null)
   const containerRef = React.useRef(null)
   const inputRef = React.useRef(null)
   const soekTimeoutRef = React.useRef(null)
+  const soekIdRef = React.useRef(0)
 
   // Synkroniser visning når value endres utenfra (f.eks. ved redigering)
   useEffect(() => {
@@ -38592,108 +38821,19 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value?.varenavn])
 
-  // Hent aktiv prisliste én gang
-  useEffect(() => {
-    const hentPrisliste = async () => {
-      if (!user?.id) return
-      try {
-        const { data: pl } = await supabase.from('prislister')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('aktiv', true)
-          .limit(1).single()
-        if (pl?.id) setAktivPrislisteId(pl.id)
-      } catch(e) {
-        // Ingen aktiv prisliste — det er OK, vi faller tilbake til user_id
-      }
-    }
-    hentPrisliste()
-  }, [user?.id])
-
-  // Søkefunksjon mot prisbok
+  // Søkefunksjon — bruker sentral usePrisbokSoek-hook
   const utforSoek = async (term) => {
-    if (!user?.id) return
+    const minId = ++soekIdRef.current
     setLaster(true)
     try {
-      // Aggressiv sanitisering: behold KUN bokstaver (inkl. norske), tall, mellomrom og bindestrek
-      const sanitiserTerm = (s) => (s || '').replace(/[^a-zA-ZæøåÆØÅ0-9\s-]/g, ' ').trim()
-      const renTerm = sanitiserTerm(term)
-
-      // Beskytt mot tom search — krever minst 2 tegn netto
-      if (!renTerm || renTerm.length < 2) {
-        setResultater([])
-        setLaster(false)
-        return
-      }
-
-      let query = supabase.from('prisbok')
-        .select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
-      if (aktivPrislisteId) query = query.eq('prisliste_id', aktivPrislisteId)
-      else query = query.eq('user_id', user.id)
-
-      const words = renTerm.split(/\s+/).filter(w => w.length >= 2)
-      if (words.length === 0) {
-        setResultater([])
-        setLaster(false)
-        return
-      }
-
-      // FORENKLET STRATEGI: Bruker bare det første ordet som søkebegrep
-      // Multi-ilike (flere AND-betingelser) ser ut til å trippe Supabase 500.
-      // Bedre å returnere flere treff og la brukeren velge enn å feile.
-      const forsteOrd = words[0]
-      if (/^\d+$/.test(forsteOrd)) {
-        // Numerisk: søk i varenummer ELLER varenavn
-        query = query.or(`varenummer.ilike.%${forsteOrd}%,varenavn.ilike.%${forsteOrd}%`)
-      } else {
-        // Tekst: enkel ilike på varenavn
-        query = query.ilike('varenavn', `%${forsteOrd}%`)
-      }
-
-      console.log('[prisbok] søker:', { term: renTerm, forsteOrd, aktivPrislisteId, words: words.length })
-      const { data, error } = await query.order('varenavn').limit(20)  // hent flere så brukeren har valg
-
-      if (error) {
-        console.warn('[prisbok] primær søk feilet:', error.message, 'term:', renTerm, 'fullError:', error)
-        // Fallback: Prøv uten prisliste-/user-filter
-        try {
-          let fb = supabase.from('prisbok').select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
-          if (/^\d+$/.test(forsteOrd)) {
-            fb = fb.or(`varenummer.ilike.%${forsteOrd}%,varenavn.ilike.%${forsteOrd}%`)
-          } else {
-            fb = fb.ilike('varenavn', `%${forsteOrd}%`)
-          }
-          const { data: fbData, error: fbError } = await fb.order('varenavn').limit(20)
-          if (fbError) {
-            console.warn('[prisbok] fallback søk feilet også:', fbError.message, 'fullError:', fbError)
-            setResultater([])
-          } else {
-            console.log('[prisbok] fallback funnet:', (fbData || []).length, 'rader')
-            setResultater(fbData || [])
-          }
-        } catch(e) {
-          console.warn('[prisbok] fallback exception:', e)
-          setResultater([])
-        }
-      } else {
-        // Hvis vi har flere ord, filtrer i JS for de som matcher alle
-        let filtered = data || []
-        if (words.length > 1 && filtered.length > 0) {
-          const restWords = words.slice(1).map(w => w.toLowerCase())
-          filtered = filtered.filter(rad => {
-            const navn = (rad.varenavn || '').toLowerCase()
-            return restWords.every(w => navn.includes(w))
-          })
-          // Hvis filteret eliminerte alt, vis original-resultatene heller enn ingenting
-          if (filtered.length === 0) filtered = (data || []).slice(0, 8)
-        }
-        setResultater(filtered.slice(0, 8))
-      }
+      const treff = await sok(term, { maxResultater: 8 })
+      // Avbryt hvis et nyere søk har startet (race condition-beskyttelse)
+      if (soekIdRef.current !== minId) return
+      setResultater(treff)
     } catch(e) {
-      console.warn('[prisbok] søkefeil:', e)
-      setResultater([])
+      if (soekIdRef.current === minId) setResultater([])
     }
-    setLaster(false)
+    if (soekIdRef.current === minId) setLaster(false)
   }
 
   // Debounced søk når brukeren skriver
@@ -38707,7 +38847,7 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
     }, 300)
     return () => { if (soekTimeoutRef.current) clearTimeout(soekTimeoutRef.current) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [soekTekst, aapenDropdown, aktivPrislisteId])
+  }, [soekTekst, aapenDropdown])
 
   // Lukk dropdown ved klikk utenfor
   useEffect(() => {
@@ -46545,6 +46685,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           const [activeKat, setActiveKat] = useState(null)
           const [plId, setPlId] = useState(null)
           const searchRef = React.useRef(0)
+          const { sok: prisbokSok } = usePrisbokSoek()
 
           const PRODUKT_KATEGORIER = [
             { id: 'isolasjon', label: 'Isolasjon', emoji: '🧱', keywords: ['ISOLASJON','EPS','XPS','GLAVA','ROCKWOOL','FLEXI','SUNDOLITT','JACKO','MINERALULL'] },
@@ -46559,9 +46700,9 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             { id: 'ror', label: 'Rør/VVS', emoji: '🔧', keywords: ['PEX','AVLØP','DRENS','SLUK','VANNRØR'] },
           ]
 
-          // Load prisliste ID once on mount
+          // Load prisliste ID once on mount (for category-only search fallback)
           useEffect(() => {
-            supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+            supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).maybeSingle()
               .then(({ data }) => { if (data) setPlId(data.id) })
               .catch(() => {})
           }, [])
@@ -46575,42 +46716,41 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
             setHasSearched(true)
 
             try {
-              let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
-              if (plId) query = query.eq('prisliste_id', plId)
-              else query = query.eq('user_id', user?.id)
+              // Hvis brukeren har skrevet tekst → bruk smart usePrisbokSoek
+              // (med eventuell ekstra kategori-filter i etterkant)
+              if (term.length >= 2) {
+                const treff = await prisbokSok(term, { maxResultater: 40 })
+                if (searchRef.current !== searchId) return
 
-              if (term.length >= 2 && katId) {
-                // Text + category: each word must match AND category keyword
-                const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                const kw = katObj?.keywords || []
-                const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                query = query.or(catFilters)
-                const words = term.split(/\s+/).filter(w => w.length >= 2)
-                words.forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
-              } else if (term.length >= 2) {
-                // Text only: split into words, each word must match in varenavn
-                // First check if it looks like a NOBB number (all digits)
-                const words = term.split(/\s+/).filter(w => w.length >= 1)
-                if (words.length === 1 && /^\d+$/.test(words[0])) {
-                  query = query.or(`varenummer.ilike.%${words[0]}%,varenavn.ilike.%${words[0]}%`)
-                } else {
-                  words.filter(w => w.length >= 2).forEach(w => { query = query.ilike('varenavn', `%${w}%`) })
+                let resultater = treff
+                // Hvis kategori er valgt, filtrer på kategori-keywords i tillegg
+                if (katId) {
+                  const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
+                  const kw = (katObj?.keywords || []).map(k => k.trim().toUpperCase())
+                  resultater = resultater.filter(r => {
+                    const navn = (r.varenavn || '').toUpperCase()
+                    return kw.some(k => navn.includes(k))
+                  })
                 }
+                setRes(resultater)
               } else if (katId) {
-                // Category only - show first keyword results
+                // Kategori-bare-søk: dette er en spesialcase som vi ikke kan bruke
+                // hook'en til (siden den krever søketerm). Direkt spørring her.
+                let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
+                if (plId) query = query.eq('prisliste_id', plId)
+                else query = query.eq('user_id', user?.id)
                 const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
                 const kw = katObj?.keywords || []
                 const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                query = query.or(catFilters)
+                if (catFilters) query = query.or(catFilters)
+                const { data, error } = await query.order('varenavn').limit(40)
+                if (searchRef.current !== searchId) return
+                if (!error) setRes(data || [])
+                else setRes([])
               }
-
-              const { data, error } = await query.order('varenavn').limit(40)
-
-              // Only update if this is still the latest search
-              if (searchRef.current !== searchId) return
-              if (!error) setRes(data || [])
-              else setRes([])
-            } catch(e) { if (searchRef.current === searchId) setRes([]) }
+            } catch(e) {
+              if (searchRef.current === searchId) setRes([])
+            }
             if (searchRef.current === searchId) setSearching(false)
           }
 
