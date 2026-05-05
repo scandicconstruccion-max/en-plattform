@@ -37023,11 +37023,14 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
         let minZ = Infinity, maxZ = -Infinity
         let harPunkter = false
 
-        // Patch 15.E: Samle alle globale vertices for konveks-hull-bygging
-        // (per de tre projeksjons-flatene XY, XZ, YZ).
-        const punkterXY = []
-        const punkterXZ = []
-        const punkterYZ = []
+        // Patch 15.F: Samle alle globale vertices (ett array), så filtrer etter
+        // minX/Y/Z etter at bbox er kjent. Dette gir oss "ekte" plan/snitt-projeksjoner:
+        //   - Plan = vertices NÆR minZ (bunnen av elementet) projisert på XY
+        //   - Snitt front = vertices NÆR minY (forsiden av elementet) projisert på XZ
+        //   - Snitt side = vertices NÆR minX (siden av elementet) projisert på YZ
+        // Dette løser problemet hvor vegger sett ovenfra ble store rektangler
+        // istedenfor tynne striper.
+        const alleVerts = []  // [[x,y,z], ...]
 
         // Hver placedGeometry har en flatTransformation (16 floats — column-major 4x4)
         // og en geometryExpressID som peker til selve mesh-en
@@ -37057,8 +37060,8 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
           // Hvis det allerede er for mange vertices, sample annenhver/hver-tredje
           // for å holde oss under MAX. Ikke kritisk for hull-kvalitet.
           let stride = 1
-          if (punkterXY.length + numVerts > MAX_VERTS_PER_ELEMENT) {
-            stride = Math.max(1, Math.ceil(numVerts / Math.max(1, MAX_VERTS_PER_ELEMENT - punkterXY.length)))
+          if (alleVerts.length + numVerts > MAX_VERTS_PER_ELEMENT) {
+            stride = Math.max(1, Math.ceil(numVerts / Math.max(1, MAX_VERTS_PER_ELEMENT - alleVerts.length)))
           }
 
           for (let v = 0; v < numVerts; v += stride) {
@@ -37077,27 +37080,51 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
             if (gz > maxZ) maxZ = gz
             harPunkter = true
 
-            // Patch 15.E: Lagre projiserte punkter (kun hvis vi har plass)
-            if (punkterXY.length < MAX_VERTS_PER_ELEMENT) {
-              punkterXY.push([gx, gy])
-              punkterXZ.push([gx, gz])
-              punkterYZ.push([gy, gz])
+            // Patch 15.F: Lagre raw vertex for senere filtrering
+            if (alleVerts.length < MAX_VERTS_PER_ELEMENT) {
+              alleVerts.push([gx, gy, gz])
             }
           }
           try { geo.delete() } catch(e) {}
         }
 
         if (harPunkter) {
-          // Patch 15.E: Bygg konvekse hull for hver projeksjon
+          // Patch 15.F: Filtrér vertices for hver projeksjon, så bygg konvekse hull.
+          //
+          // Filter-terskel: 5 % av elementets spenn i den respektive aksen, eller
+          // minimum 50mm (gitt at vi ikke kjenner enheten enda — 0.05 fungerer for både m og 50mm i mm).
+          // For typiske vegger er Z-spenn ~2.5m, så 5 % = 12.5cm — det fanger hele bunnflaten.
+          //
+          // Hvis filter gir < 3 punkter (sjelden, kun for veldig flate elementer), bruker vi alle vertices.
           let hullXY = null, hullXZ = null, hullYZ = null
-          if (punkterXY.length >= 3) {
+
+          if (alleVerts.length >= 3) {
+            const tersklZ = Math.max((maxZ - minZ) * 0.05, 0.05)  // 5% av høyde, min 50mm/0.05m
+            const tersklY = Math.max((maxY - minY) * 0.05, 0.05)
+            const tersklX = Math.max((maxX - minX) * 0.05, 0.05)
+
+            const punkterBunn = []   // for plan: nær minZ, projisert på XY
+            const punkterFront = []  // for snitt front: nær minY, projisert på XZ
+            const punkterSide = []   // for snitt side: nær minX, projisert på YZ
+
+            for (const v of alleVerts) {
+              const [vx, vy, vz] = v
+              if (vz <= minZ + tersklZ) punkterBunn.push([vx, vy])
+              if (vy <= minY + tersklY) punkterFront.push([vx, vz])
+              if (vx <= minX + tersklX) punkterSide.push([vy, vz])
+            }
+
+            // Fallback til alle vertices hvis filter gir for få punkter
+            const fallbackXY = alleVerts.map(v => [v[0], v[1]])
+            const fallbackXZ = alleVerts.map(v => [v[0], v[2]])
+            const fallbackYZ = alleVerts.map(v => [v[1], v[2]])
+
             try {
-              hullXY = convexHull2D(punkterXY)
-              hullXZ = convexHull2D(punkterXZ)
-              hullYZ = convexHull2D(punkterYZ)
+              hullXY = convexHull2D(punkterBunn.length >= 3 ? punkterBunn : fallbackXY)
+              hullXZ = convexHull2D(punkterFront.length >= 3 ? punkterFront : fallbackXZ)
+              hullYZ = convexHull2D(punkterSide.length >= 3 ? punkterSide : fallbackYZ)
               if (hullXY && hullXY.length >= 3) diagnose.medHull++
             } catch(e) {
-              // Hvis hull-bygging feiler, fall tilbake til bbox
               hullXY = hullXZ = hullYZ = null
             }
           }
