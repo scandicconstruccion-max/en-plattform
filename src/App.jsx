@@ -36922,6 +36922,189 @@ function buildMaterialLayerLookup(api, mod, modelID) {
   return lookup
 }
 
+// ─── FOTAVTRYKK-EKSTRAKSJON FRA IFC (Patch 15.A) ─────────────────────────────
+// Henter 2D-bounding-box per element for senere visning i 2D-grunnplan.
+// For hvert element: { minX, maxX, minY, maxY, minZ, maxZ } i globale koordinater.
+//
+// Vi henter via web-ifc sin StreamAllMeshes som gir oss alle mesh-er + transformasjon.
+// For 15.A nøyer vi oss med bounding-box (rektangel) — eksakte konturer kan komme i 15.B/C.
+//
+// Diagnose-data: Vi teller hvor mange elementer som fikk parsbar geometri,
+// kun bounding-box-fallback, eller ingen geometri i det hele tatt.
+
+async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
+  const fotavtrykkMap = new Map()  // expressID → { minX, maxX, minY, maxY, minZ, maxZ }
+  const diagnose = {
+    suksess: 0,        // fikk full bounding-box fra geometri
+    tomGeometri: 0,    // mesh fantes men hadde 0 vertices
+    feilet: 0,         // exception ved henting
+    minSpenn: { x: [Infinity, -Infinity], y: [Infinity, -Infinity], z: [Infinity, -Infinity] },
+  }
+
+  if (onProgress) onProgress('Henter geometri fra modellen — dette kan ta litt tid...')
+
+  try {
+    // StreamAllMeshes streamer alle mesh-er én etter én via callback.
+    // Vi unngår å holde alt i minnet samtidig.
+    api.StreamAllMeshes(modelID, (mesh) => {
+      const expressID = mesh.expressID
+      if (!expressID) return
+      try {
+        const placed = mesh.geometries
+        if (!placed || placed.size === undefined) return
+        const numPlaced = placed.size()
+        if (numPlaced === 0) {
+          diagnose.tomGeometri++
+          return
+        }
+
+        let minX = Infinity, maxX = -Infinity
+        let minY = Infinity, maxY = -Infinity
+        let minZ = Infinity, maxZ = -Infinity
+        let harPunkter = false
+
+        // Hver placedGeometry har en flatTransformation (16 floats — column-major 4x4)
+        // og en geometryExpressID som peker til selve mesh-en
+        for (let i = 0; i < numPlaced; i++) {
+          const placedGeo = placed.get(i)
+          const geoID = placedGeo.geometryExpressID
+          const matrix = placedGeo.flatTransformation  // Float64Array(16)
+          if (!geoID || !matrix) continue
+
+          let geo
+          try { geo = api.GetGeometry(modelID, geoID) } catch(e) { continue }
+          if (!geo) continue
+
+          // GetVertexData returnerer pointer til Float32Array med [x,y,z,nx,ny,nz, x,y,z,nx,ny,nz, ...]
+          const vertsPtr = geo.GetVertexData()
+          const vertsSize = geo.GetVertexDataSize()
+          if (!vertsPtr || vertsSize === 0) {
+            try { geo.delete() } catch(e) {}
+            continue
+          }
+          // GetVertexArray returnerer selve Float32Array
+          const verts = api.GetVertexArray(vertsPtr, vertsSize)
+          // Hver vertex er 6 floats (pos+normal). Stride = 6.
+          // Vi trenger kun pos (første 3 floats per vertex)
+          const numVerts = vertsSize / 6
+          for (let v = 0; v < numVerts; v++) {
+            const lx = verts[v * 6 + 0]
+            const ly = verts[v * 6 + 1]
+            const lz = verts[v * 6 + 2]
+            // Anvend flatTransformation (column-major)
+            // gx = m0*lx + m4*ly + m8*lz + m12
+            // gy = m1*lx + m5*ly + m9*lz + m13
+            // gz = m2*lx + m6*ly + m10*lz + m14
+            const gx = matrix[0] * lx + matrix[4] * ly + matrix[8]  * lz + matrix[12]
+            const gy = matrix[1] * lx + matrix[5] * ly + matrix[9]  * lz + matrix[13]
+            const gz = matrix[2] * lx + matrix[6] * ly + matrix[10] * lz + matrix[14]
+            if (gx < minX) minX = gx
+            if (gx > maxX) maxX = gx
+            if (gy < minY) minY = gy
+            if (gy > maxY) maxY = gy
+            if (gz < minZ) minZ = gz
+            if (gz > maxZ) maxZ = gz
+            harPunkter = true
+          }
+          try { geo.delete() } catch(e) {}
+        }
+
+        if (harPunkter) {
+          fotavtrykkMap.set(expressID, { minX, maxX, minY, maxY, minZ, maxZ })
+          diagnose.suksess++
+          // Oppdater globalt spenn (for diagnose-rapport)
+          if (minX < diagnose.minSpenn.x[0]) diagnose.minSpenn.x[0] = minX
+          if (maxX > diagnose.minSpenn.x[1]) diagnose.minSpenn.x[1] = maxX
+          if (minY < diagnose.minSpenn.y[0]) diagnose.minSpenn.y[0] = minY
+          if (maxY > diagnose.minSpenn.y[1]) diagnose.minSpenn.y[1] = maxY
+          if (minZ < diagnose.minSpenn.z[0]) diagnose.minSpenn.z[0] = minZ
+          if (maxZ > diagnose.minSpenn.z[1]) diagnose.minSpenn.z[1] = maxZ
+        } else {
+          diagnose.tomGeometri++
+        }
+      } catch(e) {
+        diagnose.feilet++
+      }
+    })
+  } catch(e) {
+    console.error('[ifc] StreamAllMeshes feilet:', e)
+  }
+
+  console.log(`[ifc] fotavtrykk: ${diagnose.suksess} ok, ${diagnose.tomGeometri} tom, ${diagnose.feilet} feilet`)
+  if (diagnose.suksess > 0) {
+    const sx = diagnose.minSpenn.x[1] - diagnose.minSpenn.x[0]
+    const sy = diagnose.minSpenn.y[1] - diagnose.minSpenn.y[0]
+    const sz = diagnose.minSpenn.z[1] - diagnose.minSpenn.z[0]
+    console.log(`[ifc] modell-spenn: ${sx.toFixed(1)}m × ${sy.toFixed(1)}m × ${sz.toFixed(1)}m`)
+  }
+
+  return { fotavtrykkMap, diagnose }
+}
+
+// ─── ETASJE-LOOKUP (Patch 15.A) ──────────────────────────────────────────────
+// Bygger Map<elementID, { etasjeId, etasjeNavn, elevation }> via
+// IfcRelContainedInSpatialStructure-relasjonen.
+// Fallback til Z-koordinat-gjetting hvis relasjonen mangler.
+
+function byggEtasjeLookup(api, mod, modelID) {
+  const elementToEtasje = new Map()
+  const etasjer = new Map()  // etasjeID → { id, navn, elevation }
+
+  // Først: bygg liste over alle IfcBuildingStorey (etasjer)
+  try {
+    if (typeof mod.IFCBUILDINGSTOREY !== 'undefined') {
+      const storeyIds = api.GetLineIDsWithType(modelID, mod.IFCBUILDINGSTOREY)
+      const num = storeyIds.size()
+      for (let i = 0; i < num; i++) {
+        const id = storeyIds.get(i)
+        let storey
+        try { storey = api.GetLine(modelID, id) } catch(e) { continue }
+        if (!storey) continue
+        etasjer.set(id, {
+          id,
+          navn: storey?.Name?.value || `Etasje ${id}`,
+          elevation: storey?.Elevation?.value || 0,
+        })
+      }
+    }
+  } catch(e) { console.warn('[ifc] kunne ikke bygge etasje-liste:', e) }
+
+  // Deretter: koble elementer til etasjer via IfcRelContainedInSpatialStructure
+  try {
+    if (typeof mod.IFCRELCONTAINEDINSPATIALSTRUCTURE !== 'undefined') {
+      const relIds = api.GetLineIDsWithType(modelID, mod.IFCRELCONTAINEDINSPATIALSTRUCTURE)
+      const num = relIds.size()
+      for (let i = 0; i < num; i++) {
+        const relId = relIds.get(i)
+        let rel
+        try { rel = api.GetLine(modelID, relId) } catch(e) { continue }
+        if (!rel?.RelatingStructure?.value || !rel?.RelatedElements) continue
+        const etasjeID = rel.RelatingStructure.value
+        const etasje = etasjer.get(etasjeID)
+        if (!etasje) continue  // RelatingStructure er ikke en BuildingStorey
+        const elementer = Array.isArray(rel.RelatedElements) ? rel.RelatedElements : [rel.RelatedElements]
+        for (const el of elementer) {
+          const eid = el?.value
+          if (eid) {
+            elementToEtasje.set(eid, {
+              etasjeId: etasjeID,
+              etasjeNavn: etasje.navn,
+              elevation: etasje.elevation,
+            })
+          }
+        }
+      }
+    }
+  } catch(e) { console.warn('[ifc] kunne ikke bygge etasje-mapping:', e) }
+
+  // Sortér etasjene etter elevation (lavest først)
+  const sorterteEtasjer = Array.from(etasjer.values()).sort((a, b) => a.elevation - b.elevation)
+
+  console.log(`[ifc] etasje-mapping: ${etasjer.size} etasjer, ${elementToEtasje.size} elementer mappet`)
+
+  return { elementToEtasje, etasjer: sorterteEtasjer }
+}
+
 async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const result = {
     yttervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
@@ -37738,6 +37921,42 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       })
     }
   }
+
+  // ─── PATCH 15.A: GEOMETRI- OG ETASJE-EKSTRAKSJON ───────────────────────────
+  // Hentes etter mengde-ekstraksjon, før modellen lukkes.
+  if (onProgress) onProgress('Henter geometri for tegning-visning...')
+  const { fotavtrykkMap, diagnose: geoDiagnose } = await ekstraherFotavtrykk(api, mod, modelID, onProgress)
+  const { elementToEtasje, etasjer } = byggEtasjeLookup(api, mod, modelID)
+
+  // Anvend fotavtrykk + etasje på alle elementer i resultatet
+  const alleKategorier = ['yttervegg', 'innervegg', 'ukjent_vegg', 'tak', 'gulv', 'vindu', 'dor', 'trapp']
+  let elementerMedFotavtrykk = 0
+  let elementerMedEtasje = 0
+  alleKategorier.forEach(kat => {
+    const elementer = result[kat]?.elementer || []
+    elementer.forEach(e => {
+      const fa = fotavtrykkMap.get(e.id)
+      if (fa) {
+        e.fotavtrykk = fa
+        elementerMedFotavtrykk++
+      }
+      const et = elementToEtasje.get(e.id)
+      if (et) {
+        e.etasje = et
+        elementerMedEtasje++
+      }
+    })
+  })
+
+  // Lagre på resultatet for diagnose-rapport
+  result._geometri = {
+    diagnose: geoDiagnose,
+    etasjer,
+    totaltElementer: alleKategorier.reduce((sum, k) => sum + (result[k]?.elementer?.length || 0), 0),
+    elementerMedFotavtrykk,
+    elementerMedEtasje,
+  }
+  console.log(`[ifc 15.A] anvendte fotavtrykk på ${elementerMedFotavtrykk} elementer, etasje på ${elementerMedEtasje}`)
 
   return result
 }
@@ -40606,6 +40825,138 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
 // Patch 9 implementerer: Last opp → Analyser → vise statistikk
 // Patch 10+ legger på: Mengdeekstraksjon → Bibliotek-matching → Generering
 
+// ─── PATCH 15.A: GEOMETRI-DIAGNOSE-POPUP ─────────────────────────────────────
+// Viser en strukturert rapport om hvor godt geometri-ekstraksjonen gikk.
+// Brukes for å avgjøre om en 2D-viewer er praktisk gjennomførbar for denne IFC-fila.
+// Kalles fra "Analysert"-banneret i BimImportPage.
+
+function visGeometriDiagnose(metadata, onAlert) {
+  const geo = metadata?.mengder?._geometri
+  if (!geo) {
+    onAlert({
+      message: 'Ingen geometri-data',
+      subMessage: 'Filen ble parset uten geometri-ekstraksjon. Last opp på nytt for å hente data.',
+      kind: 'warn',
+    })
+    return
+  }
+
+  const { diagnose, etasjer, totaltElementer, elementerMedFotavtrykk, elementerMedEtasje } = geo
+  const fotavtrykkProsent = totaltElementer > 0 ? (elementerMedFotavtrykk / totaltElementer * 100) : 0
+  const etasjeProsent = totaltElementer > 0 ? (elementerMedEtasje / totaltElementer * 100) : 0
+
+  // Vurder samlet kvalitet
+  let vurdering = 'ukjent'
+  let vurderingFarge = 'info'
+  let vurderingTekst = ''
+  if (fotavtrykkProsent >= 85 && etasjer.length > 0 && etasjeProsent >= 75) {
+    vurdering = 'god'
+    vurderingFarge = 'success'
+    vurderingTekst = '✅ Geometrien er parsbar og 2D-viewer vil fungere godt for denne fila.'
+  } else if (fotavtrykkProsent >= 50 && etasjer.length > 0) {
+    vurdering = 'middels'
+    vurderingFarge = 'warn'
+    vurderingTekst = '⚠️ Geometrien er delvis parsbar. 2D-viewer vil vise det meste, men noen elementer kan mangle.'
+  } else if (fotavtrykkProsent > 0) {
+    vurdering = 'dårlig'
+    vurderingFarge = 'warn'
+    vurderingTekst = '⚠️ Lite geometri funnet. 2D-viewer vil bli ufullstendig — vurder å be arkitekten om en bedre IFC-eksport.'
+  } else {
+    vurdering = 'umulig'
+    vurderingFarge = 'error'
+    vurderingTekst = '❌ Ingen parsbar geometri funnet. 2D-viewer kan ikke fungere på denne fila.'
+  }
+
+  // Modell-spenn
+  const sx = (diagnose.minSpenn.x[1] ?? 0) - (diagnose.minSpenn.x[0] ?? 0)
+  const sy = (diagnose.minSpenn.y[1] ?? 0) - (diagnose.minSpenn.y[0] ?? 0)
+  const sz = (diagnose.minSpenn.z[1] ?? 0) - (diagnose.minSpenn.z[0] ?? 0)
+  const harSpenn = isFinite(sx) && isFinite(sy) && sx > 0 && sy > 0
+
+  // Bygg stats-kort
+  const stats = [
+    {
+      title: '📐 Geometri-ekstraksjon',
+      subtitle: `${totaltElementer} elementer totalt`,
+      items: [
+        { label: 'Fotavtrykk hentet', value: `${elementerMedFotavtrykk} (${fotavtrykkProsent.toFixed(0)} %)`, highlight: fotavtrykkProsent >= 85 },
+        { label: 'Tom geometri', value: `${diagnose.tomGeometri} stk` },
+        { label: 'Feilet', value: `${diagnose.feilet} stk` },
+      ],
+    },
+    {
+      title: '🏢 Etasjer',
+      subtitle: etasjer.length > 0 ? `${etasjer.length} funnet` : 'Ingen funnet',
+      items: etasjer.length > 0 ? [
+        { label: 'Elementer med etasje', value: `${elementerMedEtasje} (${etasjeProsent.toFixed(0)} %)`, highlight: etasjeProsent >= 75 },
+        ...etasjer.map(e => ({
+          label: e.navn,
+          value: `Z = ${e.elevation.toFixed(2)} m`,
+        })),
+      ] : [
+        { label: 'Status', value: 'IFC-fila har ingen IfcBuildingStorey' },
+        { label: 'Mulig løsning', value: 'Be arkitekten eksportere med etasjer' },
+      ],
+    },
+  ]
+
+  if (harSpenn) {
+    stats.push({
+      title: '📏 Modell-størrelse',
+      subtitle: 'Globale koordinater',
+      items: [
+        { label: 'X-spenn (bredde)', value: `${sx.toFixed(1)} m` },
+        { label: 'Y-spenn (dybde)', value: `${sy.toFixed(1)} m` },
+        { label: 'Z-spenn (høyde)', value: `${sz.toFixed(1)} m` },
+      ],
+    })
+  }
+
+  // Notes-blokk
+  const notes = [{
+    kind: vurderingFarge,
+    icon: vurdering === 'god' ? '✅' : (vurdering === 'umulig' ? '❌' : '⚠️'),
+    text: vurderingTekst,
+  }]
+
+  if (vurdering === 'god') {
+    notes.push({
+      kind: 'info',
+      icon: '🚀',
+      text: 'Vi kan trygt bygge <strong>Patch 15.B</strong> (selve viewer-komponenten) og <strong>15.C</strong> (knapp i Steg 2).',
+    })
+  } else if (vurdering === 'middels' || vurdering === 'dårlig') {
+    notes.push({
+      kind: 'info',
+      icon: '🔧',
+      text: 'Vi kan fortsatt bygge viewer, men forventer at noen elementer mangler. Test gjerne med en annen IFC-fil for sammenligning.',
+    })
+  } else {
+    notes.push({
+      kind: 'info',
+      icon: '🛑',
+      text: 'Test gjerne en annen IFC-fil. Hvis flere filer feiler, kan vi avlyse 15.B/C og prioritere noe annet.',
+    })
+  }
+
+  onAlert({
+    message: 'Geometri-diagnose',
+    subMessage: `Patch 15.A — kvalitet: ${vurdering}`,
+    kind: vurderingFarge === 'error' ? 'error' : (vurderingFarge === 'warn' ? 'warn' : 'info'),
+    details: { stats, notes },
+  })
+
+  // Logg også til konsoll for utviklere
+  console.log('[Patch 15.A] Geometri-diagnose:', {
+    fotavtrykkProsent,
+    etasjeProsent,
+    etasjer,
+    totaltElementer,
+    elementerMedFotavtrykk,
+    diagnose,
+  })
+}
+
 function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksisterendeSesjon = null, redigeringAvKalkyle = null }) {
   // Sideflyt-fase: 'upload' (vis upload-area) | 'analysing' (parsing pågår) | 'analyzed' (vis resultat) | 'error'
   // Patch 14.D: Hvis vi har eksisterendeSesjon, hopp rett til 'analyzed' med data forhåndsutfylt
@@ -40812,10 +41163,19 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               <div style={{ fontSize:'15px', fontWeight:'700', color:'#065f46', marginBottom:'2px' }}>IFC-fil analysert</div>
               <div style={{ fontSize:'12px', color:'#047857' }}>{metadata.fileName} • {formatFileSize(metadata.fileSize)} • {metadata.totalElements} elementer funnet</div>
             </div>
-            <button onClick={reset}
-              style={{ background:'white', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#065f46', cursor:'pointer' }}>
-              Last opp ny fil
-            </button>
+            {/* Patch 15.A: Diagnose-knapp — vis geometri-rapport for tegning-visning */}
+            {metadata.mengder?._geometri && (
+              <button onClick={() => visGeometriDiagnose(metadata, onAlert)}
+                style={{ background:'white', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#065f46', cursor:'pointer' }}>
+                🔧 Diagnose
+              </button>
+            )}
+            {!erRedigering && (
+              <button onClick={reset}
+                style={{ background:'white', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#065f46', cursor:'pointer' }}>
+                Last opp ny fil
+              </button>
+            )}
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'14px' }}>
