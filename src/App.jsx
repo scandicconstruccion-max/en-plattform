@@ -44522,6 +44522,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [ueTilbud, setUeTilbud] = useState([])
   const [expandedUeTilbud, setExpandedUeTilbud] = useState(null)
 
+  // Scroll til toppen når kalkyle-visningen åpnes (særlig viktig etter BIM-generering
+  // der brukeren har scrollet langt ned i Steg 3 før klikket "Generer kalkyle")
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [init?.id])
+
   // Check if user has tilbud module + load UE-tilbud
   useEffect(() => {
     supabase.from('company_settings').select('active_modules').limit(1).single()
