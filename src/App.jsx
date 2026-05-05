@@ -36932,16 +36932,76 @@ function buildMaterialLayerLookup(api, mod, modelID) {
 // Diagnose-data: Vi teller hvor mange elementer som fikk parsbar geometri,
 // kun bounding-box-fallback, eller ingen geometri i det hele tatt.
 
+// ─── KONVEKST 2D-HULL (Andrew's monotone chain) ──────────────────────────────
+// Tar et array med [x,y]-punkter og returnerer det minste konvekse polygonet
+// som inneholder alle punkter. Brukes til å forenkle hundrevis av vertices
+// per IFC-element ned til 4-12 punkter per projeksjon — som gir gjenkjennelige
+// konturer i stedet for forenklede rektangler.
+//
+// Algoritmen er O(n log n) — fullt brukbart for typiske mesh-størrelser.
+
+function convexHull2D(punkter) {
+  if (!punkter || punkter.length < 3) return punkter || []
+
+  // Fjern duplikater (samme [x,y] flere ganger gir bugs i hull-algoritmen)
+  const seen = new Set()
+  const unike = []
+  for (const p of punkter) {
+    const k = `${p[0].toFixed(4)},${p[1].toFixed(4)}`
+    if (!seen.has(k)) {
+      seen.add(k)
+      unike.push(p)
+    }
+  }
+  if (unike.length < 3) return unike
+
+  // Sorter etter x, deretter y
+  unike.sort((a, b) => a[0] - b[0] || a[1] - b[1])
+
+  // Cross product av vektorene OA og OB
+  const cross = (O, A, B) => (A[0] - O[0]) * (B[1] - O[1]) - (A[1] - O[1]) * (B[0] - O[0])
+
+  // Bygg nedre hull
+  const nedre = []
+  for (const p of unike) {
+    while (nedre.length >= 2 && cross(nedre[nedre.length - 2], nedre[nedre.length - 1], p) <= 0) {
+      nedre.pop()
+    }
+    nedre.push(p)
+  }
+
+  // Bygg øvre hull
+  const ovre = []
+  for (let i = unike.length - 1; i >= 0; i--) {
+    const p = unike[i]
+    while (ovre.length >= 2 && cross(ovre[ovre.length - 2], ovre[ovre.length - 1], p) <= 0) {
+      ovre.pop()
+    }
+    ovre.push(p)
+  }
+
+  // Kombiner — fjern siste punkt fra hver halvdel for å unngå duplikat
+  nedre.pop()
+  ovre.pop()
+  return nedre.concat(ovre)
+}
+
 async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
   const fotavtrykkMap = new Map()  // expressID → { minX, maxX, minY, maxY, minZ, maxZ }
   const diagnose = {
     suksess: 0,        // fikk full bounding-box fra geometri
     tomGeometri: 0,    // mesh fantes men hadde 0 vertices
     feilet: 0,         // exception ved henting
+    medHull: 0,        // fikk også konvekse hull (Patch 15.E)
     minSpenn: { x: [Infinity, -Infinity], y: [Infinity, -Infinity], z: [Infinity, -Infinity] },
   }
 
   if (onProgress) onProgress('Henter geometri fra modellen — dette kan ta litt tid...')
+
+  // Maks antall vertices per element vi samler før vi forkorter (forhindrer
+  // minne-eksplosjon på elementer med svært tette mesh-er, f.eks. møbler).
+  // 5000 er rikelig for å bygge gode hull selv på komplekse vegger.
+  const MAX_VERTS_PER_ELEMENT = 5000
 
   try {
     // StreamAllMeshes streamer alle mesh-er én etter én via callback.
@@ -36962,6 +37022,12 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
         let minY = Infinity, maxY = -Infinity
         let minZ = Infinity, maxZ = -Infinity
         let harPunkter = false
+
+        // Patch 15.E: Samle alle globale vertices for konveks-hull-bygging
+        // (per de tre projeksjons-flatene XY, XZ, YZ).
+        const punkterXY = []
+        const punkterXZ = []
+        const punkterYZ = []
 
         // Hver placedGeometry har en flatTransformation (16 floats — column-major 4x4)
         // og en geometryExpressID som peker til selve mesh-en
@@ -36987,14 +37053,19 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
           // Hver vertex er 6 floats (pos+normal). Stride = 6.
           // Vi trenger kun pos (første 3 floats per vertex)
           const numVerts = vertsSize / 6
-          for (let v = 0; v < numVerts; v++) {
+
+          // Hvis det allerede er for mange vertices, sample annenhver/hver-tredje
+          // for å holde oss under MAX. Ikke kritisk for hull-kvalitet.
+          let stride = 1
+          if (punkterXY.length + numVerts > MAX_VERTS_PER_ELEMENT) {
+            stride = Math.max(1, Math.ceil(numVerts / Math.max(1, MAX_VERTS_PER_ELEMENT - punkterXY.length)))
+          }
+
+          for (let v = 0; v < numVerts; v += stride) {
             const lx = verts[v * 6 + 0]
             const ly = verts[v * 6 + 1]
             const lz = verts[v * 6 + 2]
             // Anvend flatTransformation (column-major)
-            // gx = m0*lx + m4*ly + m8*lz + m12
-            // gy = m1*lx + m5*ly + m9*lz + m13
-            // gz = m2*lx + m6*ly + m10*lz + m14
             const gx = matrix[0] * lx + matrix[4] * ly + matrix[8]  * lz + matrix[12]
             const gy = matrix[1] * lx + matrix[5] * ly + matrix[9]  * lz + matrix[13]
             const gz = matrix[2] * lx + matrix[6] * ly + matrix[10] * lz + matrix[14]
@@ -37005,12 +37076,36 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
             if (gz < minZ) minZ = gz
             if (gz > maxZ) maxZ = gz
             harPunkter = true
+
+            // Patch 15.E: Lagre projiserte punkter (kun hvis vi har plass)
+            if (punkterXY.length < MAX_VERTS_PER_ELEMENT) {
+              punkterXY.push([gx, gy])
+              punkterXZ.push([gx, gz])
+              punkterYZ.push([gy, gz])
+            }
           }
           try { geo.delete() } catch(e) {}
         }
 
         if (harPunkter) {
-          fotavtrykkMap.set(expressID, { minX, maxX, minY, maxY, minZ, maxZ })
+          // Patch 15.E: Bygg konvekse hull for hver projeksjon
+          let hullXY = null, hullXZ = null, hullYZ = null
+          if (punkterXY.length >= 3) {
+            try {
+              hullXY = convexHull2D(punkterXY)
+              hullXZ = convexHull2D(punkterXZ)
+              hullYZ = convexHull2D(punkterYZ)
+              if (hullXY && hullXY.length >= 3) diagnose.medHull++
+            } catch(e) {
+              // Hvis hull-bygging feiler, fall tilbake til bbox
+              hullXY = hullXZ = hullYZ = null
+            }
+          }
+
+          fotavtrykkMap.set(expressID, {
+            minX, maxX, minY, maxY, minZ, maxZ,
+            hullXY, hullXZ, hullYZ,
+          })
           diagnose.suksess++
           // Oppdater globalt spenn (for diagnose-rapport)
           if (minX < diagnose.minSpenn.x[0]) diagnose.minSpenn.x[0] = minX
@@ -37030,7 +37125,7 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
     console.error('[ifc] StreamAllMeshes feilet:', e)
   }
 
-  console.log(`[ifc] fotavtrykk: ${diagnose.suksess} ok, ${diagnose.tomGeometri} tom, ${diagnose.feilet} feilet`)
+  console.log(`[ifc] fotavtrykk: ${diagnose.suksess} ok (${diagnose.medHull} med hull), ${diagnose.tomGeometri} tom, ${diagnose.feilet} feilet`)
   if (diagnose.suksess > 0) {
     const sx = diagnose.minSpenn.x[1] - diagnose.minSpenn.x[0]
     const sy = diagnose.minSpenn.y[1] - diagnose.minSpenn.y[0]
@@ -40939,6 +41034,10 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
       elementer.forEach(e => {
         if (!e.fotavtrykk) return
         const ef = e.fotavtrykk
+        // Skalér hull-punkter også (Patch 15.E)
+        const skalerHull = (hull) => hull
+          ? hull.map(p => [p[0] * enhetsFaktor, p[1] * enhetsFaktor])
+          : null
         liste.push({
           id: e.id,
           kategori: kat,
@@ -40949,6 +41048,9 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
             maxY: ef.maxY * enhetsFaktor,
             minZ: ef.minZ * enhetsFaktor,
             maxZ: ef.maxZ * enhetsFaktor,
+            hullXY: skalerHull(ef.hullXY),
+            hullXZ: skalerHull(ef.hullXZ),
+            hullYZ: skalerHull(ef.hullYZ),
           },
           etasjeId: e.etasje?.etasjeId || null,
           etasjeNavn: e.etasje?.etasjeNavn || null,
@@ -41041,35 +41143,36 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
     return { fill: '#e2e8f0', stroke: '#94a3b8', sw: 0.02 }  // grå (default)
   }
 
-  // ── Beregn rect-koordinater for én element basert på visningstype ──────
-  // Plan:        x=minX, y=-maxY, w=X-spenn,  h=Y-spenn
-  // Snitt front: x=minX, y=-maxZ, w=X-spenn,  h=Z-spenn
-  // Snitt side:  x=minY, y=-maxZ, w=Y-spenn,  h=Z-spenn
-  const rectFor = (e) => {
+  // ── Beregn polygon-punkter for ett element basert på visningstype ──────
+  // Bruker konveks-hull fra Patch 15.E hvis tilgjengelig, fallback til
+  // bounding-box-rektangel hvis hull ikke finnes.
+  //
+  // Y-aksen flippes (negative tall) fordi SVG har Y nedover, mens IFC har
+  // Y/Z oppover.
+  //
+  // Plan (XY):        hullXY    →  points: x,-y
+  // Snitt front (XZ): hullXZ    →  points: x,-z
+  // Snitt side (YZ):  hullYZ    →  points: y,-z
+  const polygonFor = (e) => {
     const fa = e.fotavtrykk
+    let hull = null
+    if (erSnittSide) hull = fa.hullYZ
+    else if (erSnittFront) hull = fa.hullXZ
+    else hull = fa.hullXY
+
+    if (hull && hull.length >= 3) {
+      // Konstruer "x,y x,y x,y"-streng for SVG points (med flippet vertikal akse)
+      return hull.map(p => `${p[0]},${-p[1]}`).join(' ')
+    }
+
+    // Fallback: bbox-rektangel som 4 punkter
     if (erSnittSide) {
-      return {
-        x: fa.minY,
-        y: -fa.maxZ,
-        w: fa.maxY - fa.minY,
-        h: fa.maxZ - fa.minZ,
-      }
+      return `${fa.minY},${-fa.minZ} ${fa.maxY},${-fa.minZ} ${fa.maxY},${-fa.maxZ} ${fa.minY},${-fa.maxZ}`
     }
     if (erSnittFront) {
-      return {
-        x: fa.minX,
-        y: -fa.maxZ,
-        w: fa.maxX - fa.minX,
-        h: fa.maxZ - fa.minZ,
-      }
+      return `${fa.minX},${-fa.minZ} ${fa.maxX},${-fa.minZ} ${fa.maxX},${-fa.maxZ} ${fa.minX},${-fa.maxZ}`
     }
-    // plan
-    return {
-      x: fa.minX,
-      y: -fa.maxY,
-      w: fa.maxX - fa.minX,
-      h: fa.maxY - fa.minY,
-    }
+    return `${fa.minX},${-fa.minY} ${fa.maxX},${-fa.minY} ${fa.maxX},${-fa.maxY} ${fa.minX},${-fa.maxY}`
   }
 
   // ── Tellinger ──────────────────────────────────────────────────────────
@@ -41192,14 +41295,11 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
                   {/* Først grå (bakgrunn) */}
                   {synligeElementer.filter(e => !aktiveIDer.has(e.id)).map(e => {
                     const f = fargeFor(e)
-                    const r = rectFor(e)
+                    const points = polygonFor(e)
                     return (
-                      <rect
+                      <polygon
                         key={e.id}
-                        x={r.x}
-                        y={r.y}
-                        width={r.w}
-                        height={r.h}
+                        points={points}
                         fill={f.fill}
                         stroke={f.stroke}
                         strokeWidth={f.sw}
@@ -41210,14 +41310,11 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
                   {/* Deretter grønne (i forgrunn) */}
                   {synligeElementer.filter(e => aktiveIDer.has(e.id)).map(e => {
                     const f = fargeFor(e)
-                    const r = rectFor(e)
+                    const points = polygonFor(e)
                     return (
-                      <rect
+                      <polygon
                         key={e.id}
-                        x={r.x}
-                        y={r.y}
-                        width={r.w}
-                        height={r.h}
+                        points={points}
                         fill={f.fill}
                         stroke={f.stroke}
                         strokeWidth={f.sw}
@@ -41338,6 +41435,7 @@ function visGeometriDiagnose(metadata, onAlert) {
       subtitle: `${totaltElementer} elementer totalt`,
       items: [
         { label: 'Fotavtrykk hentet', value: `${elementerMedFotavtrykk} (${fotavtrykkProsent.toFixed(0)} %)`, highlight: fotavtrykkProsent >= 85 },
+        { label: 'Med ekte konturer', value: `${diagnose.medHull || 0} (${totaltElementer > 0 ? ((diagnose.medHull || 0) / totaltElementer * 100).toFixed(0) : 0} %)`, highlight: (diagnose.medHull || 0) > totaltElementer * 0.7 },
         { label: 'Tom geometri', value: `${diagnose.tomGeometri} stk` },
         { label: 'Feilet', value: `${diagnose.feilet} stk` },
       ],
