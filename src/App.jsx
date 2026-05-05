@@ -40049,6 +40049,319 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   )
 }
 
+// ─── BIM-KALKYLE: STEG 3 — GENERER KALKYLE-SEKSJON (Patch 14.A) ──────────────
+// Vises som siste steg-kort i BIM-flyten. Sammenstiller bekreftede
+// konstruksjoner per fag, viser standard-bruk for tak/vinduer/dører, og
+// presenterer "Generer kalkyle"-knappen.
+//
+// onGenerer kalles når brukeren bekrefter — den får { sammendrag, hoppedeAntall }
+// med oppsummering, slik at kalleren (BimImportPage) kan gjøre selve insert
+// og navigasjon i Patch 14.B/14.C.
+
+function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer }) {
+  const [oppdater, setOppdater] = useState(0)
+  const [visHoppede, setVisHoppede] = useState(false)
+
+  // Re-render hvis matching-state endres (samme mønster som BimMatchingSeksjon)
+  useEffect(() => {
+    const interval = setInterval(() => setOppdater(o => o + 1), 1000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Samle alle bekreftede lagsett (vegger + gulv) gruppert per fag
+  const sammendrag = React.useMemo(() => {
+    const result = {
+      perFag: {},          // { tomrer: { lagsett: [...], totalAreal, antallBd }, ... }
+      hoppede: [],         // [{ navn, kategori, areal }]
+      bekreftedeAntall: 0,
+      hoppedeAntall: 0,
+      standardBruktFor: [],
+    }
+
+    // Vegger
+    ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(katNavn => {
+      const lagsettListe = mengder[katNavn]?.lagsett || []
+      lagsettListe.forEach(ls => {
+        if (ls.matchedKonstruksjon) {
+          const fag = ls.matchedKonstruksjon.fag || 'tomrer'
+          if (!result.perFag[fag]) result.perFag[fag] = { lagsett: [], totalAreal: 0 }
+          result.perFag[fag].lagsett.push({
+            navn: ls.matchedKonstruksjon.name,
+            originalNavn: ls.navn,
+            areal: ls.totalAreal || 0,
+            antall: ls.antall || 0,
+            kategori: ls.brukerKategori || katNavn,
+          })
+          result.perFag[fag].totalAreal += (ls.totalAreal || 0)
+          result.bekreftedeAntall++
+        } else if (ls.brukerKategori && ls.brukerKategori !== 'ignorer' && ls.brukerKategori !== 'usikker') {
+          // Klassifisert men ikke matchet — telles som "hoppet"
+          result.hoppede.push({
+            navn: ls.navn,
+            kategori: ls.brukerKategori,
+            areal: ls.totalAreal || 0,
+            antall: ls.antall || 0,
+          })
+          result.hoppedeAntall++
+        }
+      })
+    })
+
+    // Gulv
+    if (mengder.gulv?.lagsett) {
+      mengder.gulv.lagsett.forEach(ls => {
+        if (ls.matchedKonstruksjon) {
+          const fag = ls.matchedKonstruksjon.fag || 'tomrer'
+          if (!result.perFag[fag]) result.perFag[fag] = { lagsett: [], totalAreal: 0 }
+          result.perFag[fag].lagsett.push({
+            navn: ls.matchedKonstruksjon.name,
+            originalNavn: ls.navn,
+            areal: ls.totalAreal || 0,
+            antall: ls.antall || 0,
+            kategori: ls.brukerKategori || 'gulv',
+          })
+          result.perFag[fag].totalAreal += (ls.totalAreal || 0)
+          result.bekreftedeAntall++
+        } else if (ls.brukerKategori && ls.brukerKategori !== 'ignorer') {
+          result.hoppede.push({
+            navn: ls.navn,
+            kategori: ls.brukerKategori,
+            areal: ls.totalAreal || 0,
+            antall: ls.antall || 0,
+          })
+          result.hoppedeAntall++
+        }
+      })
+    }
+
+    // Tak — bruker standard fra bibliotek (kommer som egen "fag-gruppe" markert standard)
+    if (mengder.tak?.totalAreal > 0) {
+      if (!result.perFag.tomrer) result.perFag.tomrer = { lagsett: [], totalAreal: 0 }
+      result.perFag.tomrer.lagsett.push({
+        navn: 'Standard saltak m/papp',
+        originalNavn: `Tak (${mengder.tak.antall} elementer)`,
+        areal: mengder.tak.totalAreal,
+        antall: mengder.tak.antall || 0,
+        kategori: 'tak',
+        erStandard: true,
+      })
+      result.perFag.tomrer.totalAreal += mengder.tak.totalAreal
+      result.standardBruktFor.push('tak')
+    }
+
+    // Vinduer — standard
+    if (mengder.vindu?.antall > 0) {
+      if (!result.perFag.tomrer) result.perFag.tomrer = { lagsett: [], totalAreal: 0 }
+      result.perFag.tomrer.lagsett.push({
+        navn: 'Standard vindu (3-lag)',
+        originalNavn: `${mengder.vindu.antall} vinduer`,
+        areal: mengder.vindu.totalAreal || 0,
+        antall: mengder.vindu.antall,
+        kategori: 'vindu',
+        erStandard: true,
+        enhet: 'stk',
+      })
+      result.standardBruktFor.push('vinduer')
+    }
+
+    // Ytterdører — standard
+    const ytterdorAntall = (mengder.dor?.elementer || []).filter(e => {
+      // Heuristikk: ytterdører har større areal (>1.9 m²) eller IsExternal-flag
+      return (e.areal || 0) > 1.9 || e.erEkstern
+    }).length
+
+    if (ytterdorAntall > 0) {
+      if (!result.perFag.tomrer) result.perFag.tomrer = { lagsett: [], totalAreal: 0 }
+      result.perFag.tomrer.lagsett.push({
+        navn: 'Standard ytterdør',
+        originalNavn: `${ytterdorAntall} ytterdører`,
+        areal: 0,
+        antall: ytterdorAntall,
+        kategori: 'ytterdor',
+        erStandard: true,
+        enhet: 'stk',
+      })
+      result.standardBruktFor.push('ytterdører')
+    }
+
+    return result
+  }, [mengder, oppdater])
+
+  const harBekreftet = sammendrag.bekreftedeAntall > 0
+  const totalAntall = sammendrag.bekreftedeAntall + sammendrag.hoppedeAntall
+
+  // Status-pille
+  const stegStatus = React.useMemo(() => {
+    if (totalAntall === 0) return { tekst: 'Ingen lagsett', farge: 'graa' }
+    if (!harBekreftet) return { tekst: '0 av ' + totalAntall + ' klar', farge: 'graa' }
+    if (sammendrag.hoppedeAntall === 0) return { tekst: '✓ Klar til generering', farge: 'gronn' }
+    return { tekst: `${sammendrag.bekreftedeAntall} av ${totalAntall} klar`, farge: 'blaa' }
+  }, [sammendrag, harBekreftet, totalAntall])
+
+  const stegFarger = {
+    gronn: { bg: '#d1fae5', tekst: '#065f46', sirkel_bg: '#10b981' },
+    blaa:  { bg: '#dbeafe', tekst: '#1e40af', sirkel_bg: '#3b82f6' },
+    graa:  { bg: '#f1f5f9', tekst: '#64748b', sirkel_bg: '#94a3b8' },
+  }
+  const stegFarge = stegFarger[stegStatus.farge]
+
+  const handleGenerer = () => {
+    if (!harBekreftet) return
+    if (onGenerer) onGenerer({ sammendrag, mengder })
+  }
+
+  return (
+    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+      {/* Header med steg-merke + status-pille */}
+      <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
+        <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: stegFarge.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>3</div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <h3 style={{ margin:0, fontSize: isMob ? '15px' : '16px', fontWeight:'700', color:'#0f172a' }}>
+            🧮 Generer kalkyle
+          </h3>
+          <p style={{ margin:'2px 0 0', fontSize:'12px', color:'#64748b' }}>
+            Bygg komplett kalkyle fra IFC-mengder og bekreftede konstruksjoner
+          </p>
+        </div>
+        <div style={{ background: stegFarge.bg, color: stegFarge.tekst, padding:'5px 11px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
+          {stegStatus.tekst}
+        </div>
+      </div>
+
+      <div style={{ height:'1px', background:'#f1f5f9', margin:'0 0 14px' }} />
+
+      {/* CTA-knapp øverst */}
+      <button
+        onClick={handleGenerer}
+        disabled={!harBekreftet}
+        style={{
+          width:'100%',
+          background: harBekreftet ? 'linear-gradient(135deg, #8b5cf6, #3b82f6)' : '#e2e8f0',
+          color: harBekreftet ? 'white' : '#94a3b8',
+          border:'none',
+          borderRadius:'12px',
+          padding: isMob ? '14px 16px' : '16px 20px',
+          fontSize: isMob ? '14px' : '15px',
+          fontWeight:'700',
+          cursor: harBekreftet ? 'pointer' : 'not-allowed',
+          marginBottom:'16px',
+          display:'flex',
+          alignItems:'center',
+          justifyContent:'center',
+          gap:'10px',
+          transition:'all 0.15s',
+          boxShadow: harBekreftet ? '0 4px 12px rgba(139, 92, 246, 0.25)' : 'none',
+        }}
+        onMouseEnter={(e) => { if (harBekreftet) e.currentTarget.style.transform = 'translateY(-1px)' }}
+        onMouseLeave={(e) => { if (harBekreftet) e.currentTarget.style.transform = 'translateY(0)' }}
+      >
+        <span style={{ fontSize:'18px' }}>🧮</span>
+        <span>{harBekreftet ? 'Generer kalkyle fra IFC' : 'Bekreft minst én konstruksjon i Steg 2 først'}</span>
+        {harBekreftet && <span style={{ fontSize:'14px', opacity:0.85 }}>→</span>}
+      </button>
+
+      {/* Sammendrag per fag */}
+      {harBekreftet && (
+        <div style={{ marginBottom:'12px' }}>
+          <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>
+            Bygningsdeler som havner i kalkylen ({sammendrag.bekreftedeAntall + sammendrag.standardBruktFor.length} stk)
+          </div>
+          <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+            {Object.entries(sammendrag.perFag).map(([fagId, data]) => {
+              const fag = FAGGRUPPER.find(f => f.id === fagId) || { name: fagId, emoji: '🔧' }
+              return (
+                <div key={fagId} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px 14px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px', gap:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', minWidth:0 }}>
+                      <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
+                      <strong style={{ fontSize:'13px', color:'#0f172a' }}>{fag.name}</strong>
+                      <span style={{ fontSize:'11px', color:'#94a3b8' }}>{data.lagsett.length} bygningsdeler</span>
+                    </div>
+                    {data.totalAreal > 0 && (
+                      <span style={{ fontSize:'12px', color:'#475569', fontWeight:'600', whiteSpace:'nowrap' }}>
+                        {data.totalAreal.toFixed(1)} m²
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                    {data.lagsett.map((ls, idx) => (
+                      <div key={idx} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'12px', padding:'4px 0', borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none', gap:'8px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px', minWidth:0, flex:1 }}>
+                          <span style={{ color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                            {ls.navn}
+                          </span>
+                          {ls.erStandard && (
+                            <span style={{ background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>
+                              standard
+                            </span>
+                          )}
+                        </div>
+                        <span style={{ color:'#94a3b8', fontSize:'11px', whiteSpace:'nowrap' }}>
+                          {ls.enhet === 'stk'
+                            ? `${ls.antall} stk`
+                            : `${ls.antall} stk · ${ls.areal.toFixed(1)} m²`}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Standard-bruk-info */}
+      {sammendrag.standardBruktFor.length > 0 && (
+        <div style={{ background:'#fef3c7', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'10px' }}>
+          <div style={{ fontSize:'12px', color:'#854d0e', lineHeight:1.5 }}>
+            <strong>💡 Standard er brukt for:</strong> {sammendrag.standardBruktFor.join(', ')}.
+            Du kan justere disse i kalkylen etter generering, eller koble dem til egne konstruksjoner i biblioteket ditt for senere prosjekter.
+          </div>
+        </div>
+      )}
+
+      {/* Hoppede lagsett (kollapsbar) */}
+      {sammendrag.hoppedeAntall > 0 && (
+        <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 14px' }}>
+          <button
+            onClick={() => setVisHoppede(v => !v)}
+            style={{ background:'none', border:'none', padding:0, cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', width:'100%', textAlign:'left' }}
+          >
+            <span style={{ fontSize:'13px' }}>⚠️</span>
+            <span style={{ fontSize:'12px', color:'#475569', fontWeight:'600', flex:1 }}>
+              {sammendrag.hoppedeAntall} {sammendrag.hoppedeAntall === 1 ? 'lagsett blir hoppet over' : 'lagsett blir hoppet over'} i kalkylen
+            </span>
+            <span style={{ fontSize:'11px', color:'#94a3b8' }}>{visHoppede ? '▲ Skjul' : '▼ Vis'}</span>
+          </button>
+          {visHoppede && (
+            <div style={{ marginTop:'8px', paddingTop:'8px', borderTop:'1px solid #e2e8f0' }}>
+              <p style={{ margin:'0 0 8px', fontSize:'11px', color:'#64748b', lineHeight:1.5 }}>
+                Disse lagsettene er klassifisert men ikke matchet til en konstruksjon. Gå tilbake til Steg 2 for å matche dem, eller la dem stå utenfor og legg dem til manuelt i kalkylen.
+              </p>
+              {sammendrag.hoppede.map((h, idx) => (
+                <div key={idx} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', fontSize:'11px', padding:'4px 0', borderTop: idx > 0 ? '1px solid #f1f5f9' : 'none' }}>
+                  <span style={{ color:'#475569', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0, flex:1 }}>{h.navn}</span>
+                  <span style={{ color:'#94a3b8', whiteSpace:'nowrap', marginLeft:'8px' }}>{h.antall} stk · {h.areal.toFixed(1)} m²</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tom-state hjelpetekst når ingenting er bekreftet */}
+      {!harBekreftet && totalAntall > 0 && (
+        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'12px 14px' }}>
+          <div style={{ fontSize:'12px', color:'#1e3a8a', lineHeight:1.5 }}>
+            <strong>📝 Slik kommer du i gang:</strong> Gå tilbake til <strong>Steg 2 — Match mot biblioteket</strong> over og bekreft minst én konstruksjon ved å enten godta en eksakt match, lage ny fra mal, eller lage fra blanke ark.
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── BIM-IMPORT FULL SIDEFLYT ────────────────────────────────────────────────
 // Erstatter BimImportPlaceholderModal når brukeren har bim_kalkyle-modulen.
 // Vises som full skjermflyt fordi parsing og bekreftelse er for kompleks for modal.
@@ -40333,13 +40646,29 @@ function BimImportPage({ onTilbake, onAlert }) {
             <BimMatchingSeksjon mengder={metadata.mengder} isMob={isMob} />
           )}
 
+          {/* Generer kalkyle — Patch 14.A */}
+          {metadata.mengder && (
+            <BimGenererKalkyleSeksjon
+              mengder={metadata.mengder}
+              isMob={isMob}
+              onGenerer={({ sammendrag }) => {
+                // Patch 14.A: kun sammendrag-visning. Selve genereringen kommer i 14.B/14.C.
+                onAlert({
+                  message: '🚧 Genereringen kommer i Patch 14.B',
+                  subMessage: `Sammendraget ser bra ut: ${sammendrag.bekreftedeAntall} bekreftede bygningsdeler fordelt på ${Object.keys(sammendrag.perFag).length} fag${sammendrag.standardBruktFor.length > 0 ? `, samt standard for ${sammendrag.standardBruktFor.join(', ')}` : ''}. I neste patch bygges selve kalkylen og lagres i calculations-tabellen.`,
+                  kind: 'info',
+                })
+              }}
+            />
+          )}
+
           {/* Neste-steg-info */}
           <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Neste steg kommer i Sesjon C.2 og videre</div>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Du tester Patch 14.A — Sammendrag og knapp</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              <strong>Sesjon C.1 (denne):</strong> Du kan nå opprette nye konstruksjoner manuelt via dialogen.<br/>
-              <strong>Sesjon C.2 (neste):</strong> Prisbok-søk per lag + permanent lagring i bedriftens eget bibliotek.<br/>
-              <strong>Patch 14:</strong> Auto-generering av komplett kalkyle fra IFC-data og bibliotek.
+              <strong>Patch 14.A (denne):</strong> Steg 3-kort med sammendrag per fag, standard for tak/vinduer/dører, og hoppede lagsett.<br/>
+              <strong>Patch 14.B (neste):</strong> <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>byggKalkylerFraIfc()</code> — bygger kalkyle-payload fra IFC-mengder.<br/>
+              <strong>Patch 14.C:</strong> Lagring i <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>calculations</code>-tabellen + navigasjon til kalkyle-visning.
             </p>
           </div>
         </div>
