@@ -38279,7 +38279,9 @@ function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
   if (brukerKategori === 'fundament') {
     kandidater = bibliotek.filter(b => /sokkel|fundament|grunnmur/i.test(b.kategori))
   } else if (brukerKategori === 'dekke_paa_grunn') {
-    kandidater = bibliotek.filter(b => /bunnplate|grunn/i.test(b.kategori))
+    // Hotfix: bibliotek bruker 'Gulvplate' for betong-bunnplater (bet_plate_*).
+    // Legacy-regex matchet kun 'bunnplate|grunn' og fant derfor ingen kandidater.
+    kandidater = bibliotek.filter(b => /bunnplate|gulvplate|grunn/i.test(b.kategori))
   }
 
   if (kandidater.length === 0) {
