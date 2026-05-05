@@ -40293,7 +40293,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 // med oppsummering, slik at kalleren (BimImportPage) kan gjøre selve insert
 // og navigasjon i Patch 14.B/14.C.
 
-function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer }) {
+function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = false, redigeringAvKalkyle = null }) {
   const [oppdater, setOppdater] = useState(0)
   const [visHoppede, setVisHoppede] = useState(false)
 
@@ -40490,8 +40490,10 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer }) {
         onMouseEnter={(e) => { if (harBekreftet) e.currentTarget.style.transform = 'translateY(-1px)' }}
         onMouseLeave={(e) => { if (harBekreftet) e.currentTarget.style.transform = 'translateY(0)' }}
       >
-        <span style={{ fontSize:'18px' }}>🧮</span>
-        <span>{harBekreftet ? 'Generer kalkyle fra IFC' : 'Bekreft minst én konstruksjon i Steg 2 først'}</span>
+        <span style={{ fontSize:'18px' }}>{erRedigering ? '🔄' : '🧮'}</span>
+        <span>{harBekreftet
+          ? (erRedigering ? `Oppdater kalkyle ${redigeringAvKalkyle?.kalk_number || ''}`.trim() : 'Generer kalkyle fra IFC')
+          : 'Bekreft minst én konstruksjon i Steg 2 først'}</span>
         {harBekreftet && <span style={{ fontSize:'14px', opacity:0.85 }}>→</span>}
       </button>
 
@@ -40604,17 +40606,28 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer }) {
 // Patch 9 implementerer: Last opp → Analyser → vise statistikk
 // Patch 10+ legger på: Mengdeekstraksjon → Bibliotek-matching → Generering
 
-function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
+function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksisterendeSesjon = null, redigeringAvKalkyle = null }) {
   // Sideflyt-fase: 'upload' (vis upload-area) | 'analysing' (parsing pågår) | 'analyzed' (vis resultat) | 'error'
-  const [fase, setFase] = useState('upload')
+  // Patch 14.D: Hvis vi har eksisterendeSesjon, hopp rett til 'analyzed' med data forhåndsutfylt
+  const [fase, setFase] = useState(eksisterendeSesjon ? 'analyzed' : 'upload')
   const [file, setFile] = useState(null)
   const [progress, setProgress] = useState({ step: '', percent: 0 })
   const [errorMsg, setErrorMsg] = useState('')
-  const [metadata, setMetadata] = useState(null)
+  const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
+    fileName: eksisterendeSesjon.fileName,
+    fileSize: eksisterendeSesjon.fileSize,
+    schema: eksisterendeSesjon.schema,
+    project: eksisterendeSesjon.project || {},
+    building: eksisterendeSesjon.building || {},
+    elementCounts: eksisterendeSesjon.elementCounts || {},
+    totalElements: eksisterendeSesjon.totalElements || 0,
+    mengder: eksisterendeSesjon.mengder || null,
+  } : null)
   const [storedFilePath, setStoredFilePath] = useState(null)
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = React.useRef(null)
   const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  const erRedigering = !!eksisterendeSesjon
   useEffect(() => {
     const handler = () => setIsMob(window.innerWidth < 768)
     window.addEventListener('resize', handler)
@@ -40712,9 +40725,11 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
         </button>
         <div style={{ flex:1 }}>
           <h2 style={{ margin:'0 0 2px', fontSize: isMob ? '20px' : '24px', fontWeight:'800', color:'#0f172a', display:'flex', alignItems:'center', gap:'8px' }}>
-            <span>📐</span><span>BIM-Kalkyle — IFC-import</span>
+            <span>📐</span><span>{erRedigering ? `Endre BIM-grunnlag${redigeringAvKalkyle?.kalk_number ? ' — ' + redigeringAvKalkyle.kalk_number : ''}` : 'BIM-Kalkyle — IFC-import'}</span>
           </h2>
-          <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>Last opp en IFC-fil fra ArchiCAD, Revit eller annet BIM-verktøy</p>
+          <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>{erRedigering
+            ? 'Juster klassifiseringer eller matching og generer kalkylen på nytt — manuelt lagte bygningsdeler beholdes'
+            : 'Last opp en IFC-fil fra ArchiCAD, Revit eller annet BIM-verktøy'}</p>
         </div>
       </div>
 
@@ -40881,13 +40896,17 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
             <BimMatchingSeksjon mengder={metadata.mengder} isMob={isMob} />
           )}
 
-          {/* Generer kalkyle — Patch 14.C */}
+          {/* Generer kalkyle — Patch 14.C + 14.D */}
           {metadata.mengder && (
             <BimGenererKalkyleSeksjon
               mengder={metadata.mengder}
               isMob={isMob}
+              erRedigering={erRedigering}
+              redigeringAvKalkyle={redigeringAvKalkyle}
               onGenerer={async ({ sammendrag }) => {
-                // Patch 14.C: Bygg payload, lagre i calculations, og naviger til kalkyle.
+                // Patch 14.C+14.D: Bygg payload, lagre i calculations, og naviger til kalkyle.
+                // Hvis erRedigering=true, oppdaterer vi eksisterende kalkyle og bevarer
+                // manuelt lagte bygningsdeler.
                 try {
                   // 1. Hent bedriftens lagrede faktorer
                   let bedriftFaktorer = {}
@@ -40897,9 +40916,9 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
                   } catch(e) { /* OK at den feiler — fall tilbake til defaults */ }
 
                   // 2. Bygg kalkyle-payload via Patch 14.B-funksjonen
-                  const { kalkyler, faktorer, meta } = byggKalkylerFraIfc(metadata.mengder, bedriftFaktorer)
+                  const { kalkyler: nyeKalkyler, faktorer, meta } = byggKalkylerFraIfc(metadata.mengder, bedriftFaktorer)
 
-                  if (kalkyler.length === 0) {
+                  if (nyeKalkyler.length === 0) {
                     onAlert({
                       message: 'Ingen bygningsdeler å bygge kalkyle av',
                       subMessage: 'Bekreft minst én konstruksjon i Steg 2 før du genererer.',
@@ -40908,61 +40927,133 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
                     return
                   }
 
-                  // 3. Generer kalkyle-nummer (samme mønster som Hurtigstart)
-                  const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
-                  const kalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
-
-                  // 4. Bygg tittel — bruk IFC-prosjektnavn hvis tilgjengelig, ellers filnavn
-                  const baseTittel = metadata.project?.name?.trim() || metadata.fileName?.replace(/\.ifc$/i, '') || 'BIM-prosjekt'
-                  const tittel = `BIM-kalkyle: ${baseTittel}`
-
-                  // 5. Beregn totals slik editor gjør
-                  const totals = beregnProsjektTotal(kalkyler, faktorer)
-
-                  // 6. Bygg en pedagogisk notes-tekst som havner i kalkylens notater-felt
-                  const notesParts = [
-                    `Kalkyle generert fra IFC-fil: ${metadata.fileName} (${formatFileSize(metadata.fileSize)})`,
-                    `Dato: ${new Date().toLocaleDateString('nb-NO', { year: 'numeric', month: 'long', day: 'numeric' })}`,
-                    `Bekreftede bygningsdeler: ${meta.bekreftedeAntall}`,
-                  ]
-                  if (meta.standardBruktFor.length > 0) {
-                    notesParts.push(`Standard brukt for: ${meta.standardBruktFor.join(', ')} — disse bør bekreftes manuelt.`)
+                  // ── REDIGERINGS-MODUS (Patch 14.D) ──────────────────────────
+                  // Erstatt kun BIM-genererte bygningsdeler (_kilde:'bim'/'bim_standard'),
+                  // bevar manuelt lagte bygningsdeler innen samme fag.
+                  let kalkylerForLagring = nyeKalkyler
+                  let manuelleBevart = 0
+                  if (erRedigering && redigeringAvKalkyle) {
+                    const eksisterendeKalkyler = redigeringAvKalkyle.kalkyler || []
+                    // For hvert fag i de nye kalkylene: hvis fag finnes i eksisterende,
+                    // legg til de manuelle bygningsdelene fra eksisterende
+                    kalkylerForLagring = nyeKalkyler.map(nyKalk => {
+                      const eksisterende = eksisterendeKalkyler.find(k => k.fag === nyKalk.fag)
+                      if (!eksisterende) return nyKalk
+                      const manuelle = (eksisterende.bygningsdeler || []).filter(bd =>
+                        bd._kilde !== 'bim' && bd._kilde !== 'bim_standard'
+                      )
+                      manuelleBevart += manuelle.length
+                      return {
+                        ...nyKalk,
+                        bygningsdeler: [...nyKalk.bygningsdeler, ...manuelle],
+                      }
+                    })
+                    // Også: hvis det finnes fag i eksisterende som IKKE er i nye (kun manuelle),
+                    // bevar dem helt
+                    eksisterendeKalkyler.forEach(eksKalk => {
+                      const finnesINye = nyeKalkyler.find(k => k.fag === eksKalk.fag)
+                      if (!finnesINye) {
+                        const manuelle = (eksKalk.bygningsdeler || []).filter(bd =>
+                          bd._kilde !== 'bim' && bd._kilde !== 'bim_standard'
+                        )
+                        if (manuelle.length > 0) {
+                          kalkylerForLagring.push({
+                            ...eksKalk,
+                            bygningsdeler: manuelle,
+                          })
+                          manuelleBevart += manuelle.length
+                        }
+                      }
+                    })
                   }
-                  if (meta.hoppedeAntall > 0) {
-                    notesParts.push(`${meta.hoppedeAntall} lagsett ble hoppet over (ikke matchet).`)
+
+                  // 3. Beregn totals slik editor gjør
+                  const totals = beregnProsjektTotal(kalkylerForLagring, faktorer)
+
+                  // 4. Bygg bim_sesjon-snapshot for senere redigering (Patch 14.D.1)
+                  const bimSesjon = {
+                    fileName: metadata.fileName,
+                    fileSize: metadata.fileSize,
+                    schema: metadata.schema,
+                    project: metadata.project || {},
+                    building: metadata.building || {},
+                    elementCounts: metadata.elementCounts || {},
+                    totalElements: metadata.totalElements || 0,
+                    mengder: metadata.mengder,
+                    sist_oppdatert: new Date().toISOString(),
+                    versjon: erRedigering ? (redigeringAvKalkyle?.bim_sesjon?.versjon || 1) + 1 : 1,
                   }
-                  const notesTekst = notesParts.join('\n')
 
-                  // 7. Bygg payload defensivt (samme mønster som Hurtigstart)
-                  const basePayload = {
-                    title: tittel,
-                    kalk_number: kalkNr,
-                    notes: notesTekst,
-                    kalkyler,
-                    faktorer,
-                    status: 'Utkast',
-                    is_template: false,
-                    total_cost: totals.totSelvkost,
-                    total_ex_mva: totals.totMedFortjeneste,
-                    profit_percent: totals.fortjenesteProsent,
-                    created_by: user?.id,
-                    created_at: new Date().toISOString(),
-                    updated_at: new Date().toISOString(),
+                  let created
+                  if (erRedigering && redigeringAvKalkyle?.id) {
+                    // ── UPDATE eksisterende kalkyle ──
+                    const updatePayload = sanitizeDbPayload({
+                      kalkyler: kalkylerForLagring,
+                      faktorer,
+                      total_cost: totals.totSelvkost,
+                      total_ex_mva: totals.totMedFortjeneste,
+                      profit_percent: totals.fortjenesteProsent,
+                      bim_sesjon: bimSesjon,
+                      updated_at: new Date().toISOString(),
+                    })
+                    const { data: updated, error } = await supabase.from('calculations')
+                      .update(updatePayload)
+                      .eq('id', redigeringAvKalkyle.id)
+                      .select()
+                      .single()
+                    if (error) throw error
+                    created = updated
+                    console.log('[Patch 14.D] Kalkyle oppdatert:', created)
+                  } else {
+                    // ── INSERT ny kalkyle (vanlig flyt) ──
+                    const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+                    const kalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+
+                    const baseTittel = metadata.project?.name?.trim() || metadata.fileName?.replace(/\.ifc$/i, '') || 'BIM-prosjekt'
+                    const tittel = `BIM-kalkyle: ${baseTittel}`
+
+                    const notesParts = [
+                      `Kalkyle generert fra IFC-fil: ${metadata.fileName} (${formatFileSize(metadata.fileSize)})`,
+                      `Dato: ${new Date().toLocaleDateString('nb-NO', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+                      `Bekreftede bygningsdeler: ${meta.bekreftedeAntall}`,
+                    ]
+                    if (meta.standardBruktFor.length > 0) {
+                      notesParts.push(`Standard brukt for: ${meta.standardBruktFor.join(', ')} — disse bør bekreftes manuelt.`)
+                    }
+                    if (meta.hoppedeAntall > 0) {
+                      notesParts.push(`${meta.hoppedeAntall} lagsett ble hoppet over (ikke matchet).`)
+                    }
+                    const notesTekst = notesParts.join('\n')
+
+                    const basePayload = {
+                      title: tittel,
+                      kalk_number: kalkNr,
+                      notes: notesTekst,
+                      kalkyler: kalkylerForLagring,
+                      faktorer,
+                      status: 'Utkast',
+                      is_template: false,
+                      total_cost: totals.totSelvkost,
+                      total_ex_mva: totals.totMedFortjeneste,
+                      profit_percent: totals.fortjenesteProsent,
+                      bim_sesjon: bimSesjon,
+                      created_by: user?.id,
+                      created_at: new Date().toISOString(),
+                      updated_at: new Date().toISOString(),
+                    }
+                    const payload = sanitizeDbPayload(basePayload)
+                    const { data: nyKalk, error } = await supabase.from('calculations').insert(payload).select().single()
+                    if (error) throw error
+                    created = nyKalk
+                    console.log('[Patch 14.C] Kalkyle opprettet:', created)
                   }
-                  const payload = sanitizeDbPayload(basePayload)
 
-                  // 8. Insert i calculations-tabellen
-                  const { data: created, error } = await supabase.from('calculations').insert(payload).select().single()
-                  if (error) throw error
-
-                  console.log('[Patch 14.C] Kalkyle opprettet:', created)
-
-                  // 9. Vis suksess-popup med strukturerte detaljer (matcher 14.B-formatet)
+                  // 5. Vis suksess-popup med strukturerte detaljer
                   const formaterKr = (n) => `${(n || 0).toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr`
-                  const totalBd = kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler?.length || 0), 0)
+                  const totalBd = kalkylerForLagring.reduce((sum, kl) => sum + (kl.bygningsdeler?.length || 0), 0)
                   const stats = [{
-                    title: '✅ ' + (created.kalk_number || kalkNr),
-                    subtitle: `${totalBd} bygningsdeler · ${kalkyler.length} fag`,
+                    title: (erRedigering ? '🔄 ' : '✅ ') + (created.kalk_number || ''),
+                    subtitle: `${totalBd} bygningsdeler · ${kalkylerForLagring.length} fag`,
                     items: [
                       { label: 'Selvkost', value: formaterKr(totals.totSelvkost) },
                       { label: `Med fortjeneste (${totals.fortjenesteProsent.toFixed(1)} %)`, value: formaterKr(totals.totMedFortjeneste), highlight: true },
@@ -40970,6 +41061,13 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
                   }]
 
                   const notes = []
+                  if (erRedigering && manuelleBevart > 0) {
+                    notes.push({
+                      kind: 'success',
+                      icon: '🛡️',
+                      text: `<strong>${manuelleBevart} manuelt lagt${manuelleBevart === 1 ? '' : 'e'} bygningsdel${manuelleBevart === 1 ? '' : 'er'}</strong> ble bevart`,
+                    })
+                  }
                   if (meta.standardBruktFor.length > 0) {
                     notes.push({
                       kind: 'warn',
@@ -40987,24 +41085,28 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
                   notes.push({
                     kind: 'success',
                     icon: '🎯',
-                    text: 'Du blir nå tatt direkte til kalkylen for justering og videre arbeid',
+                    text: erRedigering
+                      ? 'Du blir nå tatt tilbake til kalkylen med oppdaterte data'
+                      : 'Du blir nå tatt direkte til kalkylen for justering og videre arbeid',
                   })
 
                   await onAlert({
-                    message: 'Kalkyle opprettet',
-                    subMessage: `${tittel} er lagret som utkast`,
+                    message: erRedigering ? 'Kalkyle oppdatert fra IFC' : 'Kalkyle opprettet',
+                    subMessage: erRedigering
+                      ? `${created.title} er oppdatert med ny BIM-data`
+                      : `${created.title} er lagret som utkast`,
                     kind: 'success',
                     details: { stats, notes },
                   })
 
-                  // 10. Naviger til den nye kalkylen
+                  // 6. Naviger til kalkylen
                   if (onKalkyleOpprettet) {
                     await onKalkyleOpprettet(created)
                   }
                 } catch(e) {
-                  console.error('[Patch 14.C] Feil under opprettelse:', e)
+                  console.error('[Patch 14.C/14.D] Feil under opprettelse/oppdatering:', e)
                   onAlert({
-                    message: 'Kunne ikke opprette kalkyle',
+                    message: erRedigering ? 'Kunne ikke oppdatere kalkyle' : 'Kunne ikke opprette kalkyle',
                     subMessage: e.message || 'En ukjent feil oppstod. Prøv igjen, eller kontakt support hvis problemet vedvarer.',
                     kind: 'error',
                   })
@@ -41278,6 +41380,8 @@ function KalkulasjonPage({ onNavigate }) {
   const [showOpprettValg, setShowOpprettValg] = useState(false)
   const [showBimUpsell, setShowBimUpsell] = useState(false)
   const [showBimImport, setShowBimImport] = useState(false)
+  // Patch 14.D: Ved "Endre BIM-grunnlag" — kalkyle som skal redigeres med eksisterende sesjon-data
+  const [editBimSesjon, setEditBimSesjon] = useState(null)  // { kalk, sesjon } eller null
   const [bimActiveModules, setBimActiveModules] = useState([])
   useEffect(() => {
     supabase.from('company_settings').select('active_modules').limit(1).single()
@@ -41378,7 +41482,27 @@ function KalkulasjonPage({ onNavigate }) {
         } catch(e) {}
       }
     }} />}
-    <KalkProsjektView kalk={viewKalk} onBack={() => { setViewKalk(null); load() }} onEdit={(k) => { setEditKalk(k); setShowEditor(true) }} onNavigate={onNavigate} />
+    <KalkProsjektView
+      kalk={viewKalk}
+      onBack={() => { setViewKalk(null); load() }}
+      onEdit={(k) => { setEditKalk(k); setShowEditor(true) }}
+      onNavigate={onNavigate}
+      onEditBim={(kalk) => {
+        // Patch 14.D: Brukeren klikket "Endre BIM-grunnlag" — åpne BimImportPage
+        // med kalkylens lagrede sesjon-data forhåndsutfylt.
+        if (!kalk?.bim_sesjon) {
+          appAlert({
+            message: 'Ingen BIM-grunnlag funnet',
+            subMessage: 'Denne kalkylen har ingen lagret IFC-data å redigere. Den ble enten opprettet manuelt, eller før BIM-redigering ble tilgjengelig.',
+            kind: 'warn',
+          })
+          return
+        }
+        setEditBimSesjon({ kalk, sesjon: kalk.bim_sesjon })
+        setViewKalk(null)
+        setShowBimImport(true)
+      }}
+    />
   </>
 
   if (showFaktorerPage) return <KalkFaktorerPage onBack={() => setShowFaktorerPage(false)} />
@@ -41388,16 +41512,19 @@ function KalkulasjonPage({ onNavigate }) {
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
 
   if (showBimImport) return <BimImportPage
-    onTilbake={() => setShowBimImport(false)}
+    onTilbake={() => { setShowBimImport(false); setEditBimSesjon(null) }}
     onAlert={appAlert}
     onKalkyleOpprettet={async (created) => {
       // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
       // reload listen, og åpne den nye kalkylen direkte for brukeren.
       setShowBimImport(false)
+      setEditBimSesjon(null)
       await load()
       if (created) setViewKalk(created)
     }}
     user={user}
+    eksisterendeSesjon={editBimSesjon?.sesjon || null}
+    redigeringAvKalkyle={editBimSesjon?.kalk || null}
   />
 
   // ── Sammenligningsvisning ──
@@ -44380,7 +44507,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
 
 // ─── PROSJEKT VISNING (Read-only detaljer) ───────────────────────────────────
 
-function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate }) {
+function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
   const confirm = useConfirm()
   const { user } = useAuth()
   const [k, setK] = useState(init)
@@ -45175,7 +45302,17 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
               {showMoreMenu && (
                 <>
                 <div style={{ position:'fixed', inset:0, zIndex:19 }} onClick={() => setShowMoreMenu(false)} />
-                <div style={{ position: isMobKV ? 'fixed' : 'absolute', top: isMobKV ? 'auto' : '100%', bottom: isMobKV ? 0 : 'auto', left: isMobKV ? 0 : 0, right: isMobKV ? 0 : 'auto', background:'white', borderRadius: isMobKV ? '16px 16px 0 0' : '12px', border:'1px solid #e2e8f0', boxShadow:'0 -8px 24px rgba(0,0,0,0.12)', padding: isMobKV ? '12px 16px' : '6px', zIndex:20, marginTop: isMobKV ? 0 : '4px', width: isMobKV ? '100%' : '200px' }}>
+                <div style={{ position: isMobKV ? 'fixed' : 'absolute', top: isMobKV ? 'auto' : '100%', bottom: isMobKV ? 0 : 'auto', left: isMobKV ? 0 : 0, right: isMobKV ? 0 : 'auto', background:'white', borderRadius: isMobKV ? '16px 16px 0 0' : '12px', border:'1px solid #e2e8f0', boxShadow:'0 -8px 24px rgba(0,0,0,0.12)', padding: isMobKV ? '12px 16px' : '6px', zIndex:20, marginTop: isMobKV ? 0 : '4px', width: isMobKV ? '100%' : '220px' }}>
+                  {/* Patch 14.D: Endre BIM-grunnlag — vises kun hvis kalkylen har lagret BIM-sesjon */}
+                  {k.bim_sesjon && onEditBim && (
+                    <>
+                      <button onClick={() => { onEditBim(k); setShowMoreMenu(false) }}
+                        style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'#eff6ff', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#1e40af', fontWeight:'600' }}>
+                        📐 Endre BIM-grunnlag
+                      </button>
+                      <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
+                    </>
+                  )}
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
                   <button onClick={() => { setShowSaveTemplate(true); setTemplateName(k.title); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🗂️ Lagre som mal</button>
                   <button onClick={async () => {
