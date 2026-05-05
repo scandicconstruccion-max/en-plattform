@@ -40646,29 +40646,71 @@ function BimImportPage({ onTilbake, onAlert }) {
             <BimMatchingSeksjon mengder={metadata.mengder} isMob={isMob} />
           )}
 
-          {/* Generer kalkyle — Patch 14.A */}
+          {/* Generer kalkyle — Patch 14.B */}
           {metadata.mengder && (
             <BimGenererKalkyleSeksjon
               mengder={metadata.mengder}
               isMob={isMob}
-              onGenerer={({ sammendrag }) => {
-                // Patch 14.A: kun sammendrag-visning. Selve genereringen kommer i 14.B/14.C.
-                onAlert({
-                  message: '🚧 Genereringen kommer i Patch 14.B',
-                  subMessage: `Sammendraget ser bra ut: ${sammendrag.bekreftedeAntall} bekreftede bygningsdeler fordelt på ${Object.keys(sammendrag.perFag).length} fag${sammendrag.standardBruktFor.length > 0 ? `, samt standard for ${sammendrag.standardBruktFor.join(', ')}` : ''}. I neste patch bygges selve kalkylen og lagres i calculations-tabellen.`,
-                  kind: 'info',
-                })
+              onGenerer={async ({ sammendrag }) => {
+                // Patch 14.B: kall byggKalkylerFraIfc og vis resultatet.
+                // Faktisk lagring + navigasjon kommer i 14.C.
+                try {
+                  // Hent bedriftens lagrede faktorer (matcher mønster fra Hurtigstart)
+                  let bedriftFaktorer = {}
+                  try {
+                    const { data: cs } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+                    bedriftFaktorer = cs?.kalk_faktorer || {}
+                  } catch(e) { /* OK at den feiler — fall tilbake til defaults */ }
+
+                  const { kalkyler, faktorer, meta } = byggKalkylerFraIfc(metadata.mengder, bedriftFaktorer)
+
+                  if (kalkyler.length === 0) {
+                    onAlert({
+                      message: 'Ingen bygningsdeler å bygge kalkyle av',
+                      subMessage: 'Bekreft minst én konstruksjon i Steg 2 før du genererer.',
+                      kind: 'warning',
+                    })
+                    return
+                  }
+
+                  // Beregn totals slik editor gjør (bruk eksisterende helper)
+                  const totals = beregnProsjektTotal(kalkyler, faktorer)
+
+                  // Vis resultat-sammendrag for testing
+                  const totalBd = kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler?.length || 0), 0)
+                  const fagListe = kalkyler.map(kl => kl.name).join(', ')
+                  const stdInfo = meta.standardBruktFor.length > 0
+                    ? `\n\n📌 Standard ble brukt for: ${meta.standardBruktFor.join(', ')}`
+                    : ''
+                  const hoppetInfo = meta.hoppedeAntall > 0
+                    ? `\n\n⚠️ ${meta.hoppedeAntall} lagsett ble hoppet over (ikke matchet)`
+                    : ''
+
+                  onAlert({
+                    message: `✅ Kalkyle bygget — ${kalkyler.length} fag, ${totalBd} bygningsdeler`,
+                    subMessage: `Fag: ${fagListe}\nSelvkost: ${totals.totSelvkost.toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr\nMed fortjeneste: ${totals.totMedFortjeneste.toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr (${totals.fortjenesteProsent.toFixed(1)} %)${stdInfo}${hoppetInfo}\n\n🚧 Lagring + navigasjon kommer i Patch 14.C.`,
+                    kind: 'info',
+                  })
+                  console.log('[Patch 14.B] Generert kalkyle-payload:', { kalkyler, faktorer, meta, totals })
+                } catch(e) {
+                  console.error('[Patch 14.B] Bygg-feil:', e)
+                  onAlert({
+                    message: 'Kunne ikke bygge kalkyle',
+                    subMessage: e.message || 'En ukjent feil oppstod under bygging av kalkylen.',
+                    kind: 'error',
+                  })
+                }
               }}
             />
           )}
 
           {/* Neste-steg-info */}
           <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Du tester Patch 14.A — Sammendrag og knapp</div>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Du tester Patch 14.B — Bygger kalkyle-payload</div>
             <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              <strong>Patch 14.A (denne):</strong> Steg 3-kort med sammendrag per fag, standard for tak/vinduer/dører, og hoppede lagsett.<br/>
-              <strong>Patch 14.B (neste):</strong> <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>byggKalkylerFraIfc()</code> — bygger kalkyle-payload fra IFC-mengder.<br/>
-              <strong>Patch 14.C:</strong> Lagring i <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>calculations</code>-tabellen + navigasjon til kalkyle-visning.
+              <strong>Patch 14.A:</strong> Steg 3-kort med sammendrag — ferdig.<br/>
+              <strong>Patch 14.B (denne):</strong> <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>byggKalkylerFraIfc()</code> bygger kalkyle-payload + viser sammendrag i alert. Sjekk konsollen for full payload.<br/>
+              <strong>Patch 14.C (neste):</strong> Lagring i <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>calculations</code>-tabellen + navigasjon til kalkyle-visning.
             </p>
           </div>
         </div>
@@ -42727,6 +42769,239 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
   })
 
   return { kalkyler, faktorer }
+}
+
+// ─── BIM-KALKYLE: BYGG KALKYLE FRA IFC-DATA (Patch 14.B) ─────────────────────
+// Speiler arkitekturen til byggKalkylerFraVeiviser, men bruker IFC-mengder og
+// bekreftede konstruksjoner i stedet for bygningstype + valgte konstruksjoner.
+//
+// Inn:
+//   - mengder: metadata.mengder fra IFC-parsing (yttervegg/innervegg/gulv/tak/...)
+//   - bedriftFaktorer: from company_settings.kalk_faktorer (kan være tom)
+//
+// Ut:
+//   {
+//     kalkyler: [...],          // Klar for calculations.kalkyler
+//     faktorer: {...},          // Per fag — bedrift eller default
+//     meta: {                   // Brukes av 14.C for suksess-melding
+//       bekreftedeAntall: int,
+//       hoppedeAntall: int,
+//       standardBruktFor: ['tak', 'vinduer', 'ytterdører'],
+//     }
+//   }
+//
+// Logikk:
+//   1. For hvert bekreftet vegg-/gulv-lagsett: bygg bygningsdel via
+//      bibliotekTilBygningsdel(matchedKonstruksjon, lagsett.totalAreal).
+//   2. Tak — alltid standard (tom_tak_salt) basert på mengder.tak.totalAreal.
+//   3. Vinduer/ytterdører — standard (tom_vindu_3lag, tom_dor_ytter) basert
+//      på antall fra mengder.vindu / mengder.dor.
+//   4. Åpningstillegg på yttervegg-bygningsdeler — samme mønster som
+//      byggKalkylerFraVeiviser, men kun lagt til på den FØRSTE yttervegg-bd
+//      (ellers ville vi telle åpninger flere ganger). Ubekreftede lagsett
+//      filtreres bort og rapporteres i meta.
+
+function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
+  if (!mengder) return { kalkyler: [], faktorer: {}, meta: { bekreftedeAntall: 0, hoppedeAntall: 0, standardBruktFor: [] } }
+
+  // Standard-IDer for kategorier som ikke har matching-flyt ennå
+  const STANDARD_TAK_ID = 'tom_tak_salt'
+  const STANDARD_VINDU_ID = 'tom_vindu_3lag'
+  const STANDARD_YTTERDOR_ID = 'tom_dor_ytter'
+  const STANDARD_INNERDOR_ID = 'tom_dor_inner'
+
+  // Grupper bygningsdeler per fag — samme mønster som byggKalkylerFraVeiviser
+  const fagsBygningsdeler = {}
+  let bekreftedeAntall = 0
+  let hoppedeAntall = 0
+  const standardBruktFor = []
+
+  // Hjelper: legg til bygningsdel under riktig fag
+  const leggTil = (fag, bd) => {
+    if (!fagsBygningsdeler[fag]) fagsBygningsdeler[fag] = []
+    fagsBygningsdeler[fag].push(bd)
+  }
+
+  // ── 1. Vegger (yttervegg + innervegg + ukjent_vegg) ──────────────────────
+  // Holder styr på første yttervegg-bd så vi vet hvor åpningstillegg skal legges
+  let forsteYtterveggBd = null
+  ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(katNavn => {
+    const lagsettListe = mengder[katNavn]?.lagsett || []
+    lagsettListe.forEach(ls => {
+      const konst = ls.matchedKonstruksjon
+      if (!konst) {
+        // Ubekreftet — telles bare hvis brukeren faktisk klassifiserte den
+        if (ls.brukerKategori && ls.brukerKategori !== 'ignorer' && ls.brukerKategori !== 'usikker') {
+          hoppedeAntall++
+        }
+        return
+      }
+      const mengde = ls.totalAreal || 0
+      if (mengde <= 0) {
+        hoppedeAntall++
+        return
+      }
+      const bd = bibliotekTilBygningsdel(konst, mengde)
+      // Marker hvor bd kommer fra (BIM-flyt) — kan brukes av kalkyle-editor senere
+      bd._kilde = 'bim'
+      bd._ifcLagsett = ls.navn
+      bd._ifcAntall = ls.antall || 0
+      const fag = konst.fag || 'tomrer'
+      leggTil(fag, bd)
+      bekreftedeAntall++
+
+      // Husk første yttervegg for åpningstillegg
+      // Sjekk både brukerKategori og opprinnelig kategori
+      const erYttervegg = ls.brukerKategori === 'yttervegg' || katNavn === 'yttervegg'
+      if (erYttervegg && !forsteYtterveggBd) {
+        forsteYtterveggBd = bd
+      }
+    })
+  })
+
+  // ── 2. Gulv (etasjeskille + dekke_paa_grunn) ─────────────────────────────
+  if (mengder.gulv?.lagsett) {
+    mengder.gulv.lagsett.forEach(ls => {
+      const konst = ls.matchedKonstruksjon
+      if (!konst) {
+        if (ls.brukerKategori && ls.brukerKategori !== 'ignorer') hoppedeAntall++
+        return
+      }
+      const mengde = ls.totalAreal || 0
+      if (mengde <= 0) { hoppedeAntall++; return }
+      const bd = bibliotekTilBygningsdel(konst, mengde)
+      bd._kilde = 'bim'
+      bd._ifcLagsett = ls.navn
+      bd._ifcAntall = ls.antall || 0
+      leggTil(konst.fag || 'tomrer', bd)
+      bekreftedeAntall++
+    })
+  }
+
+  // ── 3. Tak (standard fra bibliotek) ──────────────────────────────────────
+  if (mengder.tak?.totalAreal > 0) {
+    const standardTak = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === STANDARD_TAK_ID)
+    if (standardTak) {
+      const bd = bibliotekTilBygningsdel(standardTak, mengder.tak.totalAreal)
+      bd._kilde = 'bim_standard'
+      bd._ifcAntall = mengder.tak.antall || 0
+      // Marker navnet slik at brukeren ser at det er standard
+      bd.name = `${bd.name} (standard — bekreft)`
+      leggTil(standardTak.fag, bd)
+      standardBruktFor.push('tak')
+    }
+  }
+
+  // ── 4. Vinduer (standard fra bibliotek) ──────────────────────────────────
+  if (mengder.vindu?.antall > 0) {
+    const standardVindu = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === STANDARD_VINDU_ID)
+    if (standardVindu) {
+      // Vinduer er stk-basert, ikke m². bibliotekTilBygningsdel håndterer
+      // mengde uavhengig av enhet, så vi sender antall som mengde.
+      const bd = bibliotekTilBygningsdel(standardVindu, mengder.vindu.antall)
+      bd._kilde = 'bim_standard'
+      bd._ifcAntall = mengder.vindu.antall
+      bd.name = `${bd.name} (standard — bekreft)`
+      leggTil(standardVindu.fag, bd)
+      standardBruktFor.push('vinduer')
+    }
+  }
+
+  // ── 5. Ytterdører (standard fra bibliotek) ───────────────────────────────
+  // Heuristikk: ytterdører har større areal (>1.9 m²) eller IsExternal-flag.
+  // Match heuristikken i BimGenererKalkyleSeksjon (Patch 14.A).
+  const ytterdorAntall = (mengder.dor?.elementer || []).filter(e => {
+    return (e.areal || 0) > 1.9 || e.erEkstern
+  }).length
+  const innerdorAntall = (mengder.dor?.antall || 0) - ytterdorAntall
+
+  if (ytterdorAntall > 0) {
+    const standardYtterdor = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === STANDARD_YTTERDOR_ID)
+    if (standardYtterdor) {
+      const bd = bibliotekTilBygningsdel(standardYtterdor, ytterdorAntall)
+      bd._kilde = 'bim_standard'
+      bd._ifcAntall = ytterdorAntall
+      bd.name = `${bd.name} (standard — bekreft)`
+      leggTil(standardYtterdor.fag, bd)
+      standardBruktFor.push('ytterdører')
+    }
+  }
+
+  // ── 6. Innerdører (standard fra bibliotek) ───────────────────────────────
+  // Tas med separat siden tømrer-tariffen skiller på montering inne vs ute.
+  if (innerdorAntall > 0) {
+    const standardInnerdor = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === STANDARD_INNERDOR_ID)
+    if (standardInnerdor) {
+      const bd = bibliotekTilBygningsdel(standardInnerdor, innerdorAntall)
+      bd._kilde = 'bim_standard'
+      bd._ifcAntall = innerdorAntall
+      bd.name = `${bd.name} (standard — bekreft)`
+      leggTil(standardInnerdor.fag, bd)
+      standardBruktFor.push('innerdører')
+    }
+  }
+
+  // ── 7. Åpningstillegg på yttervegg ───────────────────────────────────────
+  // Samme mønster som byggKalkylerFraVeiviser: vinduer + ytterdører gir mertid
+  // for tilpasning rundt åpninger (separat fra produkt-bygningsdelen).
+  if (forsteYtterveggBd && (mengder.vindu?.antall > 0 || ytterdorAntall > 0)) {
+    const apningstillegg = []
+    if (mengder.vindu?.antall > 0) {
+      // Bruk gjennomsnittsareal hvis tilgjengelig, ellers default
+      const arealPerStk = mengder.vindu.gjennomsnittAreal > 0
+        ? mengder.vindu.gjennomsnittAreal
+        : BIM_DEFAULTS.vindu_default_areal
+      apningstillegg.push({
+        id: Date.now() + 1000,
+        beskrivelse: `${mengder.vindu.antall} vinduer`,
+        antall: mengder.vindu.antall,
+        areal: arealPerStk,
+        baerende: true,  // Konservativ default — brukeren kan endre i editoren
+        timer_per_tillegg: 0.5,
+      })
+    }
+    if (ytterdorAntall > 0) {
+      apningstillegg.push({
+        id: Date.now() + 1100,
+        beskrivelse: `${ytterdorAntall} ytterdører`,
+        antall: ytterdorAntall,
+        areal: BIM_DEFAULTS.dor_ytre_areal,
+        baerende: true,
+        timer_per_tillegg: 0.5,
+      })
+    }
+    forsteYtterveggBd.apningstillegg = apningstillegg
+    forsteYtterveggBd.fradrag_apninger = true
+  }
+
+  // ── 8. Bygg én kalkyle per fag — samme mønster som byggKalkylerFraVeiviser
+  const kalkyler = []
+  let kalkyleId = Date.now()
+  Object.entries(fagsBygningsdeler).forEach(([fag, bygningsdeler]) => {
+    const fagInfo = FAGGRUPPER.find(f => f.id === fag)
+    kalkyler.push({
+      id: kalkyleId++,
+      name: `${fagInfo?.emoji || ''} ${fagInfo?.name || fag}`,
+      fag,
+      bygningsdeler,
+    })
+  })
+
+  // ── 9. Faktorer per fag — bedrift først, fallback til defaults
+  const faktorer = {}
+  kalkyler.forEach(kl => {
+    faktorer[kl.fag] = (bedriftFaktorer && bedriftFaktorer[kl.fag]) || getDefaultFaktorer(kl.fag)
+  })
+
+  return {
+    kalkyler,
+    faktorer,
+    meta: {
+      bekreftedeAntall,
+      hoppedeAntall,
+      standardBruktFor,
+    },
+  }
 }
 
 // Oppdater materialpriser fra aktiv prisliste basert på NOBB
