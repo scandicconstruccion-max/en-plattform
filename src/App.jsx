@@ -40416,7 +40416,7 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer }) {
 // Patch 9 implementerer: Last opp → Analyser → vise statistikk
 // Patch 10+ legger på: Mengdeekstraksjon → Bibliotek-matching → Generering
 
-function BimImportPage({ onTilbake, onAlert }) {
+function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
   // Sideflyt-fase: 'upload' (vis upload-area) | 'analysing' (parsing pågår) | 'analyzed' (vis resultat) | 'error'
   const [fase, setFase] = useState('upload')
   const [file, setFile] = useState(null)
@@ -40693,100 +40693,131 @@ function BimImportPage({ onTilbake, onAlert }) {
             <BimMatchingSeksjon mengder={metadata.mengder} isMob={isMob} />
           )}
 
-          {/* Generer kalkyle — Patch 14.B */}
+          {/* Generer kalkyle — Patch 14.C */}
           {metadata.mengder && (
             <BimGenererKalkyleSeksjon
               mengder={metadata.mengder}
               isMob={isMob}
               onGenerer={async ({ sammendrag }) => {
-                // Patch 14.B: kall byggKalkylerFraIfc og vis resultatet.
-                // Faktisk lagring + navigasjon kommer i 14.C.
+                // Patch 14.C: Bygg payload, lagre i calculations, og naviger til kalkyle.
                 try {
-                  // Hent bedriftens lagrede faktorer (matcher mønster fra Hurtigstart)
+                  // 1. Hent bedriftens lagrede faktorer
                   let bedriftFaktorer = {}
                   try {
                     const { data: cs } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
                     bedriftFaktorer = cs?.kalk_faktorer || {}
                   } catch(e) { /* OK at den feiler — fall tilbake til defaults */ }
 
+                  // 2. Bygg kalkyle-payload via Patch 14.B-funksjonen
                   const { kalkyler, faktorer, meta } = byggKalkylerFraIfc(metadata.mengder, bedriftFaktorer)
 
                   if (kalkyler.length === 0) {
                     onAlert({
                       message: 'Ingen bygningsdeler å bygge kalkyle av',
                       subMessage: 'Bekreft minst én konstruksjon i Steg 2 før du genererer.',
-                      kind: 'warning',
+                      kind: 'warn',
                     })
                     return
                   }
 
-                  // Beregn totals slik editor gjør (bruk eksisterende helper)
+                  // 3. Generer kalkyle-nummer (samme mønster som Hurtigstart)
+                  const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+                  const kalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+
+                  // 4. Bygg tittel — bruk IFC-prosjektnavn hvis tilgjengelig, ellers filnavn
+                  const baseTittel = metadata.project?.name?.trim() || metadata.fileName?.replace(/\.ifc$/i, '') || 'BIM-prosjekt'
+                  const tittel = `BIM-kalkyle: ${baseTittel}`
+
+                  // 5. Beregn totals slik editor gjør
                   const totals = beregnProsjektTotal(kalkyler, faktorer)
 
-                  // Bygg strukturert details-objekt for det nye popup-formatet
-                  const totalBd = kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler?.length || 0), 0)
-                  const formaterKr = (n) => `${(n || 0).toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr`
-
-                  // Stats-blokk: ett kort per fag med selvkost + pris med fortjeneste
-                  const stats = kalkyler.map(kl => {
-                    const fagInfo = FAGGRUPPER.find(f => f.id === kl.fag)
-                    const fagTotals = beregnProsjektTotal([kl], { [kl.fag]: faktorer[kl.fag] })
-                    return {
-                      title: `${fagInfo?.emoji || ''} ${fagInfo?.name || kl.fag}`,
-                      subtitle: `${kl.bygningsdeler?.length || 0} bygningsdeler`,
-                      items: [
-                        { label: 'Selvkost', value: formaterKr(fagTotals.totSelvkost) },
-                        { label: `Med fortjeneste (${fagTotals.fortjenesteProsent.toFixed(1)} %)`, value: formaterKr(fagTotals.totMedFortjeneste), highlight: true },
-                      ],
-                    }
-                  })
-
-                  // Legg til totalsum-kort hvis det er flere fag
-                  if (kalkyler.length > 1) {
-                    stats.push({
-                      title: '💰 Total',
-                      subtitle: `${kalkyler.length} fag`,
-                      items: [
-                        { label: 'Selvkost', value: formaterKr(totals.totSelvkost) },
-                        { label: `Med fortjeneste (${totals.fortjenesteProsent.toFixed(1)} %)`, value: formaterKr(totals.totMedFortjeneste), highlight: true },
-                      ],
-                    })
+                  // 6. Bygg en pedagogisk notes-tekst som havner i kalkylens notater-felt
+                  const notesParts = [
+                    `Kalkyle generert fra IFC-fil: ${metadata.fileName} (${formatFileSize(metadata.fileSize)})`,
+                    `Dato: ${new Date().toLocaleDateString('nb-NO', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+                    `Bekreftede bygningsdeler: ${meta.bekreftedeAntall}`,
+                  ]
+                  if (meta.standardBruktFor.length > 0) {
+                    notesParts.push(`Standard brukt for: ${meta.standardBruktFor.join(', ')} — disse bør bekreftes manuelt.`)
                   }
+                  if (meta.hoppedeAntall > 0) {
+                    notesParts.push(`${meta.hoppedeAntall} lagsett ble hoppet over (ikke matchet).`)
+                  }
+                  const notesTekst = notesParts.join('\n')
 
-                  // Notes-blokk: standard-bruk + hoppede lagsett
+                  // 7. Bygg payload defensivt (samme mønster som Hurtigstart)
+                  const basePayload = {
+                    title: tittel,
+                    kalk_number: kalkNr,
+                    notes: notesTekst,
+                    kalkyler,
+                    faktorer,
+                    status: 'Utkast',
+                    is_template: false,
+                    total_cost: totals.totSelvkost,
+                    total_ex_mva: totals.totMedFortjeneste,
+                    profit_percent: totals.fortjenesteProsent,
+                    created_by: user?.id,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                  }
+                  const payload = sanitizeDbPayload(basePayload)
+
+                  // 8. Insert i calculations-tabellen
+                  const { data: created, error } = await supabase.from('calculations').insert(payload).select().single()
+                  if (error) throw error
+
+                  console.log('[Patch 14.C] Kalkyle opprettet:', created)
+
+                  // 9. Vis suksess-popup med strukturerte detaljer (matcher 14.B-formatet)
+                  const formaterKr = (n) => `${(n || 0).toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr`
+                  const totalBd = kalkyler.reduce((sum, kl) => sum + (kl.bygningsdeler?.length || 0), 0)
+                  const stats = [{
+                    title: '✅ ' + (created.kalk_number || kalkNr),
+                    subtitle: `${totalBd} bygningsdeler · ${kalkyler.length} fag`,
+                    items: [
+                      { label: 'Selvkost', value: formaterKr(totals.totSelvkost) },
+                      { label: `Med fortjeneste (${totals.fortjenesteProsent.toFixed(1)} %)`, value: formaterKr(totals.totMedFortjeneste), highlight: true },
+                    ],
+                  }]
+
                   const notes = []
                   if (meta.standardBruktFor.length > 0) {
                     notes.push({
                       kind: 'warn',
                       icon: '📌',
-                      text: `Standard brukt for <strong>${meta.standardBruktFor.join(', ')}</strong> — juster i kalkylen etter generering`,
+                      text: `Standard brukt for <strong>${meta.standardBruktFor.join(', ')}</strong> — bekreft og juster i kalkylen`,
                     })
                   }
                   if (meta.hoppedeAntall > 0) {
                     notes.push({
                       kind: 'info',
                       icon: '⚠️',
-                      text: `<strong>${meta.hoppedeAntall} lagsett</strong> ble hoppet over (ikke matchet i Steg 2)`,
+                      text: `<strong>${meta.hoppedeAntall} lagsett</strong> ble hoppet over — du kan legge dem til manuelt`,
                     })
                   }
                   notes.push({
-                    kind: 'info',
-                    icon: '🚧',
-                    text: 'Lagring og navigasjon kommer i <strong>Patch 14.C</strong>',
+                    kind: 'success',
+                    icon: '🎯',
+                    text: 'Du blir nå tatt direkte til kalkylen for justering og videre arbeid',
                   })
 
-                  onAlert({
-                    message: 'Kalkyle bygget',
-                    subMessage: `${totalBd} bygningsdeler fordelt på ${kalkyler.length} fag`,
+                  await onAlert({
+                    message: 'Kalkyle opprettet',
+                    subMessage: `${tittel} er lagret som utkast`,
                     kind: 'success',
                     details: { stats, notes },
                   })
-                  console.log('[Patch 14.B] Generert kalkyle-payload:', { kalkyler, faktorer, meta, totals })
+
+                  // 10. Naviger til den nye kalkylen
+                  if (onKalkyleOpprettet) {
+                    await onKalkyleOpprettet(created)
+                  }
                 } catch(e) {
-                  console.error('[Patch 14.B] Bygg-feil:', e)
+                  console.error('[Patch 14.C] Feil under opprettelse:', e)
                   onAlert({
-                    message: 'Kunne ikke bygge kalkyle',
-                    subMessage: e.message || 'En ukjent feil oppstod under bygging av kalkylen.',
+                    message: 'Kunne ikke opprette kalkyle',
+                    subMessage: e.message || 'En ukjent feil oppstod. Prøv igjen, eller kontakt support hvis problemet vedvarer.',
                     kind: 'error',
                   })
                 }
@@ -40794,13 +40825,12 @@ function BimImportPage({ onTilbake, onAlert }) {
             />
           )}
 
-          {/* Neste-steg-info */}
-          <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'12px', padding:'16px 20px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'6px' }}>🚧 Du tester Patch 14.B — Bygger kalkyle-payload</div>
-            <p style={{ margin:0, fontSize:'12px', color:'#78350f', lineHeight:1.6 }}>
-              <strong>Patch 14.A:</strong> Steg 3-kort med sammendrag — ferdig.<br/>
-              <strong>Patch 14.B (denne):</strong> <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>byggKalkylerFraIfc()</code> bygger kalkyle-payload + viser sammendrag i alert. Sjekk konsollen for full payload.<br/>
-              <strong>Patch 14.C (neste):</strong> Lagring i <code style={{ background:'#fde68a', padding:'1px 5px', borderRadius:'3px', fontSize:'11px' }}>calculations</code>-tabellen + navigasjon til kalkyle-visning.
+          {/* Patch 14 ferdig — informasjons-banner */}
+          <div style={{ background:'linear-gradient(135deg, #f0fdf4, #ecfdf5)', border:'1px solid #a7f3d0', borderRadius:'12px', padding:'16px 20px' }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#065f46', marginBottom:'6px' }}>✅ BIM-flyten er komplett</div>
+            <p style={{ margin:0, fontSize:'12px', color:'#047857', lineHeight:1.6 }}>
+              Du har nå hele flyten fra IFC-fil til ferdig kalkyle: <strong>klassifisering → matching → generering → lagring → kalkyle-visning</strong>.
+              Klikk <strong>Generer kalkyle fra IFC</strong> over for å lagre kalkylen i databasen og åpne den direkte for justering.
             </p>
           </div>
         </div>
@@ -41169,7 +41199,18 @@ function KalkulasjonPage({ onNavigate }) {
 
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
 
-  if (showBimImport) return <BimImportPage onTilbake={() => setShowBimImport(false)} onAlert={appAlert} />
+  if (showBimImport) return <BimImportPage
+    onTilbake={() => setShowBimImport(false)}
+    onAlert={appAlert}
+    onKalkyleOpprettet={async (created) => {
+      // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
+      // reload listen, og åpne den nye kalkylen direkte for brukeren.
+      setShowBimImport(false)
+      await load()
+      if (created) setViewKalk(created)
+    }}
+    user={user}
+  />
 
   // ── Sammenligningsvisning ──
   if (showCompare && compareIds.length === 2) {
