@@ -637,7 +637,7 @@ function Modal({ open, onClose, title, children, size }) {
   const maxWidth = size === 'lg' ? '720px' : size === 'xl' ? '900px' : '480px'
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
@@ -2074,7 +2074,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
       <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(680px, calc(100vw - 32px))', maxHeight:'90vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', fontFamily:'system-ui, sans-serif' }}>
         <form onSubmit={handleSubmit} style={{ display:'flex', flexDirection:'column', flex:1, minHeight:0 }}>
           {/* Header med lagre-knapp */}
@@ -2733,7 +2733,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       {showCreateSub && <ProsjektModal title={`Nytt underprosjekt under ${project.name}`} initial={{ ...emptyProsjekt, parent_id: projectId, client_name: project.client_name, client_contact: project.client_contact, client_email: project.client_email, client_phone: project.client_phone }} onSave={handleCreateSub} onClose={() => setShowCreateSub(false)} saving={saving} projects={allProjects} />}
       {showDelete && (
         <>
-          <div onClick={() => setShowDelete(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowDelete(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
           <div style={{ position:'fixed', top: isMobH ? 'auto' : '50%', bottom: isMobH ? 0 : 'auto', left: isMobH ? 0 : '50%', right: isMobH ? 0 : 'auto', transform: isMobH ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMobH ? '20px 20px 0 0' : '20px', padding: isMobH ? '20px' : '28px', width: isMobH ? '100%' : 'min(440px, calc(100vw - 32px))', zIndex:101, fontFamily:'system-ui, sans-serif', maxHeight: isMobH ? '80vh' : 'none', overflowY:'auto' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Hva vil du gjøre med prosjektet?</h3>
             <p style={{ margin:'0 0 24px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}><strong>{project.name}</strong>{project.project_number ? ` (${project.project_number})` : ''}</p>
@@ -3371,7 +3371,7 @@ function ProsjektfilerPage() {
       {/* Local delete confirmation dialog */}
       {deleteTarget && (
         <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setDeleteTarget(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'24px 24px 0' }}>
               <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>⚠️</div>
@@ -3395,7 +3395,7 @@ function ProsjektfilerPage() {
       {/* ── Revisjonsmerknad-modal ── */}
       {revisionTarget && (
         <>
-          <div onClick={() => setRevisionTarget(null)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setRevisionTarget(null); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:100 }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(480px, calc(100vw - 32px))', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.15)', fontFamily:'system-ui, sans-serif' }}>
             <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9' }}>
               <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny revisjon</h2>
@@ -3427,7 +3427,7 @@ function ProsjektfilerPage() {
       {/* Upload Modal */}
       {showUpload && (
         <>
-          <div onClick={() => { setShowUpload(false); setUploadFiles([]) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowUpload(false); setUploadFiles([]) }}} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(560px, calc(100vw - 32px))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Last opp filer</h2>
@@ -4471,7 +4471,7 @@ function SjekklistePage({ onNavigateDetail }) {
       {/* New Checklist Modal */}
       {showNew && (
         <>
-          <div onClick={() => setShowNew(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowNew(false); }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(580px, calc(100vw - 32px))', maxHeight: '90vh', overflowY: 'auto', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Ny sjekkliste</h2>
@@ -4603,7 +4603,7 @@ function TemplateEditorModal({ template, onSave, onClose, saving }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
       <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(620px, calc(100vw - 32px))', maxHeight: '90vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>{template ? 'Rediger mal' : 'Ny mal'}</h2>
@@ -5566,7 +5566,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth: '580px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>⚠️ Registrer avvik</h2>
@@ -6239,7 +6239,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       {/* Lukk avvik modal */}
       {showClose && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={() => setShowClose(false)} />
+          <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowClose(false); }} />
           <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth: '460px', padding: '28px', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
             <h3 style={{ margin: '0 0 8px', fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>✅ Lukk avvik</h3>
             <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: '14px' }}>Legg til en kommentar om hva som ble gjort for å lukke avviket.</p>
@@ -6258,7 +6258,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
 
       {/* Lightbox */}
       {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: '20px' }}>
+        <div onMouseDown={(e) => { if (e.target === e.currentTarget) setLightbox(null); }} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: '20px' }}>
           <img src={lightbox} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '12px' }} />
         </div>
       )}
@@ -6354,7 +6354,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position: 'relative', background: 'white', borderRadius: '20px', width: '100%', maxWidth: '520px', maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>✏️ Rediger avvik</h2>
@@ -6657,7 +6657,7 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send avvik</h2>
@@ -6793,7 +6793,7 @@ function HmsModalShell({ title, onClose, size, children }) {
   const maxWidth = size === 'xl' ? '860px' : size === 'lg' ? '680px' : '520px'
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? '0' : '16px' }}>
-      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? '0' : '20px', width: '100%', maxWidth: isMob ? '100%' : maxWidth, maxHeight: isMob ? '100vh' : '92vh', height: isMob ? '100vh' : 'auto', display: 'flex', flexDirection: 'column', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui, sans-serif' }}>
         <div style={{ padding: isMob ? '14px 16px' : '20px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
           <h2 style={{ margin: 0, fontSize: isMob ? '15px' : '18px', fontWeight: '700', color: '#0f172a' }}>{title}</h2>
@@ -8347,7 +8347,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMob ? '0' : '20px', width:'100%', maxWidth: isMob ? '100%' : '480px', maxHeight: isMob ? '100vh' : '92vh', height: isMob ? '100vh' : 'auto', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
         <div style={{ padding: isMob ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize: isMob ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>🔄 Endre status{!isMob && ` – ${maskin.name}`}</h2>
@@ -8509,7 +8509,7 @@ function MaskinModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'680px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🚜 {isEdit?'Rediger':'Registrer ny'} maskin</h2>
@@ -8672,7 +8672,7 @@ function ConfirmProvider({ children }) {
       {children}
       {dialog && (
         <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => respond(false)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) respond(false); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth: dialog.details ? '460px' : '420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden', maxHeight:'90vh', display:'flex', flexDirection:'column' }}>
             <div style={{ padding:'24px 24px 0', overflowY:'auto', flex:1 }}>
               <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: visual.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
@@ -9537,7 +9537,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
       {/* Ny revisjon modal */}
       {showNewRevision && (
         <>
-          <div onClick={() => setShowNewRevision(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowNewRevision(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(500px, calc(100vw - 32px))', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9' }}>
               <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🔄 Opprett ny revisjon</h2>
@@ -9640,7 +9640,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobTE ? 'stretch' : 'center', justifyContent:'center', padding: isMobTE ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobTE ? '0' : '20px', width:'100%', maxWidth: isMobTE ? '100%' : '900px', maxHeight: isMobTE ? '100vh' : '94vh', height: isMobTE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobTE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         {/* Modal header */}
         <div style={{ padding: isMobTE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
@@ -9833,7 +9833,7 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send tilbud til kunde</h2>
@@ -9940,7 +9940,7 @@ function PurringModal({ quote, user, onClose, onSent }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send purring</h2>
@@ -10965,7 +10965,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobAE ? 'stretch' : 'center', justifyContent:'center', padding: isMobAE ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobAE ? '0' : '20px', width:'100%', maxWidth: isMobAE ? '100%' : '900px', maxHeight: isMobAE ? '100vh' : '94vh', height: isMobAE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobAE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding: isMobAE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
           <div style={{ display:'flex', alignItems:'center', gap: isMobAE ? '8px' : '16px', flex:1, minWidth:0 }}>
@@ -11178,7 +11178,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'600px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>Inviter underentreprenorer</h2>
@@ -11264,7 +11264,7 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏆 Tildel anbud</h2>
@@ -11984,7 +11984,7 @@ function EndringsmeldingPage() {
 
     return (
       <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
+        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
         <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'900px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
           <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700' }}>🔄 {isEdit ? 'Rediger' : 'Ny'} endringsmelding</h2>
@@ -13204,7 +13204,7 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{cfg.title}</h2>
@@ -13304,7 +13304,7 @@ function VersionViewerModal({ em, version, totalVersions, projects, onClose }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'700px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         {/* Header */}
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'16px' }}>
@@ -14136,7 +14136,7 @@ function FakturaUpsellModal({ onClose }) {
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
         {/* Header med gradient */}
         <div style={{ background:'linear-gradient(135deg, #059669 0%, #10b981 100%)', padding: isMob ? '24px 20px' : '32px 28px', color:'white', borderRadius:'20px 20px 0 0' }}>
@@ -14267,7 +14267,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobOE ? 'stretch' : 'center', justifyContent:'center', padding: isMobOE ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobOE ? '0' : '20px', width:'100%', maxWidth: isMobOE ? '100%' : '900px', maxHeight: isMobOE ? '100vh' : '94vh', height: isMobOE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobOE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding: isMobOE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
           <div style={{ display:'flex', alignItems:'center', gap: isMobOE ? '8px' : '16px', flex:1, minWidth:0 }}>
@@ -14453,7 +14453,7 @@ function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center', justifyContent:'center', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px', width:'100%', maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '500px', maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh', height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto', boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
         <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>📋 Ordre fra tilbud</h2>
@@ -14687,7 +14687,7 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMobSO ? 'stretch' : 'center', justifyContent:'center', padding: isMobSO ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobSO ? '0' : '20px', width:'100%', maxWidth: isMobSO ? '100%' : '480px', maxHeight: isMobSO ? '100vh' : '94vh', height: isMobSO ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobSO ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding: isMobSO ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize: isMobSO ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>📧 Send ordrebekreftelse</h2>
@@ -14880,7 +14880,7 @@ function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) 
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMobSR ? 'stretch' : 'center', justifyContent:'center', padding: isMobSR ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobSR ? '0' : '20px', width:'100%', maxWidth: isMobSR ? '100%' : '520px', maxHeight: isMobSR ? '100vh' : '90vh', height: isMobSR ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobSR ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding: isMobSR ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize: isMobSR ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>⚠️ Send purring</h2>
@@ -15036,7 +15036,7 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMobRO ? 'stretch' : 'center', justifyContent:'center', padding: isMobRO ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobRO ? '0' : '20px', width:'100%', maxWidth: isMobRO ? '100%' : '480px', maxHeight: isMobRO ? '100vh' : '90vh', height: isMobRO ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobRO ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding: isMobRO ? '14px 16px' : '20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize: isMobRO ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>🔁 Send på nytt</h2>
@@ -15087,7 +15087,7 @@ function EndringsmeldingModal({ order, user, existingCount, onClose, onSaved }) 
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny endringsmelding</h2>
@@ -15836,7 +15836,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
       {/* Kreditnota-modal */}
       {showKreditnota && (
         <>
-          <div onClick={() => setShowKreditnota(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowKreditnota(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(600px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
               <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>↩️ Opprett kreditnota</h2>
@@ -15984,7 +15984,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMobFE ? 'stretch' : 'center', justifyContent:'center', padding: isMobFE ? '0' : '16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMobFE ? '0' : '20px', width:'100%', maxWidth: isMobFE ? '100%' : '960px', maxHeight: isMobFE ? '100vh' : '94vh', height: isMobFE ? '100vh' : 'auto', display:'flex', flexDirection:'column', boxShadow: isMobFE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding: isMobFE ? '12px 14px' : '18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'8px' }}>
           <h2 style={{ margin:0, fontSize: isMobFE ? '14px' : '18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>🧾 {isEdit?'Rediger':'Ny'} faktura</h2>
@@ -16135,7 +16135,7 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{mode==='partial'?'✂️ Delfakturering':'📦 Faktura fra ordre'}</h2>
@@ -16215,7 +16215,7 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Faktura fra tilbud</h2>
@@ -16288,7 +16288,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Faktura fra endringsmeldinger</h2>
@@ -16407,7 +16407,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'680px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 Delfaktura fra kalkulasjon</h2>
@@ -16573,7 +16573,7 @@ function SendFakturaModal({ invoice, user, onClose, onSent }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send faktura</h2>
@@ -17155,7 +17155,7 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'94vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>👷 {isEdit?'Rediger ansatt':'Ny ansatt'}</h2>
@@ -17216,7 +17216,7 @@ function LeggTilSertifikatModal({ employeeId, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📜 Legg til sertifikat</h2>
@@ -17265,7 +17265,7 @@ function LeggTilProsjektModal({ employeeId, projects, existingIds, onClose, onSa
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏗️ Tilordne prosjekt</h2>
@@ -17344,7 +17344,7 @@ function ImportCSVModal({ user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📥 Importer ansatte fra CSV</h2>
@@ -21021,7 +21021,7 @@ function RessursPage() {
               title="Innstillinger">⚙️</button>
             {showSettings&&(
               <>
-                <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} onClick={()=>setShowSettings(false)} />
+                <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowSettings(false); }} />
                 <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',zIndex:101,width:'min(420px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',fontFamily:'system-ui,sans-serif' }}>
                   <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
                     <div style={{ display:'flex',alignItems:'center',gap:'8px' }}>
@@ -21419,7 +21419,7 @@ function RessursPage() {
       {/* Milestone bottom-sheet — mobil */}
       {isMobRP && showMilestones && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
-          <div onClick={()=>setShowMilestones(false)} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowMilestones(false); }} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
           <div style={{ position:'relative', background:'white', width:'100%', maxWidth:'640px', borderTopLeftRadius:'16px', borderTopRightRadius:'16px', boxShadow:'0 -4px 20px rgba(0,0,0,0.15)', animation:'slideUp 0.25s ease', display:'flex', flexDirection:'column', maxHeight:'85vh' }}>
             <div style={{ padding:'10px 0 0', display:'flex', justifyContent:'center' }}>
               <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'999px' }}/>
@@ -21524,7 +21524,7 @@ function RessursPage() {
       {/* Materiell bottom-sheet — mobil */}
       {isMobRP && showMateriell && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'flex-end', justifyContent:'center' }}>
-          <div onClick={()=>setShowMateriell(false)} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowMateriell(false); }} style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)', animation:'fadeIn 0.2s ease' }}/>
           <div style={{ position:'relative', background:'white', width:'100%', maxWidth:'640px', borderTopLeftRadius:'16px', borderTopRightRadius:'16px', boxShadow:'0 -4px 20px rgba(0,0,0,0.15)', animation:'slideUp 0.25s ease', display:'flex', flexDirection:'column', maxHeight:'85vh' }}>
             <div style={{ padding:'10px 0 0', display:'flex', justifyContent:'center' }}>
               <div style={{ width:'40px', height:'4px', background:'#e2e8f0', borderRadius:'999px' }}/>
@@ -21877,7 +21877,7 @@ function RessursPage() {
         dbList.sort((a,b)=>a.date.localeCompare(b.date))
         return (
           <>
-            <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} onClick={()=>setShowDoubleBookings(false)} />
+            <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowDoubleBookings(false); }} />
             <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(560px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',zIndex:201,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
               <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
                 <div>
@@ -22007,7 +22007,7 @@ function RessursPage() {
       )}
       {materiellDetail && (
         <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setMateriellDetail(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setMateriellDetail(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
               <div>
@@ -22181,7 +22181,7 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'540px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
 
         {/* Header med dynamisk farge basert på type */}
@@ -22497,7 +22497,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
   // ── RENDER ──
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
 
         {/* Header */}
@@ -22982,7 +22982,7 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:zIndex,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexShrink:0 }}>
           <div>
@@ -23353,7 +23353,7 @@ function LedigMannskapModal({ employees, plans, projects, allSkills, onClose, on
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
 
         {/* Header */}
@@ -23641,7 +23641,7 @@ function LedigMaskinerModal({ machines, plans, projects, onClose, onOpenBooking 
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
 
         {/* Header */}
@@ -23837,7 +23837,7 @@ function OppgavePlanleggingModal({ employees, machines, projects, allSkills, pla
   }
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'660px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',alignItems:'center',justifyContent:'space-between',flexShrink:0 }}>
           <div>
@@ -24449,7 +24449,7 @@ function EventModal({ date, initial, projects, employees, user, onClose, onSaved
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '580px',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '92vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>{isEdit?'Rediger hendelse':'Ny hendelse'}</h2>
@@ -24547,7 +24547,7 @@ function EventDetailModal({ event, projects, employees, attendees, user, onClose
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'460px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ background:col,padding:'20px 24px' }}>
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'flex-start' }}>
@@ -24618,7 +24618,7 @@ function SharingModal({ user, employees, sharing, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'460px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>👥 Del din kalender</h2>
@@ -25208,7 +25208,7 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'20px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>💬 Ny kanal</h2>
@@ -25535,7 +25535,7 @@ function KunderPage() {
       {/* Import-modal */}
       {showImport && importData && (
         <>
-          <div onClick={() => { setShowImport(false); setImportData(null); setImportErrors([]) }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowImport(false); setImportData(null); setImportErrors([]) }}} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(640px, calc(100vw - 32px))', maxHeight:'90vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
               <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>Importer kunder fra CSV</h2>
@@ -26204,7 +26204,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'600px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🏢 {isEdit ? 'Rediger kunde' : 'Ny kunde'}</h2>
@@ -26331,7 +26331,7 @@ function KontaktpersonModal({ customerId, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
           <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>👤 Ny kontaktperson</h2>
@@ -26734,7 +26734,7 @@ function CRMPage() {
 
         return (
           <>
-            <div onClick={()=>setShowImportQuotes(false)} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }}/>
+            <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowImportQuotes(false); }} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }}/>
             <div style={{ position:'fixed',top:'50%',left:'50%',transform:'translate(-50%,-50%)',background:'white',borderRadius:'20px',width:'min(600px,calc(100vw - 32px))',maxHeight:'85vh',display:'flex',flexDirection:'column',zIndex:101,boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
               <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
                 <div>
@@ -27169,7 +27169,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'640px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🤝 {isEdit?'Rediger':'Ny'} kunde / lead</h2>
@@ -27228,7 +27228,7 @@ function ContactModal({ customerId, onClose, onSaved }) {
   }
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'440px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
           <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>👤 Ny kontaktperson</h2>
@@ -27264,7 +27264,7 @@ function ActivityModal({ customerId, defaultType, user, onClose, onSaved }) {
   }
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
           <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Ny aktivitet</h2>
@@ -27307,7 +27307,7 @@ function QuotePickerModal({ quotes, customer, onClose, onLink }) {
   const total = q?(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0):0
   return (
     <div style={{ position:'fixed',inset:0,zIndex:110,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'500px',maxHeight:'80vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Tilbud for {customer.name}</h2>
@@ -27622,7 +27622,7 @@ function SystemAlert({ title, message, onClose, variant = 'info' }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000 }} />
       <div style={{
         position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
         background:'white', borderRadius:'20px',
@@ -28873,7 +28873,7 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
 
       {showPdfMenu && (
         <>
-          <div onClick={() => !pdfExporting && setShowPdfMenu(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) !pdfExporting && setShowPdfMenu(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
           <div style={{
             position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%',
             transform: isMobBD ? 'none' : 'translate(-50%,-50%)',
@@ -29311,7 +29311,7 @@ function ObservationCaptureSheet({ inspection, observation, user, onClose, onSav
 
   return (
     <>
-      <div onClick={handleClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) handleClose() }} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
       <div style={{
         position:'fixed',
         inset: isMob ? 0 : 'auto',
@@ -29688,7 +29688,7 @@ function ResolveObservationModal({ inspection, observation, user, onClose, onSav
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
       <div style={{
         position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
         transform: isMob ? 'none' : 'translate(-50%,-50%)',
@@ -29873,7 +29873,7 @@ function ApproveRejectModal({ inspection, observation, user, mode, onClose, onSa
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
       <div style={{
         position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
         transform: isMob ? 'none' : 'translate(-50%,-50%)',
@@ -30339,7 +30339,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:200 }} />
       <div style={{
         position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%',
         transform: isMob ? 'none' : 'translate(-50%,-50%)',
@@ -31016,7 +31016,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
       {showPdfMenu && (
         <>
-          <div onClick={() => !pdfExporting && setShowPdfMenu(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) !pdfExporting && setShowPdfMenu(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
           <div style={{
             position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
             background:'white', borderRadius:'20px',
@@ -31188,7 +31188,7 @@ function BefaringModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:100 }} />
       <div style={{ position:'fixed', inset: isMob ? 0 : 'auto', top: isMob ? 0 : '50%', left: isMob ? 0 : '50%', transform: isMob ? 'none' : 'translate(-50%,-50%)', background:'white', borderRadius: isMob ? 0 : '20px', width: isMob ? '100%' : 'min(640px, calc(100vw - 32px))', height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '92vh', zIndex:101, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'14px 18px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize: isMob ? '15px' : '18px', fontWeight:'700', color:'#0f172a' }}>{isEdit ? '🔍 Rediger befaring' : '🔍 Ny befaring'}</h2>
@@ -31511,7 +31511,7 @@ function BildedokPage() {
       </div>
 
       {lightbox&&(
-        <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center' }} onClick={()=>setLightbox(null)}>
+        <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setLightbox(null); }}>
           <img src={lightbox.file_url} alt={lightbox.description||''} style={{ maxWidth:'90vw',maxHeight:'85vh',objectFit:'contain',borderRadius:'8px' }} />
           <button onClick={()=>setLightbox(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',borderRadius:'50%',width:'40px',height:'40px',color:'white',fontSize:'20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
           <div style={{ position:'absolute',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'white',borderRadius:'12px',padding:'12px 20px',fontSize:'13px',display:'flex',gap:'14px',alignItems:'center',flexWrap:'wrap',maxWidth:'80vw' }}>
@@ -31568,7 +31568,7 @@ function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, 
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems: typeof window !== 'undefined' && window.innerWidth < 768 ? 'stretch' : 'center',justifyContent:'center',padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '16px',fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius: typeof window !== 'undefined' && window.innerWidth < 768 ? '0' : '20px',width:'100%',maxWidth: typeof window !== 'undefined' && window.innerWidth < 768 ? '100%' : '540px',boxShadow: typeof window !== 'undefined' && window.innerWidth < 768 ? 'none' : '0 20px 60px rgba(0,0,0,0.2)',overflow:'hidden',maxHeight: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : '90vh',height: typeof window !== 'undefined' && window.innerWidth < 768 ? '100vh' : 'auto',display:'flex',flexDirection:'column' }}>
         <div style={{ padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '12px 14px' : '18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '15px' : '17px',fontWeight:'700',color:'#0f172a',whiteSpace:'nowrap' }}>📷 Last opp bilder</h2>
@@ -31959,7 +31959,7 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'620px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔩 {isEdit?'Rediger':'Ny'} komponent</h2>
@@ -32016,7 +32016,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📎 Last opp FDV-dokument</h2>
@@ -32068,7 +32068,7 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔩 {comp.name}</h2>
@@ -33652,7 +33652,7 @@ function MinBedriftPage() {
       {/* Confirm modal */}
       {confirmModule && (
         <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={() => setConfirmModule(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmModule(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', padding:'28px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ textAlign:'center', marginBottom:'20px' }}>
               <div style={{ fontSize:'44px', marginBottom:'10px' }}>{confirmModule.action === 'add' ? '✅' : '⚠️'}</div>
@@ -34207,7 +34207,7 @@ function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
-      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'560px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <div>
@@ -34615,7 +34615,7 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
         {/* Gradient header */}
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
@@ -36288,7 +36288,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMob ? '8px' : '5vh 16px', overflowY:'auto' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1280px', maxHeight: isMob ? '95vh' : '93vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Gradient header med fremgangsindikator */}
@@ -36417,7 +36417,7 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:140, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'620px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
 
         <div style={{ padding:'22px 24px 16px', borderBottom:'1px solid #f1f5f9', position:'relative' }}>
@@ -41047,7 +41047,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user }) {
 function BimImportPlaceholderModal({ onClose }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'24px', color:'white', position:'relative' }}>
           <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px' }}>×</button>
@@ -41758,7 +41758,7 @@ function KalkulasjonPage({ onNavigate }) {
       {/* Malvelger */}
       {showTemplatePicker && (
         <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} onClick={() => setShowTemplatePicker(false)} />
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:100 }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowTemplatePicker(false); }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(720px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:101, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
               <div>
@@ -43533,7 +43533,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'700px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <div>
@@ -43870,7 +43870,7 @@ function PrisbokPage({ onBack }) {
       {/* In-app toast popup */}
       {toast && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setToast(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setToast(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'32px 28px', textAlign:'center' }}>
               <div style={{ width:'56px', height:'56px', borderRadius:'50%', background: toast.type === 'success' ? '#f0fdf4' : '#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>
@@ -44118,7 +44118,7 @@ function KalkFaktorerPage({ onBack }) {
       {/* Toast */}
       {toast && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setToast(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setToast(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'32px 28px', textAlign:'center' }}>
               <div style={{ width:'56px', height:'56px', borderRadius:'50%', background: toast.type === 'success' ? '#f0fdf4' : '#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>{toast.type === 'success' ? '✅' : '⚠️'}</div>
@@ -44307,7 +44307,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
 
         {/* Header */}
@@ -46394,7 +46394,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           return (
             <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={onClose} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'550px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
                 <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -46446,7 +46446,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* Flytt bygningsdel modal */}
       {showMoveBdModal && (
         <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setShowMoveBdModal(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowMoveBdModal(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'380px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'24px 24px 8px' }}>
               <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700' }}>Flytt "{showMoveBdModal.bdName}"</h3>
@@ -46522,7 +46522,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           if (loading) return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', padding:'40px', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
                 <div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
                 <p style={{ color:'#94a3b8', fontSize:'14px', margin:0 }}>Sjekker tilgang...</p>
@@ -46533,7 +46533,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // ── UPSELL: Ingen tilgang på ressursplanlegger ──
           if (!hasRessursplan) return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
                 {/* Header med gradient */}
                 <div style={{ background:'linear-gradient(135deg, #059669, #0891b2)', padding:'32px 28px', textAlign:'center', color:'white' }}>
@@ -46784,7 +46784,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
             return (
               <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onClick={onCancel} />
+                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel() }} />
                 <div style={{ position:'relative', background:'white', borderRadius:'16px', width:'100%', maxWidth:'460px', maxHeight:'90vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'20px 22px', fontFamily:'system-ui,sans-serif' }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'14px' }}>
                     <div>
@@ -47011,7 +47011,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // ── Suksessvisning ──
           if (sent) return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'32px', textAlign:'center' }}>
                 <div style={{ fontSize:'48px', marginBottom:'16px' }}>{sent.type === 'ressurs' ? '📅' : '📦'}</div>
                 <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>
@@ -47045,7 +47045,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           // ── Prosjektvalg popup ──
           if (showProjectPicker) return (
             <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={() => setShowProjectPicker(null)} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowProjectPicker(null); }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
                 <div style={{ padding:'24px', textAlign:'center' }}>
                   <div style={{ fontSize:'40px', marginBottom:'12px' }}>⚠️</div>
@@ -47088,7 +47088,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
             return (
               <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+                <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
                 <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'760px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
                   {/* Header */}
                   <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
@@ -47229,7 +47229,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           return (
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'800px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
                 <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
@@ -47470,7 +47470,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* UE forespørsel sendt popup */}
       {showUESuccess && (
         <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setShowUESuccess(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowUESuccess(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
             <div style={{ padding:'28px 24px', textAlign:'center' }}>
               <div style={{ width:'56px', height:'56px', borderRadius:'50%', background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>📧</div>
@@ -47487,7 +47487,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* Lagre som mal modal */}
       {showSaveTemplate && (
         <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onClick={() => setShowSaveTemplate(false)} />
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowSaveTemplate(false); }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(520px, calc(100vw - 32px))', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9' }}>
               <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>🗂️ Lagre kalkulasjon som mal</h2>
@@ -47532,7 +47532,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* Versjonshistorikk-modal */}
       {showVersions && (
         <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onClick={() => { setShowVersions(false); setCompareVersion(null) }} />
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowVersions(false); setCompareVersion(null) }}} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(700px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
               <div>
@@ -47650,7 +47650,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* Generell suksess/feil popup */}
       {toastMsg && (
         <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setToastMsg(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setToastMsg(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'420px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
             <div style={{ padding:'32px 28px', textAlign:'center' }}>
               <div style={{ width:'56px', height:'56px', borderRadius:'50%', background: toastMsg.type === 'success' ? '#f0fdf4' : '#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 16px', fontSize:'28px' }}>
@@ -47762,7 +47762,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 
           return (
             <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
                 <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
                   <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
@@ -47813,7 +47813,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* UE ekstra poster confirmation */}
       {showUEExtraPoster && (
         <div style={{ position:'fixed', inset:0, zIndex:115, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={() => setShowUEExtraPoster(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowUEExtraPoster(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
             <div style={{ padding:'24px' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
@@ -47850,7 +47850,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
       {/* Tilbud popup */}
       {showTilbudPopup && (
         <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onClick={() => setShowTilbudPopup(null)} />
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowTilbudPopup(null); }} />
           <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
             <div style={{ padding:'28px 24px', textAlign:'center' }}>
               {showTilbudPopup === 'created' ? (
@@ -48562,7 +48562,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onClick={onClose} />
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'580px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden', maxHeight:'94vh', display:'flex', flexDirection:'column' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📧 Send tilbud til kunde</h2>
@@ -49170,7 +49170,7 @@ function BVSystemAlert({ title, message, onClose, variant = 'info' }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:9000 }} />
       <div style={{
         position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)',
         background:'white', borderRadius:'20px',
@@ -49642,7 +49642,7 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 
   return (
     <>
-      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100 }} />
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', zIndex:100 }} />
       <div style={{
         position:'fixed', inset:0, background:'white', zIndex:101,
         display:'flex', flexDirection:'column', fontFamily:'system-ui,sans-serif',
@@ -50110,7 +50110,7 @@ function AppContent() {
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
         <>
-          <div onClick={() => setMobileMenuOpen(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:998, transition:'opacity 0.3s' }} />
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setMobileMenuOpen(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:998, transition:'opacity 0.3s' }} />
           <div style={{ position:'fixed', top:0, left:0, height:'100vh', width:'280px', background:'white', zIndex:999, boxShadow:'4px 0 24px rgba(0,0,0,0.15)', display:'flex', flexDirection:'column', overflowY:'auto', animation:'slideIn 0.25s ease-out' }}>
             <style>{`@keyframes slideIn { from { transform: translateX(-100%) } to { transform: translateX(0) } }`}</style>
             {/* Logo */}
