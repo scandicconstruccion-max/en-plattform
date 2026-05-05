@@ -40875,48 +40875,61 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
 // (kjent korrekt i m²) mot summert bounding-box-areal. Hvis bbox-arealet er
 // ~1 000 000× større er det åpenbart millimeter — vi deler alle koordinater på 1000.
 
+// ─── ENHETS-DETEKSJON (Patch 15.B-utvidelse) ─────────────────────────────────
+// Sammenligner totalAreal fra mengde-data (kjent korrekt i m²) mot summert
+// bounding-box-areal fra geometri. Hvis bbox-arealet er ~1 000 000× større
+// er enheten åpenbart millimeter — vi returnerer 0.001 så koordinater kan
+// multipliseres for å normalisere til meter.
+//
+// Returnerer: 1 (m, ingen endring), 0.01 (cm → m), 0.001 (mm → m)
+//
+// Brukes både i 2D-viewer og diagnose-popup.
+
+function detekterEnhetsFaktor(mengder) {
+  if (!mengder) return 1
+  let mengdeArealM2 = 0
+  let bboxArealRaw = 0
+  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
+    const kategoriData = mengder[kat]
+    if (!kategoriData) return
+    mengdeArealM2 += (kategoriData.totalAreal || 0)
+    ;(kategoriData.elementer || []).forEach(e => {
+      if (!e.fotavtrykk) return
+      const w = e.fotavtrykk.maxX - e.fotavtrykk.minX
+      const d = e.fotavtrykk.maxY - e.fotavtrykk.minY
+      const h = e.fotavtrykk.maxZ - e.fotavtrykk.minZ
+      if (kat === 'gulv' || kat === 'tak') {
+        bboxArealRaw += w * d
+      } else {
+        bboxArealRaw += Math.max(w * h, d * h)
+      }
+    })
+  })
+  if (mengdeArealM2 < 0.01 || bboxArealRaw < 0.01) return 1
+  const ratio = bboxArealRaw / mengdeArealM2
+  if (ratio > 100000) return 0.001
+  if (ratio > 100) return 0.01
+  return 1
+}
+
 function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
   const svgRef = React.useRef(null)
   const [valgtEtasjeId, setValgtEtasjeId] = useState(null)  // null = "Alle"
+  const [visningsType, setVisningsType] = useState('plan')  // 'plan' | 'snitt-front' | 'snitt-side'
   const [activeLagsett, setActiveLagsett] = useState(valgtLagsett || null)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [drag, setDrag] = useState(null)  // { startX, startY, startPan }
 
+  const erPlan = visningsType === 'plan'
+  const erSnittFront = visningsType === 'snitt-front'
+  const erSnittSide = visningsType === 'snitt-side'
+
   const etasjer = mengder?._geometri?.etasjer || []
 
   // ── Enhets-deteksjon ────────────────────────────────────────────────────
-  // Sammenlign mengde-areal (m²) mot summert bounding-box-areal.
-  // Hvis bbox-arealet er > 100x mengde-arealet, er det mm — del på 1000.
-  const enhetsFaktor = React.useMemo(() => {
-    let mengdeArealM2 = 0
-    let bboxArealRaw = 0
-    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
-      const kategoriData = mengder[kat]
-      if (!kategoriData) return
-      mengdeArealM2 += (kategoriData.totalAreal || 0)
-      ;(kategoriData.elementer || []).forEach(e => {
-        if (!e.fotavtrykk) return
-        const w = e.fotavtrykk.maxX - e.fotavtrykk.minX
-        const d = e.fotavtrykk.maxY - e.fotavtrykk.minY
-        const h = e.fotavtrykk.maxZ - e.fotavtrykk.minZ
-        // For vegger: side-areal er bredde × høyde (eller dybde × høyde)
-        // For gulv/tak: areal er bredde × dybde
-        if (kat === 'gulv' || kat === 'tak') {
-          bboxArealRaw += w * d
-        } else {
-          // Bruk største side-flate
-          bboxArealRaw += Math.max(w * h, d * h)
-        }
-      })
-    })
-    if (mengdeArealM2 < 0.01 || bboxArealRaw < 0.01) return 1  // ikke nok data
-    const ratio = bboxArealRaw / mengdeArealM2
-    // Hvis bbox er ~1 000 000x (= 1000² mm² per m²), er enheten mm
-    if (ratio > 100000) return 0.001  // mm → m
-    if (ratio > 100) return 0.01  // cm → m
-    return 1  // allerede m
-  }, [mengder])
+  // Bruker delt detekterEnhetsFaktor — samme logikk som diagnose-popup
+  const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
 
   // ── Samle alle elementer som skal tegnes ───────────────────────────────
   const alleElementer = React.useMemo(() => {
@@ -40951,30 +40964,40 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
     return new Set((activeLagsett.elementer || []).map(e => e.id))
   }, [activeLagsett])
 
-  // ── Filtrer elementer etter valgt etasje ───────────────────────────────
+  // ── Filtrer elementer etter valgt etasje (gjelder kun plan-visning) ────
   const synligeElementer = React.useMemo(() => {
+    if (!erPlan) return alleElementer  // I snitt-visninger viser vi alle elementer
     if (!valgtEtasjeId) return alleElementer
     return alleElementer.filter(e => e.etasjeId === valgtEtasjeId)
-  }, [alleElementer, valgtEtasjeId])
+  }, [alleElementer, valgtEtasjeId, erPlan])
 
   // ── Beregn bounding-box for synlige elementer (for auto-skalering) ─────
+  // Aksene avhenger av visningstype:
+  //   plan:        horisontal=X, vertikal=Y
+  //   snitt-front: horisontal=X, vertikal=Z
+  //   snitt-side:  horisontal=Y, vertikal=Z
   const synligBbox = React.useMemo(() => {
     if (synligeElementer.length === 0) return null
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+    let minH = Infinity, maxH = -Infinity, minV = Infinity, maxV = -Infinity
     synligeElementer.forEach(e => {
-      if (e.fotavtrykk.minX < minX) minX = e.fotavtrykk.minX
-      if (e.fotavtrykk.maxX > maxX) maxX = e.fotavtrykk.maxX
-      if (e.fotavtrykk.minY < minY) minY = e.fotavtrykk.minY
-      if (e.fotavtrykk.maxY > maxY) maxY = e.fotavtrykk.maxY
+      const fa = e.fotavtrykk
+      const hMin = erSnittSide ? fa.minY : fa.minX
+      const hMax = erSnittSide ? fa.maxY : fa.maxX
+      const vMin = erPlan ? fa.minY : fa.minZ
+      const vMax = erPlan ? fa.maxY : fa.maxZ
+      if (hMin < minH) minH = hMin
+      if (hMax > maxH) maxH = hMax
+      if (vMin < minV) minV = vMin
+      if (vMax > maxV) maxV = vMax
     })
-    return { minX, maxX, minY, maxY, w: maxX - minX, h: maxY - minY }
-  }, [synligeElementer])
+    return { minH, maxH, minV, maxV, w: maxH - minH, h: maxV - minV }
+  }, [synligeElementer, erPlan, erSnittSide])
 
-  // Reset pan/zoom når etasje endres
+  // Reset pan/zoom når etasje eller visningstype endres
   useEffect(() => {
     setPan({ x: 0, y: 0 })
     setZoom(1)
-  }, [valgtEtasjeId])
+  }, [valgtEtasjeId, visningsType])
 
   // ── SVG-dimensjoner og auto-skalering ──────────────────────────────────
   // Vi bruker viewBox for å auto-skalere innholdet til canvasen.
@@ -40984,14 +41007,14 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
       return '0 0 100 100'
     }
     const padding = 0.05
-    const padX = synligBbox.w * padding
-    const padY = synligBbox.h * padding
-    const vbMinX = synligBbox.minX - padX
-    const vbMinY = synligBbox.minY - padY
-    const vbW = synligBbox.w + 2 * padX
-    const vbH = synligBbox.h + 2 * padY
-    return `${vbMinX} ${-(vbMinY + vbH)} ${vbW} ${vbH}`
-    // Y-aksen flippes (negativ) fordi SVG har Y nedover, IFC har Y oppover
+    const padH = synligBbox.w * padding
+    const padV = synligBbox.h * padding
+    const vbMinH = synligBbox.minH - padH
+    const vbMinV = synligBbox.minV - padV
+    const vbW = synligBbox.w + 2 * padH
+    const vbH = synligBbox.h + 2 * padV
+    // Y-aksen flippes (negativ start) fordi SVG har Y nedover, mens IFC har Y/Z oppover
+    return `${vbMinH} ${-(vbMinV + vbH)} ${vbW} ${vbH}`
   }, [synligBbox])
 
   // ── Mus-event handlers for pan/zoom ────────────────────────────────────
@@ -41016,6 +41039,37 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
   const fargeFor = (el) => {
     if (aktiveIDer.has(el.id)) return { fill: '#86efac', stroke: '#16a34a', sw: 0.05 }  // høylyst grønn
     return { fill: '#e2e8f0', stroke: '#94a3b8', sw: 0.02 }  // grå (default)
+  }
+
+  // ── Beregn rect-koordinater for én element basert på visningstype ──────
+  // Plan:        x=minX, y=-maxY, w=X-spenn,  h=Y-spenn
+  // Snitt front: x=minX, y=-maxZ, w=X-spenn,  h=Z-spenn
+  // Snitt side:  x=minY, y=-maxZ, w=Y-spenn,  h=Z-spenn
+  const rectFor = (e) => {
+    const fa = e.fotavtrykk
+    if (erSnittSide) {
+      return {
+        x: fa.minY,
+        y: -fa.maxZ,
+        w: fa.maxY - fa.minY,
+        h: fa.maxZ - fa.minZ,
+      }
+    }
+    if (erSnittFront) {
+      return {
+        x: fa.minX,
+        y: -fa.maxZ,
+        w: fa.maxX - fa.minX,
+        h: fa.maxZ - fa.minZ,
+      }
+    }
+    // plan
+    return {
+      x: fa.minX,
+      y: -fa.maxY,
+      w: fa.maxX - fa.minX,
+      h: fa.maxY - fa.minY,
+    }
   }
 
   // ── Tellinger ──────────────────────────────────────────────────────────
@@ -41049,8 +41103,26 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
           </button>
         </div>
 
-        {/* Etasjevelger */}
-        {etasjer.length > 0 && (
+        {/* Visningstype-velger (Plan / Snitt front / Snitt side) */}
+        <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#fafbfc' }}>
+          <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', marginRight:'4px' }}>Visning:</span>
+          {[
+            { id: 'plan', label: '🗺️ Plan', tooltip: 'Sett ovenfra' },
+            { id: 'snitt-front', label: '🔍 Snitt front', tooltip: 'Sett forfra (X-Z)' },
+            { id: 'snitt-side', label: '🔍 Snitt side', tooltip: 'Sett fra siden (Y-Z)' },
+          ].map(v => (
+            <button
+              key={v.id}
+              onClick={() => setVisningsType(v.id)}
+              title={v.tooltip}
+              style={{ background: visningsType === v.id ? '#0f172a' : 'white', color: visningsType === v.id ? 'white' : '#475569', border: '1px solid ' + (visningsType === v.id ? '#0f172a' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
+              {v.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Etasjevelger (kun i plan-visning) */}
+        {erPlan && etasjer.length > 0 && (
           <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#fafbfc' }}>
             <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', marginRight:'4px' }}>Etasje:</span>
             <button
@@ -41120,13 +41192,14 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
                   {/* Først grå (bakgrunn) */}
                   {synligeElementer.filter(e => !aktiveIDer.has(e.id)).map(e => {
                     const f = fargeFor(e)
+                    const r = rectFor(e)
                     return (
                       <rect
                         key={e.id}
-                        x={e.fotavtrykk.minX}
-                        y={-e.fotavtrykk.maxY}
-                        width={e.fotavtrykk.maxX - e.fotavtrykk.minX}
-                        height={e.fotavtrykk.maxY - e.fotavtrykk.minY}
+                        x={r.x}
+                        y={r.y}
+                        width={r.w}
+                        height={r.h}
                         fill={f.fill}
                         stroke={f.stroke}
                         strokeWidth={f.sw}
@@ -41137,13 +41210,14 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
                   {/* Deretter grønne (i forgrunn) */}
                   {synligeElementer.filter(e => aktiveIDer.has(e.id)).map(e => {
                     const f = fargeFor(e)
+                    const r = rectFor(e)
                     return (
                       <rect
                         key={e.id}
-                        x={e.fotavtrykk.minX}
-                        y={-e.fotavtrykk.maxY}
-                        width={e.fotavtrykk.maxX - e.fotavtrykk.minX}
-                        height={e.fotavtrykk.maxY - e.fotavtrykk.minY}
+                        x={r.x}
+                        y={r.y}
+                        width={r.w}
+                        height={r.h}
                         fill={f.fill}
                         stroke={f.stroke}
                         strokeWidth={f.sw}
@@ -41167,7 +41241,11 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
 
             {/* Floating info-overlay */}
             <div style={{ position:'absolute', top:'12px', left:'12px', background:'rgba(255,255,255,0.95)', borderRadius:'8px', padding:'6px 10px', fontSize:'11px', color:'#475569', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
-              {synligeElementer.length} elementer · {valgtEtasjeId ? etasjer.find(e => e.id === valgtEtasjeId)?.navn : 'alle etasjer'}
+              {synligeElementer.length} elementer · {
+                erPlan ? (valgtEtasjeId ? etasjer.find(e => e.id === valgtEtasjeId)?.navn : 'alle etasjer')
+                : erSnittFront ? 'snitt forfra (X-Z)'
+                : 'snitt fra siden (Y-Z)'
+              }
               {enhetsFaktor !== 1 && <span style={{ color:'#92400e' }}> · enhet: {enhetsFaktor === 0.001 ? 'mm' : 'cm'} → m</span>}
             </div>
           </div>
@@ -41221,6 +41299,10 @@ function visGeometriDiagnose(metadata, onAlert) {
   const fotavtrykkProsent = totaltElementer > 0 ? (elementerMedFotavtrykk / totaltElementer * 100) : 0
   const etasjeProsent = totaltElementer > 0 ? (elementerMedEtasje / totaltElementer * 100) : 0
 
+  // Patch 15.B-utvidelse: Detekter enhetsfaktor for å vise korrekte tall i meter
+  const enhetsFaktor = detekterEnhetsFaktor(metadata?.mengder)
+  const enhetsTekst = enhetsFaktor === 0.001 ? 'mm' : (enhetsFaktor === 0.01 ? 'cm' : 'm')
+
   // Vurder samlet kvalitet
   let vurdering = 'ukjent'
   let vurderingFarge = 'info'
@@ -41243,10 +41325,10 @@ function visGeometriDiagnose(metadata, onAlert) {
     vurderingTekst = '❌ Ingen parsbar geometri funnet. 2D-viewer kan ikke fungere på denne fila.'
   }
 
-  // Modell-spenn
-  const sx = (diagnose.minSpenn.x[1] ?? 0) - (diagnose.minSpenn.x[0] ?? 0)
-  const sy = (diagnose.minSpenn.y[1] ?? 0) - (diagnose.minSpenn.y[0] ?? 0)
-  const sz = (diagnose.minSpenn.z[1] ?? 0) - (diagnose.minSpenn.z[0] ?? 0)
+  // Modell-spenn (med enhets-konvertering)
+  const sx = ((diagnose.minSpenn.x[1] ?? 0) - (diagnose.minSpenn.x[0] ?? 0)) * enhetsFaktor
+  const sy = ((diagnose.minSpenn.y[1] ?? 0) - (diagnose.minSpenn.y[0] ?? 0)) * enhetsFaktor
+  const sz = ((diagnose.minSpenn.z[1] ?? 0) - (diagnose.minSpenn.z[0] ?? 0)) * enhetsFaktor
   const harSpenn = isFinite(sx) && isFinite(sy) && sx > 0 && sy > 0
 
   // Bygg stats-kort
@@ -41267,7 +41349,7 @@ function visGeometriDiagnose(metadata, onAlert) {
         { label: 'Elementer med etasje', value: `${elementerMedEtasje} (${etasjeProsent.toFixed(0)} %)`, highlight: etasjeProsent >= 75 },
         ...etasjer.map(e => ({
           label: e.navn,
-          value: `Z = ${e.elevation.toFixed(2)} m`,
+          value: `Z = ${(e.elevation * enhetsFaktor).toFixed(2)} m`,
         })),
       ] : [
         { label: 'Status', value: 'IFC-fila har ingen IfcBuildingStorey' },
@@ -41279,7 +41361,7 @@ function visGeometriDiagnose(metadata, onAlert) {
   if (harSpenn) {
     stats.push({
       title: '📏 Modell-størrelse',
-      subtitle: 'Globale koordinater',
+      subtitle: enhetsFaktor !== 1 ? `Konvertert fra ${enhetsTekst} til m` : 'Globale koordinater',
       items: [
         { label: 'X-spenn (bredde)', value: `${sx.toFixed(1)} m` },
         { label: 'Y-spenn (dybde)', value: `${sy.toFixed(1)} m` },
