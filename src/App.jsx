@@ -41596,13 +41596,44 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     const modellSpennX = modellMaxX - modellMinX
     const modellSpennZ = modellMaxZ - modellMinZ
     const modellSpennY = modellMaxY - modellMinY  // dette er nå høyde
-    const gridSize = Math.max(modellSpennX, modellSpennZ, 20) * 1.5
-    const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
-    grid.position.y = -modellSpennY / 2 - 0.5  // under modellen
-    scene.add(grid)
+
+    // Patch 16-fix v3: Diagnose-logging for å verifisere koordinatsystem
+    console.log('[3D-modell] Modell-dimensjoner (Three.js-koordinater etter Y/Z-bytte):')
+    console.log(`  Bredde (X):   ${modellSpennX.toFixed(2)} m   (X: ${modellMinX.toFixed(2)} til ${modellMaxX.toFixed(2)})`)
+    console.log(`  Høyde  (Y):   ${modellSpennY.toFixed(2)} m   (Y: ${modellMinY.toFixed(2)} til ${modellMaxY.toFixed(2)})`)
+    console.log(`  Dybde  (Z):   ${modellSpennZ.toFixed(2)} m   (Z: ${modellMinZ.toFixed(2)} til ${modellMaxZ.toFixed(2)})`)
+
+    // Patch 16-fix v3: Sanity-sjekk på orientering. For et bygg burde høyden (Y) være
+    // det MINSTE av de tre dimensjonene (bygg er bredere enn de er høye). Hvis Y er
+    // den største aksen, er noe galt med koordinatsystemet — Y/Z-byttet var ikke
+    // riktig for denne IFC-fila. Da roterer vi meshGruppen 90° rundt X-aksen for å
+    // få bygget til å stå rett opp.
+    if (modellSpennY > modellSpennX && modellSpennY > modellSpennZ) {
+      console.warn('[3D-modell] ADVARSEL: Modellen står sannsynligvis på siden. Auto-roterer 90° rundt X-akse.')
+      meshGruppe.rotation.x = Math.PI / 2
+      // Etter rotasjon: vi må også oppdatere "spenn"-verdiene. Aksene byttes:
+      // Y og Z bytter plass. cy og cz bytter også.
+      const nyttSpennY = modellSpennZ
+      const nyttSpennZ = modellSpennY
+      // Re-sentrer modellen — etter X-rotasjon er Y og Z byttet for sentreringen
+      meshGruppe.position.set(-cx, cz, -cy)
+      // Bruk de nye spenn-verdiene for grid og kamera-radius
+      const gridSize = Math.max(modellSpennX, nyttSpennZ, 20) * 1.5
+      const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
+      grid.position.y = -nyttSpennY / 2 - 0.5
+      scene.add(grid)
+      var modellRadiusInput = Math.max(modellSpennX, nyttSpennZ, nyttSpennY)
+    } else {
+      // Normal kasus: Y/Z-byttet i vertex-data var riktig
+      const gridSize = Math.max(modellSpennX, modellSpennZ, 20) * 1.5
+      const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
+      grid.position.y = -modellSpennY / 2 - 0.5  // under modellen
+      scene.add(grid)
+      var modellRadiusInput = Math.max(modellSpennX, modellSpennZ, modellSpennY)
+    }
 
     // Sett kamera-posisjon basert på modell-størrelse
-    const radius = Math.max(modellSpennX, modellSpennZ, modellSpennY) * 1.4
+    const radius = modellRadiusInput * 1.4
     let theta = Math.PI * 0.3
     let phi = Math.PI * 0.4
     let cameraRadius = radius
