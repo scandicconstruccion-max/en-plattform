@@ -41569,6 +41569,9 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     let theta = Math.PI * 0.3
     let phi = Math.PI * 0.4
     let cameraRadius = radius
+    // Patch 16-fix: Pan-offset fra origo (uavhengig av cx/cy/cz)
+    let panOffsetX = 0
+    let panOffsetY = 0
 
     function updateCamera() {
       camera.position.x = cameraRadius * Math.sin(phi) * Math.cos(theta)
@@ -41578,17 +41581,37 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     }
     updateCamera()
 
+    // Patch 16-fix: Standard-visningsvinkler. Brukeren kan hoppe rett til front/side/topp/iso.
+    function setVisning(navn) {
+      switch(navn) {
+        case 'front':  theta = Math.PI * 0.5;  phi = Math.PI * 0.5;  break  // direkte forfra (Z-akse)
+        case 'side':   theta = 0;              phi = Math.PI * 0.5;  break  // fra siden (X-akse)
+        case 'topp':   theta = Math.PI * 0.5;  phi = 0.05;           break  // ovenfra (nesten rett ned)
+        case 'iso':    theta = Math.PI * 0.3;  phi = Math.PI * 0.4;  break  // standard isometrisk
+        default: return
+      }
+      cameraRadius = radius  // Reset zoom også
+      panOffsetX = 0; panOffsetY = 0
+      meshGruppe.position.set(-cx, -cy, -cz)
+      updateCamera()
+    }
+
     // Mus-kontroller
     let isDragging = false
     let isPanning = false
     let lastX = 0, lastY = 0
-    let panX = 0, panY = 0
 
     const dom = renderer.domElement
     const onMouseDown = (e) => {
-      if (e.button === 2 || e.shiftKey) isPanning = true
-      else isDragging = true
+      // Mellomknapp (button 1) eller høyreknapp (button 2) eller shift = pan
+      // Venstreklikk uten shift = roter
+      if (e.button === 1 || e.button === 2 || e.shiftKey) {
+        isPanning = true
+      } else {
+        isDragging = true
+      }
       lastX = e.clientX; lastY = e.clientY
+      e.preventDefault()
     }
     const onMouseUp = () => { isDragging = false; isPanning = false }
     const onMouseMove = (e) => {
@@ -41599,10 +41622,13 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         phi = Math.max(0.05, Math.min(Math.PI - 0.05, phi - dy * 0.008))
         updateCamera()
       } else if (isPanning) {
-        panX += dx * 0.05
-        panY += dy * 0.05
-        meshGruppe.position.x = -cx + panX
-        meshGruppe.position.y = -cy - panY
+        // Patch 16-fix: Skala pan til kameraavstand så samme musbevegelse
+        // gir samme oppfattede pan uavhengig av zoom-nivå.
+        const panSkala = cameraRadius * 0.0015
+        panOffsetX += dx * panSkala
+        panOffsetY -= dy * panSkala  // negativ for å matche musens retning
+        meshGruppe.position.x = -cx + panOffsetX
+        meshGruppe.position.y = -cy + panOffsetY
       }
       lastX = e.clientX; lastY = e.clientY
     }
@@ -41613,11 +41639,26 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     }
     const onContextMenu = (e) => e.preventDefault()
 
+    // Patch 16-fix: Tastatursnarveier (1=front, 2=side, 3=topp, 4=iso, r=reset)
+    const onKeyDown = (e) => {
+      // Bare hvis vi ikke er i et input-felt
+      const tag = (document.activeElement?.tagName || '').toLowerCase()
+      if (tag === 'input' || tag === 'textarea') return
+      switch(e.key) {
+        case '1': setVisning('front'); e.preventDefault(); break
+        case '2': setVisning('side');  e.preventDefault(); break
+        case '3': setVisning('topp');  e.preventDefault(); break
+        case '4': setVisning('iso');   e.preventDefault(); break
+        case 'r': case 'R': setVisning('iso'); e.preventDefault(); break
+      }
+    }
+
     dom.addEventListener('mousedown', onMouseDown)
     window.addEventListener('mouseup', onMouseUp)
     window.addEventListener('mousemove', onMouseMove)
     dom.addEventListener('wheel', onWheel, { passive: false })
     dom.addEventListener('contextmenu', onContextMenu)
+    window.addEventListener('keydown', onKeyDown)
 
     // Touch-kontroller (forenklet — én finger = roter, to fingre = zoom)
     let touchLastX = 0, touchLastY = 0, touchLastDist = 0
@@ -41677,15 +41718,8 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       THREE, scene, camera, renderer, idTilMesh,
       matGray, matHighlight, matHidden,
       meshGruppe, modellSenter: { cx, cy, cz },
-      panData: { panX: 0, panY: 0 },
-      reset: () => {
-        theta = Math.PI * 0.3
-        phi = Math.PI * 0.4
-        cameraRadius = radius
-        panX = 0; panY = 0
-        meshGruppe.position.set(-cx, -cy, -cz)
-        updateCamera()
-      },
+      setVisning,  // Patch 16-fix: lar UI-knapper hoppe til preset-vinkler
+      reset: () => setVisning('iso'),
     }
 
     // Cleanup ved unmount
@@ -41696,6 +41730,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       window.removeEventListener('mousemove', onMouseMove)
       dom.removeEventListener('wheel', onWheel)
       dom.removeEventListener('contextmenu', onContextMenu)
+      window.removeEventListener('keydown', onKeyDown)
       dom.removeEventListener('touchstart', onTouchStart)
       dom.removeEventListener('touchmove', onTouchMove)
       window.removeEventListener('resize', onResize)
@@ -41746,11 +41781,23 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               </p>
             )}
           </div>
-          <button
-            onClick={() => sceneRef.current?.reset()}
-            style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#475569', cursor:'pointer' }}>
-            🎯 Sentrer
-          </button>
+          {/* Patch 16-fix: Visnings-presets — front/side/topp/iso */}
+          <div style={{ display:'flex', gap:'4px', alignItems:'center' }}>
+            {[
+              { id: 'front', label: 'Front', tip: 'Sett rett forfra (1)' },
+              { id: 'side', label: 'Side', tip: 'Sett fra siden (2)' },
+              { id: 'topp', label: 'Topp', tip: 'Sett ovenfra (3)' },
+              { id: 'iso', label: 'Iso', tip: 'Tre-kvarter (4)' },
+            ].map(v => (
+              <button
+                key={v.id}
+                onClick={() => sceneRef.current?.setVisning?.(v.id)}
+                title={v.tip}
+                style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 10px', fontSize:'12px', fontWeight:'600', color:'#475569', cursor:'pointer' }}>
+                {v.label}
+              </button>
+            ))}
+          </div>
           <button onClick={onClose}
             style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>
             ×
@@ -41825,7 +41872,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               <>
                 <div ref={containerRef} style={{ width:'100%', height:'100%', cursor:'grab' }} />
                 <div style={{ position:'absolute', top:'12px', left:'12px', background:'rgba(255,255,255,0.95)', borderRadius:'8px', padding:'6px 10px', fontSize:'11px', color:'#475569', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
-                  {alleElementer.length} elementer · drag for å rotere · scroll for zoom · shift+drag for pan
+                  {alleElementer.length} elementer · drag = roter · scroll = zoom · høyreklikk eller shift+drag = pan · 1/2/3/4 = front/side/topp/iso
                 </div>
               </>
             )}
