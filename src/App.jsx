@@ -41542,28 +41542,23 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     for (const el of alleElementer) {
       try {
         const geom = new THREE.BufferGeometry()
-        // Skalér vertices med enhetsFaktor for å normalisere til meter,
-        // og samtidig bytt Y/Z slik at IFC sin Z (oppover) blir Three.js sin Y (oppover).
-        // IFC: (X, Y, Z) → Three.js: (X, Z, -Y)
+        // Patch 16-fix v4: Bruk vertices som de er (ingen hardkodet Y/Z-bytte).
+        // Vi roterer hele meshGruppen ETTER at modellen er bygget, basert på
+        // hvilken akse som er den minste — det er byggets høyde.
         const skalerteVerts = new Float32Array(el.mesh.vertices.length)
-        const skalerteNormals = new Float32Array(el.mesh.normals.length)
-        for (let i = 0; i < el.mesh.vertices.length; i += 3) {
-          skalerteVerts[i]     = el.mesh.vertices[i]     * enhetsFaktor      // X → X
-          skalerteVerts[i + 1] = el.mesh.vertices[i + 2] * enhetsFaktor      // Z → Y (opp)
-          skalerteVerts[i + 2] = -el.mesh.vertices[i + 1] * enhetsFaktor     // -Y → Z
-          skalerteNormals[i]     =  el.mesh.normals[i]
-          skalerteNormals[i + 1] =  el.mesh.normals[i + 2]
-          skalerteNormals[i + 2] = -el.mesh.normals[i + 1]
+        for (let i = 0; i < el.mesh.vertices.length; i++) {
+          skalerteVerts[i] = el.mesh.vertices[i] * enhetsFaktor
         }
         geom.setAttribute('position', new THREE.BufferAttribute(skalerteVerts, 3))
         if (el.mesh.normals && el.mesh.normals.length === el.mesh.vertices.length) {
-          geom.setAttribute('normal', new THREE.BufferAttribute(skalerteNormals, 3))
+          // Normaler trenger ikke skalering — bare kopier
+          geom.setAttribute('normal', new THREE.BufferAttribute(el.mesh.normals, 3))
         } else {
           geom.computeVertexNormals()
         }
         geom.setIndex(new THREE.BufferAttribute(el.mesh.indices, 1))
 
-        // Oppdater modell-bbox (i meter etter skalering, i Three.js-koordinater)
+        // Oppdater modell-bbox (i råe IFC-koordinater, skalert til meter)
         for (let v = 0; v < skalerteVerts.length; v += 3) {
           const x = skalerteVerts[v]
           const y = skalerteVerts[v + 1]
@@ -41585,55 +41580,64 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       }
     }
 
-    // Sentrer modellen rundt origo (i Three.js-koordinater nå)
+    const spennX = modellMaxX - modellMinX
+    const spennY = modellMaxY - modellMinY
+    const spennZ = modellMaxZ - modellMinZ
     const cx = (modellMinX + modellMaxX) / 2
     const cy = (modellMinY + modellMaxY) / 2
     const cz = (modellMinZ + modellMaxZ) / 2
-    meshGruppe.position.set(-cx, -cy, -cz)
-    scene.add(meshGruppe)
 
-    // Bakke-grid (på Y = bunnen av modellen)
-    const modellSpennX = modellMaxX - modellMinX
-    const modellSpennZ = modellMaxZ - modellMinZ
-    const modellSpennY = modellMaxY - modellMinY  // dette er nå høyde
+    console.log('[3D-modell] Råe IFC-dimensjoner (etter skalering til meter):')
+    console.log(`  X: ${spennX.toFixed(2)} m`)
+    console.log(`  Y: ${spennY.toFixed(2)} m`)
+    console.log(`  Z: ${spennZ.toFixed(2)} m`)
 
-    // Patch 16-fix v3: Diagnose-logging for å verifisere koordinatsystem
-    console.log('[3D-modell] Modell-dimensjoner (Three.js-koordinater etter Y/Z-bytte):')
-    console.log(`  Bredde (X):   ${modellSpennX.toFixed(2)} m   (X: ${modellMinX.toFixed(2)} til ${modellMaxX.toFixed(2)})`)
-    console.log(`  Høyde  (Y):   ${modellSpennY.toFixed(2)} m   (Y: ${modellMinY.toFixed(2)} til ${modellMaxY.toFixed(2)})`)
-    console.log(`  Dybde  (Z):   ${modellSpennZ.toFixed(2)} m   (Z: ${modellMinZ.toFixed(2)} til ${modellMaxZ.toFixed(2)})`)
-
-    // Patch 16-fix v3: Sanity-sjekk på orientering. For et bygg burde høyden (Y) være
-    // det MINSTE av de tre dimensjonene (bygg er bredere enn de er høye). Hvis Y er
-    // den største aksen, er noe galt med koordinatsystemet — Y/Z-byttet var ikke
-    // riktig for denne IFC-fila. Da roterer vi meshGruppen 90° rundt X-aksen for å
-    // få bygget til å stå rett opp.
-    if (modellSpennY > modellSpennX && modellSpennY > modellSpennZ) {
-      console.warn('[3D-modell] ADVARSEL: Modellen står sannsynligvis på siden. Auto-roterer 90° rundt X-akse.')
-      meshGruppe.rotation.x = Math.PI / 2
-      // Etter rotasjon: vi må også oppdatere "spenn"-verdiene. Aksene byttes:
-      // Y og Z bytter plass. cy og cz bytter også.
-      const nyttSpennY = modellSpennZ
-      const nyttSpennZ = modellSpennY
-      // Re-sentrer modellen — etter X-rotasjon er Y og Z byttet for sentreringen
-      meshGruppe.position.set(-cx, cz, -cy)
-      // Bruk de nye spenn-verdiene for grid og kamera-radius
-      const gridSize = Math.max(modellSpennX, nyttSpennZ, 20) * 1.5
-      const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
-      grid.position.y = -nyttSpennY / 2 - 0.5
-      scene.add(grid)
-      var modellRadiusInput = Math.max(modellSpennX, nyttSpennZ, nyttSpennY)
+    // Patch 16-fix v4: Auto-deteksjon av høyde-aksen.
+    // Et bygg er aldri høyere enn det er bredt eller langt — den minste aksen
+    // er derfor høyden. Vi roterer meshGruppen slik at den minste aksen blir
+    // Three.js sin Y-akse (oppover).
+    let modellSpennX, modellSpennY, modellSpennZ  // Etter rotasjon — for grid og kamera
+    if (spennZ <= spennX && spennZ <= spennY) {
+      // Z er minst → IFC Z-up → roter -90° rundt X for å få Z opp som Y
+      // Etter -90° rotasjon rundt X: punkt (px,py,pz) → (px, pz, -py)
+      // Modellsenter (cx,cy,cz) → (cx, cz, -cy)
+      // For å sentrere på origo: position = (-cx, -cz, cy)
+      console.log('[3D-modell] Z er minste akse (IFC Z-up). Roterer for å få Z → Y (opp).')
+      meshGruppe.rotation.x = -Math.PI / 2
+      meshGruppe.position.set(-cx, -cz, cy)
+      modellSpennX = spennX
+      modellSpennY = spennZ  // høyden etter rotasjon
+      modellSpennZ = spennY  // dybden etter rotasjon
+    } else if (spennY <= spennX && spennY <= spennZ) {
+      // Y er minst → IFC er allerede Y-up — ingen rotasjon nødvendig
+      console.log('[3D-modell] Y er minste akse (IFC Y-up). Ingen rotasjon nødvendig.')
+      meshGruppe.position.set(-cx, -cy, -cz)
+      modellSpennX = spennX
+      modellSpennY = spennY
+      modellSpennZ = spennZ
     } else {
-      // Normal kasus: Y/Z-byttet i vertex-data var riktig
-      const gridSize = Math.max(modellSpennX, modellSpennZ, 20) * 1.5
-      const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
-      grid.position.y = -modellSpennY / 2 - 0.5  // under modellen
-      scene.add(grid)
-      var modellRadiusInput = Math.max(modellSpennX, modellSpennZ, modellSpennY)
+      // X er minst → roter +90° rundt Z for å få X opp som Y
+      // Etter +90° rotasjon rundt Z: punkt (px,py,pz) → (-py, px, pz)
+      // Modellsenter (cx,cy,cz) → (-cy, cx, cz)
+      // For å sentrere: position = (cy, -cx, -cz)
+      console.log('[3D-modell] X er minste akse. Roterer for å få X → Y (opp).')
+      meshGruppe.rotation.z = Math.PI / 2
+      meshGruppe.position.set(cy, -cx, -cz)
+      modellSpennX = spennY  // bredden etter rotasjon
+      modellSpennY = spennX  // høyden etter rotasjon
+      modellSpennZ = spennZ
     }
 
+    scene.add(meshGruppe)
+
+    // Bakke-grid på Y = bunnen av modellen
+    const gridSize = Math.max(modellSpennX, modellSpennZ, 20) * 1.5
+    const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
+    grid.position.y = -modellSpennY / 2 - 0.5
+    scene.add(grid)
+
     // Sett kamera-posisjon basert på modell-størrelse
-    const radius = modellRadiusInput * 1.4
+    const radius = Math.max(modellSpennX, modellSpennZ, modellSpennY) * 1.4
     let theta = Math.PI * 0.3
     let phi = Math.PI * 0.4
     let cameraRadius = radius
