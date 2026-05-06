@@ -37227,6 +37227,50 @@ function byggEtasjeLookup(api, mod, modelID) {
   return { elementToEtasje, etasjer: sorterteEtasjer }
 }
 
+// ─── PATCH 15.G: FORM-KLASSIFISERING BASERT PÅ BBOX-DIMENSJONER ──────────────
+// Når et element ikke har klar IFC-type (f.eks. IfcBuildingElementProxy),
+// kan vi gjette form basert på bounding-box-proporsjoner:
+//
+//   Vegg: lang og høy, men smal (lengde/tykkelse > 5, høyde/tykkelse > 5)
+//   Dekke: bredt og dypt, men lavt (bredde/tykkelse > 5, dybde/tykkelse > 5)
+//   Søyle: høy, men smal i begge horisontalt-retninger
+//   Bjelke: lang i én retning, smal i andre to
+//   Ukjent: ingen klar form-pattern
+//
+// Aksene tolkes slik at ekstrahering av "bunn-vertices" fortsatt vil gi
+// riktig fotavtrykk (Z er vertikal, X og Y er horisontale).
+
+function klassifiserForm(fotavtrykk) {
+  if (!fotavtrykk) return 'ukjent'
+  const w = fotavtrykk.maxX - fotavtrykk.minX
+  const d = fotavtrykk.maxY - fotavtrykk.minY
+  const h = fotavtrykk.maxZ - fotavtrykk.minZ
+  if (w <= 0 || d <= 0 || h <= 0) return 'ukjent'
+
+  // Sortér dimensjonene fra størst til minst
+  const dims = [w, d, h].sort((a, b) => b - a)
+  const stor = dims[0], medium = dims[1], liten = dims[2]
+  const ratio_sm = stor / medium
+  const ratio_ml = medium / liten
+  const ratio_sl = stor / liten
+
+  // Dekke/gulv: to store horisontale dimensjoner, én liten vertikal
+  // (h er minst, w og d er begge mye større)
+  if (h === liten && w / h > 4 && d / h > 4) return 'dekke'
+
+  // Vegg: én liten dimensjon (tykkelse), én stor (lengde), én medium (høyde)
+  // — typisk h som medium og bredde-eller-dybde som liten/stor
+  if (h !== liten && ratio_sl > 5 && ratio_ml > 3) return 'vegg'
+
+  // Søyle: én stor dimensjon (høyde), to små (kvadratisk tverrsnitt)
+  if (h === stor && ratio_ml < 2 && ratio_sm > 3) return 'søyle'
+
+  // Bjelke: én stor (lengde), to relativt små
+  if (h !== stor && ratio_sm > 4 && ratio_ml < 2) return 'bjelke'
+
+  return 'ukjent'
+}
+
 async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const result = {
     yttervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
@@ -37298,7 +37342,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         const typeId = instanceToTypeLookup.get(elementId)
         if (typeId) lagstruktur = layerLookup.get(typeId) || null
       }
-      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, isExternal: isExt, lagstruktur }
+      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, isExternal: isExt, lagstruktur, ifcType: wType }
 
       let kat = 'ukjent_vegg'
       if (isExt === true) kat = 'yttervegg'
@@ -37381,7 +37425,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       result.tak.antall++
       result.tak.totalAreal += areal
       result.tak.totalVolum += volum
-      result.tak.elementer.push({ id: elementId, navn, areal, volum, lagstruktur })
+      result.tak.elementer.push({ id: elementId, navn, areal, volum, lagstruktur, ifcType: 'IFCROOF' })
     }
   }
 
@@ -37437,7 +37481,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       result.gulv.antall++
       result.gulv.totalAreal += areal
       result.gulv.totalVolum += volum
-      result.gulv.elementer.push({ id: elementId, navn, areal, volum, predef, lagstruktur })
+      result.gulv.elementer.push({ id: elementId, navn, areal, volum, predef, lagstruktur, ifcType: 'IFCSLAB' })
     }
     console.log(`[ifc] slab mengder: ${mengderFraInstans} fra instans, ${mengderFraType} fra type, ${ingenMengder} uten mengder`)
   }
@@ -37474,7 +37518,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
 
       result.vindu.antall++
       result.vindu.totalAreal += areal
-      result.vindu.elementer.push({ id: elementId, navn, width, height, areal, partitioningType })
+      result.vindu.elementer.push({ id: elementId, navn, width, height, areal, partitioningType, ifcType: 'IFCWINDOW' })
     }
   }
   result.vindu.gjennomsnittAreal = result.vindu.antall > 0 ? result.vindu.totalAreal / result.vindu.antall : 0
@@ -37496,7 +37540,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       const navn = element?.Name?.value || `Dør #${elementId}`
       result.dor.antall++
       result.dor.totalAreal += areal
-      result.dor.elementer.push({ id: elementId, navn, width, height, areal })
+      result.dor.elementer.push({ id: elementId, navn, width, height, areal, ifcType: 'IFCDOOR' })
     }
   }
   result.dor.gjennomsnittAreal = result.dor.antall > 0 ? result.dor.totalAreal / result.dor.antall : 0
@@ -37620,6 +37664,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         kilde,
         erProxy: true,
         lagstruktur: proxyLagstruktur,
+        ifcType: 'IFCBUILDINGELEMENTPROXY',
       }
 
       // Legg i riktig kategori
@@ -38061,6 +38106,8 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       if (fa) {
         e.fotavtrykk = fa
         elementerMedFotavtrykk++
+        // Patch 15.G: Klassifiser form basert på bbox-dimensjoner
+        e.formType = klassifiserForm(fa)
       }
       const et = elementToEtasje.get(e.id)
       if (et) {
@@ -40068,6 +40115,164 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
   )
 }
 
+// ─── PATCH 15.G: LAGSETT-DIAGNOSE ────────────────────────────────────────────
+// Analyserer et lagsett og forteller brukeren hvilke IFC-typer og former
+// som faktisk er i lagsettet. Brukes for å diagnostisere "vegg vs dekke"-
+// problemet — om et lagsett som heter "Trestender 98 mm" inneholder en
+// blanding av IfcWall, IfcSlab, IfcBeam, eller diverse proxy-elementer.
+//
+// Viser også form-fordeling (lange/smale → vegger, brede/flate → dekker, etc.)
+// basert på bbox-dimensjoner fra Patch 15.A.
+
+function visLagsettDiagnose(lagsett, onAlert) {
+  const elementer = lagsett.elementer || []
+  if (elementer.length === 0) {
+    onAlert({
+      message: 'Ingen elementer å analysere',
+      subMessage: 'Dette lagsettet har ingen elementer å diagnostisere.',
+      kind: 'warn',
+    })
+    return
+  }
+
+  // Tell IFC-typer
+  const typeTeller = {}
+  // Tell form-typer (basert på bbox-proporsjoner)
+  const formTeller = { vegg: 0, dekke: 0, søyle: 0, bjelke: 0, ukjent: 0, manglerForm: 0 }
+  // Tell elementer uten fotavtrykk (kan ikke analyseres)
+  let utenFotavtrykk = 0
+  // Eksempler per form (max 3 per type) for å vise dimensjoner
+  const eksempler = { vegg: [], dekke: [], søyle: [], bjelke: [], ukjent: [] }
+
+  elementer.forEach(e => {
+    const ifcType = e.ifcType || 'UKJENT'
+    typeTeller[ifcType] = (typeTeller[ifcType] || 0) + 1
+
+    if (!e.fotavtrykk) {
+      utenFotavtrykk++
+      formTeller.manglerForm++
+      return
+    }
+    const formType = e.formType || 'ukjent'
+    formTeller[formType]++
+    if (eksempler[formType] && eksempler[formType].length < 3) {
+      const fa = e.fotavtrykk
+      const w = (fa.maxX - fa.minX).toFixed(2)
+      const d = (fa.maxY - fa.minY).toFixed(2)
+      const h = (fa.maxZ - fa.minZ).toFixed(2)
+      eksempler[formType].push(`${w}×${d}×${h}m`)
+    }
+  })
+
+  // Bygg stats-kort
+  const stats = []
+
+  // 1. IFC-typer
+  const typerSortert = Object.entries(typeTeller).sort((a, b) => b[1] - a[1])
+  if (typerSortert.length > 0) {
+    stats.push({
+      title: '🏷️ IFC-typer i dette lagsettet',
+      subtitle: typerSortert.length === 1 ? 'Konsistent' : `${typerSortert.length} forskjellige typer (blandet!)`,
+      items: typerSortert.map(([type, antall]) => ({
+        label: type,
+        value: `${antall} stk`,
+        highlight: typerSortert.length === 1,
+      })),
+    })
+  }
+
+  // 2. Form-fordeling
+  const formerMedAntall = ['vegg', 'dekke', 'søyle', 'bjelke', 'ukjent']
+    .filter(f => formTeller[f] > 0)
+    .map(f => ({
+      label: f.charAt(0).toUpperCase() + f.slice(1) + (eksempler[f].length > 0 ? ` (eks: ${eksempler[f][0]})` : ''),
+      value: `${formTeller[f]} stk`,
+      highlight: formTeller[f] === elementer.length,  // grønn kun hvis "alle er denne formen"
+    }))
+  if (formerMedAntall.length > 0) {
+    const dominantForm = Object.entries(formTeller)
+      .filter(([k]) => k !== 'manglerForm')
+      .sort((a, b) => b[1] - a[1])[0]
+    const erBlandet = formerMedAntall.length > 1 && (dominantForm[1] / elementer.length) < 0.85
+    stats.push({
+      title: '📐 Form-analyse (basert på dimensjoner)',
+      subtitle: erBlandet ? 'Blandet — flere forskjellige former!' : `Dominerende: ${dominantForm[0]}`,
+      items: formerMedAntall,
+    })
+  }
+
+  // 3. Bygg vurderings-notes
+  const notes = []
+  const numTyper = typerSortert.length
+  const numFormer = formerMedAntall.length
+  const dominantForm = Object.entries(formTeller)
+    .filter(([k]) => k !== 'manglerForm')
+    .sort((a, b) => b[1] - a[1])[0]
+  const dominantProsent = dominantForm ? (dominantForm[1] / elementer.length * 100) : 0
+
+  // Tilfelle 1: Helt konsistent (kun én type, kun én form)
+  if (numTyper === 1 && numFormer === 1) {
+    notes.push({
+      kind: 'success',
+      icon: '✅',
+      text: `Lagsettet er <strong>konsistent</strong> — alle ${elementer.length} elementer er samme IFC-type og samme form.`,
+    })
+  }
+  // Tilfelle 2: Én IFC-type men forskjellige former
+  else if (numTyper === 1 && numFormer > 1) {
+    notes.push({
+      kind: 'warn',
+      icon: '⚠️',
+      text: `Alle elementer er <strong>${typerSortert[0][0]}</strong>, men formene varierer (${numFormer} ulike). Dette er sjelden — kan tyde på modellerings-feil.`,
+    })
+  }
+  // Tilfelle 3: Flere IFC-typer (typisk problem!)
+  else if (numTyper > 1) {
+    notes.push({
+      kind: 'warn',
+      icon: '⚠️',
+      text: `Lagsettet inneholder <strong>${numTyper} forskjellige IFC-typer</strong>. Dette er sannsynligvis grunnen til at tegningen ser blandet ut.`,
+    })
+    notes.push({
+      kind: 'info',
+      icon: '💡',
+      text: `Mulig forklaring: Arkitekten har brukt samme materialspesifikasjon for ulike bygningselementer — f.eks. både vegger og dekker som har samme kledning.`,
+    })
+  }
+  // Tilfelle 4: Mye proxy
+  if (typeTeller['IFCBUILDINGELEMENTPROXY'] && typeTeller['IFCBUILDINGELEMENTPROXY'] / elementer.length > 0.5) {
+    notes.push({
+      kind: 'info',
+      icon: '📦',
+      text: `<strong>Over halvparten er IfcBuildingElementProxy</strong> — generiske elementer uten klar IFC-kategori. Form-analyse er da viktigste signal.`,
+    })
+  }
+  // Tilfelle 5: Mangler fotavtrykk
+  if (utenFotavtrykk > 0) {
+    notes.push({
+      kind: 'info',
+      icon: '🔍',
+      text: `${utenFotavtrykk} elementer har ikke parsbar geometri — disse kan ikke form-analyseres.`,
+    })
+  }
+
+  onAlert({
+    message: `Diagnose: ${lagsett.navn}`,
+    subMessage: `${elementer.length} elementer analysert`,
+    kind: 'info',
+    details: { stats, notes },
+  })
+
+  // Logg full data til konsoll for utviklere
+  console.log('[Patch 15.G] Lagsett-diagnose:', {
+    navn: lagsett.navn,
+    typeTeller,
+    formTeller,
+    eksempler,
+    elementer,
+  })
+}
+
 function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
@@ -40474,7 +40679,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                 </div>
               </div>
 
-              {/* IFC-detaljer + 2D-tegning-knapp (Patch 14 Steg A + Patch 15.C) */}
+              {/* IFC-detaljer + 2D-tegning-knapp + diagnose (Patch 14.A + 15.C + 15.G) */}
               <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'8px' }}>
                 <BimLagsettDetaljer lagsett={lagsett} isMob={isMob} />
                 {(lagsett.elementer || []).some(e => e.fotavtrykk) && (
@@ -40497,6 +40702,25 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                     <span>Vis i tegning</span>
                   </button>
                 )}
+                {/* Patch 15.G: Diagnose-knapp — finn ut hva slags elementer som er i lagsettet */}
+                <button
+                  onClick={() => visLagsettDiagnose(lagsett, appAlert)}
+                  style={{
+                    background:'#fef3c7',
+                    border:'1px solid #fde68a',
+                    color:'#92400e',
+                    borderRadius:'8px',
+                    padding:'6px 10px',
+                    fontSize:'11px',
+                    fontWeight:'600',
+                    cursor:'pointer',
+                    display:'inline-flex',
+                    alignItems:'center',
+                    gap:'6px',
+                  }}>
+                  <span style={{ fontSize:'12px' }}>🔍</span>
+                  <span>Diagnose</span>
+                </button>
               </div>
 
               {/* Bekreftet match — vis valgt konstruksjon */}
@@ -41047,6 +41271,9 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
   const erSnittFront = visningsType === 'snitt-front'
   const erSnittSide = visningsType === 'snitt-side'
 
+  // Patch 15.G: Toggle for å fargekode elementer etter form-type
+  const [fargeEtterForm, setFargeEtterForm] = useState(false)
+
   const etasjer = mengder?._geometri?.etasjer || []
 
   // ── Enhets-deteksjon ────────────────────────────────────────────────────
@@ -41081,6 +41308,8 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
           },
           etasjeId: e.etasje?.etasjeId || null,
           etasjeNavn: e.etasje?.etasjeNavn || null,
+          formType: e.formType || 'ukjent',
+          ifcType: e.ifcType || 'UKJENT',
         })
       })
     })
@@ -41165,8 +41394,21 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
   const handleMouseUp = () => setDrag(null)
 
   // ── Farger per status ──────────────────────────────────────────────────
+  // Patch 15.G: Hvis fargeEtterForm er aktiv, fargekod ikke-aktive elementer
+  // etter form-type så brukeren kan se vegger vs dekker tydelig.
+  const formFarger = {
+    vegg:   { fill: '#fef3c7', stroke: '#92400e' },  // gul/brun
+    dekke:  { fill: '#dbeafe', stroke: '#1e40af' },  // lyseblå
+    søyle:  { fill: '#f3e8ff', stroke: '#6b21a8' },  // lilla
+    bjelke: { fill: '#ffedd5', stroke: '#9a3412' },  // oransje
+    ukjent: { fill: '#e2e8f0', stroke: '#94a3b8' },  // grå
+  }
   const fargeFor = (el) => {
     if (aktiveIDer.has(el.id)) return { fill: '#86efac', stroke: '#16a34a', sw: 0.05 }  // høylyst grønn
+    if (fargeEtterForm) {
+      const farge = formFarger[el.formType] || formFarger.ukjent
+      return { ...farge, sw: 0.03 }
+    }
     return { fill: '#e2e8f0', stroke: '#94a3b8', sw: 0.02 }  // grå (default)
   }
 
@@ -41249,7 +41491,34 @@ function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, 
               {v.label}
             </button>
           ))}
+          {/* Patch 15.G: Toggle for å fargekode etter form */}
+          <div style={{ flex:1 }} />
+          <button
+            onClick={() => setFargeEtterForm(f => !f)}
+            title="Fargekod elementer etter form-analyse (vegger gul, dekker blå, etc.)"
+            style={{ background: fargeEtterForm ? '#fde68a' : 'white', color: fargeEtterForm ? '#92400e' : '#475569', border: '1px solid ' + (fargeEtterForm ? '#fcd34d' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
+            🎨 {fargeEtterForm ? 'Skjul formfarger' : 'Vis formfarger'}
+          </button>
         </div>
+
+        {/* Patch 15.G: Form-farge-tegnforklaring (kun synlig når aktiv) */}
+        {fargeEtterForm && (
+          <div style={{ padding: isMob ? '6px 12px' : '8px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center', background:'#fffbeb', fontSize:'11px' }}>
+            <span style={{ fontSize:'10px', fontWeight:'700', color:'#92400e', textTransform:'uppercase', letterSpacing:'0.5px' }}>Tegnforklaring:</span>
+            {[
+              { label: 'Vegg', fill: '#fef3c7', stroke: '#92400e' },
+              { label: 'Dekke', fill: '#dbeafe', stroke: '#1e40af' },
+              { label: 'Søyle', fill: '#f3e8ff', stroke: '#6b21a8' },
+              { label: 'Bjelke', fill: '#ffedd5', stroke: '#9a3412' },
+              { label: 'Ukjent', fill: '#e2e8f0', stroke: '#94a3b8' },
+            ].map(f => (
+              <span key={f.label} style={{ display:'inline-flex', alignItems:'center', gap:'4px' }}>
+                <span style={{ width:'12px', height:'12px', background:f.fill, border:`1px solid ${f.stroke}`, borderRadius:'2px' }} />
+                <span style={{ color:'#475569' }}>{f.label}</span>
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Etasjevelger (kun i plan-visning) */}
         {erPlan && etasjer.length > 0 && (
