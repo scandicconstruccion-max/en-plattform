@@ -41606,15 +41606,17 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     let theta = Math.PI * 0.3
     let phi = Math.PI * 0.4
     let cameraRadius = radius
-    // Patch 16-fix: Pan-offset fra origo (uavhengig av cx/cy/cz)
-    let panOffsetX = 0
-    let panOffsetY = 0
+    // Patch 16-fix v2: ArchiCAD-aktig kamera — kameraet roterer rundt et "target"
+    // (look-at-punkt), og pan flytter target istedenfor å flytte modellen.
+    // Resultat: pan føles som man drar scenen, og rotasjon roterer rundt det
+    // punktet man ser på.
+    const cameraTarget = new THREE.Vector3(0, 0, 0)
 
     function updateCamera() {
-      camera.position.x = cameraRadius * Math.sin(phi) * Math.cos(theta)
-      camera.position.y = cameraRadius * Math.cos(phi)
-      camera.position.z = cameraRadius * Math.sin(phi) * Math.sin(theta)
-      camera.lookAt(0, 0, 0)
+      camera.position.x = cameraTarget.x + cameraRadius * Math.sin(phi) * Math.cos(theta)
+      camera.position.y = cameraTarget.y + cameraRadius * Math.cos(phi)
+      camera.position.z = cameraTarget.z + cameraRadius * Math.sin(phi) * Math.sin(theta)
+      camera.lookAt(cameraTarget)
     }
     updateCamera()
 
@@ -41628,8 +41630,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         default: return
       }
       cameraRadius = radius  // Reset zoom også
-      panOffsetX = 0; panOffsetY = 0
-      meshGruppe.position.set(-cx, -cy, -cz)
+      cameraTarget.set(0, 0, 0)  // Reset target tilbake til modell-senter
       updateCamera()
     }
 
@@ -41707,13 +41708,20 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         phi = Math.max(0.05, Math.min(Math.PI - 0.05, phi - dy * 0.008))
         updateCamera()
       } else if (isPanning) {
-        // Patch 16-fix: Skala pan til kameraavstand så samme musbevegelse
-        // gir samme oppfattede pan uavhengig av zoom-nivå.
-        const panSkala = cameraRadius * 0.0015
-        panOffsetX += dx * panSkala
-        panOffsetY -= dy * panSkala  // negativ for å matche musens retning
-        meshGruppe.position.x = -cx + panOffsetX
-        meshGruppe.position.y = -cy + panOffsetY
+        // Patch 16-fix v2: ArchiCAD-aktig pan. Vi flytter cameraTarget i kameraets
+        // right/up-vektorer, slik at draen alltid føles som om scenen flyttes i
+        // den retningen brukeren drar. Skalaen er proporsjonal med kameraavstanden,
+        // slik at samme drag-distanse gir samme oppfattede pan på alle zoom-nivåer.
+        const panSkala = cameraRadius * 0.0025  // raskere enn før (0.0015 → 0.0025)
+        // Hent kameraets right- og up-vektor (i verdens-koordinater)
+        const right = new THREE.Vector3()
+        const up = new THREE.Vector3()
+        camera.matrixWorld.extractBasis(right, up, new THREE.Vector3())
+        // Drag til høyre (positivt dx) → flytt target til venstre (negativ right)
+        // slik at scenen ser ut til å flytte til høyre
+        cameraTarget.addScaledVector(right, -dx * panSkala)
+        cameraTarget.addScaledVector(up, dy * panSkala)
+        updateCamera()
       } else {
         // Patch 16 Fase 2: Endre cursor til "pointer" når musen er over et klikkbart element
         const traff = finnElementUnderMus(e.clientX, e.clientY)
@@ -42006,36 +42014,36 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
                 {klikkInfo && (
                   <div style={{
                     position:'absolute',
-                    bottom:'12px',
-                    right:'12px',
+                    bottom:'16px',
+                    right:'16px',
                     background:'white',
-                    borderRadius:'12px',
-                    padding:'12px 16px',
-                    fontSize:'12px',
+                    borderRadius:'14px',
+                    padding:'16px 20px',
+                    fontSize:'13px',
                     color:'#0f172a',
-                    boxShadow:'0 8px 24px rgba(0,0,0,0.15)',
+                    boxShadow:'0 10px 32px rgba(0,0,0,0.18)',
                     border:'2px solid #3b82f6',
-                    minWidth:'260px',
-                    maxWidth:'340px',
+                    minWidth:'340px',
+                    maxWidth:'440px',
                   }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', gap:'12px' }}>
-                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', gap:'12px' }}>
+                      <div style={{ fontSize:'15px', fontWeight:'700', color:'#1e40af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         🔵 {klikkInfo.navn}
                       </div>
                       <button
                         onClick={() => { setKlikketID(null); setKlikkInfo(null) }}
-                        style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8', padding:0, lineHeight:1 }}
+                        style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', padding:'0 4px', lineHeight:1 }}
                         title="Lukk">×</button>
                     </div>
 
                     {klikkInfo.lagsett && (
-                      <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'8px', padding:'6px 10px', marginBottom:'8px', fontSize:'11px' }}>
-                        <div style={{ color:'#15803d', fontWeight:'700', fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'2px' }}>Lagsett</div>
-                        <div style={{ color:'#166534', fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{klikkInfo.lagsett}</div>
+                      <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'10px', padding:'8px 12px', marginBottom:'12px', fontSize:'12px' }}>
+                        <div style={{ color:'#15803d', fontWeight:'700', fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px' }}>Lagsett</div>
+                        <div style={{ color:'#166534', fontWeight:'600', fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{klikkInfo.lagsett}</div>
                       </div>
                     )}
 
-                    <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', columnGap:'10px', rowGap:'4px', fontSize:'11px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', columnGap:'14px', rowGap:'7px', fontSize:'12px' }}>
                       <span style={{ color:'#94a3b8' }}>IFC-type:</span>
                       <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.ifcType}</span>
                       <span style={{ color:'#94a3b8' }}>Kategori:</span>
