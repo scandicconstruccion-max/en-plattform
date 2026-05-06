@@ -36987,12 +36987,16 @@ function convexHull2D(punkter) {
 }
 
 async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
-  const fotavtrykkMap = new Map()  // expressID → { minX, maxX, minY, maxY, minZ, maxZ }
+  const fotavtrykkMap = new Map()  // expressID → { minX, maxX, minY, maxY, minZ, maxZ, hullXY, hullXZ, hullYZ }
+  // Patch 16: Mesh-data per element for 3D-rendering
+  const meshMap = new Map()  // expressID → { vertices: Float32Array, indices: Uint32Array, normals: Float32Array }
   const diagnose = {
     suksess: 0,        // fikk full bounding-box fra geometri
     tomGeometri: 0,    // mesh fantes men hadde 0 vertices
     feilet: 0,         // exception ved henting
     medHull: 0,        // fikk også konvekse hull (Patch 15.E)
+    medMesh: 0,        // fikk også mesh-data (Patch 16)
+    totalMeshVerts: 0, // total vertices i mesh-data (for minne-diagnose)
     minSpenn: { x: [Infinity, -Infinity], y: [Infinity, -Infinity], z: [Infinity, -Infinity] },
   }
 
@@ -37023,14 +37027,15 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
         let minZ = Infinity, maxZ = -Infinity
         let harPunkter = false
 
-        // Patch 15.F: Samle alle globale vertices (ett array), så filtrer etter
-        // minX/Y/Z etter at bbox er kjent. Dette gir oss "ekte" plan/snitt-projeksjoner:
-        //   - Plan = vertices NÆR minZ (bunnen av elementet) projisert på XY
-        //   - Snitt front = vertices NÆR minY (forsiden av elementet) projisert på XZ
-        //   - Snitt side = vertices NÆR minX (siden av elementet) projisert på YZ
-        // Dette løser problemet hvor vegger sett ovenfra ble store rektangler
-        // istedenfor tynne striper.
-        const alleVerts = []  // [[x,y,z], ...]
+        // Patch 15.F: Samle alle globale vertices for konvekse hull
+        // Patch 16: Samle også full mesh-data (vertices+normals+indices) for 3D-rendering
+        const alleVerts = []  // [[x,y,z], ...] for hull-bygging
+        // For mesh: vi samler chunks fra hver placedGeometry og merger til slutt
+        const meshChunks = []  // [{ verts: Float32Array, normals: Float32Array, indices: Uint32Array }]
+        let meshTotalVerts = 0
+        let meshTotalIndices = 0
+        // Cap mesh-størrelse per element for å hindre minne-eksplosjon
+        const MESH_MAX_VERTS = 20000  // 20k verts per element er rikelig
 
         // Hver placedGeometry har en flatTransformation (16 floats — column-major 4x4)
         // og en geometryExpressID som peker til selve mesh-en
@@ -37057,8 +37062,52 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
           // Vi trenger kun pos (første 3 floats per vertex)
           const numVerts = vertsSize / 6
 
-          // Hvis det allerede er for mange vertices, sample annenhver/hver-tredje
-          // for å holde oss under MAX. Ikke kritisk for hull-kvalitet.
+          // Patch 16: Hent også indices for trekant-topologi
+          let indices = null
+          let numIndices = 0
+          try {
+            const indPtr = geo.GetIndexData()
+            const indSize = geo.GetIndexDataSize()
+            if (indPtr && indSize > 0) {
+              indices = api.GetIndexArray(indPtr, indSize)
+              numIndices = indSize
+            }
+          } catch(e) { /* ingen indices = ikke kritisk for hull, men ingen mesh */ }
+
+          // Patch 16: Samle mesh-chunks for 3D-rendering hvis vi har plass
+          // Vi transformerer vertices+normals til globale koordinater her
+          if (indices && numIndices > 0 && meshTotalVerts + numVerts <= MESH_MAX_VERTS) {
+            const chunkVerts = new Float32Array(numVerts * 3)
+            const chunkNormals = new Float32Array(numVerts * 3)
+            // Vi må også re-mappe indices med offset siden de skal merges
+            const chunkIndices = new Uint32Array(numIndices)
+            const indexOffset = meshTotalVerts
+            for (let v = 0; v < numVerts; v++) {
+              const lx = verts[v * 6 + 0]
+              const ly = verts[v * 6 + 1]
+              const lz = verts[v * 6 + 2]
+              const lnx = verts[v * 6 + 3]
+              const lny = verts[v * 6 + 4]
+              const lnz = verts[v * 6 + 5]
+              // Transformer posisjon (column-major 4x4)
+              chunkVerts[v * 3 + 0] = matrix[0] * lx + matrix[4] * ly + matrix[8]  * lz + matrix[12]
+              chunkVerts[v * 3 + 1] = matrix[1] * lx + matrix[5] * ly + matrix[9]  * lz + matrix[13]
+              chunkVerts[v * 3 + 2] = matrix[2] * lx + matrix[6] * ly + matrix[10] * lz + matrix[14]
+              // Transformer normal (kun rotasjon, ingen translasjon — det er upper 3x3)
+              chunkNormals[v * 3 + 0] = matrix[0] * lnx + matrix[4] * lny + matrix[8]  * lnz
+              chunkNormals[v * 3 + 1] = matrix[1] * lnx + matrix[5] * lny + matrix[9]  * lnz
+              chunkNormals[v * 3 + 2] = matrix[2] * lnx + matrix[6] * lny + matrix[10] * lnz
+            }
+            // Re-mappe indices
+            for (let ii = 0; ii < numIndices; ii++) {
+              chunkIndices[ii] = indices[ii] + indexOffset
+            }
+            meshChunks.push({ verts: chunkVerts, normals: chunkNormals, indices: chunkIndices })
+            meshTotalVerts += numVerts
+            meshTotalIndices += numIndices
+          }
+
+          // Bbox og hull-vertices: samme logikk som før
           let stride = 1
           if (alleVerts.length + numVerts > MAX_VERTS_PER_ELEMENT) {
             stride = Math.max(1, Math.ceil(numVerts / Math.max(1, MAX_VERTS_PER_ELEMENT - alleVerts.length)))
@@ -37134,6 +37183,31 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
             hullXY, hullXZ, hullYZ,
           })
           diagnose.suksess++
+
+          // Patch 16: Merge mesh-chunks til én mesh per element og lagre
+          if (meshChunks.length > 0 && meshTotalVerts > 0 && meshTotalIndices > 0) {
+            const mergedVerts = new Float32Array(meshTotalVerts * 3)
+            const mergedNormals = new Float32Array(meshTotalVerts * 3)
+            const mergedIndices = new Uint32Array(meshTotalIndices)
+            let vOff = 0, iOff = 0
+            for (const chunk of meshChunks) {
+              mergedVerts.set(chunk.verts, vOff * 3)
+              mergedNormals.set(chunk.normals, vOff * 3)
+              // Indices er allerede re-mappet med korrekt offset i loopen over,
+              // så vi kan kopiere direkte
+              mergedIndices.set(chunk.indices, iOff)
+              vOff += chunk.verts.length / 3
+              iOff += chunk.indices.length
+            }
+            meshMap.set(expressID, {
+              vertices: mergedVerts,
+              normals: mergedNormals,
+              indices: mergedIndices,
+            })
+            diagnose.medMesh++
+            diagnose.totalMeshVerts += meshTotalVerts
+          }
+
           // Oppdater globalt spenn (for diagnose-rapport)
           if (minX < diagnose.minSpenn.x[0]) diagnose.minSpenn.x[0] = minX
           if (maxX > diagnose.minSpenn.x[1]) diagnose.minSpenn.x[1] = maxX
@@ -37160,7 +37234,9 @@ async function ekstraherFotavtrykk(api, mod, modelID, onProgress) {
     console.log(`[ifc] modell-spenn: ${sx.toFixed(1)}m × ${sy.toFixed(1)}m × ${sz.toFixed(1)}m`)
   }
 
-  return { fotavtrykkMap, diagnose }
+  console.log(`[ifc 16] mesh-data lagret for ${diagnose.medMesh} elementer`)
+
+  return { fotavtrykkMap, meshMap, diagnose }
 }
 
 // ─── ETASJE-LOOKUP (Patch 15.A) ──────────────────────────────────────────────
@@ -38092,13 +38168,14 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   // ─── PATCH 15.A: GEOMETRI- OG ETASJE-EKSTRAKSJON ───────────────────────────
   // Hentes etter mengde-ekstraksjon, før modellen lukkes.
   if (onProgress) onProgress('Henter geometri for tegning-visning...')
-  const { fotavtrykkMap, diagnose: geoDiagnose } = await ekstraherFotavtrykk(api, mod, modelID, onProgress)
+  const { fotavtrykkMap, meshMap, diagnose: geoDiagnose } = await ekstraherFotavtrykk(api, mod, modelID, onProgress)
   const { elementToEtasje, etasjer } = byggEtasjeLookup(api, mod, modelID)
 
   // Anvend fotavtrykk + etasje på alle elementer i resultatet
   const alleKategorier = ['yttervegg', 'innervegg', 'ukjent_vegg', 'tak', 'gulv', 'vindu', 'dor', 'trapp']
   let elementerMedFotavtrykk = 0
   let elementerMedEtasje = 0
+  let elementerMedMesh = 0
   alleKategorier.forEach(kat => {
     const elementer = result[kat]?.elementer || []
     elementer.forEach(e => {
@@ -38108,6 +38185,12 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         elementerMedFotavtrykk++
         // Patch 15.G: Klassifiser form basert på bbox-dimensjoner
         e.formType = klassifiserForm(fa)
+      }
+      // Patch 16: Anvend mesh-data hvis tilgjengelig
+      const mesh = meshMap.get(e.id)
+      if (mesh) {
+        e.mesh = mesh
+        elementerMedMesh++
       }
       const et = elementToEtasje.get(e.id)
       if (et) {
@@ -38124,6 +38207,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     totaltElementer: alleKategorier.reduce((sum, k) => sum + (result[k]?.elementer?.length || 0), 0),
     elementerMedFotavtrykk,
     elementerMedEtasje,
+    elementerMedMesh,
   }
   console.log(`[ifc 15.A] anvendte fotavtrykk på ${elementerMedFotavtrykk} elementer, etasje på ${elementerMedEtasje}`)
 
@@ -40280,6 +40364,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
 
   // Patch 15.C: Lagsett som vises i 2D-tegning (null = lukket)
   const [tegningLagsett, setTegningLagsett] = useState(null)
+  // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
+  const [meshLagsett, setMeshLagsett] = useState(null)
 
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
@@ -40702,6 +40788,27 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
                     <span>Vis i tegning</span>
                   </button>
                 )}
+                {/* Patch 16: Vis i 3D-knapp */}
+                {(lagsett.elementer || []).some(e => e.mesh) && (
+                  <button
+                    onClick={() => setMeshLagsett(lagsett)}
+                    style={{
+                      background:'#eef2ff',
+                      border:'1px solid #c7d2fe',
+                      color:'#4338ca',
+                      borderRadius:'8px',
+                      padding:'6px 10px',
+                      fontSize:'11px',
+                      fontWeight:'600',
+                      cursor:'pointer',
+                      display:'inline-flex',
+                      alignItems:'center',
+                      gap:'6px',
+                    }}>
+                    <span style={{ fontSize:'12px' }}>🎲</span>
+                    <span>Vis i 3D</span>
+                  </button>
+                )}
                 {/* Patch 15.G: Diagnose-knapp — finn ut hva slags elementer som er i lagsettet */}
                 <button
                   onClick={() => visLagsettDiagnose(lagsett, appAlert)}
@@ -40879,6 +40986,18 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
           lagsettListe={alleLagsett.map(({ lagsett }) => lagsett)}
           onClose={() => setTegningLagsett(null)}
           onVelgLagsett={(ls) => setTegningLagsett(ls)}
+          isMob={isMob}
+        />
+      )}
+
+      {/* Patch 16: 3D-mesh-viewer */}
+      {meshLagsett && (
+        <BimMeshViewer
+          mengder={mengder}
+          valgtLagsett={meshLagsett}
+          lagsettListe={alleLagsett.map(({ lagsett }) => lagsett)}
+          onClose={() => setMeshLagsett(null)}
+          onVelgLagsett={(ls) => setMeshLagsett(ls)}
           isMob={isMob}
         />
       )}
@@ -41256,6 +41375,494 @@ function detekterEnhetsFaktor(mengder) {
   if (ratio > 100000) return 0.001
   if (ratio > 100) return 0.01
   return 1
+}
+
+// ─── PATCH 16: 3D MESH-VIEWER ────────────────────────────────────────────────
+// Renderer ekte mesh-geometri fra IFC i 3D med Three.js. Brukeren kan rotere,
+// zoome, panorere, høylyse lagsett, og filtrere på etasje.
+//
+// Three.js + OrbitControls lastes lazy fra CDN ved første åpning.
+//
+// Mesh-data per element (vertices+normals+indices) hentes fra _meshData som
+// ble fylt opp under IFC-parsing i Patch 16. For å unngå minne-eksplosjon ved
+// re-render bygger vi Three.js-meshes kun én gang per element-id.
+
+function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
+  const containerRef = React.useRef(null)
+  const sceneRef = React.useRef(null)  // Three.js scene+renderer+camera state
+  const [valgtEtasjeId, setValgtEtasjeId] = useState(null)  // null = "alle"
+  const [activeLagsett, setActiveLagsett] = useState(valgtLagsett || null)
+  const [lasterThree, setLasterThree] = useState(true)
+  const [feilmelding, setFeilmelding] = useState(null)
+
+  const etasjer = mengder?._geometri?.etasjer || []
+  const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
+
+  // Hvilke element-IDer hører til aktivt lagsett?
+  const aktiveIDer = React.useMemo(() => {
+    if (!activeLagsett) return new Set()
+    return new Set((activeLagsett.elementer || []).map(e => e.id))
+  }, [activeLagsett])
+
+  // Samle alle elementer som har mesh-data
+  const alleElementer = React.useMemo(() => {
+    const liste = []
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor'].forEach(kat => {
+      const elementer = mengder[kat]?.elementer || []
+      elementer.forEach(e => {
+        if (e.mesh) {
+          liste.push({
+            id: e.id,
+            kategori: kat,
+            mesh: e.mesh,
+            etasjeId: e.etasje?.etasjeId || null,
+          })
+        }
+      })
+    })
+    return liste
+  }, [mengder])
+
+  // Last Three.js fra CDN ved mount
+  useEffect(() => {
+    let cancelled = false
+
+    const loadThreeJs = async () => {
+      try {
+        // Sjekk om Three.js allerede er lastet
+        if (typeof window.THREE === 'undefined') {
+          await new Promise((resolve, reject) => {
+            const script = document.createElement('script')
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+            script.onload = resolve
+            script.onerror = () => reject(new Error('Kunne ikke laste Three.js'))
+            document.head.appendChild(script)
+          })
+        }
+        if (cancelled) return
+        setLasterThree(false)
+      } catch(err) {
+        if (!cancelled) setFeilmelding('Kunne ikke laste 3D-bibliotek: ' + err.message)
+      }
+    }
+
+    loadThreeJs()
+    return () => { cancelled = true }
+  }, [])
+
+  // Bygg scene når Three.js er lastet og elementer er klare
+  useEffect(() => {
+    if (lasterThree || !containerRef.current || alleElementer.length === 0) return
+    if (typeof window.THREE === 'undefined') return
+
+    const THREE = window.THREE
+    const container = containerRef.current
+    const width = container.clientWidth
+    const height = container.clientHeight || 500
+
+    // Scene
+    const scene = new THREE.Scene()
+    scene.background = new THREE.Color(0xeeece7)
+
+    // Kamera — settes med riktig posisjon når vi vet bbox av modellen
+    const camera = new THREE.PerspectiveCamera(40, width / height, 0.1, 10000)
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true })
+    renderer.setSize(width, height)
+    renderer.setPixelRatio(window.devicePixelRatio)
+    container.innerHTML = ''
+    container.appendChild(renderer.domElement)
+
+    // Lys
+    const ambient = new THREE.AmbientLight(0xffffff, 0.55)
+    scene.add(ambient)
+    const sun = new THREE.DirectionalLight(0xffffff, 0.7)
+    sun.position.set(50, 100, 30)
+    scene.add(sun)
+    const sun2 = new THREE.DirectionalLight(0xffffff, 0.3)
+    sun2.position.set(-50, 50, -30)
+    scene.add(sun2)
+
+    // Materialer
+    const matGray = new THREE.MeshLambertMaterial({
+      color: 0xb4b2a9, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+    })
+    const matHighlight = new THREE.MeshLambertMaterial({
+      color: 0x16a34a, transparent: true, opacity: 0.92, side: THREE.DoubleSide,
+    })
+    const matHidden = new THREE.MeshLambertMaterial({
+      color: 0xb4b2a9, transparent: true, opacity: 0.08, side: THREE.DoubleSide,
+    })
+
+    // Bygg én Three.js-mesh per element
+    const meshGruppe = new THREE.Group()
+    const idTilMesh = new Map()  // expressID → Three.Mesh
+    let modellMinX = Infinity, modellMaxX = -Infinity
+    let modellMinY = Infinity, modellMaxY = -Infinity
+    let modellMinZ = Infinity, modellMaxZ = -Infinity
+
+    for (const el of alleElementer) {
+      try {
+        const geom = new THREE.BufferGeometry()
+        // Skalér vertices med enhetsFaktor for å normalisere til meter,
+        // og samtidig bytt Y/Z slik at IFC sin Z (oppover) blir Three.js sin Y (oppover).
+        // IFC: (X, Y, Z) → Three.js: (X, Z, -Y)
+        const skalerteVerts = new Float32Array(el.mesh.vertices.length)
+        const skalerteNormals = new Float32Array(el.mesh.normals.length)
+        for (let i = 0; i < el.mesh.vertices.length; i += 3) {
+          skalerteVerts[i]     = el.mesh.vertices[i]     * enhetsFaktor      // X → X
+          skalerteVerts[i + 1] = el.mesh.vertices[i + 2] * enhetsFaktor      // Z → Y (opp)
+          skalerteVerts[i + 2] = -el.mesh.vertices[i + 1] * enhetsFaktor     // -Y → Z
+          skalerteNormals[i]     =  el.mesh.normals[i]
+          skalerteNormals[i + 1] =  el.mesh.normals[i + 2]
+          skalerteNormals[i + 2] = -el.mesh.normals[i + 1]
+        }
+        geom.setAttribute('position', new THREE.BufferAttribute(skalerteVerts, 3))
+        if (el.mesh.normals && el.mesh.normals.length === el.mesh.vertices.length) {
+          geom.setAttribute('normal', new THREE.BufferAttribute(skalerteNormals, 3))
+        } else {
+          geom.computeVertexNormals()
+        }
+        geom.setIndex(new THREE.BufferAttribute(el.mesh.indices, 1))
+
+        // Oppdater modell-bbox (i meter etter skalering, i Three.js-koordinater)
+        for (let v = 0; v < skalerteVerts.length; v += 3) {
+          const x = skalerteVerts[v]
+          const y = skalerteVerts[v + 1]
+          const z = skalerteVerts[v + 2]
+          if (x < modellMinX) modellMinX = x
+          if (x > modellMaxX) modellMaxX = x
+          if (y < modellMinY) modellMinY = y
+          if (y > modellMaxY) modellMaxY = y
+          if (z < modellMinZ) modellMinZ = z
+          if (z > modellMaxZ) modellMaxZ = z
+        }
+
+        const mesh = new THREE.Mesh(geom, matGray)
+        mesh.userData = { id: el.id, kategori: el.kategori, etasjeId: el.etasjeId }
+        meshGruppe.add(mesh)
+        idTilMesh.set(el.id, mesh)
+      } catch(err) {
+        console.warn('[16] kunne ikke bygge mesh for', el.id, err)
+      }
+    }
+
+    // Sentrer modellen rundt origo (i Three.js-koordinater nå)
+    const cx = (modellMinX + modellMaxX) / 2
+    const cy = (modellMinY + modellMaxY) / 2
+    const cz = (modellMinZ + modellMaxZ) / 2
+    meshGruppe.position.set(-cx, -cy, -cz)
+    scene.add(meshGruppe)
+
+    // Bakke-grid (på Y = bunnen av modellen)
+    const modellSpennX = modellMaxX - modellMinX
+    const modellSpennZ = modellMaxZ - modellMinZ
+    const modellSpennY = modellMaxY - modellMinY  // dette er nå høyde
+    const gridSize = Math.max(modellSpennX, modellSpennZ, 20) * 1.5
+    const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
+    grid.position.y = -modellSpennY / 2 - 0.5  // under modellen
+    scene.add(grid)
+
+    // Sett kamera-posisjon basert på modell-størrelse
+    const radius = Math.max(modellSpennX, modellSpennZ, modellSpennY) * 1.4
+    let theta = Math.PI * 0.3
+    let phi = Math.PI * 0.4
+    let cameraRadius = radius
+
+    function updateCamera() {
+      camera.position.x = cameraRadius * Math.sin(phi) * Math.cos(theta)
+      camera.position.y = cameraRadius * Math.cos(phi)
+      camera.position.z = cameraRadius * Math.sin(phi) * Math.sin(theta)
+      camera.lookAt(0, 0, 0)
+    }
+    updateCamera()
+
+    // Mus-kontroller
+    let isDragging = false
+    let isPanning = false
+    let lastX = 0, lastY = 0
+    let panX = 0, panY = 0
+
+    const dom = renderer.domElement
+    const onMouseDown = (e) => {
+      if (e.button === 2 || e.shiftKey) isPanning = true
+      else isDragging = true
+      lastX = e.clientX; lastY = e.clientY
+    }
+    const onMouseUp = () => { isDragging = false; isPanning = false }
+    const onMouseMove = (e) => {
+      const dx = e.clientX - lastX
+      const dy = e.clientY - lastY
+      if (isDragging) {
+        theta -= dx * 0.008
+        phi = Math.max(0.05, Math.min(Math.PI - 0.05, phi - dy * 0.008))
+        updateCamera()
+      } else if (isPanning) {
+        panX += dx * 0.05
+        panY += dy * 0.05
+        meshGruppe.position.x = -cx + panX
+        meshGruppe.position.y = -cy - panY
+      }
+      lastX = e.clientX; lastY = e.clientY
+    }
+    const onWheel = (e) => {
+      e.preventDefault()
+      cameraRadius = Math.max(2, Math.min(radius * 5, cameraRadius + e.deltaY * radius * 0.001))
+      updateCamera()
+    }
+    const onContextMenu = (e) => e.preventDefault()
+
+    dom.addEventListener('mousedown', onMouseDown)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('mousemove', onMouseMove)
+    dom.addEventListener('wheel', onWheel, { passive: false })
+    dom.addEventListener('contextmenu', onContextMenu)
+
+    // Touch-kontroller (forenklet — én finger = roter, to fingre = zoom)
+    let touchLastX = 0, touchLastY = 0, touchLastDist = 0
+    const onTouchStart = (e) => {
+      if (e.touches.length === 1) {
+        touchLastX = e.touches[0].clientX
+        touchLastY = e.touches[0].clientY
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX
+        const dy = e.touches[0].clientY - e.touches[1].clientY
+        touchLastDist = Math.sqrt(dx*dx + dy*dy)
+      }
+    }
+    const onTouchMove = (e) => {
+      e.preventDefault()
+      if (e.touches.length === 1) {
+        const dx = e.touches[0].clientX - touchLastX
+        const dy = e.touches[0].clientY - touchLastY
+        theta -= dx * 0.008
+        phi = Math.max(0.05, Math.min(Math.PI - 0.05, phi - dy * 0.008))
+        updateCamera()
+        touchLastX = e.touches[0].clientX
+        touchLastY = e.touches[0].clientY
+      } else if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX
+        const dy = e.touches[0].clientY - e.touches[1].clientY
+        const dist = Math.sqrt(dx*dx + dy*dy)
+        const delta = touchLastDist - dist
+        cameraRadius = Math.max(2, Math.min(radius * 5, cameraRadius + delta * radius * 0.005))
+        updateCamera()
+        touchLastDist = dist
+      }
+    }
+    dom.addEventListener('touchstart', onTouchStart, { passive: false })
+    dom.addEventListener('touchmove', onTouchMove, { passive: false })
+
+    // Resize-håndtering
+    const onResize = () => {
+      const w = container.clientWidth
+      const h = container.clientHeight || 500
+      camera.aspect = w / h
+      camera.updateProjectionMatrix()
+      renderer.setSize(w, h)
+    }
+    window.addEventListener('resize', onResize)
+
+    // Animasjons-loop
+    let frameId
+    const animate = () => {
+      frameId = requestAnimationFrame(animate)
+      renderer.render(scene, camera)
+    }
+    animate()
+
+    // Eksponer scene-state for re-rendering ved lagsett/etasje-endring
+    sceneRef.current = {
+      THREE, scene, camera, renderer, idTilMesh,
+      matGray, matHighlight, matHidden,
+      meshGruppe, modellSenter: { cx, cy, cz },
+      panData: { panX: 0, panY: 0 },
+      reset: () => {
+        theta = Math.PI * 0.3
+        phi = Math.PI * 0.4
+        cameraRadius = radius
+        panX = 0; panY = 0
+        meshGruppe.position.set(-cx, -cy, -cz)
+        updateCamera()
+      },
+    }
+
+    // Cleanup ved unmount
+    return () => {
+      cancelAnimationFrame(frameId)
+      dom.removeEventListener('mousedown', onMouseDown)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('mousemove', onMouseMove)
+      dom.removeEventListener('wheel', onWheel)
+      dom.removeEventListener('contextmenu', onContextMenu)
+      dom.removeEventListener('touchstart', onTouchStart)
+      dom.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('resize', onResize)
+      // Rydd opp Three.js-objekter
+      idTilMesh.forEach(m => {
+        if (m.geometry) m.geometry.dispose()
+      })
+      matGray.dispose()
+      matHighlight.dispose()
+      matHidden.dispose()
+      renderer.dispose()
+      sceneRef.current = null
+    }
+  }, [lasterThree, alleElementer, enhetsFaktor])
+
+  // Oppdater materialer når lagsett eller etasje endres
+  useEffect(() => {
+    if (!sceneRef.current) return
+    const { idTilMesh, matGray, matHighlight, matHidden } = sceneRef.current
+    idTilMesh.forEach((mesh, id) => {
+      const erAktiv = aktiveIDer.has(id)
+      const erIValgtEtasje = !valgtEtasjeId || mesh.userData.etasjeId === valgtEtasjeId
+      if (!erIValgtEtasje && !erAktiv) {
+        mesh.material = matHidden
+      } else if (erAktiv) {
+        mesh.material = matHighlight
+      } else {
+        mesh.material = matGray
+      }
+    })
+  }, [aktiveIDer, valgtEtasjeId])
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.55)' }}
+        onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '14px' : '18px', width:'100%', height: isMob ? '95vh' : '90vh', maxWidth:'1400px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding: isMob ? '12px 16px' : '16px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
+          <div style={{ minWidth:0, flex:1 }}>
+            <h2 style={{ margin:0, fontSize: isMob ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>
+              🎲 3D-modell fra IFC
+            </h2>
+            {activeLagsett && (
+              <p style={{ margin:'2px 0 0', fontSize:'12px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                {activeLagsett.navn} — {(activeLagsett.elementer || []).length} høylyste elementer
+              </p>
+            )}
+          </div>
+          <button
+            onClick={() => sceneRef.current?.reset()}
+            style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#475569', cursor:'pointer' }}>
+            🎯 Sentrer
+          </button>
+          <button onClick={onClose}
+            style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>
+            ×
+          </button>
+        </div>
+
+        {/* Etasjevelger */}
+        {etasjer.length > 0 && (
+          <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#fafbfc' }}>
+            <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', marginRight:'4px' }}>Etasje:</span>
+            <button
+              onClick={() => setValgtEtasjeId(null)}
+              style={{ background: !valgtEtasjeId ? '#3b82f6' : 'white', color: !valgtEtasjeId ? 'white' : '#475569', border: '1px solid ' + (!valgtEtasjeId ? '#3b82f6' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+              Alle
+            </button>
+            {etasjer.map(et => (
+              <button
+                key={et.id}
+                onClick={() => setValgtEtasjeId(et.id)}
+                style={{ background: valgtEtasjeId === et.id ? '#3b82f6' : 'white', color: valgtEtasjeId === et.id ? 'white' : '#475569', border: '1px solid ' + (valgtEtasjeId === et.id ? '#3b82f6' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>
+                {et.navn}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Body — split layout */}
+        <div style={{ flex:1, display:'flex', minHeight:0, flexDirection: isMob ? 'column' : 'row' }}>
+
+          {/* Venstre: lagsett-liste */}
+          {!isMob && lagsettListe && lagsettListe.length > 0 && (
+            <div style={{ width:'260px', flexShrink:0, borderRight:'1px solid #f1f5f9', overflow:'auto', padding:'10px' }}>
+              <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', padding:'4px 6px 8px' }}>
+                Lagsett — klikk for å høylyse
+              </div>
+              {lagsettListe.map((ls, idx) => {
+                const aktiv = activeLagsett?.navn === ls.navn
+                return (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setActiveLagsett(ls)
+                      if (onVelgLagsett) onVelgLagsett(ls)
+                    }}
+                    style={{ display:'block', width:'100%', textAlign:'left', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius:'8px', padding:'8px 10px', marginBottom:'4px', cursor:'pointer', fontSize:'12px' }}>
+                    <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ls.navn}</div>
+                    <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>
+                      {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Høyre: 3D-canvas */}
+          <div style={{ flex:1, position:'relative', background:'#eeece7', overflow:'hidden', minHeight: isMob ? '300px' : 'auto' }}>
+            {feilmelding ? (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#dc2626', fontSize:'13px', padding:'20px', textAlign:'center' }}>
+                {feilmelding}
+              </div>
+            ) : lasterThree ? (
+              <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', color:'#64748b', fontSize:'13px', gap:'12px' }}>
+                <div style={{ fontSize:'24px' }}>🔄</div>
+                <div>Laster 3D-bibliotek...</div>
+              </div>
+            ) : alleElementer.length === 0 ? (
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#94a3b8', fontSize:'13px', padding:'20px', textAlign:'center' }}>
+                Ingen elementer med mesh-data. IFC-fila har kanskje ikke geometri som kan rendres i 3D.
+              </div>
+            ) : (
+              <>
+                <div ref={containerRef} style={{ width:'100%', height:'100%', cursor:'grab' }} />
+                <div style={{ position:'absolute', top:'12px', left:'12px', background:'rgba(255,255,255,0.95)', borderRadius:'8px', padding:'6px 10px', fontSize:'11px', color:'#475569', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
+                  {alleElementer.length} elementer · drag for å rotere · scroll for zoom · shift+drag for pan
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Mobile: lagsett-liste under */}
+          {isMob && lagsettListe && lagsettListe.length > 0 && (
+            <div style={{ flexShrink:0, borderTop:'1px solid #f1f5f9', overflow:'auto', maxHeight:'30vh', padding:'8px' }}>
+              <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', padding:'4px 6px' }}>
+                Lagsett
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                {lagsettListe.map((ls, idx) => {
+                  const aktiv = activeLagsett?.navn === ls.navn
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setActiveLagsett(ls)
+                        if (onVelgLagsett) onVelgLagsett(ls)
+                      }}
+                      style={{ display:'block', width:'100%', textAlign:'left', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'12px' }}>
+                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{ls.navn}</div>
+                      <div style={{ fontSize:'10px', color:'#64748b' }}>
+                        {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+    </div>
+  )
 }
 
 function BimTegningModal({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
