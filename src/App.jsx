@@ -41390,10 +41390,16 @@ function detekterEnhetsFaktor(mengder) {
 function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
   const containerRef = React.useRef(null)
   const sceneRef = React.useRef(null)  // Three.js scene+renderer+camera state
+  // Patch 16 Fase 2: Ref til pick-callback (stabil mellom renders, ingen re-init av scene)
+  const onPickRef = React.useRef(null)
   const [valgtEtasjeId, setValgtEtasjeId] = useState(null)  // null = "alle"
   const [activeLagsett, setActiveLagsett] = useState(valgtLagsett || null)
   const [lasterThree, setLasterThree] = useState(true)
   const [feilmelding, setFeilmelding] = useState(null)
+  // Patch 16 Fase 2: Klikk-info for valgt element (null = ingen valgt)
+  const [klikkInfo, setKlikkInfo] = useState(null)
+  // Patch 16 Fase 2: ID på enkelt-element som er klikket (separat fra lagsett-høylysing)
+  const [klikketID, setKlikketID] = useState(null)
 
   const etasjer = mengder?._geometri?.etasjer || []
   const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
@@ -41403,6 +41409,33 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     if (!activeLagsett) return new Set()
     return new Set((activeLagsett.elementer || []).map(e => e.id))
   }, [activeLagsett])
+
+  // Patch 16 Fase 2: Element-info-lookup (id → fullt element-objekt) for klikk-popup
+  const elementInfoMap = React.useMemo(() => {
+    const map = new Map()
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor'].forEach(kat => {
+      const elementer = mengder[kat]?.elementer || []
+      elementer.forEach(e => {
+        if (e.mesh) {
+          map.set(e.id, { ...e, kategori: kat })
+        }
+      })
+    })
+    return map
+  }, [mengder])
+
+  // Patch 16 Fase 2: id → lagsett-navn lookup. Bygges ved å gå gjennom alle lagsett.
+  // Ett element kan være i flere lagsett i teorien, men praktisk er hver i ett.
+  const idTilLagsett = React.useMemo(() => {
+    const map = new Map()
+    if (!lagsettListe) return map
+    lagsettListe.forEach(ls => {
+      ;(ls.elementer || []).forEach(e => {
+        if (!map.has(e.id)) map.set(e.id, ls)
+      })
+    })
+    return map
+  }, [lagsettListe])
 
   // Samle alle elementer som har mesh-data
   const alleElementer = React.useMemo(() => {
@@ -41493,6 +41526,10 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     })
     const matHidden = new THREE.MeshLambertMaterial({
       color: 0xb4b2a9, transparent: true, opacity: 0.08, side: THREE.DoubleSide,
+    })
+    // Patch 16 Fase 2: Material for enkelt-element som er klikket på
+    const matKlikket = new THREE.MeshLambertMaterial({
+      color: 0x3b82f6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
     })
 
     // Bygg én Three.js-mesh per element
@@ -41600,20 +41637,68 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     let isDragging = false
     let isPanning = false
     let lastX = 0, lastY = 0
+    // Patch 16 Fase 2: Spore startpunkt for å skille klikk fra drag
+    let mouseDownX = 0, mouseDownY = 0, mouseDownButton = 0
+    const KLIKK_TERSKEL_PX = 5  // Hvis musen flytter mindre enn dette, regnes det som klikk
 
     const dom = renderer.domElement
+
+    // Patch 16 Fase 2: Raycaster for å finne mesh under musen
+    const raycaster = new THREE.Raycaster()
+    const musPos = new THREE.Vector2()
+
+    function finnElementUnderMus(clientX, clientY) {
+      const rect = dom.getBoundingClientRect()
+      // Konverter til normalisert device-koordinater (-1 til +1)
+      musPos.x = ((clientX - rect.left) / rect.width) * 2 - 1
+      musPos.y = -((clientY - rect.top) / rect.height) * 2 + 1
+      raycaster.setFromCamera(musPos, camera)
+      // Finn nærmeste mesh i meshGruppe
+      const traff = raycaster.intersectObjects(meshGruppe.children, false)
+      // Filtrer bort mesh-er som er skjult (lav opacity = ikke i valgt etasje)
+      // Vi sjekker materialet og dets opacity
+      for (const t of traff) {
+        const m = t.object
+        // Hvis material er matHidden (etasje-skjult), hopp over
+        if (m.material === matHidden) continue
+        return { mesh: m, id: m.userData.id, point: t.point }
+      }
+      return null
+    }
+
     const onMouseDown = (e) => {
       // Mellomknapp (button 1) eller høyreknapp (button 2) eller shift = pan
-      // Venstreklikk uten shift = roter
+      // Venstreklikk uten shift = roter (eller klikk)
       if (e.button === 1 || e.button === 2 || e.shiftKey) {
         isPanning = true
       } else {
         isDragging = true
       }
       lastX = e.clientX; lastY = e.clientY
+      mouseDownX = e.clientX; mouseDownY = e.clientY
+      mouseDownButton = e.button
       e.preventDefault()
     }
-    const onMouseUp = () => { isDragging = false; isPanning = false }
+    const onMouseUp = (e) => {
+      // Patch 16 Fase 2: Sjekk om dette var et klikk (lite bevegelse) — kun for venstreklikk
+      const dx = e.clientX - mouseDownX
+      const dy = e.clientY - mouseDownY
+      const distanse = Math.sqrt(dx*dx + dy*dy)
+      const erKlikk = distanse < KLIKK_TERSKEL_PX
+      const erVenstreklikk = mouseDownButton === 0 && !e.shiftKey
+
+      if (erKlikk && erVenstreklikk) {
+        const traff = finnElementUnderMus(e.clientX, e.clientY)
+        if (traff) {
+          // Vi fant et element — varsle React via callback
+          if (onPickRef.current) onPickRef.current(traff.id)
+        } else {
+          // Klikk på tomrom — fjern markering
+          if (onPickRef.current) onPickRef.current(null)
+        }
+      }
+      isDragging = false; isPanning = false
+    }
     const onMouseMove = (e) => {
       const dx = e.clientX - lastX
       const dy = e.clientY - lastY
@@ -41629,6 +41714,10 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         panOffsetY -= dy * panSkala  // negativ for å matche musens retning
         meshGruppe.position.x = -cx + panOffsetX
         meshGruppe.position.y = -cy + panOffsetY
+      } else {
+        // Patch 16 Fase 2: Endre cursor til "pointer" når musen er over et klikkbart element
+        const traff = finnElementUnderMus(e.clientX, e.clientY)
+        dom.style.cursor = traff ? 'pointer' : 'grab'
       }
       lastX = e.clientX; lastY = e.clientY
     }
@@ -41716,7 +41805,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     // Eksponer scene-state for re-rendering ved lagsett/etasje-endring
     sceneRef.current = {
       THREE, scene, camera, renderer, idTilMesh,
-      matGray, matHighlight, matHidden,
+      matGray, matHighlight, matHidden, matKlikket,
       meshGruppe, modellSenter: { cx, cy, cz },
       setVisning,  // Patch 16-fix: lar UI-knapper hoppe til preset-vinkler
       reset: () => setVisning('iso'),
@@ -41741,19 +41830,57 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       matGray.dispose()
       matHighlight.dispose()
       matHidden.dispose()
+      matKlikket.dispose()
       renderer.dispose()
       sceneRef.current = null
     }
   }, [lasterThree, alleElementer, enhetsFaktor])
 
-  // Oppdater materialer når lagsett eller etasje endres
+  // Patch 16 Fase 2: Oppdater pick-callback når elementInfoMap eller idTilLagsett endres.
+  // Vi bruker ref slik at useEffect for scene-bygging ikke trigges av disse endringene.
+  useEffect(() => {
+    onPickRef.current = (elementID) => {
+      if (elementID === null) {
+        setKlikketID(null)
+        setKlikkInfo(null)
+        return
+      }
+      const info = elementInfoMap.get(elementID)
+      if (!info) return
+      const lagsett = idTilLagsett.get(elementID) || null
+      setKlikketID(elementID)
+      setKlikkInfo({
+        id: elementID,
+        navn: info.navn || `Element #${elementID}`,
+        ifcType: info.ifcType || 'Ukjent',
+        kategori: info.kategori || 'ukjent',
+        lagsett: lagsett ? lagsett.navn : null,
+        areal: info.areal || 0,
+        volum: info.volum || 0,
+        lengde: info.lengde || 0,
+        hoyde: info.hoyde || 0,
+        etasjeNavn: info.etasje?.etasjeNavn || null,
+        formType: info.formType || null,
+      })
+      // Hvis et lagsett finnes, marker det automatisk
+      if (lagsett && (!activeLagsett || activeLagsett.navn !== lagsett.navn)) {
+        setActiveLagsett(lagsett)
+      }
+    }
+  }, [elementInfoMap, idTilLagsett, activeLagsett])
+
+  // Oppdater materialer når lagsett, etasje eller klikket element endres
   useEffect(() => {
     if (!sceneRef.current) return
-    const { idTilMesh, matGray, matHighlight, matHidden } = sceneRef.current
+    const { idTilMesh, matGray, matHighlight, matHidden, matKlikket } = sceneRef.current
     idTilMesh.forEach((mesh, id) => {
       const erAktiv = aktiveIDer.has(id)
+      const erKlikket = klikketID === id
       const erIValgtEtasje = !valgtEtasjeId || mesh.userData.etasjeId === valgtEtasjeId
-      if (!erIValgtEtasje && !erAktiv) {
+      // Patch 16 Fase 2: Klikket element har høyeste prioritet
+      if (erKlikket) {
+        mesh.material = matKlikket
+      } else if (!erIValgtEtasje && !erAktiv) {
         mesh.material = matHidden
       } else if (erAktiv) {
         mesh.material = matHighlight
@@ -41761,7 +41888,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         mesh.material = matGray
       }
     })
-  }, [aktiveIDer, valgtEtasjeId])
+  }, [aktiveIDer, valgtEtasjeId, klikketID])
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
@@ -41872,8 +41999,86 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               <>
                 <div ref={containerRef} style={{ width:'100%', height:'100%', cursor:'grab' }} />
                 <div style={{ position:'absolute', top:'12px', left:'12px', background:'rgba(255,255,255,0.95)', borderRadius:'8px', padding:'6px 10px', fontSize:'11px', color:'#475569', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
-                  {alleElementer.length} elementer · drag = roter · scroll = zoom · høyreklikk eller shift+drag = pan · 1/2/3/4 = front/side/topp/iso
+                  {alleElementer.length} elementer · klikk på element for detaljer · drag = roter · scroll = zoom · høyreklikk eller shift+drag = pan
                 </div>
+
+                {/* Patch 16 Fase 2: Klikk-info-panel — vises når et element er valgt */}
+                {klikkInfo && (
+                  <div style={{
+                    position:'absolute',
+                    bottom:'12px',
+                    right:'12px',
+                    background:'white',
+                    borderRadius:'12px',
+                    padding:'12px 16px',
+                    fontSize:'12px',
+                    color:'#0f172a',
+                    boxShadow:'0 8px 24px rgba(0,0,0,0.15)',
+                    border:'2px solid #3b82f6',
+                    minWidth:'260px',
+                    maxWidth:'340px',
+                  }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px', gap:'12px' }}>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                        🔵 {klikkInfo.navn}
+                      </div>
+                      <button
+                        onClick={() => { setKlikketID(null); setKlikkInfo(null) }}
+                        style={{ background:'none', border:'none', fontSize:'18px', cursor:'pointer', color:'#94a3b8', padding:0, lineHeight:1 }}
+                        title="Lukk">×</button>
+                    </div>
+
+                    {klikkInfo.lagsett && (
+                      <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'8px', padding:'6px 10px', marginBottom:'8px', fontSize:'11px' }}>
+                        <div style={{ color:'#15803d', fontWeight:'700', fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'2px' }}>Lagsett</div>
+                        <div style={{ color:'#166534', fontWeight:'600', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{klikkInfo.lagsett}</div>
+                      </div>
+                    )}
+
+                    <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', columnGap:'10px', rowGap:'4px', fontSize:'11px' }}>
+                      <span style={{ color:'#94a3b8' }}>IFC-type:</span>
+                      <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.ifcType}</span>
+                      <span style={{ color:'#94a3b8' }}>Kategori:</span>
+                      <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.kategori}</span>
+                      {klikkInfo.formType && (
+                        <>
+                          <span style={{ color:'#94a3b8' }}>Form:</span>
+                          <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.formType}</span>
+                        </>
+                      )}
+                      {klikkInfo.etasjeNavn && (
+                        <>
+                          <span style={{ color:'#94a3b8' }}>Etasje:</span>
+                          <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.etasjeNavn}</span>
+                        </>
+                      )}
+                      {klikkInfo.areal > 0 && (
+                        <>
+                          <span style={{ color:'#94a3b8' }}>Areal:</span>
+                          <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.areal.toFixed(2)} m²</span>
+                        </>
+                      )}
+                      {klikkInfo.volum > 0 && (
+                        <>
+                          <span style={{ color:'#94a3b8' }}>Volum:</span>
+                          <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.volum.toFixed(2)} m³</span>
+                        </>
+                      )}
+                      {klikkInfo.lengde > 0 && (
+                        <>
+                          <span style={{ color:'#94a3b8' }}>Lengde:</span>
+                          <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.lengde.toFixed(2)} lm</span>
+                        </>
+                      )}
+                      {klikkInfo.hoyde > 0 && (
+                        <>
+                          <span style={{ color:'#94a3b8' }}>Høyde:</span>
+                          <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.hoyde.toFixed(2)} m</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
