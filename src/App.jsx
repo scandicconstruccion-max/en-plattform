@@ -41968,6 +41968,20 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               </button>
             ))}
           </div>
+          {/* Patch 16 Fase 2.1: Fjern alle markeringer (klikk + lagsett) */}
+          {(klikketID !== null || activeLagsett) && (
+            <button
+              onClick={() => {
+                setKlikketID(null)
+                setKlikkInfo(null)
+                setActiveLagsett(null)
+              }}
+              title="Fjern alle markeringer fra modellen"
+              style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#b91c1c', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'5px' }}>
+              <span>🧹</span>
+              <span>Fjern markering</span>
+            </button>
+          )}
           <button onClick={onClose}
             style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>
             ×
@@ -42052,33 +42066,33 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
                     bottom:'16px',
                     right:'16px',
                     background:'white',
-                    borderRadius:'14px',
-                    padding:'16px 20px',
-                    fontSize:'13px',
+                    borderRadius:'16px',
+                    padding:'20px 24px',
+                    fontSize:'14px',
                     color:'#0f172a',
-                    boxShadow:'0 10px 32px rgba(0,0,0,0.18)',
+                    boxShadow:'0 12px 36px rgba(0,0,0,0.22)',
                     border:'2px solid #3b82f6',
-                    minWidth:'340px',
-                    maxWidth:'440px',
+                    minWidth:'380px',
+                    maxWidth:'520px',
                   }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', gap:'12px' }}>
-                      <div style={{ fontSize:'15px', fontWeight:'700', color:'#1e40af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', gap:'12px' }}>
+                      <div style={{ fontSize:'16px', fontWeight:'700', color:'#1e40af', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                         🔵 {klikkInfo.navn}
                       </div>
                       <button
                         onClick={() => { setKlikketID(null); setKlikkInfo(null) }}
-                        style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', padding:'0 4px', lineHeight:1 }}
+                        style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'0 4px', lineHeight:1 }}
                         title="Lukk">×</button>
                     </div>
 
                     {klikkInfo.lagsett && (
-                      <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'10px', padding:'8px 12px', marginBottom:'12px', fontSize:'12px' }}>
-                        <div style={{ color:'#15803d', fontWeight:'700', fontSize:'10px', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'3px' }}>Lagsett</div>
-                        <div style={{ color:'#166534', fontWeight:'600', fontSize:'13px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{klikkInfo.lagsett}</div>
+                      <div style={{ background:'#dcfce7', border:'1px solid #86efac', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px' }}>
+                        <div style={{ color:'#15803d', fontWeight:'700', fontSize:'11px', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'4px' }}>Lagsett</div>
+                        <div style={{ color:'#166534', fontWeight:'600', fontSize:'14px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{klikkInfo.lagsett}</div>
                       </div>
                     )}
 
-                    <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', columnGap:'14px', rowGap:'7px', fontSize:'12px' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'auto 1fr', columnGap:'16px', rowGap:'8px', fontSize:'13px' }}>
                       <span style={{ color:'#94a3b8' }}>IFC-type:</span>
                       <span style={{ color:'#475569', fontWeight:'600' }}>{klikkInfo.ifcType}</span>
                       <span style={{ color:'#94a3b8' }}>Kategori:</span>
