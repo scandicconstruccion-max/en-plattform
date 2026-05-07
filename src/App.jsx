@@ -39024,7 +39024,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
   const farger = stegFarger[stegStatus.farge]
 
   return (
-    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', borderLeft:'4px solid #3b82f6', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: farger.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>1</div>
@@ -40662,7 +40662,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const stegFarge = stegFarger[stegStatus.farge]
 
   return (
-    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', borderLeft:'4px solid #16a34a', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: stegFarge.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>2</div>
@@ -41167,7 +41167,7 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
   }
 
   return (
-    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', borderLeft:'4px solid #7c3aed', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: stegFarge.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>3</div>
