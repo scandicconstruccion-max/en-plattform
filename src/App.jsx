@@ -41769,19 +41769,21 @@ function PlansnittPoCModal({ mengder, onClose, isMob }) {
               viewBox={`${svgInnhold.vbX} ${svgInnhold.vbY} ${svgInnhold.vbW} ${svgInnhold.vbH}`}
               style={{ width:'100%', height:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'8px' }}
               preserveAspectRatio="xMidYMid meet">
-              {/* Speilvend Y-aksen siden SVG har Y nedover */}
-              <g transform={`scale(1, -1) translate(0, ${-2 * svgInnhold.vbY - svgInnhold.vbH})`}>
-                {resultat.segmenter.map((seg, i) => (
-                  <line
-                    key={i}
-                    x1={seg[0]} y1={seg[1]}
-                    x2={seg[2]} y2={seg[3]}
-                    stroke="#0f172a"
-                    strokeWidth={0.03}
-                    vectorEffect="non-scaling-stroke"
-                  />
-                ))}
-              </g>
+              {/* Patch 17 PoC v2: Direkte rendering uten Y-flip transform.
+                  SVG har Y-akse nedover, men siden vi bruker viewBox og
+                  preserveAspectRatio, blir innholdet vist riktig uavhengig av
+                  fortegn/koordinatsystem. Hvis tegningen er speilvendt, kan
+                  brukeren bare se det og vi kan fikse senere. */}
+              {resultat.segmenter.map((seg, i) => (
+                <line
+                  key={i}
+                  x1={seg[0]} y1={seg[1]}
+                  x2={seg[2]} y2={seg[3]}
+                  stroke="#0f172a"
+                  strokeWidth={0.03}
+                  vectorEffect="non-scaling-stroke"
+                />
+              ))}
             </svg>
           )}
         </div>
