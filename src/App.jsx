@@ -41780,7 +41780,7 @@ function PlansnittPoCModal({ mengder, onClose, isMob }) {
                   x1={seg[0]} y1={seg[1]}
                   x2={seg[2]} y2={seg[3]}
                   stroke="#0f172a"
-                  strokeWidth={0.03}
+                  strokeWidth={1.5}
                   vectorEffect="non-scaling-stroke"
                 />
               ))}
