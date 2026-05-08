@@ -37316,6 +37316,218 @@ function byggEtasjeLookup(api, mod, modelID) {
 // Aksene tolkes slik at ekstrahering av "bunn-vertices" fortsatt vil gi
 // riktig fotavtrykk (Z er vertikal, X og Y er horisontale).
 
+// ─── PATCH 17 PoC: MESH-BASERT 2D-SNITT ──────────────────────────────────────
+// Genererer 2D plansnitt fra 3D-mesh-data ved å skjære mesh-trekanter med et
+// horisontalt plan. Brukes for å lage "ekte" arkitekt-aktige tegninger fra IFC.
+//
+// Algoritme:
+//   1. For hver trekant i mesh-en, sjekk hvilken side av snittplanet hver
+//      vertex er på (over/under).
+//   2. Hvis trekanten krysser planet (1 eller 2 vertices over), beregn de
+//      to skjæringspunktene.
+//   3. Returner liste over linjesegmenter.
+//
+// Inputs:
+//   mesh: { vertices: Float32Array, indices: Uint32Array }
+//   planeZ: tall — Z-koordinat for snittplanet
+//
+// Output:
+//   Array of [[x1, y1, x2, y2], ...] — linjesegmenter i XY-planet
+
+function snittMeshMedPlan(mesh, planeZ, axis = 'z') {
+  // axis: 'z' for plansnitt (horisontalt), 'y' for fasade-snitt fra siden,
+  // 'x' for fasade-snitt fra front
+  const segmenter = []
+  if (!mesh || !mesh.vertices || !mesh.indices) return segmenter
+
+  const verts = mesh.vertices
+  const indices = mesh.indices
+  const numTri = Math.floor(indices.length / 3)
+
+  // Hjelpefunksjon: hent koordinaten vi snitter i (z, y, eller x) for vertex i
+  function getAxisCoord(vertIdx) {
+    if (axis === 'z') return verts[vertIdx * 3 + 2]
+    if (axis === 'y') return verts[vertIdx * 3 + 1]
+    return verts[vertIdx * 3]
+  }
+
+  // Hjelpefunksjon: hent de to "andre" koordinater for projeksjon i 2D
+  // For plansnitt (axis=z): returner (x, y)
+  // For fasade-snitt fra siden (axis=y): returner (x, z)
+  // For fasade-snitt fra front (axis=x): returner (y, z)
+  function get2DCoords(vertIdx) {
+    if (axis === 'z') return [verts[vertIdx * 3], verts[vertIdx * 3 + 1]]
+    if (axis === 'y') return [verts[vertIdx * 3], verts[vertIdx * 3 + 2]]
+    return [verts[vertIdx * 3 + 1], verts[vertIdx * 3 + 2]]
+  }
+
+  for (let t = 0; t < numTri; t++) {
+    const i0 = indices[t * 3]
+    const i1 = indices[t * 3 + 1]
+    const i2 = indices[t * 3 + 2]
+
+    // Hvilken side av planet er hver vertex?
+    const c0 = getAxisCoord(i0) - planeZ
+    const c1 = getAxisCoord(i1) - planeZ
+    const c2 = getAxisCoord(i2) - planeZ
+
+    // Hvis alle på samme side, ingen skjæring
+    if (c0 > 0 && c1 > 0 && c2 > 0) continue
+    if (c0 < 0 && c1 < 0 && c2 < 0) continue
+    // Hvis alle nøyaktig på planet, hopp over (sjelden, gir degenerate-segmenter)
+    if (c0 === 0 && c1 === 0 && c2 === 0) continue
+
+    // Finn skjæringspunkter på trekantens kanter
+    // En kant fra v_a til v_b krysser planet hvis c_a og c_b har motsatt fortegn
+    const punkter = []
+    const sjekkKant = (ia, ib, ca, cb) => {
+      if ((ca > 0) !== (cb > 0) && (ca !== 0 || cb !== 0)) {
+        // Lineær interpolasjon: fraksjonen fra a til b der vi krysser planet
+        const t = ca / (ca - cb)
+        const [ax, ay] = get2DCoords(ia)
+        const [bx, by] = get2DCoords(ib)
+        punkter.push([ax + (bx - ax) * t, ay + (by - ay) * t])
+      } else if (ca === 0 && cb !== 0) {
+        // Vertex er på planet — bruk det som skjæringspunkt
+        punkter.push(get2DCoords(ia))
+      }
+    }
+
+    sjekkKant(i0, i1, c0, c1)
+    sjekkKant(i1, i2, c1, c2)
+    sjekkKant(i2, i0, c2, c0)
+
+    // Vi forventer 2 punkter (én linje gjennom trekanten)
+    // Hvis vi får 3 (sjelden, ved degenerate trekanter), bruk første og siste
+    if (punkter.length === 2) {
+      segmenter.push([punkter[0][0], punkter[0][1], punkter[1][0], punkter[1][1]])
+    } else if (punkter.length === 3) {
+      // Degenerate-tilfelle: ta de to lengst fra hverandre
+      segmenter.push([punkter[0][0], punkter[0][1], punkter[2][0], punkter[2][1]])
+    }
+  }
+
+  return segmenter
+}
+
+// Generer plansnitt for en gitt etasje fra alle elementer som har mesh-data.
+// Returnerer { segmenter: [[x1,y1,x2,y2], ...], bbox: {minX, maxX, minY, maxY}, info }
+function genererPlansnitt(mengder, etasjeId, snittH = 1.2) {
+  const alleSegmenter = []
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  let trekanterTotalt = 0
+  let trekanterISnitt = 0
+  let elementerSnittet = 0
+
+  // Finn etasje-info
+  const etasjer = mengder?._geometri?.etasjer || []
+  const etasje = etasjer.find(e => e.id === etasjeId)
+  if (!etasje) return { segmenter: [], bbox: null, info: { feil: 'Etasje ikke funnet' } }
+
+  // Patch 17 PoC: Auto-detekter høyde-aksen basert på modellens samlede bbox.
+  // Den minste aksen er bygningens høyde. Dette matcher logikken i 3D-viewer.
+  let modellMinX = Infinity, modellMaxX = -Infinity
+  let modellMinY = Infinity, modellMaxY = -Infinity
+  let modellMinZ = Infinity, modellMaxZ = -Infinity
+  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
+    const elementer = mengder[kat]?.elementer || []
+    elementer.forEach(e => {
+      if (!e.mesh) return
+      const v = e.mesh.vertices
+      for (let i = 0; i < v.length; i += 3) {
+        if (v[i] < modellMinX) modellMinX = v[i]
+        if (v[i] > modellMaxX) modellMaxX = v[i]
+        if (v[i+1] < modellMinY) modellMinY = v[i+1]
+        if (v[i+1] > modellMaxY) modellMaxY = v[i+1]
+        if (v[i+2] < modellMinZ) modellMinZ = v[i+2]
+        if (v[i+2] > modellMaxZ) modellMaxZ = v[i+2]
+      }
+    })
+  })
+  const spennX = modellMaxX - modellMinX
+  const spennY = modellMaxY - modellMinY
+  const spennZ = modellMaxZ - modellMinZ
+
+  // Bestem høyde-akse (minste spenn)
+  let hoydeAkse, etasjeMin, etasjeMax
+  if (spennZ <= spennX && spennZ <= spennY) {
+    hoydeAkse = 'z'
+    etasjeMin = modellMinZ
+    etasjeMax = modellMaxZ
+  } else if (spennY <= spennX && spennY <= spennZ) {
+    hoydeAkse = 'y'
+    etasjeMin = modellMinY
+    etasjeMax = modellMaxY
+  } else {
+    hoydeAkse = 'x'
+    etasjeMin = modellMinX
+    etasjeMax = modellMaxX
+  }
+
+  // Snittplan: snittH meter over etasjens bunn
+  // PROBLEM: snittH er gitt i meter, men vertices kan være i mm.
+  //          Vi sjekker om bygget er > 100m høyt, da er det sannsynligvis mm.
+  const totalHoyde = etasjeMax - etasjeMin
+  const erMillimeter = totalHoyde > 100  // bygg over 100 enheter høyt = mm
+  const snittHRaw = erMillimeter ? snittH * 1000 : snittH
+  const elevationRaw = (etasje.elevation || 0)
+  // Hvis elevation er i mm (samme test) eller m, anta samme enhet som vertices
+  const planeZ = elevationRaw + snittHRaw
+
+  console.log('[Plansnitt PoC] Generer for etasje:', {
+    navn: etasje.navn,
+    elevation: etasje.elevation,
+    hoydeAkse,
+    erMillimeter,
+    snittH,
+    planeZ,
+    totalBygnHoyde: totalHoyde.toFixed(2),
+  })
+
+  // Iterer alle kategorier
+  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor'].forEach(kat => {
+    const elementer = mengder[kat]?.elementer || []
+    elementer.forEach(e => {
+      if (!e.mesh) return
+      // Filtrer på etasje
+      if (e.etasje?.etasjeId !== etasjeId) return
+
+      const segs = snittMeshMedPlan(e.mesh, planeZ, hoydeAkse)
+      trekanterTotalt += Math.floor(e.mesh.indices.length / 3)
+      if (segs.length > 0) {
+        elementerSnittet++
+        trekanterISnitt += segs.length
+      }
+      for (const seg of segs) {
+        alleSegmenter.push(seg)
+        if (seg[0] < minX) minX = seg[0]
+        if (seg[0] > maxX) maxX = seg[0]
+        if (seg[2] < minX) minX = seg[2]
+        if (seg[2] > maxX) maxX = seg[2]
+        if (seg[1] < minY) minY = seg[1]
+        if (seg[1] > maxY) maxY = seg[1]
+        if (seg[3] < minY) minY = seg[3]
+        if (seg[3] > maxY) maxY = seg[3]
+      }
+    })
+  })
+
+  return {
+    segmenter: alleSegmenter,
+    bbox: alleSegmenter.length > 0 ? { minX, maxX, minY, maxY } : null,
+    info: {
+      etasje: etasje.navn,
+      planeZ: planeZ.toFixed(2),
+      hoydeAkse,
+      erMillimeter,
+      trekanterTotalt,
+      trekanterISnitt,
+      elementerSnittet,
+      antallSegmenter: alleSegmenter.length,
+    },
+  }
+}
+
 function klassifiserForm(fotavtrykk) {
   if (!fotavtrykk) return 'ukjent'
   const w = fotavtrykk.maxX - fotavtrykk.minX
@@ -40366,6 +40578,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   const [tegningLagsett, setTegningLagsett] = useState(null)
   // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
   const [meshLagsett, setMeshLagsett] = useState(null)
+  // Patch 17 PoC: Plansnitt-modal (true = åpen)
+  const [visPlansnitt, setVisPlansnitt] = useState(false)
 
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
@@ -40677,6 +40891,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
         <div style={{ background: stegFarge.bg, color: stegFarge.tekst, padding:'5px 11px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
           {stegStatus.tekst}
         </div>
+        {/* Patch 17 PoC: Test plansnitt-knapp */}
+        <button
+          onClick={() => setVisPlansnitt(true)}
+          title="Test mesh-basert 2D plansnitt (PoC)"
+          style={{ background:'#fef3c7', border:'1px solid #fde68a', color:'#92400e', borderRadius:'8px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:'4px' }}>
+          <span>🧪</span>
+          <span>Test plansnitt</span>
+        </button>
       </div>
 
       <div style={{ height:'1px', background:'#f1f5f9', margin:'0 0 14px' }} />
@@ -40998,6 +41220,15 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
           lagsettListe={alleLagsett.map(({ lagsett }) => lagsett)}
           onClose={() => setMeshLagsett(null)}
           onVelgLagsett={(ls) => setMeshLagsett(ls)}
+          isMob={isMob}
+        />
+      )}
+
+      {/* Patch 17 PoC: Plansnitt-modal */}
+      {visPlansnitt && (
+        <PlansnittPoCModal
+          mengder={mengder}
+          onClose={() => setVisPlansnitt(false)}
           isMob={isMob}
         />
       )}
@@ -41386,6 +41617,158 @@ function detekterEnhetsFaktor(mengder) {
 // Mesh-data per element (vertices+normals+indices) hentes fra _meshData som
 // ble fylt opp under IFC-parsing i Patch 16. For å unngå minne-eksplosjon ved
 // re-render bygger vi Three.js-meshes kun én gang per element-id.
+
+// ─── PATCH 17 PoC: PLANSNITT-MODAL ───────────────────────────────────────────
+// Proof-of-concept: Viser ett plansnitt for valgt etasje basert på mesh-data.
+// Helt enkelt UI for å verifisere at algoritmen gir brukbart resultat.
+
+function PlansnittPoCModal({ mengder, onClose, isMob }) {
+  const etasjer = mengder?._geometri?.etasjer || []
+  const [valgtEtasjeId, setValgtEtasjeId] = useState(etasjer[0]?.id || null)
+  const [snittH, setSnittH] = useState(1.2)
+  const [resultat, setResultat] = useState(null)
+  const [berenger, setBerenger] = useState(false)
+
+  // Beregn plansnitt når etasje eller høyde endres
+  useEffect(() => {
+    if (!valgtEtasjeId) return
+    setBerenger(true)
+    // Bruk setTimeout slik at UI får oppdatere "Beregner..." før vi starter
+    const timer = setTimeout(() => {
+      const start = performance.now()
+      const r = genererPlansnitt(mengder, valgtEtasjeId, snittH)
+      const tid = (performance.now() - start).toFixed(0)
+      r.info.beregningstid = tid + ' ms'
+      setResultat(r)
+      setBerenger(false)
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [mengder, valgtEtasjeId, snittH])
+
+  // Beregn SVG-viewBox og skala
+  const svgInnhold = React.useMemo(() => {
+    if (!resultat || !resultat.bbox || resultat.segmenter.length === 0) return null
+    const { minX, maxX, minY, maxY } = resultat.bbox
+    const margin = 1
+    const vbX = minX - margin
+    const vbY = minY - margin
+    const vbW = (maxX - minX) + 2 * margin
+    const vbH = (maxY - minY) + 2 * margin
+    return { vbX, vbY, vbW, vbH }
+  }, [resultat])
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.55)' }}
+        onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '14px' : '18px', width:'100%', height: isMob ? '95vh' : '90vh', maxWidth:'1400px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ padding: isMob ? '12px 16px' : '16px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
+          <div>
+            <h2 style={{ margin:0, fontSize: isMob ? '16px' : '18px', fontWeight:'700', color:'#0f172a' }}>
+              📐 Plansnitt fra IFC (PoC)
+            </h2>
+            <p style={{ margin:'2px 0 0', fontSize:'11px', color:'#64748b' }}>
+              Proof-of-concept — mesh-skjæring med horisontalt plan
+            </p>
+          </div>
+          <button onClick={onClose}
+            style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 8px' }}>
+            ×
+          </button>
+        </div>
+
+        {/* Kontroller */}
+        <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'10px', flexWrap:'wrap', alignItems:'center', background:'#fafbfc' }}>
+          <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px' }}>Etasje:</span>
+          {etasjer.map(et => (
+            <button
+              key={et.id}
+              onClick={() => setValgtEtasjeId(et.id)}
+              style={{
+                background: valgtEtasjeId === et.id ? '#0f172a' : 'white',
+                color: valgtEtasjeId === et.id ? 'white' : '#475569',
+                border: '1px solid ' + (valgtEtasjeId === et.id ? '#0f172a' : '#e2e8f0'),
+                borderRadius:'8px',
+                padding:'5px 12px',
+                fontSize:'12px',
+                fontWeight:'600',
+                cursor:'pointer',
+              }}>
+              {et.navn}
+            </button>
+          ))}
+          <div style={{ flex:1 }} />
+          <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px' }}>Snitt-høyde:</span>
+          <input
+            type="range"
+            min="0.3"
+            max="3.0"
+            step="0.1"
+            value={snittH}
+            onChange={(e) => setSnittH(parseFloat(e.target.value))}
+            style={{ width:'140px' }}
+          />
+          <span style={{ fontSize:'12px', color:'#475569', minWidth:'50px' }}>{snittH.toFixed(1)} m</span>
+        </div>
+
+        {/* Body — SVG plansnitt */}
+        <div style={{ flex:1, position:'relative', background:'#fafbfc', overflow:'auto', padding:'20px' }}>
+          {berenger ? (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#64748b', fontSize:'14px' }}>
+              🔄 Beregner snitt...
+            </div>
+          ) : !resultat ? (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:'100%', color:'#94a3b8', fontSize:'13px' }}>
+              Velg en etasje
+            </div>
+          ) : resultat.segmenter.length === 0 ? (
+            <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', height:'100%', color:'#dc2626', fontSize:'13px', gap:'8px', padding:'20px', textAlign:'center' }}>
+              <div style={{ fontSize:'32px' }}>⚠️</div>
+              <div>Ingen linjer på dette nivået</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                Trekanter sjekket: {resultat.info.trekanterTotalt}<br/>
+                Prøv å justere snitt-høyden
+              </div>
+            </div>
+          ) : svgInnhold && (
+            <svg
+              viewBox={`${svgInnhold.vbX} ${svgInnhold.vbY} ${svgInnhold.vbW} ${svgInnhold.vbH}`}
+              style={{ width:'100%', height:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'8px' }}
+              preserveAspectRatio="xMidYMid meet">
+              {/* Speilvend Y-aksen siden SVG har Y nedover */}
+              <g transform={`scale(1, -1) translate(0, ${-2 * svgInnhold.vbY - svgInnhold.vbH})`}>
+                {resultat.segmenter.map((seg, i) => (
+                  <line
+                    key={i}
+                    x1={seg[0]} y1={seg[1]}
+                    x2={seg[2]} y2={seg[3]}
+                    stroke="#0f172a"
+                    strokeWidth={0.03}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
+            </svg>
+          )}
+        </div>
+
+        {/* Footer — diagnose-info */}
+        {resultat && resultat.info && (
+          <div style={{ padding:'10px 22px', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'#fafbfc', fontSize:'11px', color:'#64748b', display:'flex', gap:'16px', flexWrap:'wrap' }}>
+            <span><strong>Etasje:</strong> {resultat.info.etasje}</span>
+            <span><strong>Plan-Z:</strong> {resultat.info.planeZ} m</span>
+            <span><strong>Elementer i snitt:</strong> {resultat.info.elementerSnittet}</span>
+            <span><strong>Trekanter sjekket:</strong> {resultat.info.trekanterTotalt}</span>
+            <span><strong>Linjer generert:</strong> {resultat.info.antallSegmenter}</span>
+            <span><strong>Beregningstid:</strong> {resultat.info.beregningstid}</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
   const containerRef = React.useRef(null)
