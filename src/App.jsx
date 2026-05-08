@@ -37464,24 +37464,54 @@ function genererPlansnitt(mengder, etasjeId, snittH = 1.2) {
     etasjeMax = modellMaxX
   }
 
-  // Snittplan: snittH meter over etasjens bunn
-  // PROBLEM: snittH er gitt i meter, men vertices kan være i mm.
-  //          Vi sjekker om bygget er > 100m høyt, da er det sannsynligvis mm.
-  const totalHoyde = etasjeMax - etasjeMin
-  const erMillimeter = totalHoyde > 100  // bygg over 100 enheter høyt = mm
-  const snittHRaw = erMillimeter ? snittH * 1000 : snittH
-  const elevationRaw = (etasje.elevation || 0)
-  // Hvis elevation er i mm (samme test) eller m, anta samme enhet som vertices
-  const planeZ = elevationRaw + snittHRaw
+  // Patch 17 PoC v2: BEDRE STRATEGI for snittplan
+  // ============================================================
+  // Tidligere: vi prøvde å bruke etasje.elevation + snittH, men
+  //   1. elevation kan være i meter mens vertices er i mm
+  //   2. enhetene er ikke alltid konsistente i IFC
+  //
+  // Ny strategi: Beregn etasjens FAKTISKE bunn ved å se på vertices
+  //   i denne etasjens elementer. Den minste høyde-koordinaten er
+  //   etasjens bunn. Da slipper vi å bekymre oss for elevation-enheter.
+  //
+  // Dette er også mer robust: hvis IFC ikke har korrekt elevation,
+  //   fungerer dette likevel.
 
-  console.log('[Plansnitt PoC] Generer for etasje:', {
+  let etasjeBunn = Infinity
+  let etasjeTopp = -Infinity
+  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
+    const elementer = mengder[kat]?.elementer || []
+    elementer.forEach(e => {
+      if (!e.mesh) return
+      if (e.etasje?.etasjeId !== etasjeId) return
+      const v = e.mesh.vertices
+      const startIdx = hoydeAkse === 'x' ? 0 : (hoydeAkse === 'y' ? 1 : 2)
+      for (let i = startIdx; i < v.length; i += 3) {
+        if (v[i] < etasjeBunn) etasjeBunn = v[i]
+        if (v[i] > etasjeTopp) etasjeTopp = v[i]
+      }
+    })
+  })
+
+  // Detekter enhet basert på etasje-tykkelse: en etasje er typisk 2-5 meter
+  // Hvis tykkelsen > 100 enheter, er det sannsynligvis mm
+  const etasjeTykkelse = etasjeTopp - etasjeBunn
+  const erMillimeter = etasjeTykkelse > 100
+  const snittHIEnhet = erMillimeter ? snittH * 1000 : snittH
+
+  // Snitt-plan: etasjens bunn + ønsket høyde (typisk 1.2m)
+  const planeZ = etasjeBunn + snittHIEnhet
+
+  console.log('[Plansnitt PoC v2] Etasje:', {
     navn: etasje.navn,
-    elevation: etasje.elevation,
     hoydeAkse,
     erMillimeter,
+    etasjeBunn,
+    etasjeTopp,
+    etasjeTykkelse: etasjeTykkelse.toFixed(2),
     snittH,
+    snittHIEnhet,
     planeZ,
-    totalBygnHoyde: totalHoyde.toFixed(2),
   })
 
   // Iterer alle kategorier
@@ -37518,6 +37548,8 @@ function genererPlansnitt(mengder, etasjeId, snittH = 1.2) {
     info: {
       etasje: etasje.navn,
       planeZ: planeZ.toFixed(2),
+      etasjeBunn: etasjeBunn.toFixed(2),
+      etasjeTopp: etasjeTopp.toFixed(2),
       hoydeAkse,
       erMillimeter,
       trekanterTotalt,
@@ -41758,7 +41790,10 @@ function PlansnittPoCModal({ mengder, onClose, isMob }) {
         {resultat && resultat.info && (
           <div style={{ padding:'10px 22px', borderTop:'1px solid #f1f5f9', flexShrink:0, background:'#fafbfc', fontSize:'11px', color:'#64748b', display:'flex', gap:'16px', flexWrap:'wrap' }}>
             <span><strong>Etasje:</strong> {resultat.info.etasje}</span>
-            <span><strong>Plan-Z:</strong> {resultat.info.planeZ} m</span>
+            <span><strong>Bunn:</strong> {resultat.info.etasjeBunn}</span>
+            <span><strong>Topp:</strong> {resultat.info.etasjeTopp}</span>
+            <span><strong>Plan-Z:</strong> {resultat.info.planeZ} {resultat.info.erMillimeter ? '(mm)' : '(m)'}</span>
+            <span><strong>Akse:</strong> {resultat.info.hoydeAkse}</span>
             <span><strong>Elementer i snitt:</strong> {resultat.info.elementerSnittet}</span>
             <span><strong>Trekanter sjekket:</strong> {resultat.info.trekanterTotalt}</span>
             <span><strong>Linjer generert:</strong> {resultat.info.antallSegmenter}</span>
