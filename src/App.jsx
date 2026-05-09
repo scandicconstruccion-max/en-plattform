@@ -42204,6 +42204,16 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   const [planAktiv, setPlanAktiv] = useState(false)
   // Patch 18 polish: Toggle for lagsett-liste (default åpen på desktop, lukket på mobil)
   const [lagsettListeApen, setLagsettListeApen] = useState(true)
+  // Patch 18 polish: Set av lagsett-navn som er ekspandert i sidepanelet (viser elementer)
+  const [ekspanderte, setEkspanderte] = useState(new Set())
+  const toggleEkspandert = (navn) => {
+    setEkspanderte(prev => {
+      const ny = new Set(prev)
+      if (ny.has(navn)) ny.delete(navn)
+      else ny.add(navn)
+      return ny
+    })
+  }
 
   const etasjer = mengder?._geometri?.etasjer || []
   const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
@@ -42808,37 +42818,45 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     }
   }, [lasterThree, alleElementer, enhetsFaktor])
 
+  // Patch 18 polish: Felles funksjon for å velge et element (kalles fra 3D-klikk
+  // og fra sidepanel-klikk). Setter klikket-ID, klikk-info og aktivt lagsett.
+  const velgElement = (elementID) => {
+    if (elementID === null) {
+      setKlikketID(null)
+      setKlikkInfo(null)
+      return
+    }
+    const info = elementInfoMap.get(elementID)
+    if (!info) {
+      // Patch 18 polish: Element finnes men har ikke mesh-data
+      console.warn('[BimMeshViewer] Element', elementID, 'har ikke mesh-data, kan ikke høylyses i 3D')
+      return
+    }
+    const lagsett = idTilLagsett.get(elementID) || null
+    setKlikketID(elementID)
+    setKlikkInfo({
+      id: elementID,
+      navn: info.navn || `Element #${elementID}`,
+      ifcType: info.ifcType || 'Ukjent',
+      kategori: info.kategori || 'ukjent',
+      lagsett: lagsett ? lagsett.navn : null,
+      areal: info.areal || 0,
+      volum: info.volum || 0,
+      lengde: info.lengde || 0,
+      hoyde: info.hoyde || 0,
+      etasjeNavn: info.etasje?.etasjeNavn || null,
+      formType: info.formType || null,
+    })
+    // Hvis et lagsett finnes, marker det automatisk
+    if (lagsett && (!activeLagsett || activeLagsett.navn !== lagsett.navn)) {
+      setActiveLagsett(lagsett)
+    }
+  }
+
   // Patch 16 Fase 2: Oppdater pick-callback når elementInfoMap eller idTilLagsett endres.
   // Vi bruker ref slik at useEffect for scene-bygging ikke trigges av disse endringene.
   useEffect(() => {
-    onPickRef.current = (elementID) => {
-      if (elementID === null) {
-        setKlikketID(null)
-        setKlikkInfo(null)
-        return
-      }
-      const info = elementInfoMap.get(elementID)
-      if (!info) return
-      const lagsett = idTilLagsett.get(elementID) || null
-      setKlikketID(elementID)
-      setKlikkInfo({
-        id: elementID,
-        navn: info.navn || `Element #${elementID}`,
-        ifcType: info.ifcType || 'Ukjent',
-        kategori: info.kategori || 'ukjent',
-        lagsett: lagsett ? lagsett.navn : null,
-        areal: info.areal || 0,
-        volum: info.volum || 0,
-        lengde: info.lengde || 0,
-        hoyde: info.hoyde || 0,
-        etasjeNavn: info.etasje?.etasjeNavn || null,
-        formType: info.formType || null,
-      })
-      // Hvis et lagsett finnes, marker det automatisk
-      if (lagsett && (!activeLagsett || activeLagsett.navn !== lagsett.navn)) {
-        setActiveLagsett(lagsett)
-      }
-    }
+    onPickRef.current = velgElement
   }, [elementInfoMap, idTilLagsett, activeLagsett])
 
   // Oppdater materialer når lagsett, etasje eller klikket element endres
@@ -43047,19 +43065,68 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               </div>
               {lagsettListe.map((ls, idx) => {
                 const aktiv = activeLagsett?.navn === ls.navn
+                const erEkspandert = ekspanderte.has(ls.navn)
+                const elementer = ls.elementer || []
                 return (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setActiveLagsett(ls)
-                      if (onVelgLagsett) onVelgLagsett(ls)
-                    }}
-                    style={{ display:'block', width:'100%', textAlign:'left', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius:'8px', padding:'8px 10px', marginBottom:'4px', cursor:'pointer', fontSize:'12px' }}>
-                    <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ls.navn}</div>
-                    <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>
-                      {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                  <div key={idx} style={{ marginBottom:'4px' }}>
+                    {/* Hovedkort */}
+                    <div
+                      style={{ display:'flex', alignItems:'stretch', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius: erEkspandert ? '8px 8px 0 0' : '8px', overflow:'hidden' }}>
+                      <button
+                        onClick={() => {
+                          setActiveLagsett(ls)
+                          if (onVelgLagsett) onVelgLagsett(ls)
+                        }}
+                        style={{ flex:1, textAlign:'left', background:'transparent', border:'none', padding:'8px 10px', cursor:'pointer', fontSize:'12px', minWidth:0 }}>
+                        <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{ls.navn}</div>
+                        <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>
+                          {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                        </div>
+                      </button>
+                      {/* Patch 18 polish: Ekspander/kollapser-knapp */}
+                      {elementer.length > 0 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleEkspandert(ls.navn) }}
+                          title={erEkspandert ? 'Skjul elementer' : 'Vis alle elementer'}
+                          style={{ background:'transparent', border:'none', borderLeft:'1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), cursor:'pointer', color:'#64748b', padding:'0 10px', fontSize:'11px' }}>
+                          {erEkspandert ? '▲' : '▼'}
+                        </button>
+                      )}
                     </div>
-                  </button>
+                    {/* Patch 18 polish: Element-liste når ekspandert */}
+                    {erEkspandert && elementer.length > 0 && (
+                      <div style={{ background:'#fafbfc', border:'1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderTop:'none', borderRadius:'0 0 8px 8px', maxHeight:'240px', overflowY:'auto' }}>
+                        {elementer.map((el, ei) => {
+                          const erKlikket = klikketID === el.id
+                          const detaljer = []
+                          if (el.lengde > 0) detaljer.push(`${el.lengde.toFixed(1)} lm${el.lengdeKilde === 'mesh_bbox' ? '*' : ''}`)
+                          if (el.areal > 0) detaljer.push(`${el.areal.toFixed(1)} m²${(el.arealKilde === 'beregnet_lengde_x_hoyde' || el.arealKilde === 'beregnet_mesh_bbox') ? '*' : ''}`)
+                          if (el.hoyde > 0) detaljer.push(`${el.hoyde.toFixed(2)}m høy`)
+                          return (
+                            <button
+                              key={ei}
+                              onClick={() => velgElement(el.id)}
+                              style={{
+                                display:'block', width:'100%', textAlign:'left',
+                                background: erKlikket ? '#dbeafe' : 'transparent',
+                                border:'none',
+                                borderBottom: ei < elementer.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                padding:'5px 10px',
+                                cursor:'pointer',
+                                fontSize:'10px',
+                              }}>
+                              <div style={{ fontWeight: erKlikket ? '700' : '500', color: erKlikket ? '#1e40af' : '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                {el.navn || `Element ${el.id}`}
+                              </div>
+                              <div style={{ fontSize:'9px', color:'#94a3b8', marginTop:'1px' }}>
+                                {detaljer.join(' · ') || '—'}
+                              </div>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
                 )
               })}
             </div>
@@ -43179,19 +43246,63 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
                 {lagsettListe.map((ls, idx) => {
                   const aktiv = activeLagsett?.navn === ls.navn
+                  const erEkspandert = ekspanderte.has(ls.navn)
+                  const elementer = ls.elementer || []
                   return (
-                    <button
-                      key={idx}
-                      onClick={() => {
-                        setActiveLagsett(ls)
-                        if (onVelgLagsett) onVelgLagsett(ls)
-                      }}
-                      style={{ display:'block', width:'100%', textAlign:'left', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius:'8px', padding:'7px 10px', cursor:'pointer', fontSize:'12px' }}>
-                      <div style={{ fontWeight:'600', color:'#0f172a' }}>{ls.navn}</div>
-                      <div style={{ fontSize:'10px', color:'#64748b' }}>
-                        {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                    <div key={idx}>
+                      <div style={{ display:'flex', alignItems:'stretch', background: aktiv ? '#dcfce7' : 'white', border: '1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderRadius: erEkspandert ? '8px 8px 0 0' : '8px', overflow:'hidden' }}>
+                        <button
+                          onClick={() => {
+                            setActiveLagsett(ls)
+                            if (onVelgLagsett) onVelgLagsett(ls)
+                          }}
+                          style={{ flex:1, textAlign:'left', background:'transparent', border:'none', padding:'7px 10px', cursor:'pointer', fontSize:'12px', minWidth:0 }}>
+                          <div style={{ fontWeight:'600', color:'#0f172a' }}>{ls.navn}</div>
+                          <div style={{ fontSize:'10px', color:'#64748b' }}>
+                            {ls.antall} stk · {(ls.totalAreal || 0).toFixed(1)} m²
+                          </div>
+                        </button>
+                        {elementer.length > 0 && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); toggleEkspandert(ls.navn) }}
+                            style={{ background:'transparent', border:'none', borderLeft:'1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), cursor:'pointer', color:'#64748b', padding:'0 12px', fontSize:'11px' }}>
+                            {erEkspandert ? '▲' : '▼'}
+                          </button>
+                        )}
                       </div>
-                    </button>
+                      {erEkspandert && elementer.length > 0 && (
+                        <div style={{ background:'#fafbfc', border:'1px solid ' + (aktiv ? '#86efac' : '#f1f5f9'), borderTop:'none', borderRadius:'0 0 8px 8px', maxHeight:'180px', overflowY:'auto' }}>
+                          {elementer.map((el, ei) => {
+                            const erKlikket = klikketID === el.id
+                            const detaljer = []
+                            if (el.lengde > 0) detaljer.push(`${el.lengde.toFixed(1)} lm${el.lengdeKilde === 'mesh_bbox' ? '*' : ''}`)
+                            if (el.areal > 0) detaljer.push(`${el.areal.toFixed(1)} m²${(el.arealKilde === 'beregnet_lengde_x_hoyde' || el.arealKilde === 'beregnet_mesh_bbox') ? '*' : ''}`)
+                            if (el.hoyde > 0) detaljer.push(`${el.hoyde.toFixed(2)}m høy`)
+                            return (
+                              <button
+                                key={ei}
+                                onClick={() => velgElement(el.id)}
+                                style={{
+                                  display:'block', width:'100%', textAlign:'left',
+                                  background: erKlikket ? '#dbeafe' : 'transparent',
+                                  border:'none',
+                                  borderBottom: ei < elementer.length - 1 ? '1px solid #f1f5f9' : 'none',
+                                  padding:'5px 10px',
+                                  cursor:'pointer',
+                                  fontSize:'10px',
+                                }}>
+                                <div style={{ fontWeight: erKlikket ? '700' : '500', color: erKlikket ? '#1e40af' : '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                  {el.navn || `Element ${el.id}`}
+                                </div>
+                                <div style={{ fontSize:'9px', color:'#94a3b8', marginTop:'1px' }}>
+                                  {detaljer.join(' · ') || '—'}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      )}
+                    </div>
                   )
                 })}
               </div>
