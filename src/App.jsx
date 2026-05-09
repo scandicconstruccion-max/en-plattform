@@ -39407,16 +39407,18 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
 
   // Komprimerte knappestiler — mindre padding, mindre font
   const knappStil = (kat, erValgt) => ({
-    background: erValgt ? kategoriFarge(kat) : 'white',
-    color: erValgt ? 'white' : kategoriFarge(kat),
-    border: '1px solid ' + kategoriFarge(kat) + (erValgt ? '' : '50'),
+    // Patch 18 polish: Ensrettet design — alle knapper har samme farge,
+    // valgt knapp får mørk fyll. Skaper ro og tydelig visuell tilstand.
+    background: erValgt ? '#334155' : 'white',
+    color: erValgt ? 'white' : '#475569',
+    border: '1px solid ' + (erValgt ? '#334155' : '#e2e8f0'),
     borderRadius: '6px',
-    padding: '4px 9px',
-    fontSize: '10px',
+    padding: '5px 10px',
+    fontSize: '11px',
     fontWeight: erValgt ? '700' : '500',
     letterSpacing: '0.2px',
     cursor: 'pointer',
-    display: 'flex',
+    display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
     lineHeight: 1.5,
@@ -39494,8 +39496,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
             const erValgt = aktivKat === kat
             return (
               <button key={kat} onClick={() => settBrukerKategori(lagsett, kat)} style={knappStil(kat, erValgt)}>
-                <span>{kategoriIkon(kat)}</span>
-                <span>{kategoriLabel(kat)}</span>
+                {kategoriLabel(kat)}
               </button>
             )
           })}
@@ -40614,22 +40615,24 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
       <button
         onClick={() => setAapen(a => !a)}
         style={{
-          background: aapen ? '#eff6ff' : '#f8fafc',
-          border: '1px solid ' + (aapen ? '#bfdbfe' : '#e2e8f0'),
-          color: aapen ? '#1e40af' : '#475569',
-          borderRadius: '8px',
-          padding: '6px 10px',
+          background: aapen ? '#334155' : 'white',
+          border: '1px solid ' + (aapen ? '#334155' : '#e2e8f0'),
+          color: aapen ? 'white' : '#475569',
+          borderRadius: '6px',
+          padding: '5px 10px',
           fontSize: '11px',
-          fontWeight: '600',
+          fontWeight: aapen ? '700' : '500',
+          letterSpacing: '0.2px',
           cursor: 'pointer',
           display: 'inline-flex',
           alignItems: 'center',
-          gap: '6px',
+          gap: '4px',
+          lineHeight: 1.5,
+          transition: 'all 0.1s',
         }}
       >
-        <span style={{ fontSize: '12px' }}>🔍</span>
         <span>{aapen ? 'Skjul detaljer' : 'Vis detaljer fra IFC'}</span>
-        <span style={{ color: '#94a3b8', fontSize: '10px' }}>{aapen ? '▲' : '▼'}</span>
+        <span style={{ fontSize: '10px' }}>{aapen ? '▲' : '▼'}</span>
       </button>
 
       {/* Detalj-panel */}
@@ -41340,6 +41343,33 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     baering: '#0d9488',
   }
 
+  // Patch 18 polish: Ensrettet knappestil — matcher Steg 1.
+  // Inaktive knapper: hvit bakgrunn, grå tekst, lys border
+  // Aktiv/primær knapp: mørk fyll + hvit tekst
+  const knappStilNoytral = {
+    background: 'white',
+    color: '#475569',
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    padding: '5px 10px',
+    fontSize: '11px',
+    fontWeight: '500',
+    letterSpacing: '0.2px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    lineHeight: 1.5,
+    transition: 'all 0.1s',
+  }
+  const knappStilPrimaer = {
+    ...knappStilNoytral,
+    background: '#334155',
+    color: 'white',
+    border: '1px solid #334155',
+    fontWeight: '700',
+  }
+
   // Status-pille: hvor mange er bekreftet/auto-matchet vs total
   const stegStatus = React.useMemo(() => {
     const totalt = matchResultater.length
@@ -41412,9 +41442,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
         <button
           onClick={() => visIfcInnholdDiagnose(mengder, appAlert)}
           title="Se hvilke element-typer som finnes i IFC-fila"
-          style={{ background:'#eff6ff', border:'1px solid #bfdbfe', color:'#1e40af', borderRadius:'8px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:'4px' }}>
-          <span>🔬</span>
-          <span>IFC-innhold</span>
+          style={{ ...knappStilNoytral, whiteSpace: 'nowrap' }}>
+          IFC-innhold
         </button>
       </div>
 
@@ -41512,41 +41541,15 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                 {(lagsett.elementer || []).some(e => e.mesh) && (
                   <button
                     onClick={() => setMeshLagsett(lagsett)}
-                    style={{
-                      background:'#eef2ff',
-                      border:'1px solid #c7d2fe',
-                      color:'#4338ca',
-                      borderRadius:'8px',
-                      padding:'6px 10px',
-                      fontSize:'11px',
-                      fontWeight:'600',
-                      cursor:'pointer',
-                      display:'inline-flex',
-                      alignItems:'center',
-                      gap:'6px',
-                    }}>
-                    <span style={{ fontSize:'12px' }}>🎲</span>
-                    <span>Vis i 3D</span>
+                    style={knappStilNoytral}>
+                    Vis i 3D
                   </button>
                 )}
                 {/* Patch 15.G: Diagnose-knapp — finn ut hva slags elementer som er i lagsettet */}
                 <button
                   onClick={() => visLagsettDiagnose(lagsett, appAlert)}
-                  style={{
-                    background:'#fef3c7',
-                    border:'1px solid #fde68a',
-                    color:'#92400e',
-                    borderRadius:'8px',
-                    padding:'6px 10px',
-                    fontSize:'11px',
-                    fontWeight:'600',
-                    cursor:'pointer',
-                    display:'inline-flex',
-                    alignItems:'center',
-                    gap:'6px',
-                  }}>
-                  <span style={{ fontSize:'12px' }}>🔍</span>
-                  <span>Diagnose</span>
+                  style={knappStilNoytral}>
+                  Diagnose
                 </button>
               </div>
 
@@ -41572,7 +41575,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   <div style={{ marginTop:'6px' }}>
                     <button onClick={() => fjernMatch(lagsett)}
                       style={{ background:'transparent', border:'none',
-                               color: lagsett.matchKilde === 'auto' ? '#854d0e' : '#1e40af',
+                               color: '#475569',
                                fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
                       {lagsett.matchKilde === 'auto' ? 'Endre valg' : 'Fjern valg'}
                     </button>
@@ -41660,7 +41663,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                               )}
                             </div>
                             <button onClick={() => aapneNyDialog(lagsett, mal, lagsett.brukerKategori)}
-                              style={{ background:'white', color:'#475569', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'4px 10px', fontSize:'10px', fontWeight:'600', cursor:'pointer', flexShrink:0 }}>
+                              style={{ ...knappStilNoytral, flexShrink: 0 }}>
                               Bruk som mal
                             </button>
                           </div>
@@ -41672,11 +41675,11 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   {/* Knapper for "Lag ny" og "Hopp over" */}
                   <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
                     <button onClick={() => aapneNyDialog(lagsett, null, lagsett.brukerKategori)}
-                      style={{ background:'#3b82f6', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer' }}>
-                      ✨ Lag helt ny konstruksjon
+                      style={knappStilPrimaer}>
+                      Lag helt ny konstruksjon
                     </button>
                     <button onClick={() => settMatch(lagsett, { name: '(hoppet over)', _hoppet: true }, 'hoppet')}
-                      style={{ background:'white', color:'#94a3b8', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'500', cursor:'pointer' }}>
+                      style={knappStilNoytral}>
                       Hopp over
                     </button>
                   </div>
