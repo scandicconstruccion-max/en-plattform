@@ -44169,12 +44169,13 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               gap: '16px',
               marginTop: '18px',
               marginBottom: '18px',
-              // Bryt ut av parent 1100px: clamp(0, ledig-plass, 250px)
-              // Sidemeny er ca 220px → effektiv skjermbredde er (100vw - 220px)
-              // Tilgjengelig plass = (100vw - 220 - 1100) / 2; del lik på begge sider
-              // Clamp opp til 250px så vi ikke utvider for mye på svært brede skjermer
-              marginLeft: 'calc(min(250px, max(0px, (100vw - 1320px) / 2)) * -1)',
-              marginRight: 'calc(min(250px, max(0px, (100vw - 1320px) / 2)) * -1)',
+              // Bryt ut av parent 1100px: clamp(0, ledig-plass, 350px)
+              // Sidemeny kan være 220px (åpen) eller 60px (collapsed) — leser fra
+              // CSS-variabel satt på root, slik at vi reagerer automatisk på toggle.
+              // Tilgjengelig plass = (100vw - sidebar - 1100) / 2; clamp opp til 350px
+              // (gir opptil 1800px bredde når sidemeny er kollapset på vid skjerm).
+              marginLeft: 'calc(min(350px, max(0px, (100vw - var(--sidebar-width, 220px) - 1100px) / 2)) * -1)',
+              marginRight: 'calc(min(350px, max(0px, (100vw - var(--sidebar-width, 220px) - 1100px) / 2)) * -1)',
             }}>
               {/* Venstre kolonne — Steg 1 (Klassifisering) */}
               <div style={{
@@ -53566,7 +53567,7 @@ function AppContent() {
   const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer' && page !== 'superadmin'
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', '--sidebar-width': sidebarWidth + 'px' }}>
 
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
