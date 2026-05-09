@@ -44153,14 +44153,28 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
           {/* Patch 18 polish: To-kolonne layout for Steg 1 + Steg 2 (kun desktop).
               Hver kolonne har sin egen scroll når innholdet er for langt. På mobil
-              faller layoutet automatisk til 1 kolonne (stacked). */}
+              faller layoutet automatisk til 1 kolonne (stacked).
+              MERK: Bryter ut av parent's 1100px max-width slik at vi utnytter mer
+              skjermbredde. Bruker negative margins (clamp'et) for å utvide tryggt. */}
           {metadata.mengder && (
-            <div style={{
+            <div style={isMob ? {
               display: 'grid',
-              gridTemplateColumns: isMob ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)',
+              gridTemplateColumns: '1fr',
               gap: '14px',
               marginTop: '18px',
               marginBottom: '18px',
+            } : {
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+              gap: '16px',
+              marginTop: '18px',
+              marginBottom: '18px',
+              // Bryt ut av parent 1100px: clamp(0, ledig-plass, 250px)
+              // Sidemeny er ca 220px → effektiv skjermbredde er (100vw - 220px)
+              // Tilgjengelig plass = (100vw - 220 - 1100) / 2; del lik på begge sider
+              // Clamp opp til 250px så vi ikke utvider for mye på svært brede skjermer
+              marginLeft: 'calc(min(250px, max(0px, (100vw - 1320px) / 2)) * -1)',
+              marginRight: 'calc(min(250px, max(0px, (100vw - 1320px) / 2)) * -1)',
             }}>
               {/* Venstre kolonne — Steg 1 (Klassifisering) */}
               <div style={{
