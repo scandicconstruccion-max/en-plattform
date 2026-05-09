@@ -42072,6 +42072,8 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   const [klikketID, setKlikketID] = useState(null)
   // Patch 18: Plan-modus (true = klippeplan aktivert, kamera på topp)
   const [planAktiv, setPlanAktiv] = useState(false)
+  // Patch 18 polish: Toggle for lagsett-liste (default åpen på desktop, lukket på mobil)
+  const [lagsettListeApen, setLagsettListeApen] = useState(true)
 
   const etasjer = mengder?._geometri?.etasjer || []
   const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
@@ -42647,6 +42649,8 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       sentrerPlanKamera,
       etasjeBunnY,
       etasjeToppY,
+      // Patch 18 polish: For å trigge resize fra utenfor (toggle-knapp osv)
+      onResize,
     }
 
     // Cleanup ved unmount
@@ -42756,11 +42760,22 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     }
   }, [planAktiv])
 
+  // Patch 18 polish: Trigge resize når lagsett-listen toggles eller plan aktiveres
+  // (begge endrer canvas-bredde)
+  useEffect(() => {
+    if (!sceneRef.current?.onResize) return
+    // Vent til DOM har oppdatert
+    const timer = setTimeout(() => {
+      sceneRef.current?.onResize?.()
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [lagsettListeApen, planAktiv])
+
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '12px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.55)' }}
         onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '14px' : '18px', width:'100%', height: isMob ? '95vh' : '90vh', maxWidth:'1400px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? '14px' : '14px', width:'100%', height: isMob ? '96vh' : '96vh', maxWidth:'1800px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Header */}
         <div style={{ padding: isMob ? '12px 16px' : '16px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
@@ -42878,11 +42893,27 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         {/* Body — split layout */}
         <div style={{ flex:1, display:'flex', minHeight:0, flexDirection: isMob ? 'column' : 'row' }}>
 
+          {/* Patch 18 polish: Smal toggle-stripe når lista er skjult (desktop) */}
+          {!isMob && lagsettListe && lagsettListe.length > 0 && !lagsettListeApen && (
+            <div style={{ width:'32px', flexShrink:0, borderRight:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', background:'#fafbfc' }}
+                 onClick={() => setLagsettListeApen(true)}
+                 title="Åpne lagsett-liste">
+              <span style={{ fontSize:'18px', color:'#64748b' }}>▶</span>
+            </div>
+          )}
+
           {/* Venstre: lagsett-liste */}
-          {!isMob && lagsettListe && lagsettListe.length > 0 && (
-            <div style={{ width:'260px', flexShrink:0, borderRight:'1px solid #f1f5f9', overflow:'auto', padding:'10px' }}>
-              <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', padding:'4px 6px 8px' }}>
-                Lagsett — klikk for å høylyse
+          {!isMob && lagsettListe && lagsettListe.length > 0 && lagsettListeApen && (
+            <div style={{ width:'260px', flexShrink:0, borderRight:'1px solid #f1f5f9', overflow:'auto', padding:'10px', position:'relative' }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'4px 6px 8px' }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                  Lagsett — klikk for å høylyse
+                </div>
+                <button onClick={() => setLagsettListeApen(false)}
+                  title="Skjul lagsett-liste"
+                  style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', padding:'2px 6px', fontSize:'14px' }}>
+                  ◀
+                </button>
               </div>
               {lagsettListe.map((ls, idx) => {
                 const aktiv = activeLagsett?.navn === ls.navn
@@ -42923,7 +42954,9 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
               <>
                 <div ref={containerRef} style={{ width:'100%', height:'100%', cursor:'grab' }} />
                 <div style={{ position:'absolute', top:'12px', left:'12px', background:'rgba(255,255,255,0.95)', borderRadius:'8px', padding:'6px 10px', fontSize:'11px', color:'#475569', boxShadow:'0 2px 8px rgba(0,0,0,0.08)' }}>
-                  {alleElementer.length} elementer · klikk på element for detaljer · drag = roter · scroll = zoom · høyreklikk eller shift+drag = pan
+                  {planAktiv
+                    ? `${alleElementer.length} elementer · scroll = zoom · høyreklikk eller shift+drag = pan`
+                    : `${alleElementer.length} elementer · klikk på element for detaljer · drag = roter · scroll = zoom · høyreklikk eller shift+drag = pan`}
                 </div>
 
                 {/* Patch 16 Fase 2: Klikk-info-panel — vises når et element er valgt */}
