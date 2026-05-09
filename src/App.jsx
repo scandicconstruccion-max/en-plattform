@@ -41497,7 +41497,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
         )}
         {tellinger.hoppet > 0 && (
           <div style={{ background: '#ca8a04' + '12', border: '1px solid ' + '#ca8a04' + '40', borderRadius:'8px', padding:'6px 10px', display:'flex', alignItems:'center', gap:'6px', minWidth:'120px' }}>
-            <span style={{ fontSize:'14px' }}>⚠</span>
+            <span style={{ fontSize:'14px' }}>⚠️</span>
             <div>
               <div style={{ fontSize:'10px', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.4px' }}>Hoppet over</div>
               <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>{tellinger.hoppet} lagsett</div>
@@ -44287,7 +44287,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                 background: 'white',
                 border: '1px solid #e2e8f0',
                 borderRadius: '12px',
-                maxHeight: isMob ? 'none' : '75vh',
+                maxHeight: isMob ? 'none' : '85vh',
                 overflowY: isMob ? 'visible' : 'auto',
                 overflowX: 'hidden',
                 minHeight: 0,
@@ -44305,7 +44305,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                 background: 'white',
                 border: '1px solid #e2e8f0',
                 borderRadius: '12px',
-                maxHeight: isMob ? 'none' : '75vh',
+                maxHeight: isMob ? 'none' : '85vh',
                 overflowY: isMob ? 'visible' : 'auto',
                 overflowX: 'hidden',
                 minHeight: 0,
