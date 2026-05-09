@@ -39407,13 +39407,13 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
 
   // Komprimerte knappestiler — mindre padding, mindre font
   const knappStil = (kat, erValgt) => ({
-    // Patch 18 polish: Ensrettet design — alle knapper har samme farge,
-    // valgt knapp får mørk fyll. Skaper ro og tydelig visuell tilstand.
-    background: erValgt ? '#334155' : 'white',
-    color: erValgt ? 'white' : '#475569',
-    border: '1px solid ' + (erValgt ? '#334155' : '#e2e8f0'),
+    // Patch 18 polish: Tydeligere knapper — lys grå bakgrunn når inaktiv,
+    // mørk fyll når aktiv. Skaper synlige knapp-bokser uten å være fargerik.
+    background: erValgt ? '#334155' : '#f1f5f9',
+    color: erValgt ? 'white' : '#334155',
+    border: '1px solid ' + (erValgt ? '#334155' : '#cbd5e1'),
     borderRadius: '6px',
-    padding: '5px 10px',
+    padding: '5px 12px',
     fontSize: '11px',
     fontWeight: erValgt ? '700' : '500',
     letterSpacing: '0.2px',
@@ -40615,11 +40615,11 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
       <button
         onClick={() => setAapen(a => !a)}
         style={{
-          background: aapen ? '#334155' : 'white',
-          border: '1px solid ' + (aapen ? '#334155' : '#e2e8f0'),
-          color: aapen ? 'white' : '#475569',
+          background: aapen ? '#334155' : '#f1f5f9',
+          border: '1px solid ' + (aapen ? '#334155' : '#cbd5e1'),
+          color: aapen ? 'white' : '#334155',
           borderRadius: '6px',
-          padding: '5px 10px',
+          padding: '5px 12px',
           fontSize: '11px',
           fontWeight: aapen ? '700' : '500',
           letterSpacing: '0.2px',
@@ -41344,14 +41344,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   }
 
   // Patch 18 polish: Ensrettet knappestil — matcher Steg 1.
-  // Inaktive knapper: hvit bakgrunn, grå tekst, lys border
+  // Inaktive knapper: lys grå bakgrunn, mørk tekst, synlig border
   // Aktiv/primær knapp: mørk fyll + hvit tekst
   const knappStilNoytral = {
-    background: 'white',
-    color: '#475569',
-    border: '1px solid #e2e8f0',
+    background: '#f1f5f9',
+    color: '#334155',
+    border: '1px solid #cbd5e1',
     borderRadius: '6px',
-    padding: '5px 10px',
+    padding: '5px 12px',
     fontSize: '11px',
     fontWeight: '500',
     letterSpacing: '0.2px',
