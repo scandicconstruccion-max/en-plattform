@@ -39527,43 +39527,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
 
   return (
     <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #3b82f6', padding: kompakt ? '0' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
-      {/* Patch 18 polish: Sticky fremdrifts-stripe (kun i kompakt to-kolonne-modus) */}
-      {kompakt && (() => {
-        const totalt = alleVeggLagsett.length + alleGulvLagsett.length
-        const usikre = alleVeggLagsett.filter(({ lagsett }) =>
-          !lagsett.brukerKategori || lagsett.brukerKategori === 'usikker'
-        ).length
-        const ferdig = totalt - usikre
-        const pct = totalt > 0 ? Math.round((ferdig / totalt) * 100) : 0
-        return (
-          <div style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            background: 'white',
-            borderBottom: '1px solid #e2e8f0',
-            padding: '8px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-          }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#1e40af', whiteSpace: 'nowrap' }}>
-              🧭 Klassifiser
-            </span>
-            <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
-              {ferdig} av {totalt} ferdig
-            </span>
-            {/* Tynn fremdriftsindikator */}
-            <div style={{ flex: 1, height: '4px', background: '#f1f5f9', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ width: pct + '%', height: '100%', background: pct === 100 ? '#10b981' : '#3b82f6', transition: 'width 0.3s' }} />
-            </div>
-            <span style={{ fontSize: '11px', fontWeight: '600', color: pct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap' }}>
-              {pct}%
-            </span>
-          </div>
-        )
-      })()}
+      {/* Patch 18 polish: Indre sticky stripe fjernet — erstattet av felles stripe over begge kolonner i BimImportPage. */}
 
       <div style={kompakt ? { padding: '14px 16px' } : {}}>
       {/* Header med steg-merke + status-pille */}
@@ -41393,39 +41357,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
 
   return (
     <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #16a34a', padding: kompakt ? '0' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
-      {/* Patch 18 polish: Sticky fremdrifts-stripe (kun i kompakt to-kolonne-modus) */}
-      {kompakt && (() => {
-        const totalt = matchResultater.length
-        const ferdigeAntall = (tellinger.bekreftet || 0) + (tellinger.eksakt || 0) + (tellinger.auto || 0) + (tellinger.baering || 0)
-        const pct = totalt > 0 ? Math.round((ferdigeAntall / totalt) * 100) : 0
-        return (
-          <div style={{
-            position: 'sticky',
-            top: 0,
-            zIndex: 10,
-            background: 'white',
-            borderBottom: '1px solid #e2e8f0',
-            padding: '8px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
-          }}>
-            <span style={{ fontSize: '11px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
-              🎯 Match
-            </span>
-            <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
-              {ferdigeAntall} av {totalt} ferdig
-            </span>
-            <div style={{ flex: 1, height: '4px', background: '#f1f5f9', borderRadius: '2px', overflow: 'hidden' }}>
-              <div style={{ width: pct + '%', height: '100%', background: pct === 100 ? '#10b981' : '#16a34a', transition: 'width 0.3s' }} />
-            </div>
-            <span style={{ fontSize: '11px', fontWeight: '600', color: pct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap' }}>
-              {pct}%
-            </span>
-          </div>
-        )
-      })()}
+      {/* Patch 18 polish: Indre sticky stripe fjernet — erstattet av felles stripe over begge kolonner i BimImportPage. */}
 
       <div style={kompakt ? { padding: '14px 16px' } : {}}>
       {/* Header med steg-merke + status-pille */}
@@ -43974,6 +43906,9 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   // Patch 18 polish: Versjons-teller som inkrementeres når Steg 1 endrer klassifisering.
   // Brukes til å trigge re-rendering av Steg 2 (matchings-seksjonen).
   const [klassifiseringVersjon, setKlassifiseringVersjon] = useState(0)
+  // Patch 18 polish: Tilsvarende for matching i Steg 2.
+  // Begge brukes også for å re-beregne fremdrifts-stripe-tellinger.
+  const [matchVersjon, setMatchVersjon] = useState(0)
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -44261,27 +44196,107 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               faller layoutet automatisk til 1 kolonne (stacked).
               MERK: Bryter ut av parent's 1100px max-width slik at vi utnytter mer
               skjermbredde. Bruker negative margins (clamp'et) for å utvide tryggt. */}
-          {metadata.mengder && (
+          {metadata.mengder && (() => {
+            // Beregn fremdrift for begge stiler — kjøres på hver re-render
+            // (klassifiseringVersjon og matchVersjon trigger oppdatering)
+            const _v = klassifiseringVersjon // referer slik at React tracker dependency
+            const _m = matchVersjon
+            const veggLagsett = []
+            ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(k => {
+              if (metadata.mengder[k]?.lagsett) {
+                metadata.mengder[k].lagsett.forEach(ls => veggLagsett.push(ls))
+              }
+            })
+            const gulvLagsett = metadata.mengder.gulv?.lagsett || []
+            const alleLagsett = [...veggLagsett, ...gulvLagsett]
+            const totalt = alleLagsett.length
+
+            // Klassifisering: alt som ikke er 'usikker' eller null/undefined
+            const klassifiserteAntall = alleLagsett.filter(ls =>
+              ls.brukerKategori && ls.brukerKategori !== 'usikker'
+            ).length
+
+            // Matching: alle med matchedKonstruksjon ELLER kategori 'baering' (separat håndtering)
+            const matchedeAntall = alleLagsett.filter(ls =>
+              ls.matchedKonstruksjon || ls.brukerKategori === 'baering'
+            ).length
+
+            const klassPct = totalt > 0 ? Math.round((klassifiserteAntall / totalt) * 100) : 0
+            const matchPct = totalt > 0 ? Math.round((matchedeAntall / totalt) * 100) : 0
+
+            return (
             <div style={isMob ? {
-              display: 'grid',
-              gridTemplateColumns: '1fr',
-              gap: '14px',
               marginTop: '18px',
               marginBottom: '18px',
             } : {
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
-              gap: '16px',
               marginTop: '18px',
               marginBottom: '18px',
               // Bryt ut av parent 1100px: clamp(0, ledig-plass, 350px)
-              // Sidemeny kan være 220px (åpen) eller 60px (collapsed) — leser fra
-              // CSS-variabel satt på root, slik at vi reagerer automatisk på toggle.
-              // Tilgjengelig plass = (100vw - sidebar - 1100) / 2; clamp opp til 350px
-              // (gir opptil 1800px bredde når sidemeny er kollapset på vid skjerm).
               marginLeft: 'calc(min(350px, max(0px, (100vw - var(--sidebar-width, 220px) - 1100px) / 2)) * -1)',
               marginRight: 'calc(min(350px, max(0px, (100vw - var(--sidebar-width, 220px) - 1100px) / 2)) * -1)',
             }}>
+
+              {/* Patch 18 polish: Felles sticky fremdrifts-stripe over begge kolonner.
+                  Sticky til vinduet (ikke kolonnen) — synlig så lenge BIM-import-området er på skjermen. */}
+              {!isMob && (
+                <div style={{
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 20,
+                  background: 'white',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '10px 16px',
+                  marginBottom: '12px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '24px',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                }}>
+                  {/* Klassifiser-fremdrift */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
+                      🧭 Klassifiser
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {klassifiserteAntall} av {totalt} ferdig
+                    </span>
+                    <div style={{ flex: 1, height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: klassPct + '%', height: '100%', background: klassPct === 100 ? '#10b981' : '#15803d', transition: 'width 0.3s' }} />
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: klassPct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
+                      {klassPct}%
+                    </span>
+                  </div>
+
+                  {/* Match-fremdrift */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
+                      🎯 Match
+                    </span>
+                    <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                      {matchedeAntall} av {totalt} ferdig
+                    </span>
+                    <div style={{ flex: 1, height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                      <div style={{ width: matchPct + '%', height: '100%', background: matchPct === 100 ? '#10b981' : '#15803d', transition: 'width 0.3s' }} />
+                    </div>
+                    <span style={{ fontSize: '11px', fontWeight: '700', color: matchPct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
+                      {matchPct}%
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Selve kolonne-griden */}
+              <div style={isMob ? {
+                display: 'grid',
+                gridTemplateColumns: '1fr',
+                gap: '14px',
+              } : {
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+                gap: '16px',
+              }}>
               {/* Venstre kolonne — Steg 1 (Klassifisering) */}
               <div style={{
                 background: 'white',
@@ -44315,10 +44330,13 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   isMob={isMob}
                   kompakt={true}
                   klassifiseringVersjon={klassifiseringVersjon}
+                  onChange={() => setMatchVersjon(v => v + 1)}
                 />
               </div>
+              </div>
             </div>
-          )}
+            )
+          })()}
 
           {/* Generer kalkyle — Patch 14.C + 14.D */}
           {metadata.mengder && (
