@@ -37591,6 +37591,78 @@ function klassifiserForm(fotavtrykk) {
   return 'ukjent'
 }
 
+// ─── PATCH 18: IFC-TYPER DIAGNOSE ─────────────────────────────────────────────
+// Skanner IFC-en for alle interessante element-typer og teller forekomster.
+// Brukes for å avdekke hva slags innredning, sanitær, møbler etc. som
+// faktisk er modellert i IFC-en — slik at vi vet om "Plan med innredning"
+// er teknisk mulig.
+
+const IFC_DIAGNOSE_TYPER = [
+  // Bygningsstruktur
+  { type: 'IFCWALL', kategori: 'Vegger', alltid: true },
+  { type: 'IFCWALLSTANDARDCASE', kategori: 'Vegger', alltid: true },
+  { type: 'IFCSLAB', kategori: 'Dekker/gulv', alltid: true },
+  { type: 'IFCROOF', kategori: 'Tak', alltid: true },
+  { type: 'IFCWINDOW', kategori: 'Vinduer', alltid: true },
+  { type: 'IFCDOOR', kategori: 'Dører', alltid: true },
+  { type: 'IFCSTAIR', kategori: 'Trapper' },
+  { type: 'IFCRAILING', kategori: 'Rekkverk' },
+  { type: 'IFCCOLUMN', kategori: 'Søyler' },
+  { type: 'IFCBEAM', kategori: 'Bjelker' },
+  { type: 'IFCBUILDINGELEMENTPROXY', kategori: 'Generiske elementer' },
+  { type: 'IFCCOVERING', kategori: 'Kledninger' },
+
+  // Sanitær (relevant for plansnitt!)
+  { type: 'IFCSANITARYTERMINAL', kategori: 'Sanitær (WC, vask, dusj)', viktig: true },
+  { type: 'IFCFLOWTERMINAL', kategori: 'Kraner og avløp', viktig: true },
+
+  // Møbler og innredning (relevant for plansnitt!)
+  { type: 'IFCFURNITURE', kategori: 'Møbler', viktig: true },
+  { type: 'IFCFURNISHINGELEMENT', kategori: 'Innredning (skap, hyller)', viktig: true },
+  { type: 'IFCSYSTEMFURNITUREELEMENT', kategori: 'Systemmøbler', viktig: true },
+
+  // Elektro/VVS (kan være relevant)
+  { type: 'IFCFLOWFITTING', kategori: 'Rør-fittings' },
+  { type: 'IFCFLOWSEGMENT', kategori: 'Rør og kabler' },
+  { type: 'IFCDISTRIBUTIONELEMENT', kategori: 'Distribusjon (VVS/EL)' },
+  { type: 'IFCLIGHTFIXTURE', kategori: 'Lysarmaturer' },
+  { type: 'IFCOUTLET', kategori: 'Stikkontakter' },
+  { type: 'IFCSWITCHINGDEVICE', kategori: 'Brytere' },
+
+  // Spaces (rom-definisjoner)
+  { type: 'IFCSPACE', kategori: 'Rom-definisjoner', viktig: true },
+  { type: 'IFCZONE', kategori: 'Soner' },
+
+  // Anneneksternt
+  { type: 'IFCSITE', kategori: 'Tomt' },
+  { type: 'IFCBUILDING', kategori: 'Bygning' },
+  { type: 'IFCBUILDINGSTOREY', kategori: 'Etasjer' },
+]
+
+function tellAlleIfcTyper(api, mod, modelID) {
+  const resultater = []
+  for (const t of IFC_DIAGNOSE_TYPER) {
+    const constant = mod[t.type]
+    if (typeof constant === 'undefined') continue
+    try {
+      const ids = api.GetLineIDsWithType(modelID, constant)
+      const antall = ids.size()
+      if (antall > 0) {
+        resultater.push({
+          type: t.type,
+          kategori: t.kategori,
+          antall,
+          viktig: t.viktig || false,
+          alltid: t.alltid || false,
+        })
+      }
+    } catch(e) {
+      // Type ikke støttet i denne IFC-versjonen — hopp over
+    }
+  }
+  return resultater
+}
+
 async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const result = {
     yttervegg:    { antall: 0, totalAreal: 0, totalLengde: 0, gjennomsnittHoyde: 0, totalVolum: 0, elementer: [] },
@@ -38454,6 +38526,16 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     elementerMedMesh,
   }
   console.log(`[ifc 15.A] anvendte fotavtrykk på ${elementerMedFotavtrykk} elementer, etasje på ${elementerMedEtasje}`)
+
+  // Patch 18: IFC-typer diagnose for å se om innredning/sanitær finnes
+  try {
+    if (onProgress) onProgress('Diagnostiserer IFC-innhold...')
+    result._ifcTyperDiagnose = tellAlleIfcTyper(api, mod, modelID)
+    console.log(`[ifc 18] fant ${result._ifcTyperDiagnose.length} ulike IFC-typer i fila`)
+  } catch(e) {
+    console.warn('[ifc 18] kunne ikke kjøre type-diagnose:', e)
+    result._ifcTyperDiagnose = []
+  }
 
   return result
 }
@@ -40452,6 +40534,121 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
 // Viser også form-fordeling (lange/smale → vegger, brede/flate → dekker, etc.)
 // basert på bbox-dimensjoner fra Patch 15.A.
 
+// Patch 18: Vis hvilke IFC-element-typer som finnes i fila
+function visIfcInnholdDiagnose(mengder, onAlert) {
+  const liste = mengder?._ifcTyperDiagnose || []
+  if (liste.length === 0) {
+    onAlert({
+      message: 'IFC-innhold er ikke tilgjengelig',
+      subMessage: 'Diagnosen kjøres bare når IFC-fila parses. Last opp på nytt for å regenerere.',
+      kind: 'warn',
+    })
+    return
+  }
+
+  // Sortér: viktige først (sanitær, møbler), deretter vanlige bygnings­elementer, deretter resten
+  const viktige = liste.filter(t => t.viktig).sort((a,b) => b.antall - a.antall)
+  const alltid = liste.filter(t => t.alltid && !t.viktig).sort((a,b) => b.antall - a.antall)
+  const ovrige = liste.filter(t => !t.viktig && !t.alltid).sort((a,b) => b.antall - a.antall)
+
+  const stats = []
+
+  // Stats-kort 1: Innredning og sanitær (det viktigste!)
+  if (viktige.length > 0) {
+    stats.push({
+      title: '🛁 Innredning, sanitær og rom',
+      subtitle: 'Disse vil dukke opp i Plan-visning hvis de finnes',
+      items: viktige.map(t => ({
+        label: t.kategori,
+        value: `${t.antall} stk`,
+        highlight: true,
+      })),
+    })
+  } else {
+    stats.push({
+      title: '🛁 Innredning, sanitær og rom',
+      subtitle: 'Ikke funnet i denne IFC-fila',
+      items: [{
+        label: '(Ingen relevante element-typer)',
+        value: '0',
+      }],
+    })
+  }
+
+  // Stats-kort 2: Bygningselementer (det vi allerede henter)
+  if (alltid.length > 0) {
+    stats.push({
+      title: '🏗️ Bygningselementer',
+      subtitle: 'Hentes til kalkylen og 3D-modellen',
+      items: alltid.map(t => ({
+        label: t.kategori + (t.type !== `IFC${t.kategori.toUpperCase()}` ? ` (${t.type})` : ''),
+        value: `${t.antall} stk`,
+      })),
+    })
+  }
+
+  // Stats-kort 3: Andre element-typer (informasjonsbasert)
+  if (ovrige.length > 0) {
+    stats.push({
+      title: '📦 Andre element-typer',
+      subtitle: 'Finnes i fila, men brukes ikke i kalkyle eller 3D enda',
+      items: ovrige.map(t => ({
+        label: t.kategori + ` (${t.type})`,
+        value: `${t.antall} stk`,
+      })),
+    })
+  }
+
+  // Notes basert på funn
+  const notes = []
+  const harSanitar = viktige.some(t => t.type.includes('SANITARY') || t.type.includes('FLOWTERMINAL'))
+  const harMobler = viktige.some(t => t.type.includes('FURNITURE') || t.type.includes('FURNISHING'))
+  const harRom = viktige.some(t => t.type.includes('SPACE'))
+
+  if (harSanitar && harMobler) {
+    notes.push({
+      kind: 'success',
+      icon: '✅',
+      text: '<strong>Bra!</strong> Denne IFC-fila inneholder både sanitær og møbler. Plan-visning med innredning er <strong>teknisk mulig</strong>.',
+    })
+  } else if (harSanitar || harMobler) {
+    notes.push({
+      kind: 'info',
+      icon: 'ℹ️',
+      text: 'IFC-fila inneholder <strong>noe</strong> innredning, men ikke alt. Vi kan vise det som er der i Plan-visning.',
+    })
+  } else {
+    notes.push({
+      kind: 'warn',
+      icon: '⚠️',
+      text: '<strong>Ingen sanitær eller møbler</strong> i denne IFC-fila. Arkitekten har ikke modellert innredning. Plan-visning vil bare vise vegger, dører og vinduer.',
+    })
+  }
+
+  if (harRom) {
+    notes.push({
+      kind: 'info',
+      icon: '🏠',
+      text: '<strong>Romdefinisjoner (IfcSpace)</strong> finnes — kan brukes til å vise romnavn og areal i Plan-visning hvis vi bygger det.',
+    })
+  }
+
+  notes.push({
+    kind: 'info',
+    icon: '💡',
+    text: 'Dette er en <strong>diagnose</strong>, ikke en endring. Bruk denne info til å bestemme om det er verdt å bygge "Plan med innredning"-visning.',
+  })
+
+  onAlert({
+    message: 'IFC-innhold — diagnose',
+    subMessage: `${liste.length} ulike element-typer funnet i fila`,
+    kind: 'info',
+    details: { stats, notes },
+  })
+
+  console.log('[Patch 18] IFC-typer diagnose:', liste)
+}
+
 function visLagsettDiagnose(lagsett, onAlert) {
   const elementer = lagsett.elementer || []
   if (elementer.length === 0) {
@@ -40930,6 +41127,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
           style={{ background:'#fef3c7', border:'1px solid #fde68a', color:'#92400e', borderRadius:'8px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:'4px' }}>
           <span>🧪</span>
           <span>Test plansnitt</span>
+        </button>
+        {/* Patch 18: IFC-typer diagnose */}
+        <button
+          onClick={() => visIfcInnholdDiagnose(mengder, appAlert)}
+          title="Se hvilke element-typer som finnes i IFC-fila"
+          style={{ background:'#eff6ff', border:'1px solid #bfdbfe', color:'#1e40af', borderRadius:'8px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:'4px' }}>
+          <span>🔬</span>
+          <span>IFC-innhold</span>
         </button>
       </div>
 
