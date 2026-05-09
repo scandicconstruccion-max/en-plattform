@@ -40973,7 +40973,7 @@ function visLagsettDiagnose(lagsett, onAlert) {
   })
 }
 
-function BimMatchingSeksjon({ mengder, isMob, onChange }) {
+function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
   const { user } = useAuth()
@@ -41199,7 +41199,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
       const result = matchLagsettMotBibliotek(lagsett, katForMatch, utvidetBibliotek)
       return { lagsett, type, opprinneligKat, idx, ...result }
     })
-  }, [alleLagsett, utvidetBibliotek, oppdater])
+  }, [alleLagsett, utvidetBibliotek, oppdater, klassifiseringVersjon])
 
   const settMatch = async (lagsett, valgtKonstruksjon, kilde) => {
     // kilde = 'eksakt' | 'mal' | 'ny' | 'hoppet'
@@ -43886,6 +43886,9 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   const [file, setFile] = useState(null)
   const [progress, setProgress] = useState({ step: '', percent: 0 })
   const [errorMsg, setErrorMsg] = useState('')
+  // Patch 18 polish: Versjons-teller som inkrementeres når Steg 1 endrer klassifisering.
+  // Brukes til å trigge re-rendering av Steg 2 (matchings-seksjonen).
+  const [klassifiseringVersjon, setKlassifiseringVersjon] = useState(0)
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -44170,12 +44173,20 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
           {/* Klassifiserings-seksjon — Patch 13 Sesjon A */}
           {metadata.mengder && (
-            <BimKlassifiseringSeksjon mengder={metadata.mengder} isMob={isMob} />
+            <BimKlassifiseringSeksjon
+              mengder={metadata.mengder}
+              isMob={isMob}
+              onChange={() => setKlassifiseringVersjon(v => v + 1)}
+            />
           )}
 
           {/* Bibliotek-matching — Patch 13 Sesjon B */}
           {metadata.mengder && (
-            <BimMatchingSeksjon mengder={metadata.mengder} isMob={isMob} />
+            <BimMatchingSeksjon
+              mengder={metadata.mengder}
+              isMob={isMob}
+              klassifiseringVersjon={klassifiseringVersjon}
+            />
           )}
 
           {/* Generer kalkyle — Patch 14.C + 14.D */}
