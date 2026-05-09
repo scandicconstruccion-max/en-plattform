@@ -44201,6 +44201,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
             // (klassifiseringVersjon og matchVersjon trigger oppdatering)
             const _v = klassifiseringVersjon // referer slik at React tracker dependency
             const _m = matchVersjon
+
+            // Samle vegg-lagsett (matcher Steg 1's alleVeggLagsett)
             const veggLagsett = []
             ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(k => {
               if (metadata.mengder[k]?.lagsett) {
@@ -44211,10 +44213,12 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
             const alleLagsett = [...veggLagsett, ...gulvLagsett]
             const totalt = alleLagsett.length
 
-            // Klassifisering: alt som ikke er 'usikker' eller null/undefined
-            const klassifiserteAntall = alleLagsett.filter(ls =>
-              ls.brukerKategori && ls.brukerKategori !== 'usikker'
+            // Klassifisering: matcher Steg 1's logikk eksakt — bare vegger trenger brukerinngrep,
+            // gulv klassifiseres automatisk ved IFC-parsing. Så "ferdig" = totalt - usikre vegger.
+            const usikreVegger = veggLagsett.filter(ls =>
+              !ls.brukerKategori || ls.brukerKategori === 'usikker'
             ).length
+            const klassifiserteAntall = totalt - usikreVegger
 
             // Matching: alle med matchedKonstruksjon ELLER kategori 'baering' (separat håndtering)
             const matchedeAntall = alleLagsett.filter(ls =>
@@ -44237,24 +44241,33 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
             }}>
 
               {/* Patch 18 polish: Felles sticky fremdrifts-stripe over begge kolonner.
-                  Sticky til vinduet (ikke kolonnen) — synlig så lenge BIM-import-området er på skjermen. */}
+                  Sticky til vinduet (ikke kolonnen) — synlig så lenge BIM-import-området er på skjermen.
+                  Hver fremdrift har sitt eget kort for tydelig skille. */}
               {!isMob && (
                 <div style={{
                   position: 'sticky',
                   top: 0,
                   zIndex: 20,
-                  background: 'white',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: '12px',
-                  padding: '10px 16px',
                   marginBottom: '12px',
                   display: 'grid',
                   gridTemplateColumns: '1fr 1fr',
-                  gap: '24px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  gap: '12px',
+                  // Bakgrunn bak kortene så hvit innhold ikke "lekker" gjennom
+                  background: '#f8fafc',
+                  paddingTop: '4px',
+                  paddingBottom: '4px',
                 }}>
-                  {/* Klassifiser-fremdrift */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Klassifiser-fremdrift — eget kort */}
+                  <div style={{
+                    background: 'white',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  }}>
                     <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
                       🧭 Klassifiser
                     </span>
@@ -44269,8 +44282,17 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                     </span>
                   </div>
 
-                  {/* Match-fremdrift */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  {/* Match-fremdrift — eget kort */}
+                  <div style={{
+                    background: 'white',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '12px',
+                    padding: '10px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                  }}>
                     <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
                       🎯 Match
                     </span>
