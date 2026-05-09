@@ -40522,18 +40522,15 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
 //   ⚠ INGEN MATCH — viser nærmeste mal-konstruksjoner og lar brukeren lage ny
 //   ⏸ HOPPET OVER — for usikker/ignorer-klassifisering
 
+
 // ─── BIM BIBLIOTEK-SØKEMODAL (Patch 18 polish) ────────────────────────────────
 // Lar kalkulatøren søke gjennom HELE biblioteket (alle kategorier) og velge
 // en konstruksjon manuelt — uavhengig av IFC-klassifisering. Nyttig når
 // arkitektens prosjektering ikke matcher hva som faktisk skal bygges, eller
 // når automatisk matching ikke finner gode kandidater.
 //
-// Funksjoner:
-//   - Søkefelt på navn
-//   - Kategori-filter (default: lagsettets klassifiserte kategori, kan velges "Alle")
-//   - Likhets-prosent vs IFC-lagstruktur (når mulig)
-//   - Lag-beskrivelse for hver konstruksjon
-//   - Sortert etter likhets-score (når kategori er satt)
+// Layout: Sidebar venstre (kategori-tre) + liste høyre (konstruksjoner).
+// Listen er alltid synlig — sidebaren tar smal kolonne.
 
 function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onClose }) {
   const [sok, setSok] = useState('')
@@ -40547,11 +40544,15 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
   // Beregn IFC-lagstruktur én gang (for likhets-score)
   const ifcLag = React.useMemo(() => ifcLagFingeravtrykk(lagsett), [lagsett])
 
-  // Hent unike kategorier fra biblioteket — for filter-knappene
+  // Hent unike kategorier fra biblioteket — for filter-listen
   const tilgjengeligeKategorier = React.useMemo(() => {
-    const set = new Set()
-    bibliotek.forEach(b => { if (b.kategori) set.add(b.kategori) })
-    return Array.from(set).sort()
+    const counter = {}
+    bibliotek.forEach(b => {
+      if (b.kategori) counter[b.kategori] = (counter[b.kategori] || 0) + 1
+    })
+    return Object.entries(counter)
+      .map(([navn, antall]) => ({ navn, antall }))
+      .sort((a, b) => a.navn.localeCompare(b.navn))
   }, [bibliotek])
 
   // Filtrert + scoret liste
@@ -40571,12 +40572,13 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
       }
     }
 
-    // Filter på søketekst
+    // Filter på søketekst (matcher navn, kategori, beskrivelse)
     if (sokLower) {
       liste = liste.filter(b => {
         const navn = (b.name || b.navn || '').toLowerCase()
         const kat = (b.kategori || '').toLowerCase()
-        return navn.includes(sokLower) || kat.includes(sokLower)
+        const beskr = (b.beskrivelse || '').toLowerCase()
+        return navn.includes(sokLower) || kat.includes(sokLower) || beskr.includes(sokLower)
       })
     }
 
@@ -40592,7 +40594,7 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
       return { konstruksjon: k, score }
     })
 
-    // Sort: høyest score først, deretter alfabetisk
+    // Sort: høyest score først, deretter alfabetisk på navn
     scored.sort((a, b) => {
       if (b.score !== a.score) return b.score - a.score
       const navnA = (a.konstruksjon.name || a.konstruksjon.navn || '').toLowerCase()
@@ -40603,46 +40605,30 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
     return scored
   }, [bibliotek, sok, valgtKategori, ifcLag, brukerKategori])
 
-  // Lag-beskrivelse for en bibliotek-konstruksjon
-  const lagBeskrivelse = (k) => {
-    const lag = k.lagstruktur || k.lag || []
-    if (!lag.length) return 'Ingen lagstruktur'
-    return lag.map(l => {
-      const navn = l.materiale || l.material || l.navn || '?'
-      const tykk = l.tykkelse || l.thickness || 0
-      return tykk ? `${navn} ${tykk}mm` : navn
-    }).join(' + ')
+  // Beskrivelse av en konstruksjon — bruker beskrivelse-feltet hvis det finnes,
+  // ellers oppsummering av materialene
+  const konstruksjonsBeskrivelse = (k) => {
+    if (k.beskrivelse) return k.beskrivelse
+    const mats = k.materialer || []
+    if (!mats.length) return ''
+    return mats.slice(0, 3).map(m => m.varenavn).join(' + ') + (mats.length > 3 ? '...' : '')
   }
 
-  // Stiler
-  const knappStilNoytral = {
-    background: '#dcfce7',
-    color: '#15803d',
-    border: '1px solid #86efac',
+  // Stil for kategori-rad i sidebar
+  const kategoriRadStil = (erValgt) => ({
+    padding: '8px 12px',
     borderRadius: '6px',
-    padding: '5px 12px',
-    fontSize: '11px',
-    fontWeight: '500',
     cursor: 'pointer',
+    background: erValgt ? '#15803d' : 'transparent',
+    color: erValgt ? 'white' : '#334155',
+    fontSize: '12px',
+    fontWeight: erValgt ? '700' : '500',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
     transition: 'all 0.1s',
-  }
-  const knappStilAktiv = {
-    ...knappStilNoytral,
-    background: '#15803d',
-    color: 'white',
-    border: '1px solid #15803d',
-    fontWeight: '700',
-  }
-  const knappStilPrimaer = {
-    background: '#15803d',
-    color: 'white',
-    border: '1px solid #15803d',
-    borderRadius: '6px',
-    padding: '8px 16px',
-    fontSize: '13px',
-    fontWeight: '700',
-    cursor: 'pointer',
-  }
+  })
 
   return (
     <div style={{
@@ -40658,9 +40644,9 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
       <div style={{
         background: 'white',
         borderRadius: '14px',
-        maxWidth: '900px',
+        maxWidth: '1100px',
         width: '100%',
-        maxHeight: '90vh',
+        height: '85vh',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
@@ -40668,7 +40654,7 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
       }} onClick={e => e.stopPropagation()}>
 
         {/* Header */}
-        <div style={{ padding: '18px 22px', borderBottom: '1px solid #e2e8f0' }}>
+        <div style={{ padding: '16px 22px', borderBottom: '1px solid #e2e8f0' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
             <div>
               <h3 style={{ margin: 0, fontSize: '17px', fontWeight: '800', color: '#0f172a' }}>
@@ -40677,7 +40663,7 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
               <p style={{ margin: '4px 0 0', fontSize: '12px', color: '#64748b' }}>
                 Lagsett: <strong>{lagsett.navn || 'Uten navn'}</strong>
                 {brukerKategori && (
-                  <> · Klassifisert som: <strong>{brukerKategori}</strong></>
+                  <> · Klassifisert: <strong>{brukerKategori}</strong></>
                 )}
               </p>
             </div>
@@ -40688,156 +40674,238 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
           </div>
         </div>
 
-        {/* Søkefelt og kategori-filter */}
-        <div style={{ padding: '14px 22px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+        {/* Søkefelt */}
+        <div style={{ padding: '12px 22px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
           <input
             type="text"
-            placeholder="🔍 Søk på navn eller kategori..."
+            placeholder="🔍 Søk på navn, kategori eller beskrivelse..."
             value={sok}
             onChange={e => setSok(e.target.value)}
+            autoFocus
             style={{
               width: '100%',
-              padding: '8px 12px',
+              padding: '9px 14px',
               border: '1px solid #cbd5e1',
               borderRadius: '8px',
               fontSize: '13px',
               outline: 'none',
               background: 'white',
+              boxSizing: 'border-box',
             }}
           />
+        </div>
 
-          {/* Kategori-knapper */}
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '10px' }}>
-            <button
+        {/* Hovedinnhold: sidebar + liste */}
+        <div style={{ flex: 1, display: 'flex', overflow: 'hidden', minHeight: 0 }}>
+
+          {/* Sidebar venstre: Kategori-tre */}
+          <div style={{
+            width: '240px',
+            flexShrink: 0,
+            borderRight: '1px solid #e2e8f0',
+            background: '#f8fafc',
+            overflowY: 'auto',
+            padding: '10px 8px',
+          }}>
+            <div style={{
+              fontSize: '10px',
+              fontWeight: '700',
+              color: '#94a3b8',
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              padding: '6px 12px',
+            }}>
+              Kategori
+            </div>
+            {/* Alle */}
+            <div
               onClick={() => setValgtKategori('alle')}
-              style={valgtKategori === 'alle' ? knappStilAktiv : knappStilNoytral}>
-              Alle ({bibliotek.length})
-            </button>
-            {tilgjengeligeKategorier.map(kat => {
-              const antall = bibliotek.filter(b => b.kategori === kat).length
-              return (
-                <button
-                  key={kat}
-                  onClick={() => setValgtKategori(kat)}
-                  style={valgtKategori === kat ? knappStilAktiv : knappStilNoytral}>
-                  {kat} ({antall})
-                </button>
-              )
-            })}
+              style={kategoriRadStil(valgtKategori === 'alle')}>
+              <span>Alle</span>
+              <span style={{
+                fontSize: '10px',
+                background: valgtKategori === 'alle' ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                color: valgtKategori === 'alle' ? 'white' : '#64748b',
+                padding: '1px 7px',
+                borderRadius: '8px',
+                fontWeight: '700',
+              }}>{bibliotek.length}</span>
+            </div>
+            <div style={{ height: '1px', background: '#e2e8f0', margin: '6px 12px' }} />
+            {/* Hver kategori */}
+            {tilgjengeligeKategorier.map(({ navn, antall }) => (
+              <div
+                key={navn}
+                onClick={() => setValgtKategori(navn)}
+                style={kategoriRadStil(valgtKategori === navn)}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {navn}
+                </span>
+                <span style={{
+                  fontSize: '10px',
+                  background: valgtKategori === navn ? 'rgba(255,255,255,0.25)' : '#e2e8f0',
+                  color: valgtKategori === navn ? 'white' : '#64748b',
+                  padding: '1px 7px',
+                  borderRadius: '8px',
+                  fontWeight: '700',
+                  flexShrink: 0,
+                }}>{antall}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Liste høyre: Konstruksjoner */}
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', minWidth: 0 }}>
+            {/* Treff-teller */}
+            <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '10px', padding: '0 4px' }}>
+              {filtrert.length === 0
+                ? 'Ingen konstruksjoner matcher'
+                : `Viser ${filtrert.length} ${filtrert.length === 1 ? 'konstruksjon' : 'konstruksjoner'}`}
+              {ifcLag.length > 0 && filtrert.length > 0 && (
+                <span style={{ marginLeft: '8px', color: '#94a3b8' }}>· sortert etter likhet</span>
+              )}
+            </div>
+
+            {filtrert.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8', fontSize: '13px' }}>
+                Prøv å søke på noe annet eller velg en annen kategori.
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {filtrert.map(({ konstruksjon: k, score }) => {
+                  const erValgt = valgt === k
+                  const navn = k.name || k.navn || 'Uten navn'
+                  const beskrivelse = konstruksjonsBeskrivelse(k)
+                  const visScore = ifcLag.length > 0 && score > 0
+                  const harMatch = visScore && score >= 0.5
+
+                  return (
+                    <div
+                      key={k.id || navn}
+                      onClick={() => setValgt(k)}
+                      style={{
+                        background: erValgt ? '#dcfce7' : 'white',
+                        border: '2px solid ' + (erValgt ? '#15803d' : '#e2e8f0'),
+                        borderRadius: '10px',
+                        padding: '10px 12px',
+                        cursor: 'pointer',
+                        transition: 'all 0.1s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                      }}>
+                      {/* Radio-indikator */}
+                      <div style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        border: '2px solid ' + (erValgt ? '#15803d' : '#cbd5e1'),
+                        background: erValgt ? '#15803d' : 'white',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}>
+                        {erValgt && (
+                          <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white' }} />
+                        )}
+                      </div>
+
+                      {/* Hovedinnhold */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{navn}</span>
+                          <span style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                            {k.kategori || 'Ukjent'}
+                          </span>
+                          {harMatch && (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              color: '#15803d',
+                              background: '#dcfce7',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              ✓ god match
+                            </span>
+                          )}
+                        </div>
+                        {beskrivelse && (
+                          <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                            {beskrivelse}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Likhets-score */}
+                      {visScore && (
+                        <div style={{
+                          flexShrink: 0,
+                          textAlign: 'center',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          background: score >= 0.7 ? '#dcfce7' : score >= 0.4 ? '#fef3c7' : '#fee2e2',
+                          color: score >= 0.7 ? '#15803d' : score >= 0.4 ? '#92400e' : '#991b1b',
+                          minWidth: '52px',
+                        }}>
+                          <div style={{ fontSize: '14px', fontWeight: '800' }}>
+                            {Math.round(score * 100)}%
+                          </div>
+                          <div style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
+                            lik
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Listen */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px' }}>
-          {filtrert.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13px' }}>
-              Ingen konstruksjoner matcher søket.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              {filtrert.map(({ konstruksjon: k, score }) => {
-                const erValgt = valgt === k
-                const navn = k.name || k.navn || 'Uten navn'
-                const beskrivelse = lagBeskrivelse(k)
-                return (
-                  <div
-                    key={k.id || navn}
-                    onClick={() => setValgt(k)}
-                    style={{
-                      background: erValgt ? '#dcfce7' : 'white',
-                      border: '2px solid ' + (erValgt ? '#15803d' : '#e2e8f0'),
-                      borderRadius: '10px',
-                      padding: '12px 14px',
-                      cursor: 'pointer',
-                      transition: 'all 0.1s',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                    }}>
-                    {/* Radio-indikator */}
-                    <div style={{
-                      width: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                      border: '2px solid ' + (erValgt ? '#15803d' : '#cbd5e1'),
-                      background: erValgt ? '#15803d' : 'white',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}>
-                      {erValgt && (
-                        <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: 'white' }} />
-                      )}
-                    </div>
-
-                    {/* Hovedinnhold */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{navn}</span>
-                        <span style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px' }}>
-                          {k.kategori || 'Ukjent'}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px', lineHeight: 1.4 }}>
-                        {beskrivelse}
-                      </div>
-                    </div>
-
-                    {/* Likhets-score */}
-                    {ifcLag.length > 0 && score > 0 && (
-                      <div style={{
-                        flexShrink: 0,
-                        textAlign: 'center',
-                        padding: '4px 10px',
-                        borderRadius: '6px',
-                        background: score >= 0.7 ? '#dcfce7' : score >= 0.4 ? '#fef3c7' : '#fee2e2',
-                        color: score >= 0.7 ? '#15803d' : score >= 0.4 ? '#92400e' : '#991b1b',
-                      }}>
-                        <div style={{ fontSize: '14px', fontWeight: '800' }}>
-                          {Math.round(score * 100)}%
-                        </div>
-                        <div style={{ fontSize: '9px', textTransform: 'uppercase', letterSpacing: '0.4px' }}>
-                          lik
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
         {/* Bunn — handlinger */}
-        <div style={{ padding: '14px 22px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '8px', background: '#f8fafc' }}>
-          <button onClick={onClose} style={{
-            background: 'white',
-            border: '1px solid #cbd5e1',
-            color: '#475569',
-            borderRadius: '6px',
-            padding: '8px 16px',
-            fontSize: '13px',
-            fontWeight: '600',
-            cursor: 'pointer',
-          }}>
-            Avbryt
-          </button>
-          <button
-            onClick={() => valgt && onVelg(valgt)}
-            disabled={!valgt}
-            style={{
-              ...knappStilPrimaer,
-              opacity: valgt ? 1 : 0.5,
-              cursor: valgt ? 'pointer' : 'not-allowed',
+        <div style={{ padding: '12px 22px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', background: '#f8fafc' }}>
+          <div style={{ fontSize: '11px', color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {valgt ? <>Valgt: <strong style={{ color: '#0f172a' }}>{valgt.name || valgt.navn}</strong></> : 'Ingen valgt'}
+          </div>
+          <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
+            <button onClick={onClose} style={{
+              background: 'white',
+              border: '1px solid #cbd5e1',
+              color: '#475569',
+              borderRadius: '6px',
+              padding: '8px 16px',
+              fontSize: '13px',
+              fontWeight: '600',
+              cursor: 'pointer',
             }}>
-            Bruk valgt
-          </button>
+              Avbryt
+            </button>
+            <button
+              onClick={() => valgt && onVelg(valgt)}
+              disabled={!valgt}
+              style={{
+                background: valgt ? '#15803d' : '#cbd5e1',
+                color: 'white',
+                border: '1px solid ' + (valgt ? '#15803d' : '#cbd5e1'),
+                borderRadius: '6px',
+                padding: '8px 16px',
+                fontSize: '13px',
+                fontWeight: '700',
+                cursor: valgt ? 'pointer' : 'not-allowed',
+              }}>
+              Bruk valgt
+            </button>
+          </div>
         </div>
       </div>
     </div>
   )
 }
+
 
 // ─── BIM LAGSETT-DETALJER (Patch 14 Steg A — vis IFC-detaljer) ───────────────
 // Kollapsbar visning av all data IFC-fila har om et bestemt lagsett:
