@@ -38569,6 +38569,67 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       if (mesh) {
         e.mesh = mesh
         elementerMedMesh++
+
+        // Patch 18 polish: Beregn lengde og areal fra mesh-bbox hvis IFC mangler det.
+        // For vegger og lignende elementer er lengde = lengste horisontale akse,
+        // tykkelse = korteste horisontale akse, høyde = vertikale akse.
+        // Vi vet ikke hvilken akse som er høyde fra mesh alene — så vi bruker
+        // den minste av tre spenn som "tykkelse" og største som "lengde",
+        // andre som "høyde".
+        if ((e.areal || 0) === 0 || (e.lengde || 0) === 0) {
+          const v = mesh.vertices
+          if (v && v.length >= 3) {
+            let minX = Infinity, maxX = -Infinity
+            let minY = Infinity, maxY = -Infinity
+            let minZ = Infinity, maxZ = -Infinity
+            for (let i = 0; i < v.length; i += 3) {
+              if (v[i] < minX) minX = v[i]
+              if (v[i] > maxX) maxX = v[i]
+              if (v[i+1] < minY) minY = v[i+1]
+              if (v[i+1] > maxY) maxY = v[i+1]
+              if (v[i+2] < minZ) minZ = v[i+2]
+              if (v[i+2] > maxZ) maxZ = v[i+2]
+            }
+            const spennX = maxX - minX
+            const spennY = maxY - minY
+            const spennZ = maxZ - minZ
+
+            // Detekter enhet: hvis største spenn > 50, antar mm
+            const stortste = Math.max(spennX, spennY, spennZ)
+            const erMillimeter = stortste > 50
+            const skala = erMillimeter ? 0.001 : 1.0  // mm → m
+
+            const sx = spennX * skala
+            const sy = spennY * skala
+            const sz = spennZ * skala
+
+            // Sorter de tre spennene: minste = tykkelse, største = lengde, mellom = høyde
+            const sortert = [sx, sy, sz].sort((a, b) => a - b)
+            const meshTykkelse = sortert[0]
+            const meshHoyde = sortert[1]
+            const meshLengde = sortert[2]
+
+            // Bruk mesh-data hvis IFC mangler:
+            //   - hoyde fra mesh hvis IFC mangler
+            //   - lengde fra mesh hvis IFC mangler
+            //   - areal = lengde × hoyde
+            if ((e.hoyde || 0) === 0) {
+              e.hoyde = meshHoyde
+              e.hoydeKilde = 'mesh_bbox'
+            }
+            if ((e.lengde || 0) === 0) {
+              e.lengde = meshLengde
+              e.lengdeKilde = 'mesh_bbox'
+            }
+            if ((e.areal || 0) === 0 && e.lengde > 0 && e.hoyde > 0) {
+              e.areal = e.lengde * e.hoyde
+              e.arealKilde = 'beregnet_mesh_bbox'
+            }
+
+            // Lagre tykkelse for senere bruk (kan være nyttig for lagsett-info)
+            if (!e.meshTykkelse) e.meshTykkelse = meshTykkelse
+          }
+        }
       }
       const et = elementToEtasje.get(e.id)
       if (et) {
@@ -38577,6 +38638,34 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       }
     })
   })
+
+  // Patch 18 polish: Re-beregn totalAreal/totalLengde for hver kategori etter
+  // mesh-basert areal-beregning (ovenfor). Vi må gjøre dette FØR lagsett blir
+  // gruppert på nytt nedenfor.
+  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak'].forEach(kat => {
+    const k = result[kat]
+    if (!k || !k.elementer) return
+    let sumAreal = 0, sumLengde = 0, sumVolum = 0, sumHoyde = 0, antMedHoyde = 0
+    k.elementer.forEach(e => {
+      sumAreal += (e.areal || 0)
+      sumLengde += (e.lengde || 0)
+      sumVolum += (e.volum || 0)
+      if (e.hoyde > 0) { sumHoyde += e.hoyde; antMedHoyde++ }
+    })
+    k.totalAreal = sumAreal
+    if ('totalLengde' in k) k.totalLengde = sumLengde
+    k.totalVolum = sumVolum
+    if ('gjennomsnittHoyde' in k) {
+      k.gjennomsnittHoyde = antMedHoyde > 0 ? sumHoyde / antMedHoyde : 0
+    }
+  })
+
+  // Re-grupper lagsett med oppdaterte areal-verdier
+  result.yttervegg.lagsett = grupperEtterLagsett(result.yttervegg.elementer)
+  result.innervegg.lagsett = grupperEtterLagsett(result.innervegg.elementer)
+  result.ukjent_vegg.lagsett = grupperEtterLagsett(result.ukjent_vegg.elementer)
+  result.tak.lagsett = grupperEtterLagsett(result.tak.elementer)
+  result.gulv.lagsett = grupperEtterLagsett(result.gulv.elementer)
 
   // Lagre på resultatet for diagnose-rapport
   result._geometri = {
@@ -40570,9 +40659,9 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
               <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
                 {eksempler.map((e, idx) => {
                   const detaljer = []
-                  if (e.lengde > 0) detaljer.push(`${e.lengde.toFixed(1)} lm`)
-                  if (e.areal > 0) detaljer.push(`${e.areal.toFixed(1)} m²${e.arealKilde === 'beregnet_lengde_x_hoyde' ? '*' : ''}`)
-                  if (e.hoyde > 0) detaljer.push(`${e.hoyde.toFixed(2)}m høy`)
+                  if (e.lengde > 0) detaljer.push(`${e.lengde.toFixed(1)} lm${e.lengdeKilde === 'mesh_bbox' ? '*' : ''}`)
+                  if (e.areal > 0) detaljer.push(`${e.areal.toFixed(1)} m²${(e.arealKilde === 'beregnet_lengde_x_hoyde' || e.arealKilde === 'beregnet_mesh_bbox') ? '*' : ''}`)
+                  if (e.hoyde > 0) detaljer.push(`${e.hoyde.toFixed(2)}m høy${e.hoydeKilde === 'mesh_bbox' ? '*' : ''}`)
                   if (e.volum > 0 && !e.hoyde) detaljer.push(`${e.volum.toFixed(2)} m³`)
                   return (
                     <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 10px', borderBottom: idx < eksempler.length - 1 ? '1px solid #f1f5f9' : 'none', gap: '8px' }}>
@@ -40597,9 +40686,9 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
                 </div>
               )}
               {/* Patch 18 polish: Forklaring av *-merket areal */}
-              {alleElementer.some(e => e.arealKilde === 'beregnet_lengde_x_hoyde') && (
+              {alleElementer.some(e => e.arealKilde === 'beregnet_lengde_x_hoyde' || e.arealKilde === 'beregnet_mesh_bbox' || e.lengdeKilde === 'mesh_bbox' || e.hoydeKilde === 'mesh_bbox') && (
                 <div style={{ marginTop: '6px', fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>
-                  * Areal beregnet automatisk fra lengde × høyde (IFC mangler areal-felt)
+                  * Verdier beregnet automatisk fra 3D-geometri (IFC mangler felt direkte)
                 </div>
               )}
             </div>
