@@ -39524,7 +39524,46 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
   const farger = stegFarger[stegStatus.farge]
 
   return (
-    <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #3b82f6', padding: kompakt ? '14px 16px' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #3b82f6', padding: kompakt ? '0' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
+      {/* Patch 18 polish: Sticky fremdrifts-stripe (kun i kompakt to-kolonne-modus) */}
+      {kompakt && (() => {
+        const totalt = alleVeggLagsett.length + alleGulvLagsett.length
+        const usikre = alleVeggLagsett.filter(({ lagsett }) =>
+          !lagsett.brukerKategori || lagsett.brukerKategori === 'usikker'
+        ).length
+        const ferdig = totalt - usikre
+        const pct = totalt > 0 ? Math.round((ferdig / totalt) * 100) : 0
+        return (
+          <div style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: 'white',
+            borderBottom: '1px solid #e2e8f0',
+            padding: '8px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#1e40af', whiteSpace: 'nowrap' }}>
+              🧭 Klassifiser
+            </span>
+            <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              {ferdig} av {totalt} ferdig
+            </span>
+            {/* Tynn fremdriftsindikator */}
+            <div style={{ flex: 1, height: '4px', background: '#f1f5f9', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ width: pct + '%', height: '100%', background: pct === 100 ? '#10b981' : '#3b82f6', transition: 'width 0.3s' }} />
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: pct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap' }}>
+              {pct}%
+            </span>
+          </div>
+        )
+      })()}
+
+      <div style={kompakt ? { padding: '14px 16px' } : {}}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: farger.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>1</div>
@@ -39606,6 +39645,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
         <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
           Når du går til neste steg (bibliotek-matching, kommer i neste oppdatering), vil systemet sammenligne hvert lagsett mot din konstruksjons-bibliotek. Hvis det finnes en eksakt match, brukes den. Hvis ikke, får du valg om å lage ny konstruksjon basert på IFC-data.
         </p>
+      </div>
       </div>
     </div>
   )
@@ -41318,7 +41358,42 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const stegFarge = stegFarger[stegStatus.farge]
 
   return (
-    <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #16a34a', padding: kompakt ? '14px 16px' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #16a34a', padding: kompakt ? '0' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
+      {/* Patch 18 polish: Sticky fremdrifts-stripe (kun i kompakt to-kolonne-modus) */}
+      {kompakt && (() => {
+        const totalt = matchResultater.length
+        const ferdigeAntall = (tellinger.bekreftet || 0) + (tellinger.eksakt || 0) + (tellinger.auto || 0) + (tellinger.baering || 0)
+        const pct = totalt > 0 ? Math.round((ferdigeAntall / totalt) * 100) : 0
+        return (
+          <div style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: 'white',
+            borderBottom: '1px solid #e2e8f0',
+            padding: '8px 14px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.03)',
+          }}>
+            <span style={{ fontSize: '11px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
+              🎯 Match
+            </span>
+            <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+              {ferdigeAntall} av {totalt} ferdig
+            </span>
+            <div style={{ flex: 1, height: '4px', background: '#f1f5f9', borderRadius: '2px', overflow: 'hidden' }}>
+              <div style={{ width: pct + '%', height: '100%', background: pct === 100 ? '#10b981' : '#16a34a', transition: 'width 0.3s' }} />
+            </div>
+            <span style={{ fontSize: '11px', fontWeight: '600', color: pct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap' }}>
+              {pct}%
+            </span>
+          </div>
+        )
+      })()}
+
+      <div style={kompakt ? { padding: '14px 16px' } : {}}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: stegFarge.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>2</div>
@@ -41659,6 +41734,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           isMob={isMob}
         />
       )}
+      </div>
     </div>
   )
 }
