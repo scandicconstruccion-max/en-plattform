@@ -42193,29 +42193,30 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     scene.add(sun2)
 
     // Materialer
-    // Patch 18: Klippeplan for Plan-modus.
-    // Planet er deaktivert som standard. Aktiveres når Plan-modus slås på.
-    // Vi bruker constant=Infinity for å starte i "ingen klipping".
-    // Klippeplanet er horisontalt (normal peker oppover langs Y-aksen i Three.js
-    // verdens-koordinater). Plane.constant settes til etasjehøyde + 1.2m.
-    // OBS: Etter mesh-rotasjon (axis swap) er Y i Three.js = høyde alltid.
-    const clippingPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), Infinity)
+    // Patch 18: To klippeplan for Plan-modus.
+    //   clippingPlaneOver: kutter alt OVER snitt-høyden (normal peker ned)
+    //   clippingPlaneUnder: kutter alt UNDER etasje-bunnen (normal peker opp)
+    // Begge er deaktivert som standard (constant=Infinity = ingen klipping).
+    // Når Plan-modus aktiveres, settes constant til faktiske høyder.
+    const clippingPlaneOver = new THREE.Plane(new THREE.Vector3(0, -1, 0), Infinity)
+    const clippingPlaneUnder = new THREE.Plane(new THREE.Vector3(0, 1, 0), Infinity)
+    const clippingPlanes = [clippingPlaneOver, clippingPlaneUnder]
     const matGray = new THREE.MeshLambertMaterial({
       color: 0xb4b2a9, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
-      clippingPlanes: [clippingPlane], clipIntersection: false,
+      clippingPlanes, clipIntersection: false,
     })
     const matHighlight = new THREE.MeshLambertMaterial({
       color: 0x16a34a, transparent: true, opacity: 0.92, side: THREE.DoubleSide,
-      clippingPlanes: [clippingPlane], clipIntersection: false,
+      clippingPlanes, clipIntersection: false,
     })
     const matHidden = new THREE.MeshLambertMaterial({
       color: 0xb4b2a9, transparent: true, opacity: 0.08, side: THREE.DoubleSide,
-      clippingPlanes: [clippingPlane], clipIntersection: false,
+      clippingPlanes, clipIntersection: false,
     })
     // Patch 16 Fase 2: Material for enkelt-element som er klikket på
     const matKlikket = new THREE.MeshLambertMaterial({
       color: 0x3b82f6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
-      clippingPlanes: [clippingPlane], clipIntersection: false,
+      clippingPlanes, clipIntersection: false,
     })
 
     // Bygg én Three.js-mesh per element
@@ -42363,7 +42364,8 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     function oppdaterKlippeplan(planAktiv, etasjeId, snittH) {
       if (!planAktiv) {
         // Deaktiver: sett constant til Infinity = ingen klipping
-        clippingPlane.constant = Infinity
+        clippingPlaneOver.constant = Infinity
+        clippingPlaneUnder.constant = Infinity
         return
       }
       // Finn etasjebunn (verdens-Y) for valgt etasje, eller bruk modellbunn
@@ -42374,30 +42376,34 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         // Hvis ingen etasje valgt, bruk modellbunn
         bunn = -modellSpennY / 2
       }
-      // Klippeplan-normal er (0, -1, 0) — peker NEDOVER. constant = bunn + snittH
-      // betyr "klipp bort alt over bunn + snittH".
-      // For Plane(normal, constant): plane keeper punkter der dot(normal, p) + constant >= 0
-      // Med normal=(0,-1,0) og constant=C: -y + C >= 0 → y <= C
-      // Så constant = bunn + snittH gir: vis bare det som er <= bunn + snittH
-      clippingPlane.constant = bunn + snittH
-      console.log(`[Patch 18] Klippeplan satt: etasjeBunn=${bunn.toFixed(2)}, snittH=${snittH}, constant=${clippingPlane.constant.toFixed(2)}`)
 
-      // Patch 18 fix: Zoom og senter inn på valgt etasje
-      if (etasjeId && etasjeBbox.has(etasjeId)) {
-        const bbox = etasjeBbox.get(etasjeId)
-        const senterX = (bbox.minX + bbox.maxX) / 2
-        const senterZ = (bbox.minZ + bbox.maxZ) / 2
-        const spennX = bbox.maxX - bbox.minX
-        const spennZ = bbox.maxZ - bbox.minZ
-        const stortesteSpenn = Math.max(spennX, spennZ)
+      // ÖVRE KLIPPEPLAN — kutter alt over (bunn + snittH)
+      // Plane(normal=(0,-1,0), constant=C): keeper y <= C → vis bare det som er <= bunn + snittH
+      clippingPlaneOver.constant = bunn + snittH
 
-        // Sentrer kamera på etasjens senter (Y er ikke kritisk siden vi ser ovenfra)
-        cameraTarget.set(senterX, bunn + snittH, senterZ)
-        // Zoom slik at hele etasjen får plass — radius ca 0.7 ganger største spenn
-        cameraRadius = Math.max(stortesteSpenn * 0.7, 5)
-        console.log(`[Patch 18] Sentrer på etasje: senter=(${senterX.toFixed(1)}, ${senterZ.toFixed(1)}), spenn=${stortesteSpenn.toFixed(1)}m, radius=${cameraRadius.toFixed(1)}`)
-        updateCamera()
-      }
+      // NEDRE KLIPPEPLAN — kutter alt under bunnen
+      // Plane(normal=(0,1,0), constant=C): keeper y >= -C → vis bare det som er >= -C
+      // Vi vil ha y >= bunn → -C = bunn → C = -bunn
+      // Vi setter constant til litt under bunnen (- 0.1m) for å beholde gulvet selv
+      clippingPlaneUnder.constant = -(bunn - 0.1)
+
+      console.log(`[Patch 18] Klippeplan: bunn=${bunn.toFixed(2)}, snittH=${snittH}, over=${clippingPlaneOver.constant.toFixed(2)}, under=${clippingPlaneUnder.constant.toFixed(2)}`)
+
+      // Patch 18 fix: Zoom og senter inn på etasjen
+      // OBS: I Plan-modus viser vi alle elementer (uansett etasje-mapping),
+      // så bruker hele byggets horisontale bbox for sentrering, ikke etasjens
+      // egen bbox (som kan være ufullstendig hvis IFC-mapping er dårlig).
+      // Etter meshGruppe.position.set(-cx, -cy, -cz) er byggets senter på origo.
+      const senterX = 0
+      const senterZ = 0
+      const stortesteSpenn = Math.max(modellSpennX, modellSpennZ)
+
+      // Sentrer kamera på byggets senter
+      cameraTarget.set(senterX, bunn + snittH, senterZ)
+      // Zoom slik at hele bygget får plass — radius ca 0.7 ganger største spenn
+      cameraRadius = Math.max(stortesteSpenn * 0.7, 5)
+      console.log(`[Patch 18] Sentrer på bygg: spenn=${stortesteSpenn.toFixed(1)}m, radius=${cameraRadius.toFixed(1)}`)
+      updateCamera()
     }
 
     // Bakke-grid på Y = bunnen av modellen
@@ -42701,7 +42707,8 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     idTilMesh.forEach((mesh, id) => {
       const erAktiv = aktiveIDer.has(id)
       const erKlikket = klikketID === id
-      const erIValgtEtasje = !valgtEtasjeId || mesh.userData.etasjeId === valgtEtasjeId
+      // Patch 18: I Plan-modus viser vi ALLE elementer — klippeplan håndterer synlighet
+      const erIValgtEtasje = planAktiv || !valgtEtasjeId || mesh.userData.etasjeId === valgtEtasjeId
       // Patch 16 Fase 2: Klikket element har høyeste prioritet
       if (erKlikket) {
         mesh.material = matKlikket
@@ -42713,7 +42720,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         mesh.material = matGray
       }
     })
-  }, [aktiveIDer, valgtEtasjeId, klikketID])
+  }, [aktiveIDer, valgtEtasjeId, klikketID, planAktiv])
 
   // Patch 18: Reager på plan-modus-endringer
   useEffect(() => {
