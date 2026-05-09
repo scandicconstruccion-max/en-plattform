@@ -41181,9 +41181,22 @@ function BimMatchingSeksjon({ mengder, isMob, onChange }) {
   // Beregn match-resultat for hvert lagsett — gjøres på fly slik at endringer
   // i klassifisering automatisk oppdaterer matching.
   // Bruker utvidetBibliotek (standard + bruker_bibliotek) for matching.
+  // Patch 18 polish: Hvis brukerKategori er 'usikker' (auto-klassifisering kunne ikke
+  // finne klare indikatorer), faller vi tilbake til IFC-kategorien (yttervegg/innervegg/
+  // gulv) slik at vi fortsatt kan vise lignende konstruksjoner som maler.
   const matchResultater = React.useMemo(() => {
     return alleLagsett.map(({ lagsett, type, opprinneligKat, idx }) => {
-      const result = matchLagsettMotBibliotek(lagsett, lagsett.brukerKategori, utvidetBibliotek)
+      let katForMatch = lagsett.brukerKategori
+      if (!katForMatch || katForMatch === 'usikker') {
+        // Bruk IFC-kategorien som fallback (yttervegg/innervegg/gulv/ukjent_vegg)
+        if (opprinneligKat === 'ukjent_vegg') {
+          // For ukjent_vegg, prøv yttervegg først (mest vanlig)
+          katForMatch = 'yttervegg'
+        } else {
+          katForMatch = opprinneligKat
+        }
+      }
+      const result = matchLagsettMotBibliotek(lagsett, katForMatch, utvidetBibliotek)
       return { lagsett, type, opprinneligKat, idx, ...result }
     })
   }, [alleLagsett, utvidetBibliotek, oppdater])
