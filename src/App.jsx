@@ -39307,7 +39307,7 @@ function beskrivForskjeller(ifcLag, biblioLag) {
 // Mottar mengder-objektet og en callback som kalles når brukeren har endret
 // klassifisering. Lagsettene mutres direkte (brukerKategori-feltet).
 
-function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
+function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false }) {
   const [oppdater, setOppdater] = useState(0)
 
   // Samle alle lagsett fra alle vegg-kategorier — flat liste
@@ -39501,7 +39501,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange }) {
   const farger = stegFarger[stegStatus.farge]
 
   return (
-    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', borderLeft:'4px solid #3b82f6', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #3b82f6', padding: kompakt ? '14px 16px' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: farger.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>1</div>
@@ -40973,7 +40973,7 @@ function visLagsettDiagnose(lagsett, onAlert) {
   })
 }
 
-function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon }) {
+function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
   const { user } = useAuth()
@@ -41293,7 +41293,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon })
   const stegFarge = stegFarger[stegStatus.farge]
 
   return (
-    <div style={{ background:'white', borderRadius:'14px', border:'1px solid #e2e8f0', borderLeft:'4px solid #16a34a', padding: isMob ? '18px' : '22px 24px', marginBottom:'28px', boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+    <div style={{ background: kompakt ? 'transparent' : 'white', borderRadius: kompakt ? '0' : '14px', border: kompakt ? 'none' : '1px solid #e2e8f0', borderLeft: kompakt ? 'none' : '4px solid #16a34a', padding: kompakt ? '14px 16px' : (isMob ? '18px' : '22px 24px'), marginBottom: kompakt ? '0' : '28px', boxShadow: kompakt ? 'none' : '0 1px 3px rgba(0,0,0,0.04)' }}>
       {/* Header med steg-merke + status-pille */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
         <div style={{ width:'32px', height:'32px', borderRadius:'50%', background: stegFarge.sirkel_bg, color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>2</div>
@@ -41412,29 +41412,9 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon })
                 </div>
               </div>
 
-              {/* IFC-detaljer + 2D-tegning-knapp + diagnose (Patch 14.A + 15.C + 15.G) */}
+              {/* IFC-detaljer + 3D-knapp + diagnose (Patch 14.A + 15.C + 15.G + 18 polish: 2D-knapp fjernet) */}
               <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'8px' }}>
                 <BimLagsettDetaljer lagsett={lagsett} isMob={isMob} />
-                {(lagsett.elementer || []).some(e => e.fotavtrykk) && (
-                  <button
-                    onClick={() => setTegningLagsett(lagsett)}
-                    style={{
-                      background:'#f0fdf4',
-                      border:'1px solid #bbf7d0',
-                      color:'#15803d',
-                      borderRadius:'8px',
-                      padding:'6px 10px',
-                      fontSize:'11px',
-                      fontWeight:'600',
-                      cursor:'pointer',
-                      display:'inline-flex',
-                      alignItems:'center',
-                      gap:'6px',
-                    }}>
-                    <span style={{ fontSize:'12px' }}>🗺️</span>
-                    <span>Vis i tegning</span>
-                  </button>
-                )}
                 {/* Patch 16: Vis i 3D-knapp */}
                 {(lagsett.elementer || []).some(e => e.mesh) && (
                   <button
@@ -44171,22 +44151,53 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
             </div>
           )}
 
-          {/* Klassifiserings-seksjon — Patch 13 Sesjon A */}
+          {/* Patch 18 polish: To-kolonne layout for Steg 1 + Steg 2 (kun desktop).
+              Hver kolonne har sin egen scroll når innholdet er for langt. På mobil
+              faller layoutet automatisk til 1 kolonne (stacked). */}
           {metadata.mengder && (
-            <BimKlassifiseringSeksjon
-              mengder={metadata.mengder}
-              isMob={isMob}
-              onChange={() => setKlassifiseringVersjon(v => v + 1)}
-            />
-          )}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: isMob ? '1fr' : 'minmax(0, 1fr) minmax(0, 1fr)',
+              gap: '14px',
+              marginTop: '18px',
+              marginBottom: '18px',
+            }}>
+              {/* Venstre kolonne — Steg 1 (Klassifisering) */}
+              <div style={{
+                background: 'white',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                maxHeight: isMob ? 'none' : '75vh',
+                overflowY: isMob ? 'visible' : 'auto',
+                overflowX: 'hidden',
+                minHeight: 0,
+              }}>
+                <BimKlassifiseringSeksjon
+                  mengder={metadata.mengder}
+                  isMob={isMob}
+                  kompakt={true}
+                  onChange={() => setKlassifiseringVersjon(v => v + 1)}
+                />
+              </div>
 
-          {/* Bibliotek-matching — Patch 13 Sesjon B */}
-          {metadata.mengder && (
-            <BimMatchingSeksjon
-              mengder={metadata.mengder}
-              isMob={isMob}
-              klassifiseringVersjon={klassifiseringVersjon}
-            />
+              {/* Høyre kolonne — Steg 2 (Matching) */}
+              <div style={{
+                background: 'white',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                maxHeight: isMob ? 'none' : '75vh',
+                overflowY: isMob ? 'visible' : 'auto',
+                overflowX: 'hidden',
+                minHeight: 0,
+              }}>
+                <BimMatchingSeksjon
+                  mengder={metadata.mengder}
+                  isMob={isMob}
+                  kompakt={true}
+                  klassifiseringVersjon={klassifiseringVersjon}
+                />
+              </div>
+            </div>
           )}
 
           {/* Generer kalkyle — Patch 14.C + 14.D */}
