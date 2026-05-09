@@ -38344,6 +38344,19 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     })
     const betongAndel = totT > 0 ? betongTykkelse / totT : 0
 
+    // Regel B (Bæring) — søyler, dragere, stålbjelker, limtre. Kommer tidlig
+    // siden disse elementene er smale lineære profiler, ikke flate vegger.
+    // Sjekker både navn og materialer for stål/HEA/IPE/HSQ/søyle/drager.
+    const harStaal = inneholderMateriale(layers, ['stål', 'staal', 'steel'])
+    const harLimtre = inneholderMateriale(layers, ['limtre', 'glulam'])
+    const erBaeringNavn = /\b(stål|staal|steel|hea|heb|hem|ipe|hsq|hup|hss|søyle|soyle|drager|bjelke(?!\w)|limtre|glulam|column|beam|rsj|unp)\b/i.test(navn)
+    if (erBaeringNavn || (harStaal && totT < 400)) {
+      return { foreslattKategori: 'baering', sikkerhet: 'høy',
+        begrunnelse: erBaeringNavn
+          ? `Navnet "${lagsett.navn}" indikerer bæring (søyle/drager/stålprofil)`
+          : 'Inneholder stål med begrenset tykkelse — typisk bærekonstruksjon' }
+    }
+
     // Regel A (fundament/sokkel) — kommer FØR yttervegg-regelen
     // Navn-basert: "sokkel", "fundament", "kjeller" → fundament
     if (/sokkel|fundament|kjeller|grunnmur/.test(navn)) {
@@ -39215,6 +39228,12 @@ function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
   if (brukerKategori === 'usikker' || brukerKategori === 'ignorer' || !brukerKategori) {
     return { status: 'ingen', maler: [], begrunnelse: 'Ikke klassifisert ennå' }
   }
+  // Patch 18 polish: Bæring (søyler/dragere) håndteres separat — ikke prøv å matche
+  // mot vegg-bibliotek. Bæring-elementer trenger egne kalkyle-formler (kg/lm/stk).
+  if (brukerKategori === 'baering') {
+    return { status: 'baering', maler: [],
+      begrunnelse: 'Bæring (søyler/dragere) håndteres separat — bibliotek-matching kommer i senere versjon' }
+  }
 
   const biblioKategori = KATEGORI_MAPPING[brukerKategori]
   if (!biblioKategori) {
@@ -39337,7 +39356,8 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
   // Tellinger for vegger
   const veggTellinger = React.useMemo(() => {
     const t = { yttervegg: { antall: 0, areal: 0 }, innervegg: { antall: 0, areal: 0 },
-                fundament: { antall: 0, areal: 0 }, usikker: { antall: 0, areal: 0 },
+                fundament: { antall: 0, areal: 0 }, baering: { antall: 0, areal: 0 },
+                usikker: { antall: 0, areal: 0 },
                 ignorer: { antall: 0, areal: 0 } }
     alleVeggLagsett.forEach(({ lagsett }) => {
       const kat = lagsett.brukerKategori || 'usikker'
@@ -39368,16 +39388,19 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
   const sikkerhetFarge = (s) => s === 'høy' ? '#10b981' : s === 'middels' ? '#f59e0b' : '#94a3b8'
   const kategoriFarge = (k) => ({
     yttervegg: '#dc2626', innervegg: '#7c3aed', fundament: '#475569',
+    baering: '#0d9488',
     etasjeskille: '#0891b2', dekke_paa_grunn: '#0e7490',
     usikker: '#ca8a04', ignorer: '#6b7280', ukjent: '#94a3b8',
   }[k] || '#94a3b8')
   const kategoriIkon = (k) => ({
     yttervegg: '🧱', innervegg: '🚪', fundament: '🟪',
+    baering: '🏗️',
     etasjeskille: '🟦', dekke_paa_grunn: '🟫',
     usikker: '⚠️', ignorer: '🚫', ukjent: '❓',
   }[k] || '❓')
   const kategoriLabel = (k) => ({
     yttervegg: 'Yttervegg', innervegg: 'Innervegg', fundament: 'Fundament',
+    baering: 'Bæring',
     etasjeskille: 'Etasjeskille', dekke_paa_grunn: 'Dekke på grunn',
     usikker: 'Usikker', ignorer: 'Ignorér', ukjent: 'Ukjent',
   }[k] || k)
@@ -39535,7 +39558,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
           </div>
           {/* Sammendrag-kort */}
           <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom:'10px' }}>
-            {['yttervegg', 'innervegg', 'fundament', 'usikker', 'ignorer'].map(k => {
+            {['yttervegg', 'innervegg', 'fundament', 'baering', 'usikker', 'ignorer'].map(k => {
               const t = veggTellinger[k] || { antall: 0, areal: 0 }
               if (t.antall === 0 && k !== 'usikker') return null
               return <SammendragKort key={k} kat={k} t={t} />
@@ -39545,7 +39568,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {alleVeggLagsett.map(({ lagsett, opprinneligKat, idx }) => (
               <LagsettRad key={`v-${opprinneligKat}-${idx}`} lagsett={lagsett}
-                kategorier={['yttervegg', 'innervegg', 'fundament', 'usikker', 'ignorer']}
+                kategorier={['yttervegg', 'innervegg', 'fundament', 'baering', 'usikker', 'ignorer']}
                 kategoriPlaceholder="usikker" />
             ))}
           </div>
@@ -41247,7 +41270,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
 
   // Sammendrag-tellinger
   const tellinger = React.useMemo(() => {
-    const t = { eksakt: 0, ingen: 0, hoppet: 0, bekreftet: 0, auto: 0 }
+    const t = { eksakt: 0, ingen: 0, hoppet: 0, bekreftet: 0, auto: 0, baering: 0 }
     matchResultater.forEach(r => {
       if (r.lagsett.matchedKonstruksjon) {
         if (r.lagsett.matchKilde === 'auto') {
@@ -41257,6 +41280,9 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
         }
       } else if (r.status === 'eksakt') {
         t.eksakt++
+      } else if (r.lagsett.brukerKategori === 'baering') {
+        // Patch 18 polish: Bæring telles separat (ikke som hoppet eller ingen match)
+        t.baering++
       } else if (r.lagsett.brukerKategori === 'usikker' || r.lagsett.brukerKategori === 'ignorer' || !r.lagsett.brukerKategori) {
         t.hoppet++
       } else {
@@ -41273,6 +41299,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     ingen: '#ef4444',
     hoppet: '#94a3b8',
     bekreftet: '#3b82f6',
+    baering: '#0d9488',
   }
 
   // Status-pille: hvor mange er bekreftet/auto-matchet vs total
@@ -41408,7 +41435,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   {aktivStatus === 'auto' ? '🔄 Husket fra før' :
                    aktivStatus === 'bekreftet' ? '✓ Bekreftet' :
                    aktivStatus === 'eksakt' ? '🎯 Match funnet' :
-                   aktivStatus === 'hoppet' ? '⏸ Hoppet over' : '⚠ Ingen match'}
+                   aktivStatus === 'hoppet' ? '⏸ Hoppet over' :
+                   aktivStatus === 'baering' ? '🏗️ Bæring (separat)' : '⚠ Ingen match'}
                 </div>
               </div>
 
@@ -41520,6 +41548,19 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                       style={{ background:'white', color:'#475569', border:'1px solid #cbd5e1', borderRadius:'6px', padding:'5px 12px', fontSize:'11px', fontWeight:'500', cursor:'pointer' }}>
                       Lag ny i stedet
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Patch 18 polish: Bæring — søyler/dragere håndteres separat */}
+              {!erBekreftet && !erHoppet && status === 'baering' && (
+                <div style={{ background:'#f0fdfa', border:'1px solid #99f6e4', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px' }}>
+                  <div style={{ fontSize:'11px', color:'#115e59', fontWeight:'700', marginBottom:'4px' }}>
+                    🏗️ Bæring — håndteres separat
+                  </div>
+                  <div style={{ fontSize:'10px', color:'#134e4a', lineHeight:1.5 }}>
+                    Søyler og dragere har egne kalkyle-formler (kg / lm / stk) som ikke matcher mot vegg-biblioteket.
+                    Dette lagsettet inkluderes ikke i kalkylen ennå — separat bibliotek for bæring kommer i en senere versjon.
                   </div>
                 </div>
               )}
@@ -46596,7 +46637,8 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
       const konst = ls.matchedKonstruksjon
       if (!konst) {
         // Ubekreftet — telles bare hvis brukeren faktisk klassifiserte den
-        if (ls.brukerKategori && ls.brukerKategori !== 'ignorer' && ls.brukerKategori !== 'usikker') {
+        // Patch 18 polish: 'baering' regnes ikke som hoppet — den håndteres separat
+        if (ls.brukerKategori && ls.brukerKategori !== 'ignorer' && ls.brukerKategori !== 'usikker' && ls.brukerKategori !== 'baering') {
           hoppedeAntall++
         }
         return
