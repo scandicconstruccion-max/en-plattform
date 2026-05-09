@@ -39407,11 +39407,12 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
 
   // Komprimerte knappestiler — mindre padding, mindre font
   const knappStil = (kat, erValgt) => ({
-    // Patch 18 polish: Tydeligere knapper — lys grå bakgrunn når inaktiv,
-    // mørk fyll når aktiv. Skaper synlige knapp-bokser uten å være fargerik.
-    background: erValgt ? '#334155' : '#f1f5f9',
-    color: erValgt ? 'white' : '#334155',
-    border: '1px solid ' + (erValgt ? '#334155' : '#cbd5e1'),
+    // Patch 18 polish: Grønn palett som matcher "IFC-fil analysert"-banneret.
+    // Inaktive knapper: lys grønn bakgrunn med mørk grønn tekst.
+    // Aktiv knapp: mørk grønn fyll med hvit tekst.
+    background: erValgt ? '#15803d' : '#dcfce7',
+    color: erValgt ? 'white' : '#15803d',
+    border: '1px solid ' + (erValgt ? '#15803d' : '#86efac'),
     borderRadius: '6px',
     padding: '5px 12px',
     fontSize: '11px',
@@ -40618,9 +40619,9 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
       <button
         onClick={() => setAapen(a => !a)}
         style={{
-          background: aapen ? '#334155' : '#f1f5f9',
-          border: '1px solid ' + (aapen ? '#334155' : '#cbd5e1'),
-          color: aapen ? 'white' : '#334155',
+          background: aapen ? '#15803d' : '#dcfce7',
+          border: '1px solid ' + (aapen ? '#15803d' : '#86efac'),
+          color: aapen ? 'white' : '#15803d',
           borderRadius: '6px',
           padding: '5px 12px',
           fontSize: '11px',
@@ -41346,13 +41347,13 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     baering: '#0d9488',
   }
 
-  // Patch 18 polish: Ensrettet knappestil — matcher Steg 1.
-  // Inaktive knapper: lys grå bakgrunn, mørk tekst, synlig border
-  // Aktiv/primær knapp: mørk fyll + hvit tekst
+  // Patch 18 polish: Grønn palett som matcher "IFC-fil analysert"-banneret.
+  // Inaktive knapper: lys grønn bakgrunn, mørk grønn tekst, synlig border
+  // Aktiv/primær knapp: mørk grønn fyll + hvit tekst
   const knappStilNoytral = {
-    background: '#f1f5f9',
-    color: '#334155',
-    border: '1px solid #cbd5e1',
+    background: '#dcfce7',
+    color: '#15803d',
+    border: '1px solid #86efac',
     borderRadius: '6px',
     padding: '5px 12px',
     fontSize: '11px',
@@ -41367,9 +41368,9 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   }
   const knappStilPrimaer = {
     ...knappStilNoytral,
-    background: '#334155',
+    background: '#15803d',
     color: 'white',
-    border: '1px solid #334155',
+    border: '1px solid #15803d',
     fontWeight: '700',
   }
 
