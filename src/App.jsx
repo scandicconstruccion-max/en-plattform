@@ -40641,7 +40641,7 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
 
       {/* Detalj-panel */}
       {aapen && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginTop: '8px', flexBasis: '100%', minWidth: 0 }}>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginTop: '8px', flexBasis: '100%', minWidth: 0, order: 99 }}>
 
           {/* Geometri-grid */}
           <div style={{ marginBottom: '12px' }}>
