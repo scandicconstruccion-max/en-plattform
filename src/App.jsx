@@ -42719,6 +42719,14 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   useEffect(() => {
     if (!sceneRef.current?.oppdaterKlippeplan) return
     sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId, planSnittH)
+
+    // Patch 18: Bytt bakgrunn — hvit i Plan-modus, lys grå i vanlig 3D
+    if (sceneRef.current.scene) {
+      sceneRef.current.scene.background = new sceneRef.current.THREE.Color(
+        planAktiv ? 0xffffff : 0xeeece7
+      )
+    }
+
     if (planAktiv && sceneRef.current.setVisning) {
       sceneRef.current.setVisning('plan')
       // Etter setVisning('plan') må vi re-anvende klippeplan-zoom siden setVisning resetter camera
