@@ -37723,10 +37723,17 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       let qSet = quantityLookup.get(elementId)
       if (qSet) qSet = expandQuantities(api, modelID, qSet)
       // Areal — bruk NetSideArea (etter trekk for åpninger), fallback til GrossSideArea
-      const areal = getQuantityValue(qSet, ['NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea']) || 0
+      let areal = getQuantityValue(qSet, ['NetSideArea', 'GrossSideArea', 'NetArea', 'GrossArea']) || 0
       const lengde = getQuantityValue(qSet, ['Length', 'NetLength', 'GrossLength']) || 0
       const hoyde = getQuantityValue(qSet, ['Height', 'NetHeight', 'GrossHeight']) || 0
       const volum = getQuantityValue(qSet, ['NetVolume', 'GrossVolume']) || 0
+
+      // Patch 18 polish: Auto-beregn areal hvis IFC mangler det
+      let arealKilde = areal > 0 ? 'ifc' : null
+      if (areal === 0 && lengde > 0 && hoyde > 0) {
+        areal = lengde * hoyde
+        arealKilde = 'beregnet_lengde_x_hoyde'
+      }
 
       const isExt = getWallIsExternal(api, mod, modelID, elementId, propLookup)
       const navn = element?.Name?.value || `Vegg #${elementId}`
@@ -37737,7 +37744,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         const typeId = instanceToTypeLookup.get(elementId)
         if (typeId) lagstruktur = layerLookup.get(typeId) || null
       }
-      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, isExternal: isExt, lagstruktur, ifcType: wType }
+      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, arealKilde, isExternal: isExt, lagstruktur, ifcType: wType }
 
       let kat = 'ukjent_vegg'
       if (isExt === true) kat = 'yttervegg'
@@ -38093,11 +38100,21 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       let proxyLagstruktur = layerLookup.get(elementId) || null
       if (!proxyLagstruktur && typeId) proxyLagstruktur = layerLookup.get(typeId) || null
 
+      // Patch 18 polish: Auto-beregn areal hvis IFC ikke har det.
+      // Mange fundament/strukturelle elementer har Length og Height/Width men
+      // ikke NetArea direkte. Da kan vi regne ut arealet selv.
+      let arealKilde = areal > 0 ? 'ifc' : null
+      if (areal === 0 && lengde > 0 && hoyde > 0) {
+        areal = lengde * hoyde
+        arealKilde = 'beregnet_lengde_x_hoyde'
+      }
+
       const elInfo = {
         id: elementId,
         navn: navn || typenavn || `Proxy #${elementId}`,
         typenavn,
         areal, volum, lengde, hoyde,
+        arealKilde,  // 'ifc', 'beregnet_lengde_x_hoyde', eller null hvis fortsatt 0
         kilde,
         erProxy: true,
         lagstruktur: proxyLagstruktur,
@@ -40423,7 +40440,13 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
   const harVolum = (lagsett.totalVolum || 0) > 0
   const harHoyde = snittTall.snittHoyde > 0
   const lagListe = (lagsett.layers || []).filter(l => l && (l.material || l.thickness))
-  const eksempler = (lagsett.elementer || []).slice(0, 5)
+  // Patch 18 polish: Vis ALLE elementer (med toggle for > 20 stk)
+  const [visAlleEksempler, setVisAlleEksempler] = useState(false)
+  const alleElementer = lagsett.elementer || []
+  const harMange = alleElementer.length > 20
+  const eksempler = harMange && !visAlleEksempler
+    ? alleElementer.slice(0, 20)
+    : alleElementer
 
   // Cellestil for geometri-grid
   const cellStyle = {
@@ -40536,17 +40559,19 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                  Eksempler (fra IFC)
+                  Alle elementer (fra IFC)
                 </div>
-                {(lagsett.elementer || []).length > 5 && (
-                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>Viser 5 av {lagsett.elementer.length}</span>
-                )}
+                <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                  {harMange && !visAlleEksempler
+                    ? `Viser 20 av ${alleElementer.length}`
+                    : `${alleElementer.length} stk`}
+                </span>
               </div>
               <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', overflow: 'hidden' }}>
                 {eksempler.map((e, idx) => {
                   const detaljer = []
                   if (e.lengde > 0) detaljer.push(`${e.lengde.toFixed(1)} lm`)
-                  if (e.areal > 0) detaljer.push(`${e.areal.toFixed(1)} m²`)
+                  if (e.areal > 0) detaljer.push(`${e.areal.toFixed(1)} m²${e.arealKilde === 'beregnet_lengde_x_hoyde' ? '*' : ''}`)
                   if (e.hoyde > 0) detaljer.push(`${e.hoyde.toFixed(2)}m høy`)
                   if (e.volum > 0 && !e.hoyde) detaljer.push(`${e.volum.toFixed(2)} m³`)
                   return (
@@ -40561,6 +40586,22 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
                   )
                 })}
               </div>
+              {/* Patch 18 polish: Toggle for å vise alle elementer hvis > 20 */}
+              {harMange && (
+                <div style={{ marginTop: '6px', textAlign: 'center' }}>
+                  <button
+                    onClick={() => setVisAlleEksempler(!visAlleEksempler)}
+                    style={{ background: 'none', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '4px 10px', fontSize: '11px', color: '#475569', cursor: 'pointer', fontWeight: '600' }}>
+                    {visAlleEksempler ? `Skjul (vis 20)` : `Vis alle ${alleElementer.length} elementer`}
+                  </button>
+                </div>
+              )}
+              {/* Patch 18 polish: Forklaring av *-merket areal */}
+              {alleElementer.some(e => e.arealKilde === 'beregnet_lengde_x_hoyde') && (
+                <div style={{ marginTop: '6px', fontSize: '10px', color: '#94a3b8', fontStyle: 'italic' }}>
+                  * Areal beregnet automatisk fra lengde × høyde (IFC mangler areal-felt)
+                </div>
+              )}
             </div>
           )}
 
