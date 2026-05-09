@@ -42322,6 +42322,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     // vertices. Dette tar høyde for at etasjer kan ha forskjellig elevation.
     const etasjeBunnY = new Map()  // etasjeId → laveste Y i verdens-koord
     const etasjeToppY = new Map()  // etasjeId → høyeste Y i verdens-koord
+    const etasjeBbox = new Map()   // etasjeId → { minX, maxX, minZ, maxZ } (horisontal bbox i verdens-koord)
     {
       // Vi må beregne "verdens-Y" etter rotasjon. En enkel tilnærming:
       // hent mesh.geometry.attributes.position (i lokal mesh-koord, samme
@@ -42335,14 +42336,27 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         for (let i = 0; i < pos.count; i++) {
           tmpVec.set(pos.getX(i), pos.getY(i), pos.getZ(i))
           tmpVec.applyMatrix4(mesh.matrixWorld)
-          const y = tmpVec.y
+          const x = tmpVec.x, y = tmpVec.y, z = tmpVec.z
+          // Y (høyde)
           const cur = etasjeBunnY.get(etId)
           if (cur === undefined || y < cur) etasjeBunnY.set(etId, y)
           const curT = etasjeToppY.get(etId)
           if (curT === undefined || y > curT) etasjeToppY.set(etId, y)
+          // X+Z (horisontal bbox)
+          let bbox = etasjeBbox.get(etId)
+          if (!bbox) {
+            bbox = { minX: x, maxX: x, minZ: z, maxZ: z }
+            etasjeBbox.set(etId, bbox)
+          } else {
+            if (x < bbox.minX) bbox.minX = x
+            if (x > bbox.maxX) bbox.maxX = x
+            if (z < bbox.minZ) bbox.minZ = z
+            if (z > bbox.maxZ) bbox.maxZ = z
+          }
         }
       })
       console.log('[Patch 18] Etasjebunner (verdens-Y):', Array.from(etasjeBunnY.entries()))
+      console.log('[Patch 18] Etasje-bbox horisontalt:', Array.from(etasjeBbox.entries()))
     }
 
     // Patch 18: Funksjon for å aktivere/deaktivere klippeplan basert på etasje
@@ -42367,6 +42381,23 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       // Så constant = bunn + snittH gir: vis bare det som er <= bunn + snittH
       clippingPlane.constant = bunn + snittH
       console.log(`[Patch 18] Klippeplan satt: etasjeBunn=${bunn.toFixed(2)}, snittH=${snittH}, constant=${clippingPlane.constant.toFixed(2)}`)
+
+      // Patch 18 fix: Zoom og senter inn på valgt etasje
+      if (etasjeId && etasjeBbox.has(etasjeId)) {
+        const bbox = etasjeBbox.get(etasjeId)
+        const senterX = (bbox.minX + bbox.maxX) / 2
+        const senterZ = (bbox.minZ + bbox.maxZ) / 2
+        const spennX = bbox.maxX - bbox.minX
+        const spennZ = bbox.maxZ - bbox.minZ
+        const stortesteSpenn = Math.max(spennX, spennZ)
+
+        // Sentrer kamera på etasjens senter (Y er ikke kritisk siden vi ser ovenfra)
+        cameraTarget.set(senterX, bunn + snittH, senterZ)
+        // Zoom slik at hele etasjen får plass — radius ca 0.7 ganger største spenn
+        cameraRadius = Math.max(stortesteSpenn * 0.7, 5)
+        console.log(`[Patch 18] Sentrer på etasje: senter=(${senterX.toFixed(1)}, ${senterZ.toFixed(1)}), spenn=${stortesteSpenn.toFixed(1)}m, radius=${cameraRadius.toFixed(1)}`)
+        updateCamera()
+      }
     }
 
     // Bakke-grid på Y = bunnen av modellen
@@ -42396,12 +42427,19 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
 
     // Patch 16-fix: Standard-visningsvinkler. Brukeren kan hoppe rett til front/side/topp/iso.
     function setVisning(navn) {
+      // Patch 18: 'plan'-modus håndterer target/radius separat via oppdaterKlippeplan
+      if (navn === 'plan') {
+        theta = Math.PI * 0.5
+        phi = 0.05  // rett ovenfra
+        // IKKE reset cameraRadius eller cameraTarget — oppdaterKlippeplan gjør det
+        updateCamera()
+        return
+      }
       switch(navn) {
         case 'front':  theta = Math.PI * 0.5;  phi = Math.PI * 0.5;  break  // direkte forfra (Z-akse)
         case 'side':   theta = 0;              phi = Math.PI * 0.5;  break  // fra siden (X-akse)
         case 'topp':   theta = Math.PI * 0.5;  phi = 0.05;           break  // ovenfra (nesten rett ned)
         case 'iso':    theta = Math.PI * 0.3;  phi = Math.PI * 0.4;  break  // standard isometrisk
-        case 'plan':   theta = Math.PI * 0.5;  phi = 0.05;           break  // Patch 18: rett ovenfra (samme som topp)
         default: return
       }
       cameraRadius = radius  // Reset zoom også
@@ -42683,6 +42721,11 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId, planSnittH)
     if (planAktiv && sceneRef.current.setVisning) {
       sceneRef.current.setVisning('plan')
+      // Etter setVisning('plan') må vi re-anvende klippeplan-zoom siden setVisning resetter camera
+      sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId, planSnittH)
+    } else if (!planAktiv && sceneRef.current.setVisning) {
+      // Når Plan-modus skrus av, reset til iso-visning
+      sceneRef.current.setVisning('iso')
     }
   }, [planAktiv, valgtEtasjeId, planSnittH])
 
@@ -42726,7 +42769,16 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
             ))}
             {/* Patch 18: Plan-knapp — kombinerer Topp + klippeplan + etasje-filter */}
             <button
-              onClick={() => setPlanAktiv(p => !p)}
+              onClick={() => {
+                // Patch 18: Auto-velg første etasje hvis "Alle" er valgt
+                if (!planAktiv && !valgtEtasjeId && etasjer.length > 0) {
+                  // Velg en passende etasje. Hopp over "Hav" eller "Takplan"
+                  // hvis mulig — en mellom-etasje gir bedre Plan-resultat.
+                  const passende = etasjer.find(e => /1\.|2\.|U\./i.test(e.navn)) || etasjer[0]
+                  setValgtEtasjeId(passende.id)
+                }
+                setPlanAktiv(p => !p)
+              }}
               title={planAktiv ? 'Skru av Plan-modus' : 'Plan-visning: rett ovenfra med klippeplan på 1.2m'}
               style={{
                 background: planAktiv ? '#1e40af' : '#eff6ff',
