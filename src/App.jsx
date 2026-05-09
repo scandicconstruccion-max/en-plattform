@@ -37515,7 +37515,7 @@ function genererPlansnitt(mengder, etasjeId, snittH = 1.2) {
   })
 
   // Iterer alle kategorier
-  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor'].forEach(kat => {
+  ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor', 'innredning', 'vvs'].forEach(kat => {
     const elementer = mengder[kat]?.elementer || []
     elementer.forEach(e => {
       if (!e.mesh) return
@@ -37673,6 +37673,9 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
     vindu:        { antall: 0, totalAreal: 0, gjennomsnittAreal: 0, elementer: [] },
     dor:          { antall: 0, totalAreal: 0, gjennomsnittAreal: 0, elementer: [] },
     trapp:        { antall: 0, elementer: [] },
+    // Patch 18: Innredning og VVS for Plan-visning
+    innredning:   { antall: 0, elementer: [] },
+    vvs:          { antall: 0, elementer: [] },
   }
 
   if (onProgress) onProgress('Bygger mengde-indeks...')
@@ -37950,6 +37953,48 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       result.trapp.antall++
       result.trapp.elementer.push({ id: elementId, navn })
     }
+  }
+
+  // --- INNREDNING (IfcFurniture, IfcFurnishingElement, IfcSystemFurnitureElement) ---
+  // Patch 18: For Plan-visning. Skap, hyller, kjøkken — det som finnes i IFC.
+  if (onProgress) onProgress('Henter innredning...')
+  const innredningTypes = ['IFCFURNITURE', 'IFCFURNISHINGELEMENT', 'IFCSYSTEMFURNITUREELEMENT']
+  for (const innType of innredningTypes) {
+    const constant = mod[innType]
+    if (typeof constant === 'undefined') continue
+    try {
+      const ids = api.GetLineIDsWithType(modelID, constant)
+      const num = ids.size()
+      for (let i = 0; i < num; i++) {
+        const elementId = ids.get(i)
+        let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+        if (!element) continue
+        const navn = element?.Name?.value || element?.ObjectType?.value || `Innredning #${elementId}`
+        result.innredning.antall++
+        result.innredning.elementer.push({ id: elementId, navn, ifcType: innType })
+      }
+    } catch(e) { /* OK */ }
+  }
+
+  // --- VVS-elementer (IfcSanitaryTerminal, IfcFlowTerminal) ---
+  // Patch 18: Kraner, avløp, sanitær for Plan-visning
+  if (onProgress) onProgress('Henter VVS-elementer...')
+  const vvsTypes = ['IFCSANITARYTERMINAL', 'IFCFLOWTERMINAL']
+  for (const vvsType of vvsTypes) {
+    const constant = mod[vvsType]
+    if (typeof constant === 'undefined') continue
+    try {
+      const ids = api.GetLineIDsWithType(modelID, constant)
+      const num = ids.size()
+      for (let i = 0; i < num; i++) {
+        const elementId = ids.get(i)
+        let element; try { element = api.GetLine(modelID, elementId) } catch(e) { continue }
+        if (!element) continue
+        const navn = element?.Name?.value || element?.ObjectType?.value || `VVS #${elementId}`
+        result.vvs.antall++
+        result.vvs.elementer.push({ id: elementId, navn, ifcType: vvsType })
+      }
+    } catch(e) { /* OK */ }
   }
 
   // --- IFCBUILDINGELEMENTPROXY (navn-basert fallback) ---
@@ -38488,7 +38533,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
   const { elementToEtasje, etasjer } = byggEtasjeLookup(api, mod, modelID)
 
   // Anvend fotavtrykk + etasje på alle elementer i resultatet
-  const alleKategorier = ['yttervegg', 'innervegg', 'ukjent_vegg', 'tak', 'gulv', 'vindu', 'dor', 'trapp']
+  const alleKategorier = ['yttervegg', 'innervegg', 'ukjent_vegg', 'tak', 'gulv', 'vindu', 'dor', 'trapp', 'innredning', 'vvs']
   let elementerMedFotavtrykk = 0
   let elementerMedEtasje = 0
   let elementerMedMesh = 0
@@ -42025,6 +42070,10 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   const [klikkInfo, setKlikkInfo] = useState(null)
   // Patch 16 Fase 2: ID på enkelt-element som er klikket (separat fra lagsett-høylysing)
   const [klikketID, setKlikketID] = useState(null)
+  // Patch 18: Plan-modus (true = klippeplan aktivert, kamera på topp)
+  const [planAktiv, setPlanAktiv] = useState(false)
+  // Patch 18: Snitt-høyde i meter (fra etasjebunn)
+  const [planSnittH, setPlanSnittH] = useState(1.2)
 
   const etasjer = mengder?._geometri?.etasjer || []
   const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
@@ -42038,7 +42087,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   // Patch 16 Fase 2: Element-info-lookup (id → fullt element-objekt) for klikk-popup
   const elementInfoMap = React.useMemo(() => {
     const map = new Map()
-    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor'].forEach(kat => {
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor', 'innredning', 'vvs'].forEach(kat => {
       const elementer = mengder[kat]?.elementer || []
       elementer.forEach(e => {
         if (e.mesh) {
@@ -42065,7 +42114,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   // Samle alle elementer som har mesh-data
   const alleElementer = React.useMemo(() => {
     const liste = []
-    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor'].forEach(kat => {
+    ;['yttervegg', 'innervegg', 'ukjent_vegg', 'gulv', 'tak', 'vindu', 'dor', 'innredning', 'vvs'].forEach(kat => {
       const elementer = mengder[kat]?.elementer || []
       elementer.forEach(e => {
         if (e.mesh) {
@@ -42129,6 +42178,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     const renderer = new THREE.WebGLRenderer({ antialias: true })
     renderer.setSize(width, height)
     renderer.setPixelRatio(window.devicePixelRatio)
+    renderer.localClippingEnabled = true  // Patch 18: Plan-knapp bruker klippeplan
     container.innerHTML = ''
     container.appendChild(renderer.domElement)
 
@@ -42143,18 +42193,29 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     scene.add(sun2)
 
     // Materialer
+    // Patch 18: Klippeplan for Plan-modus.
+    // Planet er deaktivert som standard. Aktiveres når Plan-modus slås på.
+    // Vi bruker constant=Infinity for å starte i "ingen klipping".
+    // Klippeplanet er horisontalt (normal peker oppover langs Y-aksen i Three.js
+    // verdens-koordinater). Plane.constant settes til etasjehøyde + 1.2m.
+    // OBS: Etter mesh-rotasjon (axis swap) er Y i Three.js = høyde alltid.
+    const clippingPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), Infinity)
     const matGray = new THREE.MeshLambertMaterial({
       color: 0xb4b2a9, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+      clippingPlanes: [clippingPlane], clipIntersection: false,
     })
     const matHighlight = new THREE.MeshLambertMaterial({
       color: 0x16a34a, transparent: true, opacity: 0.92, side: THREE.DoubleSide,
+      clippingPlanes: [clippingPlane], clipIntersection: false,
     })
     const matHidden = new THREE.MeshLambertMaterial({
       color: 0xb4b2a9, transparent: true, opacity: 0.08, side: THREE.DoubleSide,
+      clippingPlanes: [clippingPlane], clipIntersection: false,
     })
     // Patch 16 Fase 2: Material for enkelt-element som er klikket på
     const matKlikket = new THREE.MeshLambertMaterial({
       color: 0x3b82f6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
+      clippingPlanes: [clippingPlane], clipIntersection: false,
     })
 
     // Bygg én Three.js-mesh per element
@@ -42255,6 +42316,59 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
 
     scene.add(meshGruppe)
 
+    // Patch 18: Beregn etasjebunn (i Three.js verdens-Y) for hver etasje.
+    // Etter rotasjon er Y høyde i Three.js. Vi går gjennom alle mesh-er per
+    // etasje og finner den laveste Y-verdien (verdens-koordinat) blant deres
+    // vertices. Dette tar høyde for at etasjer kan ha forskjellig elevation.
+    const etasjeBunnY = new Map()  // etasjeId → laveste Y i verdens-koord
+    const etasjeToppY = new Map()  // etasjeId → høyeste Y i verdens-koord
+    {
+      // Vi må beregne "verdens-Y" etter rotasjon. En enkel tilnærming:
+      // hent mesh.geometry.attributes.position (i lokal mesh-koord, samme
+      // som meshGruppe), transform med meshGruppe.matrixWorld.
+      meshGruppe.updateMatrixWorld(true)
+      const tmpVec = new THREE.Vector3()
+      idTilMesh.forEach((mesh, id) => {
+        const etId = mesh.userData?.etasjeId
+        if (!etId) return
+        const pos = mesh.geometry.attributes.position
+        for (let i = 0; i < pos.count; i++) {
+          tmpVec.set(pos.getX(i), pos.getY(i), pos.getZ(i))
+          tmpVec.applyMatrix4(mesh.matrixWorld)
+          const y = tmpVec.y
+          const cur = etasjeBunnY.get(etId)
+          if (cur === undefined || y < cur) etasjeBunnY.set(etId, y)
+          const curT = etasjeToppY.get(etId)
+          if (curT === undefined || y > curT) etasjeToppY.set(etId, y)
+        }
+      })
+      console.log('[Patch 18] Etasjebunner (verdens-Y):', Array.from(etasjeBunnY.entries()))
+    }
+
+    // Patch 18: Funksjon for å aktivere/deaktivere klippeplan basert på etasje
+    function oppdaterKlippeplan(planAktiv, etasjeId, snittH) {
+      if (!planAktiv) {
+        // Deaktiver: sett constant til Infinity = ingen klipping
+        clippingPlane.constant = Infinity
+        return
+      }
+      // Finn etasjebunn (verdens-Y) for valgt etasje, eller bruk modellbunn
+      let bunn
+      if (etasjeId && etasjeBunnY.has(etasjeId)) {
+        bunn = etasjeBunnY.get(etasjeId)
+      } else {
+        // Hvis ingen etasje valgt, bruk modellbunn
+        bunn = -modellSpennY / 2
+      }
+      // Klippeplan-normal er (0, -1, 0) — peker NEDOVER. constant = bunn + snittH
+      // betyr "klipp bort alt over bunn + snittH".
+      // For Plane(normal, constant): plane keeper punkter der dot(normal, p) + constant >= 0
+      // Med normal=(0,-1,0) og constant=C: -y + C >= 0 → y <= C
+      // Så constant = bunn + snittH gir: vis bare det som er <= bunn + snittH
+      clippingPlane.constant = bunn + snittH
+      console.log(`[Patch 18] Klippeplan satt: etasjeBunn=${bunn.toFixed(2)}, snittH=${snittH}, constant=${clippingPlane.constant.toFixed(2)}`)
+    }
+
     // Bakke-grid på Y = bunnen av modellen
     const gridSize = Math.max(modellSpennX, modellSpennZ, 20) * 1.5
     const grid = new THREE.GridHelper(gridSize, 20, 0xb8b6ad, 0xd4d2c9)
@@ -42287,6 +42401,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         case 'side':   theta = 0;              phi = Math.PI * 0.5;  break  // fra siden (X-akse)
         case 'topp':   theta = Math.PI * 0.5;  phi = 0.05;           break  // ovenfra (nesten rett ned)
         case 'iso':    theta = Math.PI * 0.3;  phi = Math.PI * 0.4;  break  // standard isometrisk
+        case 'plan':   theta = Math.PI * 0.5;  phi = 0.05;           break  // Patch 18: rett ovenfra (samme som topp)
         default: return
       }
       cameraRadius = radius  // Reset zoom også
@@ -42477,6 +42592,10 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       meshGruppe, modellSenter: { cx, cy, cz },
       setVisning,  // Patch 16-fix: lar UI-knapper hoppe til preset-vinkler
       reset: () => setVisning('iso'),
+      // Patch 18: Plan-modus
+      oppdaterKlippeplan,
+      etasjeBunnY,
+      etasjeToppY,
     }
 
     // Cleanup ved unmount
@@ -42558,6 +42677,15 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     })
   }, [aktiveIDer, valgtEtasjeId, klikketID])
 
+  // Patch 18: Reager på plan-modus-endringer
+  useEffect(() => {
+    if (!sceneRef.current?.oppdaterKlippeplan) return
+    sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId, planSnittH)
+    if (planAktiv && sceneRef.current.setVisning) {
+      sceneRef.current.setVisning('plan')
+    }
+  }, [planAktiv, valgtEtasjeId, planSnittH])
+
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.55)' }}
@@ -42586,12 +42714,36 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
             ].map(v => (
               <button
                 key={v.id}
-                onClick={() => sceneRef.current?.setVisning?.(v.id)}
+                onClick={() => {
+                  // Patch 18: Hvis Plan-modus var aktiv, skru av
+                  if (planAktiv) setPlanAktiv(false)
+                  sceneRef.current?.setVisning?.(v.id)
+                }}
                 title={v.tip}
                 style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'6px 10px', fontSize:'12px', fontWeight:'600', color:'#475569', cursor:'pointer' }}>
                 {v.label}
               </button>
             ))}
+            {/* Patch 18: Plan-knapp — kombinerer Topp + klippeplan + etasje-filter */}
+            <button
+              onClick={() => setPlanAktiv(p => !p)}
+              title={planAktiv ? 'Skru av Plan-modus' : 'Plan-visning: rett ovenfra med klippeplan på 1.2m'}
+              style={{
+                background: planAktiv ? '#1e40af' : '#eff6ff',
+                border: '1px solid ' + (planAktiv ? '#1e40af' : '#bfdbfe'),
+                color: planAktiv ? 'white' : '#1e40af',
+                borderRadius: '8px',
+                padding: '6px 10px',
+                fontSize: '12px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}>
+              <span>📐</span>
+              <span>Plan</span>
+            </button>
           </div>
           {/* Patch 16 Fase 2.1: Fjern alle markeringer (klikk + lagsett) */}
           {(klikketID !== null || activeLagsett) && (
@@ -42630,6 +42782,29 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
                 {et.navn}
               </button>
             ))}
+          </div>
+        )}
+
+        {/* Patch 18: Plan-modus snitt-høyde-slider */}
+        {planAktiv && (
+          <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'12px', alignItems:'center', background:'#eff6ff', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', textTransform:'uppercase', letterSpacing:'0.5px' }}>📐 Plan-modus:</span>
+            <span style={{ fontSize:'12px', color:'#1e40af' }}>Snitt-høyde over etasjebunn:</span>
+            <input
+              type="range"
+              min="0.3"
+              max="3.0"
+              step="0.1"
+              value={planSnittH}
+              onChange={(e) => setPlanSnittH(parseFloat(e.target.value))}
+              style={{ flex:1, maxWidth:'200px' }}
+            />
+            <span style={{ fontSize:'13px', color:'#1e40af', fontWeight:'600', minWidth:'50px' }}>{planSnittH.toFixed(1)} m</span>
+            {!valgtEtasjeId && (
+              <span style={{ fontSize:'11px', color:'#92400e', background:'#fef3c7', padding:'4px 8px', borderRadius:'6px', border:'1px solid #fde68a' }}>
+                💡 Velg en etasje for best resultat
+              </span>
+            )}
           </div>
         )}
 
