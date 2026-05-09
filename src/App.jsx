@@ -43930,6 +43930,41 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     return () => window.removeEventListener('resize', handler)
   }, [])
 
+  // Patch 18 polish: Scroll-basert fixed-positioning for fremdrifts-stripa.
+  // sticky fungerte ikke i denne layouten (sannsynligvis pga overflow-x: clip
+  // på <main>), så vi bruker scroll-listener for å bestemme om stripa skal
+  // være fixed eller i naturlig posisjon. Lytter også til kolonne-bredde for
+  // å holde stripa innenfor riktig område.
+  const stripeWrapperRef = React.useRef(null)
+  const kolonneWrapperRef = React.useRef(null)
+  const [stripeFixed, setStripeFixed] = useState(false)
+  const [stripeRect, setStripeRect] = useState({ left: 0, width: 0 })
+
+  useEffect(() => {
+    if (isMob) return  // Ikke relevant på mobil
+    const onScroll = () => {
+      if (!stripeWrapperRef.current || !kolonneWrapperRef.current) return
+      // Beregn om stripens naturlige posisjon er over viewport-toppen
+      const wrapperRect = stripeWrapperRef.current.getBoundingClientRect()
+      const kolonneRect = kolonneWrapperRef.current.getBoundingClientRect()
+      // Aktiv hvis (a) wrapperRect.top < 0 (rullet forbi naturlig posisjon),
+      // og (b) kolonne-rekken har bunn under viewport (kolonnene er fortsatt synlige)
+      const skalVaereFixed = wrapperRect.top < 0 && kolonneRect.bottom > 80
+      if (skalVaereFixed !== stripeFixed) setStripeFixed(skalVaereFixed)
+      // Oppdater horisontal posisjon (følger kolonne-rekkens venstre kant)
+      if (skalVaereFixed) {
+        setStripeRect({ left: kolonneRect.left, width: kolonneRect.width })
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    window.addEventListener('resize', onScroll)
+    onScroll()  // Kall en gang ved oppstart
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.removeEventListener('resize', onScroll)
+    }
+  }, [isMob, stripeFixed, metadata])
+
   // Validerer filstørrelse og endelse — returnerer feilmelding eller null
   const validerFil = (f) => {
     if (!f) return 'Ingen fil valgt'
@@ -44240,77 +44275,91 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               marginRight: 'calc(min(350px, max(0px, (100vw - var(--sidebar-width, 220px) - 1100px) / 2)) * -1)',
             }}>
 
-              {/* Patch 18 polish: Felles sticky fremdrifts-stripe over begge kolonner.
-                  Sticky til vinduet (ikke kolonnen) — synlig så lenge BIM-import-området er på skjermen.
+              {/* Patch 18 polish: Felles fremdrifts-stripe over begge kolonner.
+                  Bruker scroll-basert fixed-positioning siden sticky ikke fungerte
+                  i denne layouten (sannsynligvis pga overflow-x: clip på <main>).
                   Hver fremdrift har sitt eget kort for tydelig skille. */}
-              {!isMob && (
-                <div style={{
-                  position: 'sticky',
-                  top: 0,
-                  zIndex: 20,
-                  marginBottom: '12px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '12px',
-                  // Bakgrunn bak kortene så hvit innhold ikke "lekker" gjennom
-                  background: '#f8fafc',
-                  paddingTop: '4px',
-                  paddingBottom: '4px',
-                }}>
-                  {/* Klassifiser-fremdrift — eget kort */}
-                  <div style={{
-                    background: 'white',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    padding: '10px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                  }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
-                      🧭 Klassifiser
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
-                      {klassifiserteAntall} av {totalt} ferdig
-                    </span>
-                    <div style={{ flex: 1, height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ width: klassPct + '%', height: '100%', background: klassPct === 100 ? '#10b981' : '#15803d', transition: 'width 0.3s' }} />
-                    </div>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: klassPct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
-                      {klassPct}%
-                    </span>
-                  </div>
+              <div ref={stripeWrapperRef}>
+                {!isMob && (
+                  <>
+                    {/* Placeholder beholder plassen i layouten når stripa blir fixed */}
+                    {stripeFixed && (
+                      <div style={{ height: '64px', marginBottom: '12px' }} />
+                    )}
+                    {/* Selve stripa — fixed når brukeren har scrollet forbi naturlig posisjon */}
+                    <div style={{
+                      position: stripeFixed ? 'fixed' : 'relative',
+                      top: stripeFixed ? '0' : 'auto',
+                      left: stripeFixed ? stripeRect.left + 'px' : 'auto',
+                      width: stripeFixed ? stripeRect.width + 'px' : 'auto',
+                      zIndex: 50,
+                      marginBottom: stripeFixed ? '0' : '12px',
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '12px',
+                      // Bakgrunn bak kortene så hvit innhold ikke "lekker" gjennom
+                      background: '#f8fafc',
+                      paddingTop: '8px',
+                      paddingBottom: '8px',
+                      // Subtile shadow når fixed for å skille fra innholdet under
+                      boxShadow: stripeFixed ? '0 4px 12px rgba(0,0,0,0.08)' : 'none',
+                    }}>
+                      {/* Klassifiser-fremdrift — eget kort */}
+                      <div style={{
+                        background: 'white',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                      }}>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
+                          🧭 Klassifiser
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                          {klassifiserteAntall} av {totalt} ferdig
+                        </span>
+                        <div style={{ flex: 1, height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ width: klassPct + '%', height: '100%', background: klassPct === 100 ? '#10b981' : '#15803d', transition: 'width 0.3s' }} />
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: klassPct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
+                          {klassPct}%
+                        </span>
+                      </div>
 
-                  {/* Match-fremdrift — eget kort */}
-                  <div style={{
-                    background: 'white',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '12px',
-                    padding: '10px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '10px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
-                  }}>
-                    <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
-                      🎯 Match
-                    </span>
-                    <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
-                      {matchedeAntall} av {totalt} ferdig
-                    </span>
-                    <div style={{ flex: 1, height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
-                      <div style={{ width: matchPct + '%', height: '100%', background: matchPct === 100 ? '#10b981' : '#15803d', transition: 'width 0.3s' }} />
+                      {/* Match-fremdrift — eget kort */}
+                      <div style={{
+                        background: 'white',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        padding: '10px 16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                      }}>
+                        <span style={{ fontSize: '12px', fontWeight: '700', color: '#15803d', whiteSpace: 'nowrap' }}>
+                          🎯 Match
+                        </span>
+                        <span style={{ fontSize: '11px', color: '#64748b', whiteSpace: 'nowrap' }}>
+                          {matchedeAntall} av {totalt} ferdig
+                        </span>
+                        <div style={{ flex: 1, height: '5px', background: '#f1f5f9', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ width: matchPct + '%', height: '100%', background: matchPct === 100 ? '#10b981' : '#15803d', transition: 'width 0.3s' }} />
+                        </div>
+                        <span style={{ fontSize: '11px', fontWeight: '700', color: matchPct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
+                          {matchPct}%
+                        </span>
+                      </div>
                     </div>
-                    <span style={{ fontSize: '11px', fontWeight: '700', color: matchPct === 100 ? '#10b981' : '#475569', whiteSpace: 'nowrap', minWidth: '36px', textAlign: 'right' }}>
-                      {matchPct}%
-                    </span>
-                  </div>
-                </div>
-              )}
+                  </>
+                )}
+              </div>
 
               {/* Selve kolonne-griden */}
-              <div style={isMob ? {
+              <div ref={kolonneWrapperRef} style={isMob ? {
                 display: 'grid',
                 gridTemplateColumns: '1fr',
                 gap: '14px',
