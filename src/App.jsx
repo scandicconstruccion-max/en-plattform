@@ -40610,7 +40610,10 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
   }
 
   return (
-    <div style={{ marginBottom: '8px' }}>
+    // Patch 18 polish: Fragment gjør at både knappen og panelet blir direkte
+    // barn av parent-flex-container. Knappen tar plass i flex-raden, panelet
+    // bryter til ny rad pga flex-wrap (siden det er bredt og fyller hele raden).
+    <>
       {/* Toggle-knapp */}
       <button
         onClick={() => setAapen(a => !a)}
@@ -40637,7 +40640,7 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
 
       {/* Detalj-panel */}
       {aapen && (
-        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginTop: '8px' }}>
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px 12px', marginTop: '8px', flexBasis: '100%', minWidth: 0 }}>
 
           {/* Geometri-grid */}
           <div style={{ marginBottom: '12px' }}>
@@ -40762,7 +40765,7 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
 
         </div>
       )}
-    </div>
+    </>
   )
 }
 
