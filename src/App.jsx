@@ -41005,8 +41005,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [tegningLagsett, setTegningLagsett] = useState(null)
   // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
   const [meshLagsett, setMeshLagsett] = useState(null)
-  // Patch 17 PoC: Plansnitt-modal (true = åpen)
-  const [visPlansnitt, setVisPlansnitt] = useState(false)
 
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
@@ -41335,14 +41333,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
         <div style={{ background: stegFarge.bg, color: stegFarge.tekst, padding:'5px 11px', borderRadius:'8px', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }}>
           {stegStatus.tekst}
         </div>
-        {/* Patch 17 PoC: Test plansnitt-knapp */}
-        <button
-          onClick={() => setVisPlansnitt(true)}
-          title="Test mesh-basert 2D plansnitt (PoC)"
-          style={{ background:'#fef3c7', border:'1px solid #fde68a', color:'#92400e', borderRadius:'8px', padding:'5px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:'4px' }}>
-          <span>🧪</span>
-          <span>Test plansnitt</span>
-        </button>
         {/* Patch 18: IFC-typer diagnose */}
         <button
           onClick={() => visIfcInnholdDiagnose(mengder, appAlert)}
@@ -41666,15 +41656,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           lagsettListe={alleLagsett.map(({ lagsett }) => lagsett)}
           onClose={() => setMeshLagsett(null)}
           onVelgLagsett={(ls) => setMeshLagsett(ls)}
-          isMob={isMob}
-        />
-      )}
-
-      {/* Patch 17 PoC: Plansnitt-modal */}
-      {visPlansnitt && (
-        <PlansnittPoCModal
-          mengder={mengder}
-          onClose={() => setVisPlansnitt(false)}
           isMob={isMob}
         />
       )}
