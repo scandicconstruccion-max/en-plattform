@@ -42072,8 +42072,6 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
   const [klikketID, setKlikketID] = useState(null)
   // Patch 18: Plan-modus (true = klippeplan aktivert, kamera på topp)
   const [planAktiv, setPlanAktiv] = useState(false)
-  // Patch 18: Snitt-høyde i meter (fra etasjebunn)
-  const [planSnittH, setPlanSnittH] = useState(1.2)
 
   const etasjer = mengder?._geometri?.etasjer || []
   const enhetsFaktor = React.useMemo(() => detekterEnhetsFaktor(mengder), [mengder])
@@ -42361,48 +42359,56 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     }
 
     // Patch 18: Funksjon for å aktivere/deaktivere klippeplan basert på etasje
-    function oppdaterKlippeplan(planAktiv, etasjeId, snittH) {
+    function oppdaterKlippeplan(planAktiv, etasjeId) {
       if (!planAktiv) {
         // Deaktiver: sett constant til Infinity = ingen klipping
         clippingPlaneOver.constant = Infinity
         clippingPlaneUnder.constant = Infinity
         return
       }
-      // Finn etasjebunn (verdens-Y) for valgt etasje, eller bruk modellbunn
-      let bunn
-      if (etasjeId && etasjeBunnY.has(etasjeId)) {
-        bunn = etasjeBunnY.get(etasjeId)
-      } else {
-        // Hvis ingen etasje valgt, bruk modellbunn
-        bunn = -modellSpennY / 2
+      if (!etasjeId) {
+        // Hvis ingen etasje valgt, ingen klipping (men dette skal ikke skje
+        // siden vi auto-velger etasje når Plan aktiveres)
+        clippingPlaneOver.constant = Infinity
+        clippingPlaneUnder.constant = Infinity
+        return
       }
 
-      // ÖVRE KLIPPEPLAN — kutter alt over (bunn + snittH)
-      // Plane(normal=(0,-1,0), constant=C): keeper y <= C → vis bare det som er <= bunn + snittH
-      clippingPlaneOver.constant = bunn + snittH
+      // Patch 18: Vis HELE etasjen — fra gulv til rett under tak.
+      // Bruk etasjebunn og etasjetopp fra mesh-data.
+      const bunn = etasjeBunnY.get(etasjeId)
+      const topp = etasjeToppY.get(etasjeId)
+      if (bunn === undefined || topp === undefined) {
+        console.warn('[Patch 18] Mangler etasjebunn/topp for', etasjeId)
+        clippingPlaneOver.constant = Infinity
+        clippingPlaneUnder.constant = Infinity
+        return
+      }
 
-      // NEDRE KLIPPEPLAN — kutter alt under bunnen
-      // Plane(normal=(0,1,0), constant=C): keeper y >= -C → vis bare det som er >= -C
-      // Vi vil ha y >= bunn → -C = bunn → C = -bunn
-      // Vi setter constant til litt under bunnen (- 0.1m) for å beholde gulvet selv
+      // Liten margin (0.3m) under taket slik at vi ser veggene fra topp,
+      // ikke selve takflaten som dekker over alt.
+      const takMargin = 0.3
+
+      // ÖVRE KLIPPEPLAN — kutter alt over (etasjetopp - margin)
+      // Plane(normal=(0,-1,0), constant=C): keeper y <= C
+      clippingPlaneOver.constant = topp - takMargin
+
+      // NEDRE KLIPPEPLAN — kutter alt under etasjebunn (med liten margin under)
+      // Plane(normal=(0,1,0), constant=C): keeper y >= -C
+      // Vi vil ha y >= bunn - 0.1 → C = -(bunn - 0.1)
       clippingPlaneUnder.constant = -(bunn - 0.1)
 
-      console.log(`[Patch 18] Klippeplan: bunn=${bunn.toFixed(2)}, snittH=${snittH}, over=${clippingPlaneOver.constant.toFixed(2)}, under=${clippingPlaneUnder.constant.toFixed(2)}`)
+      console.log(`[Patch 18] Etasje "${etasjeId}": bunn=${bunn.toFixed(2)}, topp=${topp.toFixed(2)}, klipp over=${clippingPlaneOver.constant.toFixed(2)}, under=${clippingPlaneUnder.constant.toFixed(2)}`)
+    }
 
-      // Patch 18 fix: Zoom og senter inn på etasjen
-      // OBS: I Plan-modus viser vi alle elementer (uansett etasje-mapping),
-      // så bruker hele byggets horisontale bbox for sentrering, ikke etasjens
-      // egen bbox (som kan være ufullstendig hvis IFC-mapping er dårlig).
-      // Etter meshGruppe.position.set(-cx, -cy, -cz) er byggets senter på origo.
-      const senterX = 0
-      const senterZ = 0
+    // Patch 18: Sentrer kamera på Plan-modus. Kalles KUN når Plan aktiveres
+    // (ikke ved etasje-bytte) slik at brukerens manuelle zoom bevares.
+    function sentrerPlanKamera() {
+      // Etter meshGruppe.position.set(-cx, -cy, -cz) er byggets senter på origo
       const stortesteSpenn = Math.max(modellSpennX, modellSpennZ)
-
-      // Sentrer kamera på byggets senter
-      cameraTarget.set(senterX, bunn + snittH, senterZ)
-      // Zoom slik at hele bygget får plass — radius ca 0.7 ganger største spenn
+      cameraTarget.set(0, 0, 0)
       cameraRadius = Math.max(stortesteSpenn * 0.7, 5)
-      console.log(`[Patch 18] Sentrer på bygg: spenn=${stortesteSpenn.toFixed(1)}m, radius=${cameraRadius.toFixed(1)}`)
+      console.log(`[Patch 18] Sentrer Plan-kamera: spenn=${stortesteSpenn.toFixed(1)}m, radius=${cameraRadius.toFixed(1)}`)
       updateCamera()
     }
 
@@ -42638,6 +42644,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       reset: () => setVisning('iso'),
       // Patch 18: Plan-modus
       oppdaterKlippeplan,
+      sentrerPlanKamera,
       etasjeBunnY,
       etasjeToppY,
     }
@@ -42722,27 +42729,32 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     })
   }, [aktiveIDer, valgtEtasjeId, klikketID, planAktiv])
 
-  // Patch 18: Reager på plan-modus-endringer
+  // Patch 18: Reager på etasje-endringer i Plan-modus — kun oppdater klippeplan
+  // (ikke kamera) slik at brukerens zoom bevares ved etasje-bytte
   useEffect(() => {
     if (!sceneRef.current?.oppdaterKlippeplan) return
-    sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId, planSnittH)
+    sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId)
 
-    // Patch 18: Bytt bakgrunn — hvit i Plan-modus, lys grå i vanlig 3D
+    // Bytt bakgrunn — hvit i Plan-modus, lys grå i vanlig 3D
     if (sceneRef.current.scene) {
       sceneRef.current.scene.background = new sceneRef.current.THREE.Color(
         planAktiv ? 0xffffff : 0xeeece7
       )
     }
+  }, [planAktiv, valgtEtasjeId])
 
-    if (planAktiv && sceneRef.current.setVisning) {
+  // Patch 18: Reager på Plan-aktivering — sett kamera (kun ved første aktivering)
+  useEffect(() => {
+    if (!sceneRef.current) return
+    if (planAktiv && sceneRef.current.setVisning && sceneRef.current.sentrerPlanKamera) {
+      // Plan aktiveres: sett kamera til topp-vinkel og sentrer på bygget
       sceneRef.current.setVisning('plan')
-      // Etter setVisning('plan') må vi re-anvende klippeplan-zoom siden setVisning resetter camera
-      sceneRef.current.oppdaterKlippeplan(planAktiv, valgtEtasjeId, planSnittH)
+      sceneRef.current.sentrerPlanKamera()
     } else if (!planAktiv && sceneRef.current.setVisning) {
-      // Når Plan-modus skrus av, reset til iso-visning
+      // Plan deaktiveres: tilbake til iso
       sceneRef.current.setVisning('iso')
     }
-  }, [planAktiv, valgtEtasjeId, planSnittH])
+  }, [planAktiv])
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding: isMob ? '8px' : '16px' }}>
@@ -42836,11 +42848,14 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
         {etasjer.length > 0 && (
           <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', background:'#fafbfc' }}>
             <span style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', marginRight:'4px' }}>Etasje:</span>
-            <button
-              onClick={() => setValgtEtasjeId(null)}
-              style={{ background: !valgtEtasjeId ? '#3b82f6' : 'white', color: !valgtEtasjeId ? 'white' : '#475569', border: '1px solid ' + (!valgtEtasjeId ? '#3b82f6' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
-              Alle
-            </button>
+            {/* Patch 18: "Alle"-knapp skjules i Plan-modus — gir ikke mening der */}
+            {!planAktiv && (
+              <button
+                onClick={() => setValgtEtasjeId(null)}
+                style={{ background: !valgtEtasjeId ? '#3b82f6' : 'white', color: !valgtEtasjeId ? 'white' : '#475569', border: '1px solid ' + (!valgtEtasjeId ? '#3b82f6' : '#e2e8f0'), borderRadius:'8px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>
+                Alle
+              </button>
+            )}
             {etasjer.map(et => (
               <button
                 key={et.id}
@@ -42852,26 +42867,11 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
           </div>
         )}
 
-        {/* Patch 18: Plan-modus snitt-høyde-slider */}
+        {/* Patch 18: Plan-modus info-stripe (slider fjernet — viser hele etasjen automatisk) */}
         {planAktiv && (
-          <div style={{ padding: isMob ? '8px 12px' : '10px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'12px', alignItems:'center', background:'#eff6ff', flexWrap:'wrap' }}>
-            <span style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', textTransform:'uppercase', letterSpacing:'0.5px' }}>📐 Plan-modus:</span>
-            <span style={{ fontSize:'12px', color:'#1e40af' }}>Snitt-høyde over etasjebunn:</span>
-            <input
-              type="range"
-              min="0.3"
-              max="3.0"
-              step="0.1"
-              value={planSnittH}
-              onChange={(e) => setPlanSnittH(parseFloat(e.target.value))}
-              style={{ flex:1, maxWidth:'200px' }}
-            />
-            <span style={{ fontSize:'13px', color:'#1e40af', fontWeight:'600', minWidth:'50px' }}>{planSnittH.toFixed(1)} m</span>
-            {!valgtEtasjeId && (
-              <span style={{ fontSize:'11px', color:'#92400e', background:'#fef3c7', padding:'4px 8px', borderRadius:'6px', border:'1px solid #fde68a' }}>
-                💡 Velg en etasje for best resultat
-              </span>
-            )}
+          <div style={{ padding: isMob ? '8px 12px' : '8px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0, display:'flex', gap:'8px', alignItems:'center', background:'#eff6ff' }}>
+            <span style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', textTransform:'uppercase', letterSpacing:'0.5px' }}>📐 Plan-modus aktiv</span>
+            <span style={{ fontSize:'12px', color:'#1e40af' }}>— viser hele etasjen ovenfra. Velg etasje under.</span>
           </div>
         )}
 
