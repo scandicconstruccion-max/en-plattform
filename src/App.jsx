@@ -39223,6 +39223,43 @@ function malLikhetsScore(ifcLag, biblioLag) {
 //   maler: [<konstruksjon>, ...], // sorterte mal-forslag (max 3)
 //   begrunnelse: 'string'
 // }
+// ─── PATCH 18 POLISH: TILPASSING AV BIBLIOTEK-KONSTRUKSJON ────────────────────
+// Når kalkulatøren henter en konstruksjon fra biblioteket men den ikke matcher
+// IFC eksakt (f.eks. 300mm betongvegg vs 250mm i biblioteket), kan kalkulatøren
+// tilpasse en KOPI av konstruksjonen for det spesifikke lagsettet.
+//
+// Tilpasningen lagres på lagsett-objektet som `tilpassetKonstruksjon` og
+// erstatter `matchedKonstruksjon` ved kalkyle-generering. Biblioteket forblir
+// uendret.
+
+function tilpassKonstruksjon(originalKonstruksjon) {
+  // Dyp kopi som kan redigeres uten å påvirke biblioteket
+  return {
+    ...originalKonstruksjon,
+    materialer: (originalKonstruksjon.materialer || []).map(m => ({ ...m })),
+    arbeidsarter: (originalKonstruksjon.arbeidsarter || []).map(a => ({ ...a })),
+    underleverandorer: (originalKonstruksjon.underleverandorer || []).map(u => ({ ...u })),
+    _erTilpasset: true,
+    _baserseringsId: originalKonstruksjon.id,
+    _tilpasningsNotat: '',
+  }
+}
+
+// Hent IFC-tykkelse fra et lagsett (i mm) for sammenligning med bibliotek
+function lagsettTotalTykkelse(lagsett) {
+  const layers = lagsett.layers || lagsett.lag || []
+  return layers.reduce((sum, l) => sum + (l.tykkelse || 0), 0)
+}
+
+// Forsøk å hente tykkelse fra konstruksjons-navn (f.eks. "Plasstøpt betongvegg 250mm" → 250)
+function ekstrakerTykkelseFraNavn(konstruksjon) {
+  const navn = konstruksjon.name || konstruksjon.navn || ''
+  const beskr = konstruksjon.beskrivelse || ''
+  const tekst = navn + ' ' + beskr
+  const match = tekst.match(/(\d{2,4})\s*mm\b/i)
+  return match ? parseInt(match[1], 10) : null
+}
+
 function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
   // Skip kategorier som ikke skal matches
   if (brukerKategori === 'usikker' || brukerKategori === 'ignorer' || !brukerKategori) {
@@ -41392,6 +41429,335 @@ function visLagsettDiagnose(lagsett, onAlert) {
   })
 }
 
+// ─── BIM TILPASNINGS-PANEL (Patch 18 polish — Variant 2B) ─────────────────────
+// Lar kalkulatøren tilpasse en kopi av en bibliotek-konstruksjon for et
+// spesifikt lagsett. Brukes når IFC har andre dimensjoner enn nærmeste
+// bibliotek-match (f.eks. 300mm vs 250mm betongvegg).
+//
+// Redigerbart:
+//   - Tykkelse (med forslag om å oppdatere relevante material-mengder)
+//   - Material-linjer: varenavn, mengde, enhet, enhetspris
+//   - Arbeidsart-linjer: beskrivelse, grunntid
+//   - Notat-felt for kommentar (hvorfor tilpasningen ble gjort)
+//
+// Tilpasningen lagres som `lagsett.tilpassetKonstruksjon` og brukes ved
+// kalkyle-generering istedenfor `matchedKonstruksjon`.
+
+function BimTilpasningsPanel({ lagsett, onLagre, onAvbryt }) {
+  // Hent original konstruksjon (matched fra bibliotek) som utgangspunkt
+  const original = lagsett.matchedKonstruksjon
+  // Bruk eksisterende tilpasning hvis den finnes, ellers lag en ny kopi
+  const [tilpasset, setTilpasset] = useState(() =>
+    lagsett.tilpassetKonstruksjon
+      ? { ...lagsett.tilpassetKonstruksjon, materialer: lagsett.tilpassetKonstruksjon.materialer.map(m => ({...m})), arbeidsarter: lagsett.tilpassetKonstruksjon.arbeidsarter.map(a => ({...a})) }
+      : tilpassKonstruksjon(original)
+  )
+
+  // IFC-tykkelse (det som faktisk er prosjektert)
+  const ifcTykkelse = React.useMemo(() => lagsettTotalTykkelse(lagsett), [lagsett])
+  // Bibliotek-tykkelse (fra navn — best vi kan)
+  const biblioTykkelse = React.useMemo(() => ekstrakerTykkelseFraNavn(original), [original])
+
+  // Tilpasset tykkelse (overstyres av bruker)
+  const [tilpassetTykkelse, setTilpassetTykkelse] = useState(
+    tilpasset._tilpassetTykkelse !== undefined ? tilpasset._tilpassetTykkelse :
+    (ifcTykkelse > 0 ? ifcTykkelse : biblioTykkelse) || 0
+  )
+
+  // Forslag-dialog: når tykkelse endres og avviker fra bibliotek, vis forslag
+  const [skaleringsForslag, setSkaleringsForslag] = useState(null)
+
+  const handterTykkelseEndring = (nyTykkelse) => {
+    const gammel = tilpassetTykkelse
+    setTilpassetTykkelse(nyTykkelse)
+
+    // Hvis tykkelsen endres betydelig (>5mm) og bibliotek hadde en kjent tykkelse,
+    // vis forslag om å skalere relevante material-linjer
+    if (biblioTykkelse && Math.abs(nyTykkelse - biblioTykkelse) > 5) {
+      const faktor = nyTykkelse / biblioTykkelse
+      // Finn material-linjer som virker tykkelse-relaterte
+      // (typisk: betong, isolasjon, gips — de med m³ eller m² enhet basert på tykkelse)
+      const relevanteMaterialer = tilpasset.materialer.filter(m => {
+        const navn = (m.varenavn || '').toLowerCase()
+        return /betong|isolasjon|gips|stender|bjelke|plate/i.test(navn)
+      })
+      if (relevanteMaterialer.length > 0) {
+        setSkaleringsForslag({
+          faktor,
+          fraTykkelse: biblioTykkelse,
+          tilTykkelse: nyTykkelse,
+          materialer: relevanteMaterialer.map(m => m.varenavn),
+        })
+      }
+    }
+  }
+
+  const aksepterSkalering = () => {
+    if (!skaleringsForslag) return
+    const faktor = skaleringsForslag.faktor
+    setTilpasset(t => ({
+      ...t,
+      materialer: t.materialer.map(m => {
+        const navn = (m.varenavn || '').toLowerCase()
+        if (/betong|isolasjon|gips|stender|bjelke|plate/i.test(navn)) {
+          return { ...m, mengde: parseFloat((m.mengde * faktor).toFixed(3)) }
+        }
+        return m
+      })
+    }))
+    setSkaleringsForslag(null)
+  }
+
+  const oppdaterMaterial = (idx, felt, verdi) => {
+    setTilpasset(t => ({
+      ...t,
+      materialer: t.materialer.map((m, i) => i === idx ? { ...m, [felt]: verdi } : m)
+    }))
+  }
+
+  const oppdaterArbeidsart = (idx, felt, verdi) => {
+    setTilpasset(t => ({
+      ...t,
+      arbeidsarter: t.arbeidsarter.map((a, i) => i === idx ? { ...a, [felt]: verdi } : a)
+    }))
+  }
+
+  const oppdaterNotat = (notat) => {
+    setTilpasset(t => ({ ...t, _tilpasningsNotat: notat }))
+  }
+
+  const handleLagre = () => {
+    const ferdig = {
+      ...tilpasset,
+      _tilpassetTykkelse: tilpassetTykkelse,
+      _erTilpasset: true,
+    }
+    onLagre(ferdig)
+  }
+
+  const tinyInput = {
+    width: '70px',
+    padding: '4px 6px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '4px',
+    fontSize: '11px',
+    background: 'white',
+    textAlign: 'right',
+  }
+  const smallInput = {
+    width: '100%',
+    padding: '4px 8px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '4px',
+    fontSize: '11px',
+    background: 'white',
+    boxSizing: 'border-box',
+  }
+
+  const tykkelseAvviker = ifcTykkelse > 0 && biblioTykkelse && Math.abs(ifcTykkelse - biblioTykkelse) > 5
+
+  return (
+    <div style={{
+      background: '#fefce8',
+      border: '1px solid #fde68a',
+      borderRadius: '10px',
+      padding: '12px 14px',
+      marginTop: '8px',
+      flexBasis: '100%',
+      order: 100,
+    }}>
+      {/* Tittel */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+        <div style={{ fontSize: '12px', fontWeight: '700', color: '#854d0e' }}>
+          ✏️ Tilpass konstruksjon for dette lagsettet
+        </div>
+        <div style={{ fontSize: '10px', color: '#a16207' }}>
+          Endringer påvirker kun denne kalkylen — biblioteket beholdes uendret
+        </div>
+      </div>
+
+      {/* Tykkelses-sammenligning */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'auto auto auto 1fr', gap: '12px', alignItems: 'center', marginBottom: '12px', padding: '8px 10px', background: 'white', borderRadius: '6px', border: '1px solid #fde68a' }}>
+        <div>
+          <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>IFC sier</div>
+          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{ifcTykkelse > 0 ? `${ifcTykkelse.toFixed(0)} mm` : '—'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Bibliotek</div>
+          <div style={{ fontSize: '13px', fontWeight: '700', color: '#0f172a' }}>{biblioTykkelse ? `${biblioTykkelse} mm` : '—'}</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.4px' }}>Tilpasset</div>
+          <input
+            type="number"
+            value={tilpassetTykkelse}
+            onChange={e => handterTykkelseEndring(parseFloat(e.target.value) || 0)}
+            style={{ ...tinyInput, fontWeight: '700', color: '#854d0e' }}
+          />
+        </div>
+        {tykkelseAvviker && (
+          <div style={{ fontSize: '10px', color: '#854d0e', textAlign: 'right' }}>
+            ⚠ Avvik: {Math.abs(ifcTykkelse - biblioTykkelse).toFixed(0)} mm
+          </div>
+        )}
+      </div>
+
+      {/* Skalering-forslag (når tykkelse endres) */}
+      {skaleringsForslag && (
+        <div style={{ background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '6px', padding: '10px 12px', marginBottom: '12px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#1e40af', marginBottom: '6px' }}>
+            💡 Skal mengdene skaleres automatisk?
+          </div>
+          <div style={{ fontSize: '10px', color: '#1e3a8a', marginBottom: '8px', lineHeight: 1.5 }}>
+            Tykkelsen endret fra {skaleringsForslag.fraTykkelse}mm til {skaleringsForslag.tilTykkelse}mm
+            (faktor {skaleringsForslag.faktor.toFixed(2)}×). Følgende materialer kan skaleres:
+            <strong> {skaleringsForslag.materialer.join(', ')}</strong>
+          </div>
+          <div style={{ display: 'flex', gap: '6px' }}>
+            <button onClick={aksepterSkalering} style={{ background: '#1e40af', color: 'white', border: 'none', borderRadius: '4px', padding: '5px 12px', fontSize: '11px', fontWeight: '700', cursor: 'pointer' }}>
+              Ja, skalér
+            </button>
+            <button onClick={() => setSkaleringsForslag(null)} style={{ background: 'white', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '5px 12px', fontSize: '11px', fontWeight: '600', cursor: 'pointer' }}>
+              Nei, jeg justerer selv
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Material-tabell */}
+      {tilpasset.materialer.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: '#854d0e', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+            Materialer ({tilpasset.materialer.length})
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '6px', fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px', padding: '0 6px', marginBottom: '4px' }}>
+            <div>Varenavn</div>
+            <div style={{ textAlign: 'right' }}>Mengde</div>
+            <div>Enhet</div>
+            <div style={{ textAlign: 'right' }}>Pris</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {tilpasset.materialer.map((m, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr', gap: '6px', alignItems: 'center', padding: '4px 6px', background: 'white', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                <input
+                  type="text"
+                  value={m.varenavn || ''}
+                  onChange={e => oppdaterMaterial(i, 'varenavn', e.target.value)}
+                  style={smallInput}
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={m.mengde || 0}
+                  onChange={e => oppdaterMaterial(i, 'mengde', parseFloat(e.target.value) || 0)}
+                  style={{ ...smallInput, textAlign: 'right' }}
+                />
+                <input
+                  type="text"
+                  value={m.enhet || ''}
+                  onChange={e => oppdaterMaterial(i, 'enhet', e.target.value)}
+                  style={smallInput}
+                />
+                <input
+                  type="number"
+                  step="1"
+                  value={m.enhetspris || 0}
+                  onChange={e => oppdaterMaterial(i, 'enhetspris', parseFloat(e.target.value) || 0)}
+                  style={{ ...smallInput, textAlign: 'right' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Arbeidsart-tabell */}
+      {tilpasset.arbeidsarter.length > 0 && (
+        <div style={{ marginBottom: '12px' }}>
+          <div style={{ fontSize: '10px', fontWeight: '700', color: '#854d0e', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+            Arbeidsarter ({tilpasset.arbeidsarter.length})
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '6px', fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.3px', padding: '0 6px', marginBottom: '4px' }}>
+            <div>Beskrivelse</div>
+            <div style={{ textAlign: 'right' }}>Grunntid (t/m²)</div>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {tilpasset.arbeidsarter.map((a, i) => (
+              <div key={i} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '6px', alignItems: 'center', padding: '4px 6px', background: 'white', borderRadius: '4px', border: '1px solid #fde68a' }}>
+                <input
+                  type="text"
+                  value={a.beskrivelse || ''}
+                  onChange={e => oppdaterArbeidsart(i, 'beskrivelse', e.target.value)}
+                  style={smallInput}
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  value={a.grunntid || 0}
+                  onChange={e => oppdaterArbeidsart(i, 'grunntid', parseFloat(e.target.value) || 0)}
+                  style={{ ...smallInput, textAlign: 'right' }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Notat-felt */}
+      <div style={{ marginBottom: '12px' }}>
+        <div style={{ fontSize: '10px', fontWeight: '700', color: '#854d0e', textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+          Notat (hvorfor ble tilpasningen gjort?)
+        </div>
+        <textarea
+          value={tilpasset._tilpasningsNotat || ''}
+          onChange={e => oppdaterNotat(e.target.value)}
+          placeholder="F.eks. 'Tykkere betongvegg pga grunnforhold i sør'"
+          rows={2}
+          style={{
+            width: '100%',
+            padding: '6px 10px',
+            border: '1px solid #cbd5e1',
+            borderRadius: '6px',
+            fontSize: '11px',
+            background: 'white',
+            boxSizing: 'border-box',
+            fontFamily: 'inherit',
+            resize: 'vertical',
+          }}
+        />
+      </div>
+
+      {/* Handlinger */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px' }}>
+        <button onClick={onAvbryt} style={{
+          background: 'white',
+          border: '1px solid #cbd5e1',
+          color: '#475569',
+          borderRadius: '6px',
+          padding: '6px 14px',
+          fontSize: '11px',
+          fontWeight: '600',
+          cursor: 'pointer',
+        }}>
+          Avbryt
+        </button>
+        <button onClick={handleLagre} style={{
+          background: '#854d0e',
+          color: 'white',
+          border: '1px solid #854d0e',
+          borderRadius: '6px',
+          padding: '6px 14px',
+          fontSize: '11px',
+          fontWeight: '700',
+          cursor: 'pointer',
+        }}>
+          Lagre tilpasning
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
@@ -41403,6 +41769,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [meshLagsett, setMeshLagsett] = useState(null)
   // Patch 18 polish: Lagsett for bibliotek-søk-modal (null = lukket)
   const [bibliotekSokLagsett, setBibliotekSokLagsett] = useState(null)
+  // Patch 18 polish: Set av lagsett-id-er der tilpasnings-panelet er åpent
+  const [tilpasningAapneIds, setTilpasningAapneIds] = useState(new Set())
 
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
@@ -41630,6 +41998,40 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     if (kilde !== 'hoppet' && valgtKonstruksjon && !valgtKonstruksjon._hoppet) {
       await lagreMatchingSignatur(lagsett, valgtKonstruksjon, kilde)
     }
+  }
+
+  // Helper for å få stabil id på et lagsett (bruker navn + tykkelse + antall som fingeravtrykk)
+  const lagsettId = (ls) => `${ls.navn}__${ls.tykkelse || 0}__${ls.antall || 0}`
+
+  // Patch 18 polish: Lagre tilpasset konstruksjon på lagsett
+  const lagreTilpasning = (lagsett, tilpassetKonst) => {
+    lagsett.tilpassetKonstruksjon = tilpassetKonst
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+    // Lukk panelet etter lagring
+    setTilpasningAapneIds(prev => {
+      const ny = new Set(prev)
+      ny.delete(lagsettId(lagsett))
+      return ny
+    })
+  }
+
+  // Patch 18 polish: Fjern tilpasning, gå tilbake til original bibliotek-konstruksjon
+  const fjernTilpasning = (lagsett) => {
+    lagsett.tilpassetKonstruksjon = null
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+  }
+
+  // Patch 18 polish: Toggle tilpasnings-panel
+  const toggleTilpasning = (lagsett) => {
+    const id = lagsettId(lagsett)
+    setTilpasningAapneIds(prev => {
+      const ny = new Set(prev)
+      if (ny.has(id)) ny.delete(id)
+      else ny.add(id)
+      return ny
+    })
   }
 
   const fjernMatch = async (lagsett) => {
@@ -41888,25 +42290,69 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                     {lagsett.matchKilde === 'auto' ? '🔄 Husket fra forrige prosjekt:'
                       : lagsett.matchKilde === 'eksakt' ? '✓ Brukes:'
                       : lagsett.matchKilde === 'mal' ? '📋 Basert på mal:'
+                      : lagsett.matchKilde === 'bibliotek' ? '📚 Hentet fra bibliotek:'
                       : '✨ Ny konstruksjon:'}
                   </div>
                   <div style={{ fontSize:'12px', color: lagsett.matchKilde === 'auto' ? '#713f12' : '#1e3a8a', fontWeight:'600' }}>
                     {lagsett.matchedKonstruksjon.name}
+                    {/* Patch 18 polish: Vis tilpasnings-indikator */}
+                    {lagsett.tilpassetKonstruksjon && (
+                      <span style={{ marginLeft: '6px', fontSize: '10px', background: '#fef3c7', color: '#854d0e', padding: '2px 6px', borderRadius: '4px', fontWeight: '700' }}>
+                        ✏️ Tilpasset
+                      </span>
+                    )}
                   </div>
+                  {/* Vis tykkelse-info hvis tilpasset */}
+                  {lagsett.tilpassetKonstruksjon && lagsett.tilpassetKonstruksjon._tilpassetTykkelse && (
+                    <div style={{ fontSize: '10px', color: '#854d0e', marginTop: '3px' }}>
+                      Tykkelse: {lagsett.tilpassetKonstruksjon._tilpassetTykkelse} mm
+                      {lagsett.tilpassetKonstruksjon._tilpasningsNotat && (
+                        <span style={{ marginLeft: '8px', fontStyle: 'italic' }}>
+                          · {lagsett.tilpassetKonstruksjon._tilpasningsNotat}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {lagsett.matchKilde === 'auto' && (
                     <div style={{ fontSize:'10px', color:'#854d0e', marginTop:'2px', fontStyle:'italic' }}>
                       Du valgte denne for samme lagstruktur tidligere. Trykk "Endre valg" hvis du vil velge noe annet.
                     </div>
                   )}
-                  <div style={{ marginTop:'6px' }}>
+                  <div style={{ marginTop:'6px', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                     <button onClick={() => fjernMatch(lagsett)}
                       style={{ background:'transparent', border:'none',
                                color: '#475569',
                                fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
                       {lagsett.matchKilde === 'auto' ? 'Endre valg' : 'Fjern valg'}
                     </button>
+                    {/* Patch 18 polish: Tilpass-knapp */}
+                    <button onClick={() => toggleTilpasning(lagsett)}
+                      style={{ background:'transparent', border:'none',
+                               color: '#854d0e', fontWeight: '700',
+                               fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
+                      {lagsett.tilpassetKonstruksjon
+                        ? (tilpasningAapneIds.has(lagsettId(lagsett)) ? 'Lukk tilpasning' : 'Endre tilpasning')
+                        : (tilpasningAapneIds.has(lagsettId(lagsett)) ? 'Lukk' : '✏️ Tilpass')}
+                    </button>
+                    {lagsett.tilpassetKonstruksjon && (
+                      <button onClick={() => fjernTilpasning(lagsett)}
+                        style={{ background:'transparent', border:'none',
+                                 color: '#dc2626',
+                                 fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
+                        Fjern tilpasning
+                      </button>
+                    )}
                   </div>
                 </div>
+              )}
+
+              {/* Patch 18 polish: Tilpasnings-panel — vises når brukeren har klikket Tilpass */}
+              {erBekreftet && tilpasningAapneIds.has(lagsettId(lagsett)) && (
+                <BimTilpasningsPanel
+                  lagsett={lagsett}
+                  onLagre={(tilpassetKonst) => lagreTilpasning(lagsett, tilpassetKonst)}
+                  onAvbryt={() => toggleTilpasning(lagsett)}
+                />
               )}
 
               {/* Hoppet over — info */}
