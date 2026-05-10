@@ -41277,6 +41277,766 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
 // BimKlassifiseringSeksjon senere). Lukket som standard for å unngå støy
 // — brukeren klikker for å utforske.
 
+// ─── PATCH 19.B: VISUELL TVERRSNITT-POPUP (ArchiCAD-stil, horisontal) ─────────
+// Viser lagstrukturen som en illustrert tverrsnitt-tegning i SVG:
+// - Horisontal layout: EKSTERIØR venstre, INTERIØR høyre
+// - Lag som rektangler stablet horisontalt, proporsjonal til tykkelse
+// - Arkitekt-mønstre (ekte byggetegning-konvensjon):
+//     • Bobler for isolasjon  • Diagonal skravering for stender/trevirke
+//     • Prikker for betong  • Tett skravering for stål
+//     • Tykk farget linje for damp/vindsperre  • Murverk-mønster for tegl
+// - STENDERE som vertikale interrupts gjennom isolasjon (c/c 600mm-stil)
+//   Auto-detektert når et stender-lag har samme tykkelse som tilstøtende isolasjon.
+// - Tykkelses-mål under hvert lag
+// - Materialliste til høyre med NS 3451-koder
+// - Spec-badges (brann/lyd/bærende/U-verdi) på toppen
+// - Eksport som SVG-fil
+
+// ─── NS 3451 BYGNINGSDELSTABELLEN ─────────────────────────────────────────────
+function mapMaterialTilNS3451(materialnavn, kategori, lagPosisjon) {
+  const m = (materialnavn || '').toLowerCase()
+  const kat = (kategori || '').toLowerCase()
+
+  if (/damp\s?sperre|fukt\s?sperre|vapor/i.test(m)) {
+    if (kat.includes('tak')) return { kode: '263', navn: 'Dampsperre tak' }
+    if (kat.includes('innervegg')) return { kode: '244', navn: 'Dampsperre innvendig' }
+    return { kode: '236', navn: 'Dampsperre yttervegg' }
+  }
+  if (/vind\s?sperre|wind/i.test(m)) {
+    if (kat.includes('tak')) return { kode: '262', navn: 'Vindsperre tak' }
+    return { kode: '234', navn: 'Vindsperre yttervegg' }
+  }
+  if (/undertak/i.test(m)) return { kode: '262', navn: 'Undertak' }
+  if (/gips|gypsum|drywall|plaster/i.test(m)) {
+    if (kat.includes('innervegg')) return { kode: '244', navn: 'Innvendig kledning innervegg' }
+    if (lagPosisjon === 'innvendig') return { kode: '236', navn: 'Innvendig kledning yttervegg' }
+    return { kode: '244', navn: 'Innvendig kledning' }
+  }
+  if (/mineralull|glassull|steinull|rockwool|isolasjon|insulation/i.test(m)) {
+    if (kat.includes('innervegg')) return { kode: '245', navn: 'Isolasjon innervegg' }
+    if (kat.includes('tak')) return { kode: '264', navn: 'Isolasjon tak' }
+    if (kat.includes('gulv') || kat.includes('dekke') || kat.includes('etasje')) return { kode: '254', navn: 'Isolasjon dekke' }
+    return { kode: '235', navn: 'Isolasjon yttervegg' }
+  }
+  if (/eps|xps|polystyren|cellplast/i.test(m)) {
+    if (kat.includes('fundament') || kat.includes('sokkel') || kat.includes('bunnplate')) return { kode: '214', navn: 'Markisolasjon' }
+    return { kode: '254', navn: 'Trykkfast isolasjon' }
+  }
+  if (/pur|pir|polyuretan/i.test(m)) return { kode: '264', navn: 'PUR/PIR-isolasjon' }
+  if (/betong|concrete|beton/i.test(m)) {
+    if (kat.includes('fundament') || kat.includes('sokkel')) return { kode: '212', navn: 'Plasstøpt fundament' }
+    if (kat.includes('bunnplate')) return { kode: '253', navn: 'Plasstøpt bunnplate' }
+    if (kat.includes('etasjeskille') || kat.includes('dekke')) return { kode: '253', navn: 'Plasstøpt dekke' }
+    if (kat.includes('vegg')) return { kode: '232', navn: 'Plasstøpt yttervegg' }
+    return { kode: '222', navn: 'Bærende betongkonstruksjon' }
+  }
+  if (/stål|stal|steel|metall|metal/i.test(m)) {
+    return { kode: '222', navn: 'Bærende stålkonstruksjon' }
+  }
+  if (/stender|sviller/i.test(m)) {
+    if (kat.includes('innervegg')) return { kode: '243', navn: 'Bæresystem innervegg (stender)' }
+    return { kode: '233', navn: 'Bæresystem yttervegg (stender)' }
+  }
+  if (/bjelke|drager|limtre|massivtre|clt/i.test(m)) {
+    return { kode: '222', navn: 'Bærende trekonstruksjon' }
+  }
+  if (/osb|spon\s?plate|kryssfiner|finer|plywood|mdf|huntonit|asfalt\s?plate/i.test(m)) {
+    if (kat.includes('tak')) return { kode: '262', navn: 'Taktro' }
+    return { kode: '234', navn: 'Vindavstivende plate' }
+  }
+  if (/tegl|brick/i.test(m)) return { kode: '232', navn: 'Tegl yttervegg' }
+  if (/leca|lettklinker/i.test(m)) return { kode: '232', navn: 'Leca yttervegg' }
+  if (/mur(?!ing)/i.test(m)) return { kode: '232', navn: 'Murvegg' }
+  if (/kledning|panel|cladding|fasade/i.test(m)) {
+    if (kat.includes('tak')) return { kode: '261', navn: 'Taktekking' }
+    return { kode: '233', navn: 'Utvendig kledning' }
+  }
+  if (/membran|takpapp|takbelegg|asphalt|asfalt/i.test(m)) {
+    if (kat.includes('tak')) return { kode: '261', navn: 'Taktekking' }
+    return { kode: '253', navn: 'Membran' }
+  }
+  if (/puss|sparkel|stucco|render/i.test(m)) return { kode: '233', navn: 'Pusset overflate' }
+  if (/luft|cavity|spalte/i.test(m)) {
+    if (kat.includes('tak')) return { kode: '262', navn: 'Luftet sjikt tak' }
+    return { kode: '234', navn: 'Luftet sjikt yttervegg' }
+  }
+  return null
+}
+
+// ─── MATERIAL-FARGEPALETT ─────────────────────────────────────────────────────
+function getTverrsnittMaterialFarge(materialnavn) {
+  const m = (materialnavn || '').toLowerCase()
+  if (/damp\s?sperre|fukt\s?sperre|vapor/i.test(m)) return { fyll: '#1e293b', strek: '#0f172a', tekst: '#f8fafc' }
+  if (/vind\s?sperre|wind|undertak/i.test(m)) return { fyll: '#dc2626', strek: '#991b1b', tekst: '#fef2f2' }
+  if (/gips|gypsum|drywall|plaster/i.test(m)) return { fyll: '#fafafa', strek: '#a1a1aa', tekst: '#52525b' }
+  if (/mineralull|glassull|steinull|rockwool|isolasjon|insulation/i.test(m)) return { fyll: '#fef3c7', strek: '#d97706', tekst: '#78350f' }
+  if (/eps|xps|polystyren|cellplast/i.test(m)) return { fyll: '#fce7f3', strek: '#be185d', tekst: '#831843' }
+  if (/pur|pir|polyuretan/i.test(m)) return { fyll: '#ecfccb', strek: '#65a30d', tekst: '#365314' }
+  if (/betong|concrete|beton/i.test(m)) return { fyll: '#d4d4d8', strek: '#52525b', tekst: '#27272a' }
+  if (/stål|stal|steel|metall|metal/i.test(m)) return { fyll: '#94a3b8', strek: '#334155', tekst: '#0f172a' }
+  if (/stender|sviller|bjelke|drager|limtre|massivtre|clt/i.test(m)) return { fyll: '#fed7aa', strek: '#9a3412', tekst: '#7c2d12' }
+  if (/tre|wood|plank/i.test(m)) return { fyll: '#fed7aa', strek: '#9a3412', tekst: '#7c2d12' }
+  if (/osb|spon\s?plate|kryssfiner|finer|plywood|mdf|huntonit/i.test(m)) return { fyll: '#fde68a', strek: '#a16207', tekst: '#713f12' }
+  if (/tegl|brick/i.test(m)) return { fyll: '#fca5a5', strek: '#991b1b', tekst: '#7f1d1d' }
+  if (/leca|lettklinker/i.test(m)) return { fyll: '#e7e5e4', strek: '#78716c', tekst: '#44403c' }
+  if (/mur/i.test(m)) return { fyll: '#fca5a5', strek: '#991b1b', tekst: '#7f1d1d' }
+  if (/puss|sparkel|stucco|render/i.test(m)) return { fyll: '#fef3c7', strek: '#a16207', tekst: '#713f12' }
+  if (/kledning|panel|cladding|fasade/i.test(m)) return { fyll: '#bef264', strek: '#4d7c0f', tekst: '#365314' }
+  if (/membran|takpapp|takbelegg|asphalt|asfalt/i.test(m)) return { fyll: '#404040', strek: '#171717', tekst: '#fafafa' }
+  if (/luft|cavity|spalte/i.test(m)) return { fyll: '#f8fafc', strek: '#cbd5e1', tekst: '#64748b' }
+  return { fyll: '#f4f4f5', strek: '#a1a1aa', tekst: '#52525b' }
+}
+
+// ─── DETEKTER LAG-TYPE for SVG-mønster ────────────────────────────────────────
+function detekterLagtype(materialnavn) {
+  const m = (materialnavn || '').toLowerCase()
+  if (/mineralull|glassull|steinull|rockwool|isolasjon|insulation/i.test(m)) return 'isolasjon'
+  if (/eps|xps|polystyren|cellplast/i.test(m)) return 'eps'
+  if (/pur|pir|polyuretan/i.test(m)) return 'eps'
+  if (/stender|sviller|massivtre|clt/i.test(m)) return 'stender'
+  if (/bjelke|drager|limtre/i.test(m)) return 'limtre'
+  if (/betong|concrete|beton/i.test(m)) return 'betong'
+  if (/stål|stal|steel|metall|metal/i.test(m)) return 'stål'
+  if (/damp\s?sperre|fukt\s?sperre|vapor/i.test(m)) return 'dampsperre'
+  if (/vind\s?sperre|wind|undertak/i.test(m)) return 'vindsperre'
+  if (/gips|gypsum|drywall/i.test(m)) return 'gips'
+  if (/osb|spon\s?plate|kryssfiner|finer|plywood|mdf|huntonit/i.test(m)) return 'plate'
+  if (/tegl|brick/i.test(m)) return 'tegl'
+  if (/leca|lettklinker/i.test(m)) return 'leca'
+  if (/membran|takpapp|takbelegg/i.test(m)) return 'membran'
+  if (/luft|cavity|spalte/i.test(m)) return 'luft'
+  if (/kledning|panel|cladding|fasade/i.test(m)) return 'kledning'
+  if (/tre|wood|plank/i.test(m)) return 'trevirke'
+  return 'annet'
+}
+
+// ─── HOVED-KOMPONENT ──────────────────────────────────────────────────────────
+function BimTverrsnittModal({ lagsett, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  if (!lagsett) return null
+
+  // Lag-data — støtt både IFC (material/thickness) og bibliotek (navn/tykkelse)
+  const lagListe = (lagsett.layers || lagsett.lag || []).filter(l => {
+    if (!l) return false
+    const harMaterial = l.material || l.navn
+    const harTykkelse = (l.thickness && l.thickness > 0) || (l.tykkelse && l.tykkelse > 0)
+    return harMaterial || harTykkelse
+  })
+  const lagTykkelseMm = (l) => {
+    if (l.thickness && l.thickness > 0) return l.thickness * 1000
+    if (l.tykkelse && l.tykkelse > 0) return l.tykkelse
+    return 0
+  }
+  const lagMaterial = (l) => l.material || l.navn || 'Ukjent material'
+
+  const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
+  const totalTykkelseMm = lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm
+  const kategori = lagsett.brukerKategori || 'ukjent'
+
+  // Spec-data
+  const brukerSpec = lagsett.brukerSpec || null
+  const ifcSpec = lagsett.ifcSpec || {}
+  let brannVerdi = null, brannKilde = null
+  if (brukerSpec?.brann) { brannVerdi = brukerSpec.brann; brannKilde = 'bruker' }
+  else if (ifcSpec.fireRating && ifcSpec.fireRating !== '_varierer') { brannVerdi = ifcSpec.fireRating; brannKilde = 'ifc' }
+  let lydVerdi = null, lydKilde = null
+  if (brukerSpec?.lyd) { lydVerdi = brukerSpec.lyd; lydKilde = 'bruker' }
+  else if (ifcSpec.acousticRating && ifcSpec.acousticRating !== '_varierer') { lydVerdi = `${ifcSpec.acousticRating} dB`; lydKilde = 'ifc' }
+  let baerendeVerdi = null, baerendeKilde = null
+  if (brukerSpec?.baerende) { baerendeVerdi = brukerSpec.baerende; baerendeKilde = 'bruker' }
+  else if (ifcSpec.loadBearing === true) { baerendeVerdi = 'Ja'; baerendeKilde = 'ifc' }
+  else if (ifcSpec.loadBearing === false) { baerendeVerdi = 'Nei'; baerendeKilde = 'ifc' }
+  let uVerdiVerdi = null, uVerdiKilde = null
+  if (brukerSpec?.uVerdi !== null && brukerSpec?.uVerdi !== undefined && brukerSpec?.uVerdi !== '') { uVerdiVerdi = brukerSpec.uVerdi; uVerdiKilde = 'bruker' }
+  else if (ifcSpec.uValue && ifcSpec.uValue !== '_varierer') { uVerdiVerdi = ifcSpec.uValue; uVerdiKilde = 'ifc' }
+  const harBadges = brannVerdi || lydVerdi || baerendeVerdi || uVerdiVerdi
+  const beskrivelse = brukerSpec?.beskrivelse || lagsett.tilpassetKonstruksjon?._tilpasningsNotat || ''
+
+  // Posisjon per lag (utvendig/midten/innvendig) for NS 3451-mapping
+  const lagPosisjon = (idx) => {
+    if (idx === 0) return 'utvendig'
+    if (idx === lagListe.length - 1) return 'innvendig'
+    return 'midten'
+  }
+
+  // Detekter stender + isolasjon-par for vertikale interrupts
+  const stenderInterrupts = new Set()
+  for (let i = 0; i < lagListe.length; i++) {
+    const type = detekterLagtype(lagMaterial(lagListe[i]))
+    if (type !== 'stender') continue
+    const tykk = lagTykkelseMm(lagListe[i])
+    for (const j of [i - 1, i + 1]) {
+      if (j < 0 || j >= lagListe.length) continue
+      const naboType = detekterLagtype(lagMaterial(lagListe[j]))
+      if (naboType !== 'isolasjon' && naboType !== 'eps') continue
+      const naboTykk = lagTykkelseMm(lagListe[j])
+      if (Math.abs(tykk - naboTykk) < 5) {
+        stenderInterrupts.add(i)
+        stenderInterrupts.add(j)
+        break
+      }
+    }
+  }
+  const kombinertePar = []
+  const allerede = new Set()
+  for (let i = 0; i < lagListe.length; i++) {
+    if (allerede.has(i)) continue
+    const type = detekterLagtype(lagMaterial(lagListe[i]))
+    if (type !== 'stender' || !stenderInterrupts.has(i)) continue
+    for (const j of [i - 1, i + 1]) {
+      if (j < 0 || j >= lagListe.length) continue
+      if (allerede.has(j)) continue
+      const naboType = detekterLagtype(lagMaterial(lagListe[j]))
+      if (naboType !== 'isolasjon' && naboType !== 'eps') continue
+      if (!stenderInterrupts.has(j)) continue
+      if (Math.abs(lagTykkelseMm(lagListe[i]) - lagTykkelseMm(lagListe[j])) < 5) {
+        kombinertePar.push({ stenderIdx: i, isolasjonIdx: j })
+        allerede.add(i); allerede.add(j)
+        break
+      }
+    }
+  }
+
+  // Render-enheter (enkle lag eller kombinerte par)
+  const renderEnheter = []
+  const tattMed = new Set()
+  for (let i = 0; i < lagListe.length; i++) {
+    if (tattMed.has(i)) continue
+    const par = kombinertePar.find(p => p.stenderIdx === i || p.isolasjonIdx === i)
+    if (par) {
+      const lavest = Math.min(par.stenderIdx, par.isolasjonIdx)
+      renderEnheter.push({
+        type: 'kombinert',
+        idxStender: par.stenderIdx,
+        idxIsolasjon: par.isolasjonIdx,
+        ankerIdx: lavest,
+        mm: lagTykkelseMm(lagListe[par.stenderIdx]),
+      })
+      tattMed.add(par.stenderIdx); tattMed.add(par.isolasjonIdx)
+    } else {
+      renderEnheter.push({
+        type: 'enkelt',
+        idx: i,
+        ankerIdx: i,
+        mm: lagTykkelseMm(lagListe[i]),
+      })
+      tattMed.add(i)
+    }
+  }
+  renderEnheter.sort((a, b) => a.ankerIdx - b.ankerIdx)
+
+  // SVG dimensjoner
+  const svgW = 880
+  const svgH = 380
+  const padTop = 70
+  const padBottom = 80
+  const padLeft = 30
+  const padRight = 30
+  const tegnW = svgW - padLeft - padRight
+  const tegnH = svgH - padTop - padBottom
+
+  // Beregn x-posisjon for hver render-enhet
+  const sumRenderMm = renderEnheter.reduce((s, e) => s + e.mm, 0) || 1
+  const minLagPx = 22
+  const enheterMedPx = (() => {
+    let foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMm) * tegnW }))
+    let underskudd = 0
+    foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
+    if (underskudd > 0) {
+      const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.px, 0)
+      if (justerbarSum > 0) {
+        const faktor = (justerbarSum - underskudd) / justerbarSum
+        foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
+      }
+    }
+    let xCursor = padLeft
+    return foreloepige.map(o => {
+      const x = xCursor
+      xCursor += o.px
+      return { ...o, x }
+    })
+  })()
+
+  // Render et lag som SVG (med pattern hvis aktuelt)
+  const renderLag = (enhet, idx) => {
+    if (enhet.type === 'kombinert') {
+      const stender = lagListe[enhet.idxStender]
+      const isolasjon = lagListe[enhet.idxIsolasjon]
+      const fargeIso = getTverrsnittMaterialFarge(lagMaterial(isolasjon))
+      const fargeStender = getTverrsnittMaterialFarge(lagMaterial(stender))
+      const patternId = `pat-iso-${idx}`
+      // Stendere c/c — vertikale rektangler innenfor lag-bredden
+      const stenderTegnBredde = Math.max(7, enhet.px * 0.16)
+      const ccPx = Math.max(50, enhet.px * 1.5)
+      const stenderPosisjoner = []
+      let p = enhet.x + enhet.px * 0.15
+      while (p + stenderTegnBredde <= enhet.x + enhet.px) {
+        stenderPosisjoner.push(p)
+        p += ccPx
+      }
+      return (
+        <g key={idx}>
+          <defs>
+            <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+              <rect width="14" height="14" fill={fargeIso.fyll} />
+              <circle cx="7" cy="7" r="4.5" fill="none" stroke={fargeIso.strek} strokeWidth="0.8" opacity="0.7" />
+            </pattern>
+          </defs>
+          <rect x={enhet.x} y={padTop} width={enhet.px} height={tegnH}
+            fill={`url(#${patternId})`} stroke="#1e293b" strokeWidth="1.5" />
+          {stenderPosisjoner.map((sx, si) => (
+            <g key={si}>
+              <rect x={sx} y={padTop} width={stenderTegnBredde} height={tegnH}
+                fill={fargeStender.fyll} stroke={fargeStender.strek} strokeWidth="1" />
+              <line x1={sx} y1={padTop + tegnH} x2={sx + stenderTegnBredde} y2={padTop}
+                stroke={fargeStender.strek} strokeWidth="0.7" opacity="0.5" />
+              <line x1={sx + stenderTegnBredde * 0.5} y1={padTop + tegnH}
+                x2={sx + stenderTegnBredde * 1.5} y2={padTop}
+                stroke={fargeStender.strek} strokeWidth="0.7" opacity="0.5" />
+            </g>
+          ))}
+        </g>
+      )
+    }
+
+    const lag = lagListe[enhet.idx]
+    const farge = getTverrsnittMaterialFarge(lagMaterial(lag))
+    const lagtype = detekterLagtype(lagMaterial(lag))
+    const patternId = `pat-${idx}`
+    let patternEl = null
+    let bgFill = farge.fyll
+
+    switch (lagtype) {
+      case 'isolasjon':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+            <rect width="14" height="14" fill={farge.fyll} />
+            <circle cx="7" cy="7" r="4.5" fill="none" stroke={farge.strek} strokeWidth="0.8" opacity="0.7" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'eps':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="8" height="8" fill={farge.fyll} />
+            <line x1="0" y1="0" x2="0" y2="8" stroke={farge.strek} strokeWidth="0.8" opacity="0.6" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'stender':
+      case 'limtre':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="10" height="10" fill={farge.fyll} />
+            <line x1="0" y1="0" x2="0" y2="10" stroke={farge.strek} strokeWidth="1.2" opacity="0.7" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'betong':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+            <rect width="8" height="8" fill={farge.fyll} />
+            <circle cx="4" cy="4" r="1" fill={farge.strek} opacity="0.6" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'stål':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+            <rect width="6" height="6" fill={farge.fyll} />
+            <line x1="0" y1="0" x2="0" y2="6" stroke={farge.strek} strokeWidth="0.8" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'tegl':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="20" height="14" patternUnits="userSpaceOnUse">
+            <rect width="20" height="14" fill={farge.fyll} />
+            <line x1="0" y1="7" x2="20" y2="7" stroke={farge.strek} strokeWidth="0.8" />
+            <line x1="0" y1="0" x2="0" y2="7" stroke={farge.strek} strokeWidth="0.8" />
+            <line x1="10" y1="7" x2="10" y2="14" stroke={farge.strek} strokeWidth="0.8" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'leca':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
+            <rect width="10" height="10" fill={farge.fyll} />
+            <circle cx="3" cy="4" r="1.2" fill={farge.strek} opacity="0.5" />
+            <circle cx="8" cy="2" r="0.8" fill={farge.strek} opacity="0.5" />
+            <circle cx="6" cy="8" r="1" fill={farge.strek} opacity="0.5" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'kledning':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+            <rect width="14" height="14" fill={farge.fyll} />
+            <line x1="0" y1="0" x2="0" y2="14" stroke={farge.strek} strokeWidth="1" opacity="0.6" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'luft':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse">
+            <rect width="12" height="12" fill={farge.fyll} />
+            <line x1="0" y1="12" x2="12" y2="0" stroke={farge.strek} strokeWidth="0.6" opacity="0.4" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      case 'gips':
+        patternEl = (
+          <pattern id={patternId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+            <rect width="20" height="20" fill={farge.fyll} />
+            <line x1="0" y1="20" x2="20" y2="0" stroke={farge.strek} strokeWidth="0.5" opacity="0.4" />
+          </pattern>
+        )
+        bgFill = `url(#${patternId})`
+        break
+      default:
+        bgFill = farge.fyll
+    }
+
+    return (
+      <g key={idx}>
+        {patternEl && <defs>{patternEl}</defs>}
+        <rect x={enhet.x} y={padTop} width={enhet.px} height={tegnH}
+          fill={bgFill} stroke="#1e293b" strokeWidth="1.5" />
+      </g>
+    )
+  }
+
+  // Tykkelses-mål under hvert lag
+  const renderTykkelseMaal = () => {
+    return enheterMedPx.map((enhet, idx) => {
+      const mmTekst = enhet.mm > 0 ? `${Math.round(enhet.mm)}` : '?'
+      const cx = enhet.x + enhet.px / 2
+      return (
+        <g key={`maal-${idx}`}>
+          <line x1={enhet.x} y1={padTop + tegnH + 6} x2={enhet.x} y2={padTop + tegnH + 22}
+            stroke="#475569" strokeWidth="1" />
+          <line x1={enhet.x + enhet.px} y1={padTop + tegnH + 6} x2={enhet.x + enhet.px} y2={padTop + tegnH + 22}
+            stroke="#475569" strokeWidth="1" />
+          <line x1={enhet.x} y1={padTop + tegnH + 14} x2={enhet.x + enhet.px} y2={padTop + tegnH + 14}
+            stroke="#475569" strokeWidth="0.8" />
+          <text x={cx} y={padTop + tegnH + 36} fontSize="11" fill="#0f172a"
+            fontFamily="system-ui, sans-serif" textAnchor="middle" fontWeight="600">
+            {mmTekst}
+          </text>
+          <text x={cx} y={padTop + tegnH + 50} fontSize="9" fill="#64748b"
+            fontFamily="system-ui, sans-serif" textAnchor="middle">
+            mm
+          </text>
+        </g>
+      )
+    })
+  }
+
+  // Materialliste til høyre med NS 3451-koder
+  const materiallisteRader = lagListe.map((lag, idx) => {
+    const navn = lagMaterial(lag)
+    const tykk = lagTykkelseMm(lag)
+    const ns3451 = mapMaterialTilNS3451(navn, kategori, lagPosisjon(idx))
+    const farge = getTverrsnittMaterialFarge(navn)
+    return { idx, navn, tykk, ns3451, farge }
+  })
+
+  // Eksport som SVG
+  const lastNedSvg = () => {
+    const svgEl = document.getElementById('tverrsnitt-svg')
+    if (!svgEl) return
+    const serializer = new XMLSerializer()
+    const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(svgEl)
+    const blob = new Blob([svgStr], { type: 'image/svg+xml' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `tverrsnitt-${(lagsett.navn || 'lagsett').replace(/[^a-z0-9]/gi, '-').toLowerCase()}.svg`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const badgeStil = (bg, br, c) => ({
+    background: bg, border: `1px solid ${br}`, color: c,
+    padding: '5px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '600',
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+  })
+  const ifcTag = (
+    <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.6)', padding: '1px 4px', borderRadius: '3px', fontWeight: '700', letterSpacing: '0.3px' }}>
+      IFC
+    </span>
+  )
+
+  return createPortal(
+    <div onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
+        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', backdropFilter: 'blur(4px)',
+      }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: '16px', width: '100%', maxWidth: '1100px',
+          maxHeight: '94vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
+        }}>
+        {/* Header */}
+        <div style={{
+          padding: '18px 22px 14px', borderBottom: '1px solid #e2e8f0',
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px',
+        }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
+              📐 Tverrsnitt · {kategori}
+            </div>
+            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>
+              {lagsett.navn || 'Lagsett'}
+            </div>
+            <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
+              Total tykkelse: <strong style={{ color: '#0f172a' }}>{totalTykkelseMm.toFixed(0)} mm</strong>
+              {' · '}{lagListe.length} lag
+              {kombinertePar.length > 0 && ` · ${kombinertePar.length} stender+isolasjon`}
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
+            <button onClick={lastNedSvg}
+              title="Last ned som SVG-fil"
+              style={{
+                background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d',
+                borderRadius: '8px', padding: '7px 12px', fontSize: '11px', fontWeight: '600',
+                cursor: 'pointer', display:'inline-flex', alignItems:'center', gap:'4px',
+              }}>💾 SVG</button>
+            <button onClick={onClose} aria-label="Lukk"
+              style={{
+                background: 'white', border: '1px solid #e2e8f0', color: '#475569',
+                borderRadius: '8px', width: '32px', height: '32px', fontSize: '16px',
+                cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontWeight: '600',
+              }}>×</button>
+          </div>
+        </div>
+
+        {/* Spec-badges */}
+        {harBadges && (
+          <div style={{ padding: '12px 22px', background: '#fafbfc', borderBottom: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {brannVerdi && (
+              <div style={badgeStil('#fef2f2', '#fecaca', '#991b1b')}>
+                <span>🔥</span><span>Brann: {String(brannVerdi)}</span>
+                {brannKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {lydVerdi && (
+              <div style={badgeStil('#eff6ff', '#bfdbfe', '#1e40af')}>
+                <span>🔊</span><span>Lyd: {String(lydVerdi)}</span>
+                {lydKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {baerendeVerdi === 'Ja' && (
+              <div style={badgeStil('#fffbeb', '#fde68a', '#92400e')}>
+                <span>🏗️</span><span>Bærende</span>
+                {baerendeKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {baerendeVerdi === 'Nei' && (
+              <div style={badgeStil('#f1f5f9', '#cbd5e1', '#475569')}>
+                <span>—</span><span>Ikke-bærende</span>
+                {baerendeKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {uVerdiVerdi !== null && uVerdiVerdi !== undefined && (
+              <div style={badgeStil('#f0fdfa', '#99f6e4', '#115e59')}>
+                <span>🌡️</span>
+                <span>U: {typeof uVerdiVerdi === 'number' ? uVerdiVerdi.toFixed(2) : uVerdiVerdi} W/m²K</span>
+                {uVerdiKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Hovedinnhold */}
+        <div style={{ overflow: 'auto', flex: 1, background: '#fafbfc' }}>
+          <div style={{ padding: '20px 22px' }}>
+            {lagListe.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13px' }}>
+                Ingen lag-data tilgjengelig fra IFC.
+              </div>
+            ) : (
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
+                {/* SVG-tegning (venstre) */}
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px' }}>
+                  <svg id="tverrsnitt-svg" viewBox={`0 0 ${svgW} ${svgH}`}
+                    xmlns="http://www.w3.org/2000/svg"
+                    style={{ width: '100%', height: 'auto', display: 'block' }}>
+                    {/* EKSTERIØR-tag */}
+                    <text x={padLeft + 4} y={padTop - 36} fontSize="13" fontWeight="700"
+                      fill="#0f172a" fontFamily="system-ui, sans-serif" letterSpacing="0.5">
+                      ◄ EKSTERIØR / UTENFRA
+                    </text>
+                    <line x1={padLeft} y1={padTop - 22} x2={padLeft + 130} y2={padTop - 22}
+                      stroke="#0f172a" strokeWidth="1.5" />
+                    <polygon points={`${padLeft - 8},${padTop - 22} ${padLeft},${padTop - 26} ${padLeft},${padTop - 18}`}
+                      fill="#0f172a" />
+
+                    {/* INTERIØR-tag */}
+                    <text x={svgW - padRight - 4} y={padTop - 36} fontSize="13" fontWeight="700"
+                      fill="#0f172a" fontFamily="system-ui, sans-serif" letterSpacing="0.5"
+                      textAnchor="end">
+                      INTERIØR / INNOVER ►
+                    </text>
+                    <line x1={svgW - padRight - 130} y1={padTop - 22} x2={svgW - padRight} y2={padTop - 22}
+                      stroke="#0f172a" strokeWidth="1.5" />
+                    <polygon points={`${svgW - padRight + 8},${padTop - 22} ${svgW - padRight},${padTop - 26} ${svgW - padRight},${padTop - 18}`}
+                      fill="#0f172a" />
+
+                    {/* Lag-rektangler */}
+                    {enheterMedPx.map((enhet, idx) => renderLag(enhet, idx))}
+
+                    {/* Ytre ramme rundt hele tverrsnittet (tykkere svart) */}
+                    <rect x={padLeft} y={padTop} width={tegnW} height={tegnH}
+                      fill="none" stroke="#0f172a" strokeWidth="2.5" />
+
+                    {/* Tykkelses-mål under */}
+                    {renderTykkelseMaal()}
+
+                    {/* Total-mål helt nederst */}
+                    <line x1={padLeft} y1={svgH - 18} x2={svgW - padRight} y2={svgH - 18}
+                      stroke="#0f172a" strokeWidth="1.2" />
+                    <line x1={padLeft} y1={svgH - 22} x2={padLeft} y2={svgH - 14}
+                      stroke="#0f172a" strokeWidth="1.5" />
+                    <line x1={svgW - padRight} y1={svgH - 22} x2={svgW - padRight} y2={svgH - 14}
+                      stroke="#0f172a" strokeWidth="1.5" />
+                    <text x={svgW / 2} y={svgH - 4} fontSize="12" fontWeight="700"
+                      fill="#0f172a" fontFamily="system-ui, sans-serif" textAnchor="middle">
+                      Total: {totalTykkelseMm.toFixed(0)} mm
+                    </text>
+                  </svg>
+                </div>
+
+                {/* Materialliste (høyre) */}
+                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                    Materialliste (NS 3451)
+                  </div>
+                  {materiallisteRader.map(({ idx, navn, tykk, ns3451, farge }) => (
+                    <div key={idx} style={{
+                      background:'white', border:'1px solid #e2e8f0', borderRadius:'6px',
+                      padding:'8px 10px', display:'flex', alignItems:'flex-start', gap:'8px',
+                    }}>
+                      <div style={{
+                        width:'10px', minHeight:'24px', borderRadius:'3px',
+                        background: farge.fyll, border:`1px solid ${farge.strek}`, flexShrink:0,
+                      }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                          <span style={{ fontSize:'9px', fontWeight:'700', color:'#475569',
+                            background:'#f1f5f9', padding:'1px 5px', borderRadius:'3px',
+                            fontFamily:'monospace', letterSpacing:'0.5px',
+                            minWidth:'26px', textAlign:'center', flexShrink:0,
+                          }}>
+                            {ns3451 ? ns3451.kode : '—'}
+                          </span>
+                          <span style={{ fontSize:'10px', color:'#0f172a', fontWeight:'600',
+                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1,
+                          }}>
+                            {navn}
+                          </span>
+                        </div>
+                        <div style={{ display:'flex', justifyContent:'space-between', gap:'6px' }}>
+                          {ns3451 && (
+                            <span style={{ fontSize:'9px', color:'#64748b', fontStyle:'italic',
+                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                            }}>
+                              {ns3451.navn}
+                            </span>
+                          )}
+                          <span style={{ fontSize:'9px', color:'#475569', fontWeight:'600',
+                            fontVariantNumeric:'tabular-nums', flexShrink:0,
+                          }}>
+                            {tykk > 0 ? `${Math.round(tykk)} mm` : '—'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{
+                    background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'6px',
+                    padding:'8px 10px', display:'flex', justifyContent:'space-between',
+                    marginTop:'4px',
+                  }}>
+                    <span style={{ fontSize:'10px', color:'#15803d', fontWeight:'700' }}>
+                      Total tykkelse
+                    </span>
+                    <span style={{ fontSize:'11px', color:'#0f172a', fontWeight:'700', fontVariantNumeric:'tabular-nums' }}>
+                      {totalTykkelseMm.toFixed(0)} mm
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Beskrivelse */}
+            {beskrivelse && (
+              <div style={{
+                marginTop: '16px', background: 'white', border: '1px solid #e2e8f0',
+                borderRadius: '10px', padding: '12px 14px',
+              }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  Beskrivelse
+                </div>
+                <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                  {beskrivelse}
+                </div>
+              </div>
+            )}
+
+            {/* Fotnote */}
+            <div style={{
+              marginTop: '12px', fontSize: '10px', color: '#94a3b8',
+              textAlign: 'center', fontStyle: 'italic',
+            }}>
+              Lag vises i rekkefølgen IFC-fila beskriver dem · proporsjonal til tykkelse
+              {kombinertePar.length > 0 && ' · stendere tegnet som vertikale interrupts gjennom isolasjon'}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: 'white',
+          display: 'flex', justifyContent: 'flex-end',
+        }}>
+          <button onClick={onClose}
+            style={{
+              background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
+              borderRadius: '6px', padding: '6px 14px', fontSize: '11px', fontWeight: '600',
+              cursor: 'pointer',
+            }}>
+            Lukk
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function BimLagsettDetaljer({ lagsett, isMob }) {
   const [aapen, setAapen] = useState(false)
 
@@ -42361,6 +43121,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [tegningLagsett, setTegningLagsett] = useState(null)
   // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
   const [meshLagsett, setMeshLagsett] = useState(null)
+  // Patch 19.B: Lagsett som vises i tverrsnitt-popup (null = lukket)
+  const [tverrsnittLagsett, setTverrsnittLagsett] = useState(null)
   // Patch 18 polish: Lagsett for bibliotek-søk-modal (null = lukket)
   const [bibliotekSokLagsett, setBibliotekSokLagsett] = useState(null)
   // Patch 18 polish: Set av lagsett-id-er der tilpasnings-panelet er åpent
@@ -42904,6 +43666,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                     Vis i 3D
                   </button>
                 )}
+                {/* Patch 19.B: Vis tverrsnitt-knapp */}
+                {((lagsett.layers || lagsett.lag || []).filter(l => l && (l.material || l.navn || l.thickness > 0 || l.tykkelse > 0)).length > 0) && (
+                  <button
+                    onClick={() => setTverrsnittLagsett(lagsett)}
+                    style={knappStilNoytral}>
+                    📐 Vis tverrsnitt
+                  </button>
+                )}
                 {/* Patch 15.G: Diagnose-knapp — finn ut hva slags elementer som er i lagsettet */}
                 <button
                   onClick={() => visLagsettDiagnose(lagsett, appAlert)}
@@ -43231,6 +44001,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           onClose={() => setMeshLagsett(null)}
           onVelgLagsett={(ls) => setMeshLagsett(ls)}
           isMob={isMob}
+        />
+      )}
+
+      {/* Patch 19.B: Visuell tverrsnitt-popup */}
+      {tverrsnittLagsett && (
+        <BimTverrsnittModal
+          lagsett={tverrsnittLagsett}
+          onClose={() => setTverrsnittLagsett(null)}
         />
       )}
 
