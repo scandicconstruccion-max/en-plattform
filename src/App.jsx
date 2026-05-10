@@ -43252,8 +43252,17 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
   const stegFarge = stegFarger[stegStatus.farge]
 
   const handleGenerer = () => {
-    if (!harBekreftet) return
-    if (onGenerer) onGenerer({ sammendrag, mengder })
+    console.log('[BIM debug] handleGenerer kalt, harBekreftet:', harBekreftet, 'sammendrag:', sammendrag)
+    if (!harBekreftet) {
+      console.warn('[BIM debug] Avbryter: harBekreftet er false')
+      return
+    }
+    if (onGenerer) {
+      console.log('[BIM debug] Kaller onGenerer-callback')
+      onGenerer({ sammendrag, mengder })
+    } else {
+      console.error('[BIM debug] onGenerer-callback er ikke definert!')
+    }
   }
 
   return (
@@ -45933,6 +45942,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               erRedigering={erRedigering}
               redigeringAvKalkyle={redigeringAvKalkyle}
               onGenerer={async ({ sammendrag }) => {
+                console.log('[BIM debug] onGenerer-callback startet', { sammendrag, erRedigering, mengderHar: !!metadata?.mengder })
                 // Patch 14.C+14.D: Bygg payload, lagre i calculations, og naviger til kalkyle.
                 // Hvis erRedigering=true, oppdaterer vi eksisterende kalkyle og bevarer
                 // manuelt lagte bygningsdeler.
@@ -45945,9 +45955,12 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   } catch(e) { /* OK at den feiler — fall tilbake til defaults */ }
 
                   // 2. Bygg kalkyle-payload via Patch 14.B-funksjonen
+                  console.log('[BIM debug] Kaller byggKalkylerFraIfc...')
                   const { kalkyler: nyeKalkyler, faktorer, meta } = byggKalkylerFraIfc(metadata.mengder, bedriftFaktorer)
+                  console.log('[BIM debug] byggKalkylerFraIfc returnerte:', { antallKalkyler: nyeKalkyler.length, meta })
 
                   if (nyeKalkyler.length === 0) {
+                    console.warn('[BIM debug] nyeKalkyler.length === 0 — viser advarsel')
                     onAlert({
                       message: 'Ingen bygningsdeler å bygge kalkyle av',
                       subMessage: 'Bekreft minst én konstruksjon i Steg 2 før du genererer.',
@@ -48046,26 +48059,32 @@ function getBibliotekByFag() {
 // Convert a bibliotek-bygningsdel to the runtime format used in kalkyler
 function bibliotekTilBygningsdel(bd, mengde) {
   const m = parseFloat(mengde) || 1
+  // Defensiv: bd kan komme fra ulike kilder (BYGNINGSDEL_BIBLIOTEK, brukerBibliotek,
+  // tilpassetKonstruksjon, eller direkte valg fra "Hent fra bibliotek"-modalen).
+  // Noen kilder kan mangle arbeidsarter/materialer-arrays.
+  const arbeidsarter = Array.isArray(bd.arbeidsarter) ? bd.arbeidsarter : []
+  const materialer = Array.isArray(bd.materialer) ? bd.materialer : []
+  const underleverandorer = Array.isArray(bd.underleverandorer) ? bd.underleverandorer : []
   return {
     id: Date.now() + Math.random() * 1000,
-    name: bd.name,
+    name: bd.name || bd.navn || 'Uten navn',
     mengde: m,
     enhet: bd.enhet || 'stk',
     source_bibliotek_id: bd.id,
-    arbeidsarter: bd.arbeidsarter.map((a, i) => ({
+    arbeidsarter: arbeidsarter.map((a, i) => ({
       id: Date.now() + i + 100,
-      beskrivelse: a.beskrivelse,
+      beskrivelse: a.beskrivelse || '',
       grunntid: parseFloat(a.grunntid) || 0,
     })),
-    materialer: bd.materialer.map((mat, i) => ({
+    materialer: materialer.map((mat, i) => ({
       id: Date.now() + i + 200,
-      varenavn: mat.varenavn,
+      varenavn: mat.varenavn || '',
       nobb: mat.nobb || '',
       mengde: parseFloat(mat.mengde) || 0,
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
     })),
-    underleverandorer: (bd.underleverandorer || []).map((u, i) => ({
+    underleverandorer: underleverandorer.map((u, i) => ({
       id: Date.now() + i + 300,
       navn: u.navn || '',
       beskrivelse: u.beskrivelse || '',
