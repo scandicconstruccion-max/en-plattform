@@ -39129,6 +39129,7 @@ const KATEGORI_MAPPING = {
   etasjeskille: 'Etasjeskille',
   dekke_paa_grunn: 'Bunnplate',  // kan også matche "Gulv på grunn"
   tak: 'Tak',
+  baering: 'Bæresystem',  // Patch 19: Limtre/stål søyler og bjelker
 }
 
 // Synonym-grupper for materialer. Brukes for å normalisere materialnavn
@@ -39367,11 +39368,25 @@ function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
   if (brukerKategori === 'usikker' || brukerKategori === 'ignorer' || !brukerKategori) {
     return { status: 'ingen', maler: [], begrunnelse: 'Ikke klassifisert ennå' }
   }
-  // Patch 18 polish: Bæring (søyler/dragere) håndteres separat — ikke prøv å matche
-  // mot vegg-bibliotek. Bæring-elementer trenger egne kalkyle-formler (kg/lm/stk).
+  // Patch 19: Bæring matches mot 'Bæresystem'-kategori (limtre/stål søyler+bjelker).
+  // Status 'baering' beholdes selv ved kandidater, slik at UI kan vise spesialisert
+  // flow. For bæring gjør vi IKKE eksakt lag-match — alle Bæresystem-maler vises.
   if (brukerKategori === 'baering') {
-    return { status: 'baering', maler: [],
-      begrunnelse: 'Bæring (søyler/dragere) håndteres separat — bibliotek-matching kommer i senere versjon' }
+    const baeringKandidater = bibliotek.filter(b => b.kategori === 'Bæresystem')
+    if (baeringKandidater.length === 0) {
+      return { status: 'baering', maler: [],
+        begrunnelse: 'Ingen Bæresystem-konstruksjoner i biblioteket' }
+    }
+    const navnLower = (lagsett.navn || '').toLowerCase()
+    const foretrekkLimtre = /limtre|gluelam|gl\d+/i.test(navnLower)
+    const sortert = [...baeringKandidater].sort((a, b) => {
+      const aLim = /limtre/i.test(a.name)
+      const bLim = /limtre/i.test(b.name)
+      if (aLim !== bLim) return foretrekkLimtre ? (aLim ? -1 : 1) : (aLim ? 1 : -1)
+      return 0
+    })
+    return { status: 'baering', maler: sortert.slice(0, 8),
+      begrunnelse: `${baeringKandidater.length} bære-maler tilgjengelig (limtre + stål)` }
   }
 
   const biblioKategori = KATEGORI_MAPPING[brukerKategori]
@@ -41177,343 +41192,6 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
 // BimKlassifiseringSeksjon senere). Lukket som standard for å unngå støy
 // — brukeren klikker for å utforske.
 
-// ─── PATCH 18 polish: VISUELL TVERRSNITT-POPUP ───────────────────────────────
-// Viser lagstrukturen i et lagsett som en illustrert tverrsnitt-tegning:
-// fargede rektangler stablet vertikalt, proporsjonale til tykkelse, med
-// material-spesifikke teksturer. Spec-badges (brann/lyd/bærende/U-verdi) på
-// toppen — leser brukerSpec hvis kalkulatør har supplert, ellers ifcSpec
-// (skjuler '_varierer'-verdier). Beskrivelse fra brukerSpec eller
-// _tilpasningsNotat fra tilpassetKonstruksjon under tegningen.
-//
-// Plassering: knapp "📐 Vis tverrsnitt" i lagsett-kortets knapperad.
-
-// Mapper materialnavn til en farge basert på materialtype.
-function getTverrsnittMaterialFarge(materialnavn) {
-  const m = (materialnavn || '').toLowerCase()
-  if (/damp\s?sperre|fukt\s?sperre|vapor/i.test(m)) return { fyll: '#dbeafe', strek: '#3b82f6', tekst: '#1e40af' }
-  if (/vind\s?sperre|wind|undertak/i.test(m)) return { fyll: '#dbeafe', strek: '#60a5fa', tekst: '#1d4ed8' }
-  if (/gips|gypsum|drywall|plaster/i.test(m)) return { fyll: '#f8fafc', strek: '#cbd5e1', tekst: '#475569' }
-  if (/mineralull|glassull|steinull|rockwool|isolasjon|insulation/i.test(m)) return { fyll: '#fef3c7', strek: '#f59e0b', tekst: '#92400e' }
-  if (/eps|xps|polystyren|cellplast/i.test(m)) return { fyll: '#fce7f3', strek: '#ec4899', tekst: '#9f1239' }
-  if (/pur|pir|polyuretan/i.test(m)) return { fyll: '#ecfccb', strek: '#84cc16', tekst: '#3f6212' }
-  if (/betong|concrete|beton/i.test(m)) return { fyll: '#e5e7eb', strek: '#6b7280', tekst: '#374151' }
-  if (/stål|stal|steel|metall|metal/i.test(m)) return { fyll: '#cbd5e1', strek: '#475569', tekst: '#1e293b' }
-  if (/tre|wood|stender|bjelke|sviller|limtre|massivtre|clt|plank/i.test(m)) return { fyll: '#fed7aa', strek: '#c2410c', tekst: '#7c2d12' }
-  if (/osb|spon\s?plate|kryssfiner|finer|plywood|mdf|huntonit/i.test(m)) return { fyll: '#fef3c7', strek: '#a16207', tekst: '#713f12' }
-  if (/tegl|mur|brick|leca/i.test(m)) return { fyll: '#fecaca', strek: '#dc2626', tekst: '#991b1b' }
-  if (/puss|sparkel|stucco|render/i.test(m)) return { fyll: '#fef3c7', strek: '#d97706', tekst: '#78350f' }
-  if (/kledning|panel|cladding|fasade/i.test(m)) return { fyll: '#d9f99d', strek: '#65a30d', tekst: '#3f6212' }
-  if (/membran|takpapp|takbelegg|asphalt/i.test(m)) return { fyll: '#475569', strek: '#1e293b', tekst: '#f8fafc' }
-  if (/luft|cavity|spalte/i.test(m)) return { fyll: '#f1f5f9', strek: '#94a3b8', tekst: '#64748b' }
-  return { fyll: '#f1f5f9', strek: '#cbd5e1', tekst: '#475569' }
-}
-
-function BimTverrsnittModal({ lagsett, onClose }) {
-  // Esc-lukking
-  useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  if (!lagsett) return null
-
-  // Lag-data: IFC bruker .thickness (meter) og .material; bibliotek-tilpasning
-  // bruker .tykkelse (mm) og .navn — støtt begge for kompatibilitet.
-  const lagListe = (lagsett.layers || lagsett.lag || []).filter(l => {
-    if (!l) return false
-    const harMaterial = l.material || l.navn
-    const harTykkelse = (l.thickness && l.thickness > 0) || (l.tykkelse && l.tykkelse > 0)
-    return harMaterial || harTykkelse
-  })
-
-  // Hent tykkelse i mm fra et lag — håndterer begge feltnavn
-  const lagTykkelseMm = (l) => {
-    if (l.thickness && l.thickness > 0) return l.thickness * 1000  // meter → mm
-    if (l.tykkelse && l.tykkelse > 0) return l.tykkelse             // allerede mm
-    return 0
-  }
-  const lagMaterial = (l) => l.material || l.navn || 'Ukjent material'
-
-  const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
-  const totalTykkelseMm = lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm
-
-  // Spec-data — brukerSpec har prioritet (kalkulatør har bekreftet),
-  // ellers ifcSpec hvis ikke '_varierer'.
-  const brukerSpec = lagsett.brukerSpec || null
-  const ifcSpec = lagsett.ifcSpec || {}
-
-  // Brann
-  let brannVerdi = null, brannKilde = null
-  if (brukerSpec?.brann) { brannVerdi = brukerSpec.brann; brannKilde = 'bruker' }
-  else if (ifcSpec.fireRating && ifcSpec.fireRating !== '_varierer') { brannVerdi = ifcSpec.fireRating; brannKilde = 'ifc' }
-
-  // Lyd
-  let lydVerdi = null, lydKilde = null
-  if (brukerSpec?.lyd) { lydVerdi = brukerSpec.lyd; lydKilde = 'bruker' }
-  else if (ifcSpec.acousticRating && ifcSpec.acousticRating !== '_varierer') { lydVerdi = `${ifcSpec.acousticRating} dB`; lydKilde = 'ifc' }
-
-  // Bærende
-  let baerendeVerdi = null, baerendeKilde = null
-  if (brukerSpec?.baerende) { baerendeVerdi = brukerSpec.baerende; baerendeKilde = 'bruker' }
-  else if (ifcSpec.loadBearing === true) { baerendeVerdi = 'Ja'; baerendeKilde = 'ifc' }
-  else if (ifcSpec.loadBearing === false) { baerendeVerdi = 'Nei'; baerendeKilde = 'ifc' }
-
-  // U-verdi
-  let uVerdiVerdi = null, uVerdiKilde = null
-  if (brukerSpec?.uVerdi !== null && brukerSpec?.uVerdi !== undefined && brukerSpec?.uVerdi !== '') { uVerdiVerdi = brukerSpec.uVerdi; uVerdiKilde = 'bruker' }
-  else if (ifcSpec.uValue && ifcSpec.uValue !== '_varierer') { uVerdiVerdi = ifcSpec.uValue; uVerdiKilde = 'ifc' }
-
-  const harBadges = brannVerdi || lydVerdi || baerendeVerdi || uVerdiVerdi
-
-  // Beskrivelse — brukerSpec.beskrivelse eller _tilpasningsNotat fra tilpassetKonstruksjon
-  const beskrivelse = brukerSpec?.beskrivelse || lagsett.tilpassetKonstruksjon?._tilpasningsNotat || ''
-
-  // Tegningens tilgjengelige høyde
-  const tegningHoyde = 460
-  const minLagHoyde = 18
-
-  // Beregn proporsjonal høyde — beskytt små lag (dampsperre 0.2mm må være synlig)
-  const lagMedHoyde = (() => {
-    if (lagListe.length === 0) return []
-    const basis = sumLagMm > 0 ? sumLagMm : lagListe.length
-    let foreloepige = lagListe.map(lag => {
-      const mm = lagTykkelseMm(lag)
-      return { lag, mm, h: sumLagMm > 0 ? (mm / basis) * tegningHoyde : tegningHoyde / lagListe.length }
-    })
-    let underskudd = 0
-    foreloepige.forEach(o => { if (o.h < minLagHoyde) { underskudd += (minLagHoyde - o.h); o.h = minLagHoyde; o.justert = true } })
-    if (underskudd > 0) {
-      const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.h, 0)
-      if (justerbarSum > 0) {
-        const faktor = (justerbarSum - underskudd) / justerbarSum
-        foreloepige = foreloepige.map(o => o.justert ? o : { ...o, h: Math.max(minLagHoyde, o.h * faktor) })
-      }
-    }
-    return foreloepige
-  })()
-
-  // Felles badge-stil — ifc-kilde får liten "IFC"-tag
-  const badgeStil = (bg, br, c) => ({
-    background: bg, border: `1px solid ${br}`, color: c,
-    padding: '5px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '600',
-    display: 'inline-flex', alignItems: 'center', gap: '5px',
-  })
-  const ifcTag = (
-    <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.6)', padding: '1px 4px', borderRadius: '3px', fontWeight: '700', letterSpacing: '0.3px' }}>
-      IFC
-    </span>
-  )
-
-  return createPortal(
-    <div onClick={onClose}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
-        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        padding: '20px', backdropFilter: 'blur(4px)',
-      }}>
-      <div onClick={(e) => e.stopPropagation()}
-        style={{
-          background: 'white', borderRadius: '16px', width: '100%', maxWidth: '720px',
-          maxHeight: '92vh', display: 'flex', flexDirection: 'column',
-          boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
-        }}>
-        {/* Header */}
-        <div style={{
-          padding: '18px 22px 14px', borderBottom: '1px solid #e2e8f0',
-          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px',
-        }}>
-          <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
-              📐 Tverrsnitt · {lagsett.brukerKategori || 'Ukategorisert'}
-            </div>
-            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              {lagsett.navn || 'Lagsett'}
-            </div>
-            <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
-              Total tykkelse: <strong style={{ color: '#0f172a' }}>{totalTykkelseMm.toFixed(0)} mm</strong>
-              {' · '}{lagListe.length} lag
-              {lagsett.antall ? ` · ${lagsett.antall} stk` : ''}
-            </div>
-          </div>
-          <button onClick={onClose} aria-label="Lukk"
-            style={{
-              background: 'white', border: '1px solid #e2e8f0', color: '#475569',
-              borderRadius: '8px', width: '32px', height: '32px', fontSize: '16px',
-              cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: '600',
-            }}>×</button>
-        </div>
-
-        {/* Spec-badges */}
-        {harBadges && (
-          <div style={{ padding: '12px 22px', background: '#fafbfc', borderBottom: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {brannVerdi && (
-              <div style={badgeStil('#fef2f2', '#fecaca', '#991b1b')}>
-                <span>🔥</span><span>Brann: {String(brannVerdi)}</span>
-                {brannKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {lydVerdi && (
-              <div style={badgeStil('#eff6ff', '#bfdbfe', '#1e40af')}>
-                <span>🔊</span><span>Lyd: {String(lydVerdi)}</span>
-                {lydKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {baerendeVerdi === 'Ja' && (
-              <div style={badgeStil('#fffbeb', '#fde68a', '#92400e')}>
-                <span>🏗️</span><span>Bærende</span>
-                {baerendeKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {baerendeVerdi === 'Nei' && (
-              <div style={badgeStil('#f1f5f9', '#cbd5e1', '#475569')}>
-                <span>—</span><span>Ikke-bærende</span>
-                {baerendeKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {uVerdiVerdi !== null && uVerdiVerdi !== undefined && (
-              <div style={badgeStil('#f0fdfa', '#99f6e4', '#115e59')}>
-                <span>🌡️</span>
-                <span>U: {typeof uVerdiVerdi === 'number' ? uVerdiVerdi.toFixed(2) : uVerdiVerdi} W/m²K</span>
-                {uVerdiKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Tverrsnitt-tegning */}
-        <div style={{ padding: '20px 22px', overflow: 'auto', flex: 1, background: '#fafbfc' }}>
-          {lagListe.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13px' }}>
-              Ingen lag-data tilgjengelig fra IFC.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'stretch', gap: '0', maxWidth: '600px', margin: '0 auto' }}>
-              {/* Venstre: tykkelse-skala */}
-              <div style={{ width: '70px', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
-                {lagMedHoyde.map((o, idx) => (
-                  <div key={idx} style={{
-                    height: o.h + 'px',
-                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-                    paddingRight: '10px',
-                    fontSize: '11px', color: '#475569', fontWeight: '600',
-                    fontVariantNumeric: 'tabular-nums',
-                    borderTop: idx === 0 ? 'none' : '1px dashed #e2e8f0',
-                  }}>
-                    {o.mm > 0 ? `${Math.round(o.mm)} mm` : '—'}
-                  </div>
-                ))}
-              </div>
-
-              {/* Midt: selve tverrsnitt-tegningen */}
-              <div style={{
-                width: '90px', flexShrink: 0, display: 'flex', flexDirection: 'column',
-                border: '2px solid #1e293b', borderRadius: '4px', overflow: 'hidden',
-                boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)',
-                background: 'white',
-              }}>
-                {lagMedHoyde.map((o, idx) => {
-                  const farge = getTverrsnittMaterialFarge(lagMaterial(o.lag))
-                  const m = lagMaterial(o.lag).toLowerCase()
-                  let pattern = farge.fyll
-                  if (/mineralull|glassull|steinull|rockwool|isolasjon/i.test(m)) {
-                    pattern = `repeating-linear-gradient(45deg, ${farge.fyll} 0px, ${farge.fyll} 4px, ${farge.strek}33 4px, ${farge.strek}33 6px)`
-                  } else if (/tre|wood|stender|bjelke|sviller|limtre|plank/i.test(m)) {
-                    pattern = `repeating-linear-gradient(0deg, ${farge.fyll} 0px, ${farge.fyll} 6px, ${farge.strek}22 6px, ${farge.strek}22 7px)`
-                  } else if (/betong|concrete/i.test(m)) {
-                    pattern = `radial-gradient(${farge.strek}33 1px, ${farge.fyll} 1px) 0 0/6px 6px`
-                  } else if (/damp|fukt|vapor|vind|undertak/i.test(m)) {
-                    pattern = `repeating-linear-gradient(90deg, ${farge.fyll} 0px, ${farge.fyll} 3px, ${farge.strek}66 3px, ${farge.strek}66 5px)`
-                  }
-                  return (
-                    <div key={idx} style={{
-                      height: o.h + 'px',
-                      background: pattern,
-                      borderTop: idx === 0 ? 'none' : '1px solid #1e293b',
-                    }} title={lagMaterial(o.lag)}>
-                    </div>
-                  )
-                })}
-              </div>
-
-              {/* Høyre: materialnavn + lag-nummer */}
-              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                {lagMedHoyde.map((o, idx) => {
-                  const farge = getTverrsnittMaterialFarge(lagMaterial(o.lag))
-                  return (
-                    <div key={idx} style={{
-                      height: o.h + 'px',
-                      display: 'flex', alignItems: 'center', gap: '10px',
-                      paddingLeft: '14px', position: 'relative',
-                      borderTop: idx === 0 ? 'none' : '1px dashed #e2e8f0',
-                    }}>
-                      <div style={{ position: 'absolute', left: '0', top: '50%', width: '10px', height: '1px', background: '#cbd5e1' }} />
-                      <span style={{
-                        background: farge.fyll, color: farge.tekst,
-                        border: '1px solid ' + farge.strek,
-                        padding: '2px 7px', borderRadius: '4px',
-                        fontSize: '10px', fontWeight: '700', flexShrink: 0,
-                        minWidth: '22px', textAlign: 'center',
-                      }}>{idx + 1}</span>
-                      <span style={{
-                        fontSize: '12px', color: '#0f172a', fontWeight: '500',
-                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      }}>
-                        {lagMaterial(o.lag)}
-                      </span>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Beskrivelse */}
-          {beskrivelse && (
-            <div style={{
-              marginTop: '20px', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto',
-              background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px',
-              padding: '12px 14px',
-            }}>
-              <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                Beskrivelse
-              </div>
-              <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                {beskrivelse}
-              </div>
-            </div>
-          )}
-
-          <div style={{
-            marginTop: '14px', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto',
-            fontSize: '10px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic',
-          }}>
-            Lag vises i den rekkefølgen IFC-fila beskriver dem · proporsjonal til tykkelse
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: 'white',
-          display: 'flex', justifyContent: 'flex-end',
-        }}>
-          <button onClick={onClose}
-            style={{
-              background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
-              borderRadius: '6px', padding: '6px 14px', fontSize: '11px', fontWeight: '600',
-              cursor: 'pointer',
-            }}>
-            Lukk
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body
-  )
-}
-
 function BimLagsettDetaljer({ lagsett, isMob }) {
   const [aapen, setAapen] = useState(false)
 
@@ -42598,8 +42276,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [tegningLagsett, setTegningLagsett] = useState(null)
   // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
   const [meshLagsett, setMeshLagsett] = useState(null)
-  // Patch 18 polish: Lagsett som vises i tverrsnitt-popup (null = lukket)
-  const [tverrsnittLagsett, setTverrsnittLagsett] = useState(null)
   // Patch 18 polish: Lagsett for bibliotek-søk-modal (null = lukket)
   const [bibliotekSokLagsett, setBibliotekSokLagsett] = useState(null)
   // Patch 18 polish: Set av lagsett-id-er der tilpasnings-panelet er åpent
@@ -43149,14 +42825,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   style={knappStilNoytral}>
                   Diagnose
                 </button>
-                {/* Patch 18 polish: Vis tverrsnitt-knapp — visualisert lagstruktur */}
-                {((lagsett.layers || lagsett.lag || []).filter(l => l && (l.material || l.navn || l.thickness > 0 || l.tykkelse > 0)).length > 0) && (
-                  <button
-                    onClick={() => setTverrsnittLagsett(lagsett)}
-                    style={knappStilNoytral}>
-                    📐 Vis tverrsnitt
-                  </button>
-                )}
                 {/* Patch 18 polish (IFC-supplering): Supplér info-knapp */}
                 <button
                   onClick={() => toggleSupplering(lagsett)}
@@ -43292,15 +42960,67 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                 </div>
               )}
 
-              {/* Patch 18 polish: Bæring — søyler/dragere håndteres separat */}
+              {/* Patch 19: Bæring — vis maler fra Bæresystem-bibliotek (limtre + stål) */}
               {!erBekreftet && !erHoppet && status === 'baering' && (
-                <div style={{ background:'#f0fdfa', border:'1px solid #99f6e4', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px' }}>
-                  <div style={{ fontSize:'11px', color:'#115e59', fontWeight:'700', marginBottom:'4px' }}>
-                    🏗️ Bæring — håndteres separat
+                <div>
+                  <div style={{ background:'#f0fdfa', border:'1px solid #99f6e4', borderRadius:'8px', padding:'10px 12px', marginBottom:'8px' }}>
+                    <div style={{ fontSize:'11px', color:'#115e59', fontWeight:'700', marginBottom:'3px' }}>
+                      🏗️ Bæring — velg fra bibliotek
+                    </div>
+                    <div style={{ fontSize:'10px', color:'#134e4a', lineHeight:1.5 }}>
+                      {begrunnelse || 'Velg en limtre- eller stål-mal under, eller hent fra biblioteket for full liste.'}
+                      {' '}Mengde fra IFC: <strong>{(lagsett.totalLengde || 0).toFixed(1)} lm</strong>
+                      {lagsett.antall ? ` · ${lagsett.antall} stk` : ''}
+                    </div>
                   </div>
-                  <div style={{ fontSize:'10px', color:'#134e4a', lineHeight:1.5 }}>
-                    Søyler og dragere har egne kalkyle-formler (kg / lm / stk) som ikke matcher mot vegg-biblioteket.
-                    Dette lagsettet inkluderes ikke i kalkylen ennå — separat bibliotek for bæring kommer i en senere versjon.
+
+                  {/* Mal-galleri: limtre + stål bæremaler */}
+                  {maler && maler.length > 0 && (
+                    <div style={{ marginBottom:'8px' }}>
+                      <div style={{ fontSize:'10px', color:'#64748b', fontWeight:'700', marginBottom:'4px', textTransform:'uppercase', letterSpacing:'0.3px' }}>
+                        Bæresystem-maler ({maler.length}):
+                      </div>
+                      <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+                        {maler.map((mal, mi) => {
+                          const erLimtre = /limtre/i.test(mal.name)
+                          const erSoyle = mal.enhet === 'stk'
+                          return (
+                            <div key={mi} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 10px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ fontSize:'11px', color:'#0f172a', fontWeight:'600', display:'flex', alignItems:'center', gap:'6px' }}>
+                                  <span style={{ fontSize:'10px' }}>{erLimtre ? '🪵' : '⚙️'}</span>
+                                  <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{mal.name}</span>
+                                </div>
+                                <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>
+                                  {erSoyle ? 'Per stk (default 3m)' : 'Per lm'}
+                                  {' · '}{erLimtre ? 'Limtre gran GL30c' : 'Stål S355J2'}
+                                </div>
+                              </div>
+                              <button onClick={() => aapneNyDialog(lagsett, mal, lagsett.brukerKategori)}
+                                style={{ ...knappStilNoytral, flexShrink: 0 }}>
+                                Bruk som mal
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Knapper: Lag ny / Hent fra bibliotek / Hopp over */}
+                  <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                    <button onClick={() => aapneNyDialog(lagsett, null, lagsett.brukerKategori)}
+                      style={knappStilPrimaer}>
+                      Lag helt ny bæring
+                    </button>
+                    <button onClick={() => setBibliotekSokLagsett(lagsett)}
+                      style={knappStilNoytral}>
+                      📚 Hent fra bibliotek
+                    </button>
+                    <button onClick={() => settMatch(lagsett, { name: '(hoppet over)', _hoppet: true }, 'hoppet')}
+                      style={knappStilNoytral}>
+                      Hopp over
+                    </button>
                   </div>
                 </div>
               )}
@@ -43412,14 +43132,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           onClose={() => setMeshLagsett(null)}
           onVelgLagsett={(ls) => setMeshLagsett(ls)}
           isMob={isMob}
-        />
-      )}
-
-      {/* Patch 18 polish: Visuell tverrsnitt-popup */}
-      {tverrsnittLagsett && (
-        <BimTverrsnittModal
-          lagsett={tverrsnittLagsett}
-          onClose={() => setTverrsnittLagsett(null)}
         />
       )}
 
@@ -48395,6 +48107,226 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Byggegjerde (leie)', mengde: 1, enhet: 'rs', enhetspris: 3500 }, { varenavn: 'Skilt og varsling', mengde: 1, enhet: 'rs', enhetspris: 1200 }, { varenavn: 'Byggeplassbelysning', mengde: 1, enhet: 'rs', enhetspris: 1500 }],
     underleverandorer: [], enhet: 'rs'
   },
+  // ═══ BÆRESYSTEM (Patch 19) ═════════════════════════════════════════════════
+  // Tømrer-faggruppe. 16 maler: 8 limtre (gran, Sørlaminert) + 8 stål (S355).
+  // Limtre: enhet 'lm' for bjelker, 'stk' for søyler (default 3m).
+  // Priser fra Optimera prisliste desember 2024.
+  // Stål: kr/kg = 12 (konservativt — dekker småkvanta og varierende avtaler).
+  // Stål-søyler er pre-kalkulert for default 3m høyde — bruker overstyrer.
+
+  // ─── Limtre bjelker (gran GL30c, Sørlaminert) ───────────────────────────────
+  { id: 'bae_limtre_bj_115x270', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtrebjelke 115×270 GL30c',
+    beskrivelse: 'Limtrebjelke 115×270mm gran GL30c — typisk dragere over åpninger og mindre takbjelker',
+    arbeidsarter: [
+      { beskrivelse: 'Montering limtrebjelke (kran/heis)', grunntid: 0.35 },
+      { beskrivelse: 'Kapping og tilpasning', grunntid: 0.10 },
+      { beskrivelse: 'Bjelkesko og festemiddel', grunntid: 0.15 },
+    ],
+    materialer: [
+      { varenavn: 'Limtrebjelke gran 115×270 GL30c', nobb: '7026010', mengde: 1, enhet: 'lm', enhetspris: 892 },
+      { varenavn: 'Bjelkesko og festemiddel', mengde: 0.4, enhet: 'stk/lm', enhetspris: 145 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bae_limtre_bj_140x270', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtrebjelke 140×270 GL30c',
+    beskrivelse: 'Limtrebjelke 140×270mm gran GL30c — kraftigere drager for større spenn',
+    arbeidsarter: [
+      { beskrivelse: 'Montering limtrebjelke (kran/heis)', grunntid: 0.40 },
+      { beskrivelse: 'Kapping og tilpasning', grunntid: 0.12 },
+      { beskrivelse: 'Bjelkesko og festemiddel', grunntid: 0.15 },
+    ],
+    materialer: [
+      { varenavn: 'Limtrebjelke gran 140×270 GL30c', nobb: '7026019', mengde: 1, enhet: 'lm', enhetspris: 1140 },
+      { varenavn: 'Bjelkesko og festemiddel', mengde: 0.4, enhet: 'stk/lm', enhetspris: 165 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bae_limtre_bj_140x360', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtrebjelke 140×360 GL30c',
+    beskrivelse: 'Limtrebjelke 140×360mm gran GL30c — for store spenn (8-10m)',
+    arbeidsarter: [
+      { beskrivelse: 'Montering limtrebjelke (kran nødvendig)', grunntid: 0.50 },
+      { beskrivelse: 'Kapping og tilpasning', grunntid: 0.15 },
+      { beskrivelse: 'Bjelkesko og festemiddel', grunntid: 0.20 },
+    ],
+    materialer: [
+      { varenavn: 'Limtrebjelke gran 140×360 GL30c', nobb: '7025924', mengde: 1, enhet: 'lm', enhetspris: 1367 },
+      { varenavn: 'Forsterket bjelkesko', mengde: 0.4, enhet: 'stk/lm', enhetspris: 245 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bae_limtre_bj_140x405', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtrebjelke 140×405 GL30c',
+    beskrivelse: 'Limtrebjelke 140×405mm gran GL30c — store hovedbjelker, kran påkrevd',
+    arbeidsarter: [
+      { beskrivelse: 'Montering limtrebjelke (kran påkrevd)', grunntid: 0.55 },
+      { beskrivelse: 'Kapping og tilpasning', grunntid: 0.18 },
+      { beskrivelse: 'Forsterket innfesting', grunntid: 0.25 },
+    ],
+    materialer: [
+      { varenavn: 'Limtrebjelke gran 140×405 GL30c', nobb: '7026021', mengde: 1, enhet: 'lm', enhetspris: 1460 },
+      { varenavn: 'Forsterket bjelkesko og bolter', mengde: 0.4, enhet: 'stk/lm', enhetspris: 320 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+
+  // ─── Limtre søyler (gran GL30c, stk-basert med 3m default-høyde) ────────────
+  { id: 'bae_limtre_so_115x115', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtresøyle 115×115 GL30c',
+    beskrivelse: 'Limtresøyle 115×115mm gran GL30c — typisk innendørs søyle, default høyde 3m',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle inkl. tilpasning', grunntid: 0.80 },
+      { beskrivelse: 'Innfesting topp/bunn (sko, ankerbolt)', grunntid: 0.50 },
+    ],
+    materialer: [
+      { varenavn: 'Limtresøyle gran 115×115 GL30c (3m)', nobb: '7026006', mengde: 3, enhet: 'lm/stk', enhetspris: 427 },
+      { varenavn: 'Søylesko og ankerbolt sett', mengde: 1, enhet: 'sett', enhetspris: 425 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bae_limtre_so_140x140', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtresøyle 140×140 GL30c',
+    beskrivelse: 'Limtresøyle 140×140mm gran GL30c — kraftigere søyle, default høyde 3m',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle inkl. tilpasning', grunntid: 0.90 },
+      { beskrivelse: 'Innfesting topp/bunn', grunntid: 0.55 },
+    ],
+    materialer: [
+      { varenavn: 'Limtresøyle gran 140×140 GL30c (3m)', nobb: '7025901', mengde: 3, enhet: 'lm/stk', enhetspris: 690 },
+      { varenavn: 'Søylesko og ankerbolt sett', mengde: 1, enhet: 'sett', enhetspris: 525 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bae_limtre_so_140x200', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtresøyle 140×200 GL30c',
+    beskrivelse: 'Limtresøyle 140×200mm gran GL30c — rektangulær søyle for større laster, default 3m',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle inkl. tilpasning', grunntid: 1.00 },
+      { beskrivelse: 'Innfesting topp/bunn', grunntid: 0.60 },
+    ],
+    materialer: [
+      { varenavn: 'Limtresøyle gran 140×200 GL30c (3m)', nobb: '7224308', mengde: 3, enhet: 'lm/stk', enhetspris: 1063 },
+      { varenavn: 'Søylesko og ankerbolt sett', mengde: 1, enhet: 'sett', enhetspris: 625 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bae_limtre_so_140x270', fag: 'tomrer', kategori: 'Bæresystem', name: 'Limtresøyle 140×270 GL30c',
+    beskrivelse: 'Limtresøyle 140×270mm gran GL30c — kraftig hovedsøyle, default 3m, kran ved montering',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle (kran)', grunntid: 1.20 },
+      { beskrivelse: 'Innfesting topp/bunn (forsterket)', grunntid: 0.70 },
+    ],
+    materialer: [
+      { varenavn: 'Limtresøyle gran 140×270 GL30c (3m)', nobb: '7026019', mengde: 3, enhet: 'lm/stk', enhetspris: 1140 },
+      { varenavn: 'Søylesko og bolter (forsterket)', mengde: 1, enhet: 'sett', enhetspris: 825 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+
+  // ─── Stål bjelker (S355J2, kr/kg-basert) ────────────────────────────────────
+  // Pris/lm = kg/m × 12 kr/kg + festemiddel/kapp
+  { id: 'bae_stal_bj_HEA160', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålbjelke HEA 160 S355',
+    beskrivelse: 'HEA 160 stålbjelke S355J2 — 30,4 kg/m. Lett bjelke for moderate spenn',
+    arbeidsarter: [
+      { beskrivelse: 'Montering stålbjelke (kran)', grunntid: 0.40 },
+      { beskrivelse: 'Kapping/tilpasning på sted', grunntid: 0.15 },
+      { beskrivelse: 'Innfesting og kontroll', grunntid: 0.25 },
+    ],
+    materialer: [
+      { varenavn: 'HEA 160 S355J2 (30,4 kg/m × 12 kr/kg)', mengde: 1, enhet: 'lm', enhetspris: 365 },
+      { varenavn: 'Innfesting/bolter/sveisemateriell', mengde: 1, enhet: 'rs/lm', enhetspris: 85 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bae_stal_bj_HEA200', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålbjelke HEA 200 S355',
+    beskrivelse: 'HEA 200 stålbjelke S355J2 — 42,3 kg/m. Standard hovedbjelke for SMB-bygg',
+    arbeidsarter: [
+      { beskrivelse: 'Montering stålbjelke (kran)', grunntid: 0.50 },
+      { beskrivelse: 'Kapping/tilpasning på sted', grunntid: 0.18 },
+      { beskrivelse: 'Innfesting og kontroll', grunntid: 0.30 },
+    ],
+    materialer: [
+      { varenavn: 'HEA 200 S355J2 (42,3 kg/m × 12 kr/kg)', mengde: 1, enhet: 'lm', enhetspris: 508 },
+      { varenavn: 'Innfesting/bolter/sveisemateriell', mengde: 1, enhet: 'rs/lm', enhetspris: 110 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bae_stal_bj_HEB180', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålbjelke HEB 180 S355',
+    beskrivelse: 'HEB 180 stålbjelke S355J2 — 51,2 kg/m. Kraftigere enn HEA, til høyere laster',
+    arbeidsarter: [
+      { beskrivelse: 'Montering stålbjelke (kran)', grunntid: 0.55 },
+      { beskrivelse: 'Kapping/tilpasning på sted', grunntid: 0.20 },
+      { beskrivelse: 'Innfesting og kontroll', grunntid: 0.30 },
+    ],
+    materialer: [
+      { varenavn: 'HEB 180 S355J2 (51,2 kg/m × 12 kr/kg)', mengde: 1, enhet: 'lm', enhetspris: 614 },
+      { varenavn: 'Innfesting/bolter/sveisemateriell', mengde: 1, enhet: 'rs/lm', enhetspris: 125 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+  { id: 'bae_stal_bj_HEB220', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålbjelke HEB 220 S355',
+    beskrivelse: 'HEB 220 stålbjelke S355J2 — 71,5 kg/m. Tung hovedbjelke for store laster/spenn',
+    arbeidsarter: [
+      { beskrivelse: 'Montering stålbjelke (kran påkrevd)', grunntid: 0.65 },
+      { beskrivelse: 'Kapping/tilpasning på sted', grunntid: 0.22 },
+      { beskrivelse: 'Innfesting og kontroll', grunntid: 0.35 },
+    ],
+    materialer: [
+      { varenavn: 'HEB 220 S355J2 (71,5 kg/m × 12 kr/kg)', mengde: 1, enhet: 'lm', enhetspris: 858 },
+      { varenavn: 'Innfesting/bolter/sveisemateriell', mengde: 1, enhet: 'rs/lm', enhetspris: 155 },
+    ],
+    underleverandorer: [], enhet: 'lm'
+  },
+
+  // ─── Stål søyler (S355, stk-basert, default høyde 3m) ───────────────────────
+  { id: 'bae_stal_so_HEA120', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålsøyle HEA 120 S355',
+    beskrivelse: 'HEA 120 stålsøyle S355J2 — 19,9 kg/m. Lett søyle, default høyde 3m (~717 kr stål)',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle (kran)', grunntid: 0.80 },
+      { beskrivelse: 'Innfesting topp og bunn', grunntid: 0.70 },
+      { beskrivelse: 'Sveising/bolting', grunntid: 0.60 },
+    ],
+    materialer: [
+      { varenavn: 'HEA 120 S355J2 (19,9 kg/m × 12 kr/kg × 3m)', mengde: 1, enhet: 'stk', enhetspris: 717 },
+      { varenavn: 'Fotplate, bolter og innfesting', mengde: 1, enhet: 'sett', enhetspris: 850 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bae_stal_so_HEA160', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålsøyle HEA 160 S355',
+    beskrivelse: 'HEA 160 stålsøyle S355J2 — 30,4 kg/m. Mellom-størrelse, default høyde 3m (~1095 kr stål)',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle (kran)', grunntid: 0.90 },
+      { beskrivelse: 'Innfesting topp og bunn', grunntid: 0.75 },
+      { beskrivelse: 'Sveising/bolting', grunntid: 0.65 },
+    ],
+    materialer: [
+      { varenavn: 'HEA 160 S355J2 (30,4 kg/m × 12 kr/kg × 3m)', mengde: 1, enhet: 'stk', enhetspris: 1095 },
+      { varenavn: 'Fotplate, bolter og innfesting', mengde: 1, enhet: 'sett', enhetspris: 950 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bae_stal_so_HSQ200', fag: 'tomrer', kategori: 'Bæresystem', name: 'Hatprofil HSQ 200×200×8',
+    beskrivelse: 'Hatprofil HSQ 200×200×8mm S355 — ~50 kg/m. Lukket profil, default høyde 3m (~1800 kr stål)',
+    arbeidsarter: [
+      { beskrivelse: 'Montering hatprofil (kran)', grunntid: 1.00 },
+      { beskrivelse: 'Innfesting topp og bunn', grunntid: 0.80 },
+      { beskrivelse: 'Sveising/bolting', grunntid: 0.70 },
+    ],
+    materialer: [
+      { varenavn: 'HSQ 200×200×8 S355 (50 kg/m × 12 kr/kg × 3m)', mengde: 1, enhet: 'stk', enhetspris: 1800 },
+      { varenavn: 'Fotplate, bolter og innfesting', mengde: 1, enhet: 'sett', enhetspris: 1200 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'bae_stal_so_HEB200', fag: 'tomrer', kategori: 'Bæresystem', name: 'Stålsøyle HEB 200 S355',
+    beskrivelse: 'HEB 200 stålsøyle S355J2 — 61,3 kg/m. Tung hovedsøyle, default høyde 3m (~2208 kr stål)',
+    arbeidsarter: [
+      { beskrivelse: 'Montering søyle (kran påkrevd)', grunntid: 1.10 },
+      { beskrivelse: 'Innfesting topp og bunn (forsterket)', grunntid: 0.90 },
+      { beskrivelse: 'Sveising/bolting', grunntid: 0.80 },
+    ],
+    materialer: [
+      { varenavn: 'HEB 200 S355J2 (61,3 kg/m × 12 kr/kg × 3m)', mengde: 1, enhet: 'stk', enhetspris: 2208 },
+      { varenavn: 'Fotplate, bolter og innfesting (forsterket)', mengde: 1, enhet: 'sett', enhetspris: 1450 },
+    ],
+    underleverandorer: [], enhet: 'stk'
+  },
+
 ]
 
 // Gruppert oversikt over bibliotek per faggruppe
