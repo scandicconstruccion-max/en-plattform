@@ -43252,17 +43252,8 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
   const stegFarge = stegFarger[stegStatus.farge]
 
   const handleGenerer = () => {
-    console.log('[BIM debug] handleGenerer kalt, harBekreftet:', harBekreftet, 'sammendrag:', sammendrag)
-    if (!harBekreftet) {
-      console.warn('[BIM debug] Avbryter: harBekreftet er false')
-      return
-    }
-    if (onGenerer) {
-      console.log('[BIM debug] Kaller onGenerer-callback')
-      onGenerer({ sammendrag, mengder })
-    } else {
-      console.error('[BIM debug] onGenerer-callback er ikke definert!')
-    }
+    if (!harBekreftet) return
+    if (onGenerer) onGenerer({ sammendrag, mengder })
   }
 
   return (
@@ -45942,7 +45933,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               erRedigering={erRedigering}
               redigeringAvKalkyle={redigeringAvKalkyle}
               onGenerer={async ({ sammendrag }) => {
-                console.log('[BIM debug] onGenerer-callback startet', { sammendrag, erRedigering, mengderHar: !!metadata?.mengder })
                 // Patch 14.C+14.D: Bygg payload, lagre i calculations, og naviger til kalkyle.
                 // Hvis erRedigering=true, oppdaterer vi eksisterende kalkyle og bevarer
                 // manuelt lagte bygningsdeler.
@@ -45955,12 +45945,9 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   } catch(e) { /* OK at den feiler — fall tilbake til defaults */ }
 
                   // 2. Bygg kalkyle-payload via Patch 14.B-funksjonen
-                  console.log('[BIM debug] Kaller byggKalkylerFraIfc...')
                   const { kalkyler: nyeKalkyler, faktorer, meta } = byggKalkylerFraIfc(metadata.mengder, bedriftFaktorer)
-                  console.log('[BIM debug] byggKalkylerFraIfc returnerte:', { antallKalkyler: nyeKalkyler.length, meta })
 
                   if (nyeKalkyler.length === 0) {
-                    console.warn('[BIM debug] nyeKalkyler.length === 0 — viser advarsel')
                     onAlert({
                       message: 'Ingen bygningsdeler å bygge kalkyle av',
                       subMessage: 'Bekreft minst én konstruksjon i Steg 2 før du genererer.',
@@ -46010,12 +45997,18 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   }
 
                   // 3. Beregn totals slik editor gjør
-                  console.log('[BIM debug] Steg 3: Beregner totals...')
                   const totals = beregnProsjektTotal(kalkylerForLagring, faktorer)
-                  console.log('[BIM debug] Totals beregnet:', totals)
 
                   // 4. Bygg bim_sesjon-snapshot for senere redigering (Patch 14.D.1)
-                  console.log('[BIM debug] Steg 4: Bygger bim_sesjon...')
+                  // Patch 18 polish: Krymp mengder før lagring — fjerner mesh-data
+                  // (kan være MB-store) for å unngå at Supabase blir Unhealthy.
+                  // Mesh regenereres uansett ved neste IFC-opplasting.
+                  const krympedeMengder = krympMengderForLagring(metadata.mengder)
+                  const originalStr = (metadata.mengder ? JSON.stringify(metadata.mengder).length : 0)
+                  const krympetStr = (krympedeMengder ? JSON.stringify(krympedeMengder).length : 0)
+                  const sparing = originalStr > 0 ? ((originalStr - krympetStr) / originalStr * 100).toFixed(1) : 0
+                  console.log(`[BIM] Krympet mengder fra ${(originalStr/1024).toFixed(0)}KB til ${(krympetStr/1024).toFixed(0)}KB (${sparing}% sparing)`)
+
                   const bimSesjon = {
                     fileName: metadata.fileName,
                     fileSize: metadata.fileSize,
@@ -46024,16 +46017,14 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                     building: metadata.building || {},
                     elementCounts: metadata.elementCounts || {},
                     totalElements: metadata.totalElements || 0,
-                    mengder: metadata.mengder,
+                    mengder: krympedeMengder,
                     sist_oppdatert: new Date().toISOString(),
                     versjon: erRedigering ? (redigeringAvKalkyle?.bim_sesjon?.versjon || 1) + 1 : 1,
                   }
-                  console.log('[BIM debug] bim_sesjon bygd, størrelse JSON:', JSON.stringify(bimSesjon).length, 'tegn')
 
                   let created
                   if (erRedigering && redigeringAvKalkyle?.id) {
                     // ── UPDATE eksisterende kalkyle ──
-                    console.log('[BIM debug] UPDATE-sti (erRedigering=true)')
                     const updatePayload = sanitizeDbPayload({
                       kalkyler: kalkylerForLagring,
                       faktorer,
@@ -46043,28 +46034,19 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                       bim_sesjon: bimSesjon,
                       updated_at: new Date().toISOString(),
                     })
-                    console.log('[BIM debug] Kaller supabase.update...')
                     const { data: updated, error } = await supabase.from('calculations')
                       .update(updatePayload)
                       .eq('id', redigeringAvKalkyle.id)
                       .select()
                       .single()
-                    console.log('[BIM debug] Supabase.update returnerte:', { dataExist: !!updated, error })
                     if (error) throw error
                     created = updated
                     console.log('[Patch 14.D] Kalkyle oppdatert:', created)
                   } else {
                     // ── INSERT ny kalkyle (vanlig flyt) ──
-                    console.log('[BIM debug] INSERT-sti (erRedigering=false)')
-                    console.log('[BIM debug] Henter eksisterende kalk-numre...')
                     const { data: existingCalcs, error: fetchErr } = await supabase.from('calculations').select('kalk_number')
-                    if (fetchErr) {
-                      console.error('[BIM debug] FEIL ved henting av kalk-numre:', fetchErr)
-                      throw fetchErr
-                    }
-                    console.log('[BIM debug] Eksisterende kalkyler hentet:', existingCalcs?.length || 0)
+                    if (fetchErr) throw fetchErr
                     const kalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
-                    console.log('[BIM debug] Nytt kalk-nr:', kalkNr)
 
                     const baseTittel = metadata.project?.name?.trim() || metadata.fileName?.replace(/\.ifc$/i, '') || 'BIM-prosjekt'
                     const tittel = `BIM-kalkyle: ${baseTittel}`
@@ -46098,11 +46080,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
                     }
-                    console.log('[BIM debug] basePayload bygd, størrelse:', JSON.stringify(basePayload).length, 'tegn')
                     const payload = sanitizeDbPayload(basePayload)
-                    console.log('[BIM debug] payload sanitized, kaller supabase.insert...')
                     const { data: nyKalk, error } = await supabase.from('calculations').insert(payload).select().single()
-                    console.log('[BIM debug] supabase.insert returnerte:', { dataExist: !!nyKalk, error })
                     if (error) throw error
                     created = nyKalk
                     console.log('[Patch 14.C] Kalkyle opprettet:', created)
@@ -48312,6 +48291,49 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
 //      byggKalkylerFraVeiviser, men kun lagt til på den FØRSTE yttervegg-bd
 //      (ellers ville vi telle åpninger flere ganger). Ubekreftede lagsett
 //      filtreres bort og rapporteres i meta.
+
+// ─── KRYMPING AV BIM-DATA FOR LAGRING (Patch 18 polish) ──────────────────────
+// Mesh-data (vertices, indices, normals) for 3D-rendering kan bli flere MB per
+// element. Hvis det lagres i bim_sesjon JSONB, kan det få Supabase Free-tier
+// til å bli "Unhealthy". Derfor stripper vi mesh-data før lagring — det
+// regenereres uansett ved neste IFC-opplasting.
+//
+// Beholder: navn, geometri-tall, ifcSpec, brukerSpec, lagstruktur, alle felter
+// som påvirker kalkylen.
+// Fjerner: mesh.vertices, mesh.indices, mesh.normals (kan være MB-store).
+
+function krympElementForLagring(el) {
+  if (!el || typeof el !== 'object') return el
+  const { mesh, ...resten } = el
+  // Behold mesh som tom markør slik at vi vet at element HADDE mesh
+  // (kan brukes til UI-hint om å re-importere IFC for 3D-visning)
+  return mesh ? { ...resten, _haddeMesh: true } : resten
+}
+
+function krympLagsettForLagring(ls) {
+  if (!ls || typeof ls !== 'object') return ls
+  return {
+    ...ls,
+    elementer: Array.isArray(ls.elementer) ? ls.elementer.map(krympElementForLagring) : ls.elementer,
+  }
+}
+
+function krympMengderForLagring(mengder) {
+  if (!mengder || typeof mengder !== 'object') return mengder
+  const krympet = {}
+  for (const [kat, data] of Object.entries(mengder)) {
+    if (data && typeof data === 'object') {
+      krympet[kat] = {
+        ...data,
+        elementer: Array.isArray(data.elementer) ? data.elementer.map(krympElementForLagring) : data.elementer,
+        lagsett: Array.isArray(data.lagsett) ? data.lagsett.map(krympLagsettForLagring) : data.lagsett,
+      }
+    } else {
+      krympet[kat] = data
+    }
+  }
+  return krympet
+}
 
 function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
   if (!mengder) return { kalkyler: [], faktorer: {}, meta: { bekreftedeAntall: 0, hoppedeAntall: 0, standardBruktFor: [] } }
