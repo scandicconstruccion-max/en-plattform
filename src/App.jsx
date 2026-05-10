@@ -41177,6 +41177,343 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
 // BimKlassifiseringSeksjon senere). Lukket som standard for å unngå støy
 // — brukeren klikker for å utforske.
 
+// ─── PATCH 18 polish: VISUELL TVERRSNITT-POPUP ───────────────────────────────
+// Viser lagstrukturen i et lagsett som en illustrert tverrsnitt-tegning:
+// fargede rektangler stablet vertikalt, proporsjonale til tykkelse, med
+// material-spesifikke teksturer. Spec-badges (brann/lyd/bærende/U-verdi) på
+// toppen — leser brukerSpec hvis kalkulatør har supplert, ellers ifcSpec
+// (skjuler '_varierer'-verdier). Beskrivelse fra brukerSpec eller
+// _tilpasningsNotat fra tilpassetKonstruksjon under tegningen.
+//
+// Plassering: knapp "📐 Vis tverrsnitt" i lagsett-kortets knapperad.
+
+// Mapper materialnavn til en farge basert på materialtype.
+function getTverrsnittMaterialFarge(materialnavn) {
+  const m = (materialnavn || '').toLowerCase()
+  if (/damp\s?sperre|fukt\s?sperre|vapor/i.test(m)) return { fyll: '#dbeafe', strek: '#3b82f6', tekst: '#1e40af' }
+  if (/vind\s?sperre|wind|undertak/i.test(m)) return { fyll: '#dbeafe', strek: '#60a5fa', tekst: '#1d4ed8' }
+  if (/gips|gypsum|drywall|plaster/i.test(m)) return { fyll: '#f8fafc', strek: '#cbd5e1', tekst: '#475569' }
+  if (/mineralull|glassull|steinull|rockwool|isolasjon|insulation/i.test(m)) return { fyll: '#fef3c7', strek: '#f59e0b', tekst: '#92400e' }
+  if (/eps|xps|polystyren|cellplast/i.test(m)) return { fyll: '#fce7f3', strek: '#ec4899', tekst: '#9f1239' }
+  if (/pur|pir|polyuretan/i.test(m)) return { fyll: '#ecfccb', strek: '#84cc16', tekst: '#3f6212' }
+  if (/betong|concrete|beton/i.test(m)) return { fyll: '#e5e7eb', strek: '#6b7280', tekst: '#374151' }
+  if (/stål|stal|steel|metall|metal/i.test(m)) return { fyll: '#cbd5e1', strek: '#475569', tekst: '#1e293b' }
+  if (/tre|wood|stender|bjelke|sviller|limtre|massivtre|clt|plank/i.test(m)) return { fyll: '#fed7aa', strek: '#c2410c', tekst: '#7c2d12' }
+  if (/osb|spon\s?plate|kryssfiner|finer|plywood|mdf|huntonit/i.test(m)) return { fyll: '#fef3c7', strek: '#a16207', tekst: '#713f12' }
+  if (/tegl|mur|brick|leca/i.test(m)) return { fyll: '#fecaca', strek: '#dc2626', tekst: '#991b1b' }
+  if (/puss|sparkel|stucco|render/i.test(m)) return { fyll: '#fef3c7', strek: '#d97706', tekst: '#78350f' }
+  if (/kledning|panel|cladding|fasade/i.test(m)) return { fyll: '#d9f99d', strek: '#65a30d', tekst: '#3f6212' }
+  if (/membran|takpapp|takbelegg|asphalt/i.test(m)) return { fyll: '#475569', strek: '#1e293b', tekst: '#f8fafc' }
+  if (/luft|cavity|spalte/i.test(m)) return { fyll: '#f1f5f9', strek: '#94a3b8', tekst: '#64748b' }
+  return { fyll: '#f1f5f9', strek: '#cbd5e1', tekst: '#475569' }
+}
+
+function BimTverrsnittModal({ lagsett, onClose }) {
+  // Esc-lukking
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  if (!lagsett) return null
+
+  // Lag-data: IFC bruker .thickness (meter) og .material; bibliotek-tilpasning
+  // bruker .tykkelse (mm) og .navn — støtt begge for kompatibilitet.
+  const lagListe = (lagsett.layers || lagsett.lag || []).filter(l => {
+    if (!l) return false
+    const harMaterial = l.material || l.navn
+    const harTykkelse = (l.thickness && l.thickness > 0) || (l.tykkelse && l.tykkelse > 0)
+    return harMaterial || harTykkelse
+  })
+
+  // Hent tykkelse i mm fra et lag — håndterer begge feltnavn
+  const lagTykkelseMm = (l) => {
+    if (l.thickness && l.thickness > 0) return l.thickness * 1000  // meter → mm
+    if (l.tykkelse && l.tykkelse > 0) return l.tykkelse             // allerede mm
+    return 0
+  }
+  const lagMaterial = (l) => l.material || l.navn || 'Ukjent material'
+
+  const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
+  const totalTykkelseMm = lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm
+
+  // Spec-data — brukerSpec har prioritet (kalkulatør har bekreftet),
+  // ellers ifcSpec hvis ikke '_varierer'.
+  const brukerSpec = lagsett.brukerSpec || null
+  const ifcSpec = lagsett.ifcSpec || {}
+
+  // Brann
+  let brannVerdi = null, brannKilde = null
+  if (brukerSpec?.brann) { brannVerdi = brukerSpec.brann; brannKilde = 'bruker' }
+  else if (ifcSpec.fireRating && ifcSpec.fireRating !== '_varierer') { brannVerdi = ifcSpec.fireRating; brannKilde = 'ifc' }
+
+  // Lyd
+  let lydVerdi = null, lydKilde = null
+  if (brukerSpec?.lyd) { lydVerdi = brukerSpec.lyd; lydKilde = 'bruker' }
+  else if (ifcSpec.acousticRating && ifcSpec.acousticRating !== '_varierer') { lydVerdi = `${ifcSpec.acousticRating} dB`; lydKilde = 'ifc' }
+
+  // Bærende
+  let baerendeVerdi = null, baerendeKilde = null
+  if (brukerSpec?.baerende) { baerendeVerdi = brukerSpec.baerende; baerendeKilde = 'bruker' }
+  else if (ifcSpec.loadBearing === true) { baerendeVerdi = 'Ja'; baerendeKilde = 'ifc' }
+  else if (ifcSpec.loadBearing === false) { baerendeVerdi = 'Nei'; baerendeKilde = 'ifc' }
+
+  // U-verdi
+  let uVerdiVerdi = null, uVerdiKilde = null
+  if (brukerSpec?.uVerdi !== null && brukerSpec?.uVerdi !== undefined && brukerSpec?.uVerdi !== '') { uVerdiVerdi = brukerSpec.uVerdi; uVerdiKilde = 'bruker' }
+  else if (ifcSpec.uValue && ifcSpec.uValue !== '_varierer') { uVerdiVerdi = ifcSpec.uValue; uVerdiKilde = 'ifc' }
+
+  const harBadges = brannVerdi || lydVerdi || baerendeVerdi || uVerdiVerdi
+
+  // Beskrivelse — brukerSpec.beskrivelse eller _tilpasningsNotat fra tilpassetKonstruksjon
+  const beskrivelse = brukerSpec?.beskrivelse || lagsett.tilpassetKonstruksjon?._tilpasningsNotat || ''
+
+  // Tegningens tilgjengelige høyde
+  const tegningHoyde = 460
+  const minLagHoyde = 18
+
+  // Beregn proporsjonal høyde — beskytt små lag (dampsperre 0.2mm må være synlig)
+  const lagMedHoyde = (() => {
+    if (lagListe.length === 0) return []
+    const basis = sumLagMm > 0 ? sumLagMm : lagListe.length
+    let foreloepige = lagListe.map(lag => {
+      const mm = lagTykkelseMm(lag)
+      return { lag, mm, h: sumLagMm > 0 ? (mm / basis) * tegningHoyde : tegningHoyde / lagListe.length }
+    })
+    let underskudd = 0
+    foreloepige.forEach(o => { if (o.h < minLagHoyde) { underskudd += (minLagHoyde - o.h); o.h = minLagHoyde; o.justert = true } })
+    if (underskudd > 0) {
+      const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.h, 0)
+      if (justerbarSum > 0) {
+        const faktor = (justerbarSum - underskudd) / justerbarSum
+        foreloepige = foreloepige.map(o => o.justert ? o : { ...o, h: Math.max(minLagHoyde, o.h * faktor) })
+      }
+    }
+    return foreloepige
+  })()
+
+  // Felles badge-stil — ifc-kilde får liten "IFC"-tag
+  const badgeStil = (bg, br, c) => ({
+    background: bg, border: `1px solid ${br}`, color: c,
+    padding: '5px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '600',
+    display: 'inline-flex', alignItems: 'center', gap: '5px',
+  })
+  const ifcTag = (
+    <span style={{ fontSize: '9px', background: 'rgba(255,255,255,0.6)', padding: '1px 4px', borderRadius: '3px', fontWeight: '700', letterSpacing: '0.3px' }}>
+      IFC
+    </span>
+  )
+
+  return createPortal(
+    <div onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
+        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px', backdropFilter: 'blur(4px)',
+      }}>
+      <div onClick={(e) => e.stopPropagation()}
+        style={{
+          background: 'white', borderRadius: '16px', width: '100%', maxWidth: '720px',
+          maxHeight: '92vh', display: 'flex', flexDirection: 'column',
+          boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
+        }}>
+        {/* Header */}
+        <div style={{
+          padding: '18px 22px 14px', borderBottom: '1px solid #e2e8f0',
+          background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px',
+        }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
+              📐 Tverrsnitt · {lagsett.brukerKategori || 'Ukategorisert'}
+            </div>
+            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {lagsett.navn || 'Lagsett'}
+            </div>
+            <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
+              Total tykkelse: <strong style={{ color: '#0f172a' }}>{totalTykkelseMm.toFixed(0)} mm</strong>
+              {' · '}{lagListe.length} lag
+              {lagsett.antall ? ` · ${lagsett.antall} stk` : ''}
+            </div>
+          </div>
+          <button onClick={onClose} aria-label="Lukk"
+            style={{
+              background: 'white', border: '1px solid #e2e8f0', color: '#475569',
+              borderRadius: '8px', width: '32px', height: '32px', fontSize: '16px',
+              cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: '600',
+            }}>×</button>
+        </div>
+
+        {/* Spec-badges */}
+        {harBadges && (
+          <div style={{ padding: '12px 22px', background: '#fafbfc', borderBottom: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {brannVerdi && (
+              <div style={badgeStil('#fef2f2', '#fecaca', '#991b1b')}>
+                <span>🔥</span><span>Brann: {String(brannVerdi)}</span>
+                {brannKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {lydVerdi && (
+              <div style={badgeStil('#eff6ff', '#bfdbfe', '#1e40af')}>
+                <span>🔊</span><span>Lyd: {String(lydVerdi)}</span>
+                {lydKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {baerendeVerdi === 'Ja' && (
+              <div style={badgeStil('#fffbeb', '#fde68a', '#92400e')}>
+                <span>🏗️</span><span>Bærende</span>
+                {baerendeKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {baerendeVerdi === 'Nei' && (
+              <div style={badgeStil('#f1f5f9', '#cbd5e1', '#475569')}>
+                <span>—</span><span>Ikke-bærende</span>
+                {baerendeKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+            {uVerdiVerdi !== null && uVerdiVerdi !== undefined && (
+              <div style={badgeStil('#f0fdfa', '#99f6e4', '#115e59')}>
+                <span>🌡️</span>
+                <span>U: {typeof uVerdiVerdi === 'number' ? uVerdiVerdi.toFixed(2) : uVerdiVerdi} W/m²K</span>
+                {uVerdiKilde === 'ifc' && ifcTag}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Tverrsnitt-tegning */}
+        <div style={{ padding: '20px 22px', overflow: 'auto', flex: 1, background: '#fafbfc' }}>
+          {lagListe.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13px' }}>
+              Ingen lag-data tilgjengelig fra IFC.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'stretch', gap: '0', maxWidth: '600px', margin: '0 auto' }}>
+              {/* Venstre: tykkelse-skala */}
+              <div style={{ width: '70px', flexShrink: 0, display: 'flex', flexDirection: 'column' }}>
+                {lagMedHoyde.map((o, idx) => (
+                  <div key={idx} style={{
+                    height: o.h + 'px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+                    paddingRight: '10px',
+                    fontSize: '11px', color: '#475569', fontWeight: '600',
+                    fontVariantNumeric: 'tabular-nums',
+                    borderTop: idx === 0 ? 'none' : '1px dashed #e2e8f0',
+                  }}>
+                    {o.mm > 0 ? `${Math.round(o.mm)} mm` : '—'}
+                  </div>
+                ))}
+              </div>
+
+              {/* Midt: selve tverrsnitt-tegningen */}
+              <div style={{
+                width: '90px', flexShrink: 0, display: 'flex', flexDirection: 'column',
+                border: '2px solid #1e293b', borderRadius: '4px', overflow: 'hidden',
+                boxShadow: '0 4px 12px rgba(15, 23, 42, 0.12)',
+                background: 'white',
+              }}>
+                {lagMedHoyde.map((o, idx) => {
+                  const farge = getTverrsnittMaterialFarge(lagMaterial(o.lag))
+                  const m = lagMaterial(o.lag).toLowerCase()
+                  let pattern = farge.fyll
+                  if (/mineralull|glassull|steinull|rockwool|isolasjon/i.test(m)) {
+                    pattern = `repeating-linear-gradient(45deg, ${farge.fyll} 0px, ${farge.fyll} 4px, ${farge.strek}33 4px, ${farge.strek}33 6px)`
+                  } else if (/tre|wood|stender|bjelke|sviller|limtre|plank/i.test(m)) {
+                    pattern = `repeating-linear-gradient(0deg, ${farge.fyll} 0px, ${farge.fyll} 6px, ${farge.strek}22 6px, ${farge.strek}22 7px)`
+                  } else if (/betong|concrete/i.test(m)) {
+                    pattern = `radial-gradient(${farge.strek}33 1px, ${farge.fyll} 1px) 0 0/6px 6px`
+                  } else if (/damp|fukt|vapor|vind|undertak/i.test(m)) {
+                    pattern = `repeating-linear-gradient(90deg, ${farge.fyll} 0px, ${farge.fyll} 3px, ${farge.strek}66 3px, ${farge.strek}66 5px)`
+                  }
+                  return (
+                    <div key={idx} style={{
+                      height: o.h + 'px',
+                      background: pattern,
+                      borderTop: idx === 0 ? 'none' : '1px solid #1e293b',
+                    }} title={lagMaterial(o.lag)}>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Høyre: materialnavn + lag-nummer */}
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                {lagMedHoyde.map((o, idx) => {
+                  const farge = getTverrsnittMaterialFarge(lagMaterial(o.lag))
+                  return (
+                    <div key={idx} style={{
+                      height: o.h + 'px',
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      paddingLeft: '14px', position: 'relative',
+                      borderTop: idx === 0 ? 'none' : '1px dashed #e2e8f0',
+                    }}>
+                      <div style={{ position: 'absolute', left: '0', top: '50%', width: '10px', height: '1px', background: '#cbd5e1' }} />
+                      <span style={{
+                        background: farge.fyll, color: farge.tekst,
+                        border: '1px solid ' + farge.strek,
+                        padding: '2px 7px', borderRadius: '4px',
+                        fontSize: '10px', fontWeight: '700', flexShrink: 0,
+                        minWidth: '22px', textAlign: 'center',
+                      }}>{idx + 1}</span>
+                      <span style={{
+                        fontSize: '12px', color: '#0f172a', fontWeight: '500',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                        {lagMaterial(o.lag)}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Beskrivelse */}
+          {beskrivelse && (
+            <div style={{
+              marginTop: '20px', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto',
+              background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px',
+              padding: '12px 14px',
+            }}>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                Beskrivelse
+              </div>
+              <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                {beskrivelse}
+              </div>
+            </div>
+          )}
+
+          <div style={{
+            marginTop: '14px', maxWidth: '600px', marginLeft: 'auto', marginRight: 'auto',
+            fontSize: '10px', color: '#94a3b8', textAlign: 'center', fontStyle: 'italic',
+          }}>
+            Lag vises i den rekkefølgen IFC-fila beskriver dem · proporsjonal til tykkelse
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{
+          padding: '12px 22px', borderTop: '1px solid #e2e8f0', background: 'white',
+          display: 'flex', justifyContent: 'flex-end',
+        }}>
+          <button onClick={onClose}
+            style={{
+              background: '#dcfce7', border: '1px solid #86efac', color: '#15803d',
+              borderRadius: '6px', padding: '6px 14px', fontSize: '11px', fontWeight: '600',
+              cursor: 'pointer',
+            }}>
+            Lukk
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 function BimLagsettDetaljer({ lagsett, isMob }) {
   const [aapen, setAapen] = useState(false)
 
@@ -42261,6 +42598,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [tegningLagsett, setTegningLagsett] = useState(null)
   // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
   const [meshLagsett, setMeshLagsett] = useState(null)
+  // Patch 18 polish: Lagsett som vises i tverrsnitt-popup (null = lukket)
+  const [tverrsnittLagsett, setTverrsnittLagsett] = useState(null)
   // Patch 18 polish: Lagsett for bibliotek-søk-modal (null = lukket)
   const [bibliotekSokLagsett, setBibliotekSokLagsett] = useState(null)
   // Patch 18 polish: Set av lagsett-id-er der tilpasnings-panelet er åpent
@@ -42810,6 +43149,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   style={knappStilNoytral}>
                   Diagnose
                 </button>
+                {/* Patch 18 polish: Vis tverrsnitt-knapp — visualisert lagstruktur */}
+                {((lagsett.layers || lagsett.lag || []).filter(l => l && (l.material || l.navn || l.thickness > 0 || l.tykkelse > 0)).length > 0) && (
+                  <button
+                    onClick={() => setTverrsnittLagsett(lagsett)}
+                    style={knappStilNoytral}>
+                    📐 Vis tverrsnitt
+                  </button>
+                )}
                 {/* Patch 18 polish (IFC-supplering): Supplér info-knapp */}
                 <button
                   onClick={() => toggleSupplering(lagsett)}
@@ -43065,6 +43412,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           onClose={() => setMeshLagsett(null)}
           onVelgLagsett={(ls) => setMeshLagsett(ls)}
           isMob={isMob}
+        />
+      )}
+
+      {/* Patch 18 polish: Visuell tverrsnitt-popup */}
+      {tverrsnittLagsett && (
+        <BimTverrsnittModal
+          lagsett={tverrsnittLagsett}
+          onClose={() => setTverrsnittLagsett(null)}
         />
       )}
 
