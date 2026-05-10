@@ -45399,19 +45399,19 @@ function visGeometriDiagnose(metadata, onAlert) {
   if (fotavtrykkProsent >= 85 && etasjer.length > 0 && etasjeProsent >= 75) {
     vurdering = 'god'
     vurderingFarge = 'success'
-    vurderingTekst = '✅ Geometrien er parsbar og 2D-viewer vil fungere godt for denne fila.'
+    vurderingTekst = '✅ Geometrien er parsbar og 3D-viewer vil fungere godt for denne fila.'
   } else if (fotavtrykkProsent >= 50 && etasjer.length > 0) {
     vurdering = 'middels'
     vurderingFarge = 'warn'
-    vurderingTekst = '⚠️ Geometrien er delvis parsbar. 2D-viewer vil vise det meste, men noen elementer kan mangle.'
+    vurderingTekst = '⚠️ Geometrien er delvis parsbar. 3D-viewer vil vise det meste, men noen elementer kan mangle.'
   } else if (fotavtrykkProsent > 0) {
     vurdering = 'dårlig'
     vurderingFarge = 'warn'
-    vurderingTekst = '⚠️ Lite geometri funnet. 2D-viewer vil bli ufullstendig — vurder å be arkitekten om en bedre IFC-eksport.'
+    vurderingTekst = '⚠️ Lite geometri funnet. 3D-viewer vil bli ufullstendig — vurder å be arkitekten om en bedre IFC-eksport.'
   } else {
     vurdering = 'umulig'
     vurderingFarge = 'error'
-    vurderingTekst = '❌ Ingen parsbar geometri funnet. 2D-viewer kan ikke fungere på denne fila.'
+    vurderingTekst = '❌ Ingen parsbar geometri funnet. 3D-viewer kan ikke fungere på denne fila.'
   }
 
   // Modell-spenn (med enhets-konvertering)
@@ -45466,26 +45466,6 @@ function visGeometriDiagnose(metadata, onAlert) {
     icon: vurdering === 'god' ? '✅' : (vurdering === 'umulig' ? '❌' : '⚠️'),
     text: vurderingTekst,
   }]
-
-  if (vurdering === 'god') {
-    notes.push({
-      kind: 'info',
-      icon: '🚀',
-      text: 'Vi kan trygt bygge <strong>Patch 15.B</strong> (selve viewer-komponenten) og <strong>15.C</strong> (knapp i Steg 2).',
-    })
-  } else if (vurdering === 'middels' || vurdering === 'dårlig') {
-    notes.push({
-      kind: 'info',
-      icon: '🔧',
-      text: 'Vi kan fortsatt bygge viewer, men forventer at noen elementer mangler. Test gjerne med en annen IFC-fil for sammenligning.',
-    })
-  } else {
-    notes.push({
-      kind: 'info',
-      icon: '🛑',
-      text: 'Test gjerne en annen IFC-fil. Hvis flere filer feiler, kan vi avlyse 15.B/C og prioritere noe annet.',
-    })
-  }
 
   onAlert({
     message: 'Geometri-diagnose',
@@ -46561,6 +46541,7 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
 function KalkulasjonPage({ onNavigate }) {
   const { user } = useAuth()
   const appAlert = useAppAlert()
+  const confirm = useConfirm()
   const [kalks, setKalks] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -46606,6 +46587,25 @@ function KalkulasjonPage({ onNavigate }) {
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
+
+  // Slett kalkulasjon fra liste-visningen — bruker system-confirm (ikke browser-popup)
+  const handleDeleteKalk = async (k) => {
+    const ok = await confirm({
+      message: 'Slett denne kalkulasjonen?',
+      subMessage: `"${k.title}" (${k.kalk_number}) slettes permanent. Denne handlingen kan ikke angres.`,
+      danger: true,
+      confirmLabel: 'Slett',
+    })
+    if (!ok) return
+    const { error } = await supabase.from('calculations').delete().eq('id', k.id)
+    if (error) {
+      await appAlert({ message: 'Kunne ikke slette', subMessage: error.message, kind: 'error' })
+      return
+    }
+    // Fjern fra compareIds hvis valgt for sammenligning
+    setCompareIds(prev => prev.filter(id => id !== k.id))
+    load()
+  }
 
   // Filtrer ut maler fra vanlig liste
   const templates = kalks.filter(k => k.is_template)
@@ -47081,6 +47081,26 @@ function KalkulasjonPage({ onNavigate }) {
                   </div>
                   {!isMobK && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                   </div>{/* end clickable div */}
+                  {/* Slett-knapp — utenfor clickable div så hele kortet ikke åpnes */}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleDeleteKalk(k) }}
+                    title="Slett kalkulasjon"
+                    aria-label="Slett kalkulasjon"
+                    style={{
+                      background:'transparent',
+                      border:'1px solid transparent',
+                      borderRadius:'8px',
+                      padding: isMobK ? '6px 8px' : '8px 10px',
+                      fontSize: isMobK ? '14px' : '15px',
+                      cursor:'pointer',
+                      color:'#94a3b8',
+                      flexShrink:0,
+                      transition:'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background='#fef2f2'; e.currentTarget.style.borderColor='#fecaca'; e.currentTarget.style.color='#dc2626' }}
+                    onMouseLeave={e => { e.currentTarget.style.background='transparent'; e.currentTarget.style.borderColor='transparent'; e.currentTarget.style.color='#94a3b8' }}>
+                    🗑️
+                  </button>
                 </div>
               )
             })}
