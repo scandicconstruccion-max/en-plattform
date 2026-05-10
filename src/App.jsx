@@ -42559,6 +42559,7 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
       hoppede: [],         // [{ navn, kategori, areal }]
       bekreftedeAntall: 0,
       hoppedeAntall: 0,
+      tilpassedeAntall: 0,
       standardBruktFor: [],
     }
 
@@ -42567,17 +42568,21 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
       const lagsettListe = mengder[katNavn]?.lagsett || []
       lagsettListe.forEach(ls => {
         if (ls.matchedKonstruksjon) {
-          const fag = ls.matchedKonstruksjon.fag || 'tomrer'
+          // Patch 18 polish (Runde 2): Bruk tilpasset konstruksjon hvis satt
+          const aktivKonst = ls.tilpassetKonstruksjon || ls.matchedKonstruksjon
+          const fag = aktivKonst.fag || 'tomrer'
           if (!result.perFag[fag]) result.perFag[fag] = { lagsett: [], totalAreal: 0 }
           result.perFag[fag].lagsett.push({
-            navn: ls.matchedKonstruksjon.name,
+            navn: aktivKonst.name,
             originalNavn: ls.navn,
             areal: ls.totalAreal || 0,
             antall: ls.antall || 0,
             kategori: ls.brukerKategori || katNavn,
+            tilpasset: !!ls.tilpassetKonstruksjon,
           })
           result.perFag[fag].totalAreal += (ls.totalAreal || 0)
           result.bekreftedeAntall++
+          if (ls.tilpassetKonstruksjon) result.tilpassedeAntall++
         } else if (ls.brukerKategori && ls.brukerKategori !== 'ignorer' && ls.brukerKategori !== 'usikker') {
           // Klassifisert men ikke matchet — telles som "hoppet"
           result.hoppede.push({
@@ -42595,17 +42600,21 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
     if (mengder.gulv?.lagsett) {
       mengder.gulv.lagsett.forEach(ls => {
         if (ls.matchedKonstruksjon) {
-          const fag = ls.matchedKonstruksjon.fag || 'tomrer'
+          // Patch 18 polish (Runde 2): Bruk tilpasset konstruksjon hvis satt
+          const aktivKonst = ls.tilpassetKonstruksjon || ls.matchedKonstruksjon
+          const fag = aktivKonst.fag || 'tomrer'
           if (!result.perFag[fag]) result.perFag[fag] = { lagsett: [], totalAreal: 0 }
           result.perFag[fag].lagsett.push({
-            navn: ls.matchedKonstruksjon.name,
+            navn: aktivKonst.name,
             originalNavn: ls.navn,
             areal: ls.totalAreal || 0,
             antall: ls.antall || 0,
             kategori: ls.brukerKategori || 'gulv',
+            tilpasset: !!ls.tilpassetKonstruksjon,
           })
           result.perFag[fag].totalAreal += (ls.totalAreal || 0)
           result.bekreftedeAntall++
+          if (ls.tilpassetKonstruksjon) result.tilpassedeAntall++
         } else if (ls.brukerKategori && ls.brukerKategori !== 'ignorer') {
           result.hoppede.push({
             navn: ls.navn,
@@ -42752,6 +42761,26 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
           <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>
             Bygningsdeler som havner i kalkylen ({sammendrag.bekreftedeAntall + sammendrag.standardBruktFor.length} stk)
           </div>
+
+          {/* Patch 18 polish (Runde 2): Vis info når tilpasninger er aktive */}
+          {sammendrag.tilpassedeAntall > 0 && (
+            <div style={{
+              background: '#fef3c7',
+              border: '1px solid #fde68a',
+              borderRadius: '8px',
+              padding: '8px 12px',
+              marginBottom: '10px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+            }}>
+              <span style={{ fontSize: '14px' }}>✏️</span>
+              <span style={{ fontSize: '11px', color: '#854d0e', fontWeight: '600' }}>
+                {sammendrag.tilpassedeAntall} {sammendrag.tilpassedeAntall === 1 ? 'konstruksjon er tilpasset' : 'konstruksjoner er tilpasset'} for dette prosjektet — kalkylen bruker tilpassede tall
+              </span>
+            </div>
+          )}
+
           <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
             {Object.entries(sammendrag.perFag).map(([fagId, data]) => {
               const fag = FAGGRUPPER.find(f => f.id === fagId) || { name: fagId, emoji: '🔧' }
@@ -42779,6 +42808,12 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
                           {ls.erStandard && (
                             <span style={{ background:'#fef3c7', color:'#92400e', padding:'1px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>
                               standard
+                            </span>
+                          )}
+                          {/* Patch 18 polish (Runde 2): Tilpasset-badge */}
+                          {ls.tilpasset && (
+                            <span style={{ background:'#fef3c7', color:'#854d0e', padding:'1px 6px', borderRadius:'4px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>
+                              ✏️ tilpasset
                             </span>
                           )}
                         </div>
@@ -47624,6 +47659,12 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
   const STANDARD_YTTERDOR_ID = 'tom_dor_ytter'
   const STANDARD_INNERDOR_ID = 'tom_dor_inner'
 
+  // Patch 18 polish (Runde 2): Hvis kalkulatøren har tilpasset konstruksjonen
+  // for et lagsett (overstyrt tykkelse/materialer/arbeidstider), bruker vi den
+  // tilpassede kopien istedenfor den opprinnelige bibliotek-konstruksjonen.
+  // Biblioteket forblir uendret — tilpasningen gjelder kun for dette prosjektet.
+  const aktivKonstruksjon = (ls) => ls.tilpassetKonstruksjon || ls.matchedKonstruksjon
+
   // Grupper bygningsdeler per fag — samme mønster som byggKalkylerFraVeiviser
   const fagsBygningsdeler = {}
   let bekreftedeAntall = 0
@@ -47642,7 +47683,7 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
   ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(katNavn => {
     const lagsettListe = mengder[katNavn]?.lagsett || []
     lagsettListe.forEach(ls => {
-      const konst = ls.matchedKonstruksjon
+      const konst = aktivKonstruksjon(ls)
       if (!konst) {
         // Ubekreftet — telles bare hvis brukeren faktisk klassifiserte den
         // Patch 18 polish: 'baering' regnes ikke som hoppet — den håndteres separat
@@ -47661,6 +47702,11 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
       bd._kilde = 'bim'
       bd._ifcLagsett = ls.navn
       bd._ifcAntall = ls.antall || 0
+      // Patch 18 polish (Runde 2): Marker hvis konstruksjonen er tilpasset
+      if (ls.tilpassetKonstruksjon) {
+        bd._tilpasset = true
+        bd._tilpasningsNotat = ls.tilpassetKonstruksjon._tilpasningsNotat || ''
+      }
       const fag = konst.fag || 'tomrer'
       leggTil(fag, bd)
       bekreftedeAntall++
@@ -47677,7 +47723,7 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
   // ── 2. Gulv (etasjeskille + dekke_paa_grunn) ─────────────────────────────
   if (mengder.gulv?.lagsett) {
     mengder.gulv.lagsett.forEach(ls => {
-      const konst = ls.matchedKonstruksjon
+      const konst = aktivKonstruksjon(ls)
       if (!konst) {
         if (ls.brukerKategori && ls.brukerKategori !== 'ignorer') hoppedeAntall++
         return
@@ -47688,6 +47734,11 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
       bd._kilde = 'bim'
       bd._ifcLagsett = ls.navn
       bd._ifcAntall = ls.antall || 0
+      // Patch 18 polish (Runde 2): Marker hvis konstruksjonen er tilpasset
+      if (ls.tilpassetKonstruksjon) {
+        bd._tilpasset = true
+        bd._tilpasningsNotat = ls.tilpassetKonstruksjon._tilpasningsNotat || ''
+      }
       leggTil(konst.fag || 'tomrer', bd)
       bekreftedeAntall++
     })
