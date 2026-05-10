@@ -36690,9 +36690,13 @@ function expandQuantities(api, modelID, quantitySet) {
 
 // Sjekker om en vegg er ekstern (yttervegg) basert på IsExternal-property
 // fra Pset_WallCommon. Returnerer true/false/null (null = ukjent).
-function getWallIsExternal(api, mod, modelID, elementId, propLookup) {
+// Patch 18 polish: Generisk PSet-leser. Henter alle relevante properties fra
+// Pset_*Common (WallCommon, SlabCommon, RoofCommon, osv.) for et element.
+// Returnerer { isExternal, fireRating, acousticRating, loadBearing, uValue,
+//              raw } der null = ukjent/mangler i IFC.
+function getElementSpec(api, mod, modelID, elementId, propLookup) {
   try {
-    // Bygger lookup første gang og caacher
+    // Bygger lookup første gang og cacher
     if (!propLookup._psetCache) {
       propLookup._psetCache = new Map()
       const relIds = api.GetLineIDsWithType(modelID, mod.IFCRELDEFINESBYPROPERTIES)
@@ -36704,31 +36708,67 @@ function getWallIsExternal(api, mod, modelID, elementId, propLookup) {
         const propId = rel.RelatingPropertyDefinition.value
         if (!propId) continue
         let propDef; try { propDef = api.GetLine(modelID, propId) } catch(e) { continue }
-        // Pset_WallCommon har HasProperties, ikke Quantities
+        // PSets har HasProperties (Quantity-sets har Quantities)
         if (!Array.isArray(propDef?.HasProperties)) continue
         const psetName = propDef?.Name?.value
-        if (!psetName || !/wallcommon/i.test(psetName)) continue
+        if (!psetName) continue
+        // Aksepterer alle Pset_*Common-varianter (WallCommon, SlabCommon, RoofCommon, BeamCommon, ColumnCommon, osv.)
+        if (!/Common$/i.test(psetName) && !/wallcommon|slabcommon|roofcommon|beamcommon|columncommon/i.test(psetName)) continue
         const targets = Array.isArray(rel.RelatedObjects) ? rel.RelatedObjects : [rel.RelatedObjects]
         for (const tgt of targets) {
           const tid = tgt?.value
-          if (tid) propLookup._psetCache.set(tid, propDef)
+          if (!tid) continue
+          // Aggreger flere PSets per element (et element kan ha både Pset_WallCommon og Pset_BeamCommon)
+          if (!propLookup._psetCache.has(tid)) propLookup._psetCache.set(tid, [])
+          propLookup._psetCache.get(tid).push(propDef)
         }
       }
     }
-    const pset = propLookup._psetCache.get(elementId)
-    if (!pset) return null
-    // Finn IsExternal-property i HasProperties
-    for (const propRef of pset.HasProperties) {
-      let prop = propRef
-      if (!prop?.Name && propRef?.value) {
-        try { prop = api.GetLine(modelID, propRef.value) } catch(e) { continue }
-      }
-      if (prop?.Name?.value?.toLowerCase() === 'isexternal') {
-        return !!(prop?.NominalValue?.value)
+    const psets = propLookup._psetCache.get(elementId)
+    if (!psets || psets.length === 0) return null
+
+    // Hjelper for å hente verdi fra HasProperties for et gitt navn
+    const propsByLowerName = new Map()
+    for (const pset of psets) {
+      for (const propRef of pset.HasProperties) {
+        let prop = propRef
+        if (!prop?.Name && propRef?.value) {
+          try { prop = api.GetLine(modelID, propRef.value) } catch(e) { continue }
+        }
+        if (!prop?.Name?.value) continue
+        const lowerName = prop.Name.value.toLowerCase()
+        if (!propsByLowerName.has(lowerName)) propsByLowerName.set(lowerName, prop)
       }
     }
+
+    const valueOf = (lowerName) => {
+      const prop = propsByLowerName.get(lowerName)
+      if (!prop) return null
+      // IfcPropertySingleValue: NominalValue.value
+      if (prop?.NominalValue?.value !== undefined) return prop.NominalValue.value
+      return null
+    }
+
+    const result = {
+      isExternal: valueOf('isexternal'),
+      // Brann: kan være FireRating eller FireResistanceRating
+      fireRating: valueOf('firerating') || valueOf('fireresistancerating'),
+      // Lyd: AcousticRating eller SoundReduction
+      acousticRating: valueOf('acousticrating') || valueOf('soundreduction'),
+      // Bærende
+      loadBearing: valueOf('loadbearing'),
+      // U-verdi
+      uValue: valueOf('thermaltransmittance'),
+    }
+    return result
   } catch(e) { /* OK — ikke kritisk */ }
   return null
+}
+
+// Backwards-compat for eksisterende kall
+function getWallIsExternal(api, mod, modelID, elementId, propLookup) {
+  const spec = getElementSpec(api, mod, modelID, elementId, propLookup)
+  return spec?.isExternal ?? null
 }
 
 // Hovedfunksjon: ekstraherer mengder per element-kategori.
@@ -37735,7 +37775,8 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         arealKilde = 'beregnet_lengde_x_hoyde'
       }
 
-      const isExt = getWallIsExternal(api, mod, modelID, elementId, propLookup)
+      const ifcSpec = getElementSpec(api, mod, modelID, elementId, propLookup)
+      const isExt = ifcSpec?.isExternal ?? null
       const navn = element?.Name?.value || `Vegg #${elementId}`
       // Hent lagstruktur — først fra instans, fallback til type
       let lagstruktur = layerLookup.get(elementId) || null
@@ -37744,7 +37785,7 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
         const typeId = instanceToTypeLookup.get(elementId)
         if (typeId) lagstruktur = layerLookup.get(typeId) || null
       }
-      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, arealKilde, isExternal: isExt, lagstruktur, ifcType: wType }
+      const elInfo = { id: elementId, navn, areal, lengde, hoyde, volum, arealKilde, isExternal: isExt, lagstruktur, ifcType: wType, ifcSpec }
 
       let kat = 'ukjent_vegg'
       if (isExt === true) kat = 'yttervegg'
@@ -38288,6 +38329,33 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       utenLagsett.antallLag = 0
       result.push(utenLagsett)
     }
+
+    // Patch 18 polish: Aggreger ifcSpec på lagsett-nivå.
+    // Hvis alle elementer i lagsettet har samme verdi → bruk den
+    // Hvis noen har og andre ikke har → bruk verdien som finnes
+    // Hvis verdiene varierer → marker som '_varierer'
+    result.forEach(lagsett => {
+      const fields = ['fireRating', 'acousticRating', 'loadBearing', 'uValue', 'isExternal']
+      const aggregert = {}
+      fields.forEach(f => {
+        const verdier = lagsett.elementer
+          .map(e => e.ifcSpec?.[f])
+          .filter(v => v !== null && v !== undefined)
+        if (verdier.length === 0) {
+          aggregert[f] = null
+        } else {
+          // Sjekk om alle er like
+          const unike = [...new Set(verdier.map(v => String(v)))]
+          if (unike.length === 1) {
+            aggregert[f] = verdier[0]
+          } else {
+            aggregert[f] = '_varierer'
+          }
+        }
+      })
+      lagsett.ifcSpec = aggregert
+    })
+
     return result
   }
 
@@ -39258,6 +39326,40 @@ function ekstrakerTykkelseFraNavn(konstruksjon) {
   const tekst = navn + ' ' + beskr
   const match = tekst.match(/(\d{2,4})\s*mm\b/i)
   return match ? parseInt(match[1], 10) : null
+}
+
+// Patch 18 polish: Beregner IFC-kvalitet — hvor mange lagsett mangler
+// kritiske spesifikasjoner som kalkulatør trenger for å kalkulere riktig.
+function beregnIfcKvalitet(mengder) {
+  const result = {
+    totalt: 0,
+    medLagstruktur: 0,
+    medBrann: 0,
+    medLyd: 0,
+    medBaerende: 0,
+    medUverdi: 0,
+    supplertManuelt: 0, // antall lagsett der kalkulatør har fylt inn brukerSpec
+  }
+  if (!mengder) return result
+  const kategorier = ['yttervegg', 'innervegg', 'ukjent_vegg', 'tak', 'gulv']
+  kategorier.forEach(kat => {
+    const lagsettListe = mengder[kat]?.lagsett || []
+    lagsettListe.forEach(ls => {
+      result.totalt++
+      if (ls.layers && ls.layers.length > 0) result.medLagstruktur++
+      const ifc = ls.ifcSpec || {}
+      const bruker = ls.brukerSpec || {}
+      // Tell både IFC-supplering og brukersupplering
+      if (ifc.fireRating || bruker.brann) result.medBrann++
+      if (ifc.acousticRating || bruker.lyd) result.medLyd++
+      if (ifc.loadBearing !== null && ifc.loadBearing !== undefined || bruker.baerende) result.medBaerende++
+      if (ifc.uValue || bruker.uVerdi) result.medUverdi++
+      if (bruker && (bruker.brann || bruker.lyd || bruker.baerende || bruker.uVerdi || bruker.beskrivelse)) {
+        result.supplertManuelt++
+      }
+    })
+  })
+  return result
 }
 
 function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
@@ -40581,6 +40683,72 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
   // Beregn IFC-lagstruktur én gang (for likhets-score)
   const ifcLag = React.useMemo(() => ifcLagFingeravtrykk(lagsett), [lagsett])
 
+  // Patch 18 polish (IFC-supplering): Match-krav fra brukerSpec eller ifcSpec
+  // Brukes for å markere konstruksjoner som matcher kravene med "✓ matcher krav"-pille
+  const matchKrav = React.useMemo(() => {
+    const bruker = lagsett.brukerSpec || {}
+    const ifc = lagsett.ifcSpec || {}
+    const krav = {}
+    if (bruker.brann && bruker.brann !== 'Ingen') krav.brann = bruker.brann
+    else if (ifc.fireRating && ifc.fireRating !== '_varierer') krav.brann = ifc.fireRating
+    if (bruker.lyd && bruker.lyd !== 'Ingen') krav.lyd = bruker.lyd
+    else if (ifc.acousticRating && ifc.acousticRating !== '_varierer') krav.lyd = ifc.acousticRating
+    if (bruker.baerende) krav.baerende = bruker.baerende
+    else if (ifc.loadBearing !== null && ifc.loadBearing !== undefined && ifc.loadBearing !== '_varierer') {
+      krav.baerende = ifc.loadBearing ? 'Ja' : 'Nei'
+    }
+    if (bruker.uVerdi) krav.uVerdi = bruker.uVerdi
+    return krav
+  }, [lagsett])
+
+  // Sjekker om en bibliotek-konstruksjon matcher de spesifiserte kravene.
+  // Konstruksjoner kan ha brann/lyd/baerende/uVerdi-felter (legges inn ved
+  // konstruksjons-opprettelse i biblioteket).
+  const sjekkKonstrMatcher = (k) => {
+    if (Object.keys(matchKrav).length === 0) return null // ingen krav å matche mot
+    let matcher = 0
+    let totalt = 0
+    if (matchKrav.brann) {
+      totalt++
+      const kBrann = k.brann || k.brannkrav || ''
+      if (kBrann && (kBrann === matchKrav.brann || _brannMinimum(kBrann, matchKrav.brann))) matcher++
+    }
+    if (matchKrav.lyd) {
+      totalt++
+      const kLyd = k.lyd || k.lydkrav || ''
+      if (kLyd && _lydMinimum(kLyd, matchKrav.lyd)) matcher++
+    }
+    if (matchKrav.baerende) {
+      totalt++
+      const kBaerende = k.baerende
+      if (kBaerende === matchKrav.baerende || (kBaerende === true && matchKrav.baerende === 'Ja') || (kBaerende === false && matchKrav.baerende === 'Nei')) matcher++
+    }
+    if (matchKrav.uVerdi) {
+      totalt++
+      const kU = parseFloat(k.uVerdi || k['u-verdi'] || 0)
+      if (kU > 0 && kU <= matchKrav.uVerdi * 1.1) matcher++ // toleranse 10%
+    }
+    if (totalt === 0) return null
+    return { matcher, totalt, fullMatch: matcher === totalt }
+  }
+
+  // Hjelpere — sammenlign brann/lyd-krav for å se om konstruksjon dekker kravene
+  function _brannMinimum(konstrBrann, kravBrann) {
+    // Hent ut minutter — REI 60 → 60, EI 30 → 30
+    const tall = (s) => {
+      const m = String(s).match(/(\d+)/)
+      return m ? parseInt(m[1], 10) : 0
+    }
+    return tall(konstrBrann) >= tall(kravBrann)
+  }
+  function _lydMinimum(konstrLyd, kravLyd) {
+    const tall = (s) => {
+      const m = String(s).match(/(\d+)/)
+      return m ? parseInt(m[1], 10) : 0
+    }
+    return tall(konstrLyd) >= tall(kravLyd)
+  }
+
   // Hent unike kategorier fra biblioteket — for filter-listen
   const tilgjengeligeKategorier = React.useMemo(() => {
     const counter = {}
@@ -40730,6 +40898,32 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
               boxSizing: 'border-box',
             }}
           />
+          {/* Patch 18 polish (IFC-supplering): Viser hvilke krav vi matcher mot */}
+          {Object.keys(matchKrav).length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '10px', color: '#64748b', fontWeight: '600' }}>Krav:</span>
+              {matchKrav.brann && (
+                <span style={{ fontSize: '10px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                  🔥 {matchKrav.brann}
+                </span>
+              )}
+              {matchKrav.lyd && (
+                <span style={{ fontSize: '10px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                  🔊 {matchKrav.lyd}
+                </span>
+              )}
+              {matchKrav.baerende && (
+                <span style={{ fontSize: '10px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                  🏗️ Bærende: {matchKrav.baerende}
+                </span>
+              )}
+              {matchKrav.uVerdi && (
+                <span style={{ fontSize: '10px', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                  ❄️ U ≤ {matchKrav.uVerdi}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Hovedinnhold: sidebar + liste */}
@@ -40815,6 +41009,8 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
                   const beskrivelse = konstruksjonsBeskrivelse(k)
                   const visScore = ifcLag.length > 0 && score > 0
                   const harMatch = visScore && score >= 0.5
+                  // Patch 18 polish (IFC-supplering): Sjekk om konstr matcher krav
+                  const kravMatch = sjekkKonstrMatcher(k)
 
                   return (
                     <div
@@ -40866,6 +41062,33 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
                               whiteSpace: 'nowrap',
                             }}>
                               ✓ god match
+                            </span>
+                          )}
+                          {/* Patch 18 polish (IFC-supplering): "matcher krav"-pille */}
+                          {kravMatch && kravMatch.fullMatch && (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              color: '#1e40af',
+                              background: '#dbeafe',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              ✓ matcher krav
+                            </span>
+                          )}
+                          {kravMatch && !kravMatch.fullMatch && kravMatch.matcher > 0 && (
+                            <span style={{
+                              fontSize: '10px',
+                              fontWeight: '700',
+                              color: '#854d0e',
+                              background: '#fef3c7',
+                              padding: '2px 8px',
+                              borderRadius: '6px',
+                              whiteSpace: 'nowrap',
+                            }}>
+                              {kravMatch.matcher}/{kravMatch.totalt} krav
                             </span>
                           )}
                         </div>
@@ -41067,6 +41290,58 @@ function BimLagsettDetaljer({ lagsett, isMob }) {
               </div>
             </div>
           </div>
+
+          {/* Patch 18 polish (IFC-supplering): Spesifikasjoner — IFC vs supplert */}
+          {(() => {
+            const ifc = lagsett.ifcSpec || {}
+            const bruker = lagsett.brukerSpec || {}
+            const harSpec = (ifc.fireRating || ifc.acousticRating || ifc.loadBearing !== null || ifc.uValue
+                          || bruker.brann || bruker.lyd || bruker.baerende || bruker.uVerdi || bruker.beskrivelse)
+            if (!harSpec) return null
+            const fmtIfc = (v) => v === '_varierer' ? <em style={{ color: '#94a3b8' }}>varierer</em> : (v ?? <em style={{ color: '#cbd5e1' }}>—</em>)
+            const fmtBaerende = (v) => v === true ? 'Ja' : v === false ? 'Nei' : v === '_varierer' ? <em style={{ color: '#94a3b8' }}>varierer</em> : <em style={{ color: '#cbd5e1' }}>—</em>
+            return (
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                  Spesifikasjoner
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr 1fr', gap: '4px 12px', fontSize: '11px', alignItems: 'center', padding: '8px 10px', background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '700' }}></div>
+                  <div style={{ fontSize: '9px', color: '#94a3b8', textTransform: 'uppercase', fontWeight: '700' }}>Fra IFC</div>
+                  <div style={{ fontSize: '9px', color: '#1e40af', textTransform: 'uppercase', fontWeight: '700' }}>Supplert</div>
+
+                  <div style={{ color: '#475569', fontWeight: '600' }}>🔥 Brann</div>
+                  <div style={{ color: '#0f172a' }}>{fmtIfc(ifc.fireRating)}</div>
+                  <div style={{ color: bruker.brann ? '#1e40af' : '#cbd5e1', fontWeight: bruker.brann ? '700' : '400' }}>
+                    {bruker.brann || <em>—</em>}
+                  </div>
+
+                  <div style={{ color: '#475569', fontWeight: '600' }}>🔊 Lyd</div>
+                  <div style={{ color: '#0f172a' }}>{fmtIfc(ifc.acousticRating)}</div>
+                  <div style={{ color: bruker.lyd ? '#1e40af' : '#cbd5e1', fontWeight: bruker.lyd ? '700' : '400' }}>
+                    {bruker.lyd || <em>—</em>}
+                  </div>
+
+                  <div style={{ color: '#475569', fontWeight: '600' }}>🏗️ Bærende</div>
+                  <div style={{ color: '#0f172a' }}>{fmtBaerende(ifc.loadBearing)}</div>
+                  <div style={{ color: bruker.baerende ? '#1e40af' : '#cbd5e1', fontWeight: bruker.baerende ? '700' : '400' }}>
+                    {bruker.baerende || <em>—</em>}
+                  </div>
+
+                  <div style={{ color: '#475569', fontWeight: '600' }}>❄️ U-verdi</div>
+                  <div style={{ color: '#0f172a' }}>{fmtIfc(ifc.uValue)}</div>
+                  <div style={{ color: bruker.uVerdi ? '#1e40af' : '#cbd5e1', fontWeight: bruker.uVerdi ? '700' : '400' }}>
+                    {bruker.uVerdi || <em>—</em>}
+                  </div>
+                </div>
+                {bruker.beskrivelse && (
+                  <div style={{ marginTop: '6px', padding: '6px 10px', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '6px', fontSize: '10px', color: '#1e40af', lineHeight: 1.5 }}>
+                    <strong>📝 Notat fra kalkulatør:</strong> {bruker.beskrivelse}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
 
           {/* Lagstruktur */}
           {lagListe.length > 0 && (
@@ -41758,6 +42033,225 @@ function BimTilpasningsPanel({ lagsett, onLagre, onAvbryt }) {
   )
 }
 
+// ─── BIM SUPPLERINGS-PANEL (Patch 18 polish — IFC-supplering Del C) ──────────
+// Lar kalkulatøren fylle inn brann/lyd/bærelogikk/U-verdi/beskrivelse for et
+// lagsett basert på arkitekt-tegninger eller egen vurdering — fyller hullene
+// IFC-fila ofte etterlater. Vises som utvidbar seksjon i lagsett-kortet i Steg 2.
+//
+// Lagres som `lagsett.brukerSpec`. Brukes for:
+//   - Bibliotek-matching (vise "✓ matcher krav"-pille)
+//   - Telling i diagnose-banner
+//   - Dokumentasjon for senere kalkyle-revisjon
+
+const BRANN_VALG = ['Ukjent', 'Ingen', 'EI 30', 'EI 60', 'REI 30', 'REI 60', 'REI 90', 'REI 120']
+const LYD_VALG = ['Ukjent', 'Ingen', '< 35 dB', '35 dB', '39 dB', '44 dB', '48 dB', '52 dB', '> 55 dB']
+
+function BimSuppleringPanel({ lagsett, onLagre, onAvbryt }) {
+  const ifc = lagsett.ifcSpec || {}
+  // Forhåndsutfyll fra IFC hvis IFC har data
+  const initBrann = lagsett.brukerSpec?.brann ?? (ifc.fireRating && ifc.fireRating !== '_varierer' ? ifc.fireRating : 'Ukjent')
+  const initLyd = lagsett.brukerSpec?.lyd ?? (ifc.acousticRating && ifc.acousticRating !== '_varierer' ? `${ifc.acousticRating} dB` : 'Ukjent')
+  const initBaerende = lagsett.brukerSpec?.baerende ?? (ifc.loadBearing === true ? 'Ja' : ifc.loadBearing === false ? 'Nei' : 'Ukjent')
+  const initUverdi = lagsett.brukerSpec?.uVerdi ?? (ifc.uValue && ifc.uValue !== '_varierer' ? ifc.uValue : '')
+  const initBeskrivelse = lagsett.brukerSpec?.beskrivelse ?? ''
+
+  const [brann, setBrann] = useState(initBrann)
+  const [lyd, setLyd] = useState(initLyd)
+  const [baerende, setBaerende] = useState(initBaerende)
+  const [uVerdi, setUverdi] = useState(initUverdi)
+  const [beskrivelse, setBeskrivelse] = useState(initBeskrivelse)
+
+  const handleLagre = () => {
+    onLagre({
+      brann: brann === 'Ukjent' ? null : brann,
+      lyd: lyd === 'Ukjent' ? null : lyd,
+      baerende: baerende === 'Ukjent' ? null : baerende,
+      uVerdi: uVerdi === '' ? null : parseFloat(uVerdi) || null,
+      beskrivelse: beskrivelse.trim() || null,
+    })
+  }
+
+  const fjernSupplering = () => {
+    onLagre(null)
+  }
+
+  // Felles select-stil (matcher tilpasnings-panelet)
+  const selectStil = {
+    width: '100%',
+    padding: '5px 8px',
+    border: '1px solid #cbd5e1',
+    borderRadius: '6px',
+    fontSize: '11px',
+    background: 'white',
+    boxSizing: 'border-box',
+    fontFamily: 'inherit',
+  }
+  const labelStil = {
+    fontSize: '10px',
+    fontWeight: '700',
+    color: '#475569',
+    textTransform: 'uppercase',
+    letterSpacing: '0.4px',
+    marginBottom: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  }
+  const ifcBadge = (ifcVerdi) => {
+    if (!ifcVerdi) return null
+    if (ifcVerdi === '_varierer') return (
+      <span style={{ fontSize: '9px', background: '#fef3c7', color: '#854d0e', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>
+        IFC: varierer
+      </span>
+    )
+    return (
+      <span style={{ fontSize: '9px', background: '#dbeafe', color: '#1e40af', padding: '1px 5px', borderRadius: '4px', fontWeight: '700' }}>
+        IFC: {String(ifcVerdi)}
+      </span>
+    )
+  }
+
+  return (
+    <div style={{
+      background: '#eff6ff',
+      border: '1px solid #bfdbfe',
+      borderRadius: '10px',
+      padding: '12px 14px',
+      marginTop: '8px',
+      flexBasis: '100%',
+      order: 99,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+        <div style={{ fontSize: '12px', fontWeight: '700', color: '#1e40af' }}>
+          ✏️ Supplér IFC-info for dette lagsettet
+        </div>
+        <div style={{ fontSize: '10px', color: '#3b82f6' }}>
+          Fyll inn fra arkitekt-tegninger — IFC-fila mangler ofte disse
+        </div>
+      </div>
+
+      {/* Felter — to kolonner */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+        {/* Brann */}
+        <div>
+          <div style={labelStil}>
+            <span>Brannkrav</span>
+            {ifcBadge(ifc.fireRating)}
+          </div>
+          <select value={brann} onChange={e => setBrann(e.target.value)} style={selectStil}>
+            {BRANN_VALG.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </div>
+
+        {/* Lyd */}
+        <div>
+          <div style={labelStil}>
+            <span>Lydkrav (Rw)</span>
+            {ifcBadge(ifc.acousticRating)}
+          </div>
+          <select value={lyd} onChange={e => setLyd(e.target.value)} style={selectStil}>
+            {LYD_VALG.map(v => <option key={v} value={v}>{v}</option>)}
+          </select>
+        </div>
+
+        {/* Bærende */}
+        <div>
+          <div style={labelStil}>
+            <span>Bærende</span>
+            {ifc.loadBearing !== null && ifc.loadBearing !== undefined && ifc.loadBearing !== '_varierer'
+              ? ifcBadge(ifc.loadBearing ? 'Ja' : 'Nei')
+              : ifcBadge(ifc.loadBearing)}
+          </div>
+          <select value={baerende} onChange={e => setBaerende(e.target.value)} style={selectStil}>
+            <option value="Ukjent">Ukjent</option>
+            <option value="Ja">Ja</option>
+            <option value="Nei">Nei</option>
+          </select>
+        </div>
+
+        {/* U-verdi */}
+        <div>
+          <div style={labelStil}>
+            <span>U-verdi (W/m²K)</span>
+            {ifcBadge(ifc.uValue)}
+          </div>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="f.eks. 0.18"
+            value={uVerdi}
+            onChange={e => setUverdi(e.target.value)}
+            style={selectStil}
+          />
+        </div>
+      </div>
+
+      {/* Beskrivelse */}
+      <div style={{ marginBottom: '12px' }}>
+        <div style={labelStil}>
+          <span>Beskrivelse av konstruksjon</span>
+        </div>
+        <textarea
+          value={beskrivelse}
+          onChange={e => setBeskrivelse(e.target.value)}
+          placeholder="F.eks. 'Bindingsverk 36×98 c/c 600 + gips 13mm begge sider, isolert med mineralull'"
+          rows={2}
+          style={{
+            ...selectStil,
+            resize: 'vertical',
+            fontFamily: 'inherit',
+          }}
+        />
+      </div>
+
+      {/* Handlinger */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }}>
+        <div>
+          {lagsett.brukerSpec && (
+            <button onClick={fjernSupplering} style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#dc2626',
+              fontSize: '10px',
+              cursor: 'pointer',
+              textDecoration: 'underline',
+              padding: 0,
+            }}>
+              Fjern supplering
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '6px' }}>
+          <button onClick={onAvbryt} style={{
+            background: 'white',
+            border: '1px solid #cbd5e1',
+            color: '#475569',
+            borderRadius: '6px',
+            padding: '6px 14px',
+            fontSize: '11px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}>
+            Avbryt
+          </button>
+          <button onClick={handleLagre} style={{
+            background: '#1e40af',
+            color: 'white',
+            border: '1px solid #1e40af',
+            borderRadius: '6px',
+            padding: '6px 14px',
+            fontSize: '11px',
+            fontWeight: '700',
+            cursor: 'pointer',
+          }}>
+            Lagre supplering
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
@@ -41771,6 +42265,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [bibliotekSokLagsett, setBibliotekSokLagsett] = useState(null)
   // Patch 18 polish: Set av lagsett-id-er der tilpasnings-panelet er åpent
   const [tilpasningAapneIds, setTilpasningAapneIds] = useState(new Set())
+  // Patch 18 polish (IFC-supplering): Set av lagsett-id-er der suppleringspanelet er åpent
+  const [suppleringAapneIds, setSuppleringAapneIds] = useState(new Set())
 
   // Dialog-state for "Lag ny konstruksjon"
   // Når åpen: { lagsett, mal: <konstruksjon eller null>, kategori }
@@ -42034,6 +42530,35 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     })
   }
 
+  // Patch 18 polish (IFC-supplering): Toggle suppleringspanel
+  const toggleSupplering = (lagsett) => {
+    const id = lagsettId(lagsett)
+    setSuppleringAapneIds(prev => {
+      const ny = new Set(prev)
+      if (ny.has(id)) ny.delete(id)
+      else ny.add(id)
+      return ny
+    })
+  }
+
+  // Patch 18 polish (IFC-supplering): Lagre brukerSpec på lagsett
+  const lagreSupplering = (lagsett, brukerSpec) => {
+    if (brukerSpec === null) {
+      // Fjern supplering
+      delete lagsett.brukerSpec
+    } else {
+      lagsett.brukerSpec = brukerSpec
+    }
+    setOppdater(o => o + 1)
+    if (onChange) onChange()
+    // Lukk panelet
+    setSuppleringAapneIds(prev => {
+      const ny = new Set(prev)
+      ny.delete(lagsettId(lagsett))
+      return ny
+    })
+  }
+
   const fjernMatch = async (lagsett) => {
     const sig = lagsettSignatur(lagsett)
     lagsett.matchedKonstruksjon = null
@@ -42247,8 +42772,14 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
                     {lagsett.navn}
                   </div>
-                  <div style={{ fontSize:'11px', color:'#64748b' }}>
-                    {lagsett.antall} stk · {lagsett.totalAreal.toFixed(1)} m² · {lagsett.brukerKategori || 'ukategorisert'}
+                  <div style={{ fontSize:'11px', color:'#64748b', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                    <span>{lagsett.antall} stk · {lagsett.totalAreal.toFixed(1)} m² · {lagsett.brukerKategori || 'ukategorisert'}</span>
+                    {/* Patch 18 polish (IFC-supplering): Indikator hvis brukerSpec finnes */}
+                    {lagsett.brukerSpec && (
+                      <span style={{ background: '#dbeafe', color: '#1e40af', padding: '1px 6px', borderRadius: '4px', fontSize: '10px', fontWeight: '700' }}>
+                        ✏️ supplert
+                      </span>
+                    )}
                   </div>
                 </div>
                 {/* Status-pill */}
@@ -42279,7 +42810,29 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                   style={knappStilNoytral}>
                   Diagnose
                 </button>
+                {/* Patch 18 polish (IFC-supplering): Supplér info-knapp */}
+                <button
+                  onClick={() => toggleSupplering(lagsett)}
+                  style={lagsett.brukerSpec ? {
+                    ...knappStilNoytral,
+                    background: '#dbeafe',
+                    border: '1px solid #93c5fd',
+                    color: '#1e40af',
+                  } : knappStilNoytral}>
+                  {lagsett.brukerSpec
+                    ? (suppleringAapneIds.has(lagsettId(lagsett)) ? 'Lukk' : '✏️ Endre supplering')
+                    : (suppleringAapneIds.has(lagsettId(lagsett)) ? 'Lukk' : '✏️ Supplér info')}
+                </button>
               </div>
+
+              {/* Patch 18 polish (IFC-supplering): Suppleringspanel */}
+              {suppleringAapneIds.has(lagsettId(lagsett)) && (
+                <BimSuppleringPanel
+                  lagsett={lagsett}
+                  onLagre={(brukerSpec) => lagreSupplering(lagsett, brukerSpec)}
+                  onAvbryt={() => toggleSupplering(lagsett)}
+                />
+              )}
 
               {/* Bekreftet match — vis valgt konstruksjon */}
               {erBekreftet && (
@@ -45247,6 +45800,79 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   </>
                 )}
               </div>
+
+              {/* Patch 18 polish: IFC-kvalitets-banner */}
+              {(() => {
+                const k = beregnIfcKvalitet(metadata.mengder)
+                if (k.totalt === 0) return null
+                const ufullstendigeFelt = []
+                const mangler = (n) => k.totalt - n
+                if (mangler(k.medBrann) > 0) ufullstendigeFelt.push(`brannkrav (${mangler(k.medBrann)} av ${k.totalt})`)
+                if (mangler(k.medLyd) > 0) ufullstendigeFelt.push(`lydkrav (${mangler(k.medLyd)} av ${k.totalt})`)
+                if (mangler(k.medBaerende) > 0) ufullstendigeFelt.push(`bærelogikk (${mangler(k.medBaerende)} av ${k.totalt})`)
+                if (ufullstendigeFelt.length === 0) return (
+                  <div style={{
+                    background: '#dcfce7',
+                    border: '1px solid #86efac',
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    marginBottom: '14px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                  }}>
+                    <span style={{ fontSize: '20px' }}>✓</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#166534', marginBottom: '2px' }}>
+                        IFC-fila er komplett
+                      </div>
+                      <div style={{ fontSize: '11px', color: '#15803d', lineHeight: 1.5 }}>
+                        Alle {k.totalt} lagsett har spesifikasjoner for brann, lyd og bærelogikk. Du kan stole på IFC-en.
+                      </div>
+                    </div>
+                  </div>
+                )
+                const kvalitet = (k.medBrann + k.medLyd + k.medBaerende) / (k.totalt * 3)
+                const farge = kvalitet < 0.2 ? 'rod' : kvalitet < 0.6 ? 'gul' : 'gronn'
+                const palett = farge === 'rod'
+                  ? { bg: '#fef2f2', border: '#fecaca', tittel: '#991b1b', tekst: '#b91c1c' }
+                  : farge === 'gul'
+                    ? { bg: '#fef3c7', border: '#fde68a', tittel: '#854d0e', tekst: '#a16207' }
+                    : { bg: '#dcfce7', border: '#86efac', tittel: '#166534', tekst: '#15803d' }
+                return (
+                  <div style={{
+                    background: palett.bg,
+                    border: '1px solid ' + palett.border,
+                    borderRadius: '10px',
+                    padding: '12px 16px',
+                    marginBottom: '14px',
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: '12px',
+                  }}>
+                    <span style={{ fontSize: '20px', lineHeight: 1.2 }}>
+                      {farge === 'rod' ? '⚠' : farge === 'gul' ? '⚠' : 'ℹ'}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: palett.tittel, marginBottom: '4px' }}>
+                        {farge === 'rod' ? 'IFC-fila er ufullstendig — du må supplere manuelt'
+                          : farge === 'gul' ? 'IFC-fila mangler noen spesifikasjoner'
+                          : 'IFC-fila er nesten komplett'}
+                      </div>
+                      <div style={{ fontSize: '11px', color: palett.tekst, lineHeight: 1.5 }}>
+                        {ufullstendigeFelt.length > 0 && (
+                          <>Mangler: {ufullstendigeFelt.join(', ')}. </>
+                        )}
+                        {k.supplertManuelt > 0 ? (
+                          <>Du har supplert {k.supplertManuelt} av {k.totalt} lagsett — fortsett i Steg 2.</>
+                        ) : (
+                          <>Bruk "✏️ Supplér info" på hvert lagsett i Steg 2 for å fylle inn fra arkitekt-tegninger.</>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
 
               {/* Selve kolonne-griden */}
               <div ref={kolonneWrapperRef} style={isMob ? {
