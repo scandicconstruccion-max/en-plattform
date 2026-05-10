@@ -44003,7 +44003,7 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
                               <div style={{ fontWeight: erKlikket ? '700' : '500', color: erKlikket ? '#1e40af' : '#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                                 {el.navn || `Element ${el.id}`}
                               </div>
-                              <div style={{ fontSize:'9px', color:'#94a3b8', marginTop:'1px' }}>
+                              <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'1px' }}>
                                 {detaljer.join(' · ') || '—'}
                               </div>
                             </button>
