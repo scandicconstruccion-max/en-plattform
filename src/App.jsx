@@ -46010,9 +46010,12 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   }
 
                   // 3. Beregn totals slik editor gjør
+                  console.log('[BIM debug] Steg 3: Beregner totals...')
                   const totals = beregnProsjektTotal(kalkylerForLagring, faktorer)
+                  console.log('[BIM debug] Totals beregnet:', totals)
 
                   // 4. Bygg bim_sesjon-snapshot for senere redigering (Patch 14.D.1)
+                  console.log('[BIM debug] Steg 4: Bygger bim_sesjon...')
                   const bimSesjon = {
                     fileName: metadata.fileName,
                     fileSize: metadata.fileSize,
@@ -46025,10 +46028,12 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                     sist_oppdatert: new Date().toISOString(),
                     versjon: erRedigering ? (redigeringAvKalkyle?.bim_sesjon?.versjon || 1) + 1 : 1,
                   }
+                  console.log('[BIM debug] bim_sesjon bygd, størrelse JSON:', JSON.stringify(bimSesjon).length, 'tegn')
 
                   let created
                   if (erRedigering && redigeringAvKalkyle?.id) {
                     // ── UPDATE eksisterende kalkyle ──
+                    console.log('[BIM debug] UPDATE-sti (erRedigering=true)')
                     const updatePayload = sanitizeDbPayload({
                       kalkyler: kalkylerForLagring,
                       faktorer,
@@ -46038,18 +46043,28 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                       bim_sesjon: bimSesjon,
                       updated_at: new Date().toISOString(),
                     })
+                    console.log('[BIM debug] Kaller supabase.update...')
                     const { data: updated, error } = await supabase.from('calculations')
                       .update(updatePayload)
                       .eq('id', redigeringAvKalkyle.id)
                       .select()
                       .single()
+                    console.log('[BIM debug] Supabase.update returnerte:', { dataExist: !!updated, error })
                     if (error) throw error
                     created = updated
                     console.log('[Patch 14.D] Kalkyle oppdatert:', created)
                   } else {
                     // ── INSERT ny kalkyle (vanlig flyt) ──
-                    const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
+                    console.log('[BIM debug] INSERT-sti (erRedigering=false)')
+                    console.log('[BIM debug] Henter eksisterende kalk-numre...')
+                    const { data: existingCalcs, error: fetchErr } = await supabase.from('calculations').select('kalk_number')
+                    if (fetchErr) {
+                      console.error('[BIM debug] FEIL ved henting av kalk-numre:', fetchErr)
+                      throw fetchErr
+                    }
+                    console.log('[BIM debug] Eksisterende kalkyler hentet:', existingCalcs?.length || 0)
                     const kalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
+                    console.log('[BIM debug] Nytt kalk-nr:', kalkNr)
 
                     const baseTittel = metadata.project?.name?.trim() || metadata.fileName?.replace(/\.ifc$/i, '') || 'BIM-prosjekt'
                     const tittel = `BIM-kalkyle: ${baseTittel}`
@@ -46083,8 +46098,11 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                       created_at: new Date().toISOString(),
                       updated_at: new Date().toISOString(),
                     }
+                    console.log('[BIM debug] basePayload bygd, størrelse:', JSON.stringify(basePayload).length, 'tegn')
                     const payload = sanitizeDbPayload(basePayload)
+                    console.log('[BIM debug] payload sanitized, kaller supabase.insert...')
                     const { data: nyKalk, error } = await supabase.from('calculations').insert(payload).select().single()
+                    console.log('[BIM debug] supabase.insert returnerte:', { dataExist: !!nyKalk, error })
                     if (error) throw error
                     created = nyKalk
                     console.log('[Patch 14.C] Kalkyle opprettet:', created)
