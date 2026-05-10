@@ -38477,6 +38477,10 @@ async function extractIfcQuantities(api, mod, modelID, onProgress) {
       ls.foreslattBegrunnelse = k.begrunnelse
       // brukerKategori starter likt med forslag, men kan overstyres i UI
       ls.brukerKategori = k.foreslattKategori
+      // Patch 19 commit 4: Foreslå spesifikk Bæresystem-mal basert på navn
+      if (k.foreslattKategori === 'baering') {
+        ls.foreslattMalId = detekterBaeringsProfilMal(ls.navn)
+      }
     })
   }
   klassifiserAlle('yttervegg')
@@ -39121,6 +39125,79 @@ function BimMengdeVisning({ mengder, isMob }) {
 // Hvis ingen eksakt match: returner nærmeste konstruksjon som "mal-utgangspunkt"
 // (men markert tydelig som "ikke en match").
 
+// Patch 19 commit 4: Detekter hvilken Bæresystem-mal som passer best basert
+// på lagsett-navnet fra IFC. Returnerer mal-id eller null.
+//
+// Eksempler:
+//   "Stål HEA 200" → 'bae_stal_bj_HEA200'
+//   "HEB200 søyle" → 'bae_stal_so_HEB200' (søyle-variant hvis navn antyder søyle)
+//   "Limtre 140x270" → 'bae_limtre_bj_140x270'
+//   "Limtre 115×115 søyle" → 'bae_limtre_so_115x115'
+//
+// Heuristikken er konservativ: returnerer null hvis ikke høy sikkerhet.
+function detekterBaeringsProfilMal(navn) {
+  if (!navn) return null
+  const n = navn.toLowerCase()
+
+  // Bestem først om det er søyle eller bjelke (default: bjelke)
+  const erSoyle = /\bsøyle|soyle|column|stolpe\b/i.test(navn)
+
+  // ─── Stål: HEA/HEB med dimensjon ───
+  const heMatch = navn.match(/\b(HEA|HEB|HE-A|HE-B)\s*[-–]?\s*(\d{2,3})\b/i)
+  if (heMatch) {
+    const profil = heMatch[1].replace('-', '').toUpperCase()  // HEA / HEB
+    const dim = parseInt(heMatch[2], 10)
+    // Bjelke-maler: HEA160, HEA200, HEB180, HEB220
+    // Søyle-maler: HEA120, HEA160, HEB200
+    if (erSoyle) {
+      if (profil === 'HEA' && dim <= 130) return 'bae_stal_so_HEA120'
+      if (profil === 'HEA') return 'bae_stal_so_HEA160'
+      if (profil === 'HEB') return 'bae_stal_so_HEB200'
+    } else {
+      if (profil === 'HEA' && dim <= 170) return 'bae_stal_bj_HEA160'
+      if (profil === 'HEA') return 'bae_stal_bj_HEA200'
+      if (profil === 'HEB' && dim <= 190) return 'bae_stal_bj_HEB180'
+      if (profil === 'HEB') return 'bae_stal_bj_HEB220'
+    }
+  }
+
+  // ─── HSQ (hatprofil) ───
+  if (/\bhsq\b/i.test(navn)) return 'bae_stal_so_HSQ200'
+
+  // ─── Limtre med dimensjon "BREDDE×HØYDE" eller "BREDDE x HØYDE" ───
+  const limtreMatch = navn.match(/(\d{2,3})\s*[x×]\s*(\d{2,3})/i)
+  if (limtreMatch && /limtre|gluelam|gl\d/i.test(n)) {
+    const b = parseInt(limtreMatch[1], 10)
+    const h = parseInt(limtreMatch[2], 10)
+
+    if (erSoyle) {
+      // Søyler — kvadratiske eller nesten-kvadratiske
+      if (b === 115 && h <= 130) return 'bae_limtre_so_115x115'
+      if (b === 140 && h <= 150) return 'bae_limtre_so_140x140'
+      if (b === 140 && h <= 220) return 'bae_limtre_so_140x200'
+      if (b === 140 && h <= 290) return 'bae_limtre_so_140x270'
+    } else {
+      // Bjelker — rektangulære
+      if (b === 115) return 'bae_limtre_bj_115x270'
+      if (b === 140 && h <= 290) return 'bae_limtre_bj_140x270'
+      if (b === 140 && h <= 380) return 'bae_limtre_bj_140x360'
+      if (b === 140) return 'bae_limtre_bj_140x405'
+    }
+  }
+
+  // ─── Limtre uten dimensjon → default mellom-bjelke ───
+  if (/limtre|gluelam/i.test(n)) {
+    return erSoyle ? 'bae_limtre_so_140x140' : 'bae_limtre_bj_140x270'
+  }
+
+  // ─── Stål uten profil-navn → default ───
+  if (/\bstål|staal|steel\b/i.test(navn)) {
+    return erSoyle ? 'bae_stal_so_HEA160' : 'bae_stal_bj_HEA200'
+  }
+
+  return null
+}
+
 // Mapping fra IFC bruker-kategori → bibliotek kategori-navn
 const KATEGORI_MAPPING = {
   yttervegg: 'Yttervegg',
@@ -39379,14 +39456,22 @@ function matchLagsettMotBibliotek(lagsett, brukerKategori, bibliotek) {
     }
     const navnLower = (lagsett.navn || '').toLowerCase()
     const foretrekkLimtre = /limtre|gluelam|gl\d+/i.test(navnLower)
+    // Patch 19 commit 4: Auto-detektert mal kommer alltid først
+    const foreslattId = lagsett.foreslattMalId
     const sortert = [...baeringKandidater].sort((a, b) => {
+      if (foreslattId) {
+        if (a.id === foreslattId) return -1
+        if (b.id === foreslattId) return 1
+      }
       const aLim = /limtre/i.test(a.name)
       const bLim = /limtre/i.test(b.name)
       if (aLim !== bLim) return foretrekkLimtre ? (aLim ? -1 : 1) : (aLim ? 1 : -1)
       return 0
     })
     return { status: 'baering', maler: sortert.slice(0, 8),
-      begrunnelse: `${baeringKandidater.length} bære-maler tilgjengelig (limtre + stål)` }
+      begrunnelse: foreslattId
+        ? `Auto-detektert: ${baeringKandidater.find(m => m.id === foreslattId)?.name || foreslattId}`
+        : `${baeringKandidater.length} bære-maler tilgjengelig (limtre + stål)` }
   }
 
   const biblioKategori = KATEGORI_MAPPING[brukerKategori]
@@ -42984,12 +43069,26 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                         {maler.map((mal, mi) => {
                           const erLimtre = /limtre/i.test(mal.name)
                           const erSoyle = mal.enhet === 'stk'
+                          // Patch 19 commit 4: Marker hvis denne malen er auto-detektert
+                          const erForeslatt = lagsett.foreslattMalId === mal.id
                           return (
-                            <div key={mi} style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 10px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px' }}>
+                            <div key={mi} style={{
+                              background: erForeslatt ? '#f0fdf4' : '#f8fafc',
+                              border: erForeslatt ? '2px solid #15803d' : '1px solid #e2e8f0',
+                              borderRadius:'6px', padding: erForeslatt ? '5px 9px' : '6px 10px',
+                              display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px',
+                            }}>
                               <div style={{ flex:1, minWidth:0 }}>
-                                <div style={{ fontSize:'11px', color:'#0f172a', fontWeight:'600', display:'flex', alignItems:'center', gap:'6px' }}>
+                                <div style={{ fontSize:'11px', color:'#0f172a', fontWeight:'600', display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
                                   <span style={{ fontSize:'10px' }}>{erLimtre ? '🪵' : '⚙️'}</span>
                                   <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{mal.name}</span>
+                                  {erForeslatt && (
+                                    <span style={{
+                                      background:'#15803d', color:'white', fontSize:'9px',
+                                      fontWeight:'700', padding:'1px 6px', borderRadius:'4px',
+                                      letterSpacing:'0.3px', textTransform:'uppercase',
+                                    }}>✨ Auto-detektert</span>
+                                  )}
                                 </div>
                                 <div style={{ fontSize:'10px', color:'#64748b', marginTop:'2px' }}>
                                   {erSoyle ? 'Per stk (default 3m)' : 'Per lm'}
@@ -42997,8 +43096,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                                 </div>
                               </div>
                               <button onClick={() => aapneNyDialog(lagsett, mal, lagsett.brukerKategori)}
-                                style={{ ...knappStilNoytral, flexShrink: 0 }}>
-                                Bruk som mal
+                                style={erForeslatt ? { ...knappStilPrimaer, flexShrink: 0 } : { ...knappStilNoytral, flexShrink: 0 }}>
+                                {erForeslatt ? 'Bruk' : 'Bruk som mal'}
                               </button>
                             </div>
                           )
@@ -48655,6 +48754,8 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
   ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(katNavn => {
     const lagsettListe = mengder[katNavn]?.lagsett || []
     lagsettListe.forEach(ls => {
+      // Patch 19 commit 3: Bæring håndteres i seksjon 1b under — skip her
+      if (ls.brukerKategori === 'baering') return
       const konst = aktivKonstruksjon(ls)
       if (!konst) {
         // Ubekreftet — telles bare hvis brukeren faktisk klassifiserte den
@@ -48689,6 +48790,51 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
       if (erYttervegg && !forsteYtterveggBd) {
         forsteYtterveggBd = bd
       }
+    })
+  })
+
+  // ── 1b. Bæring (limtre/stål søyler+bjelker, Patch 19 commit 3) ───────────
+  // Bæring-lagsett ligger i samme vegg-kategorier (yttervegg/innervegg/ukjent_vegg)
+  // siden IFCBEAM/IFCCOLUMN ofte havner der ved import. Vi plukker dem ut basert
+  // på brukerKategori === 'baering' og bruker totalLengde (lm) eller antall (stk)
+  // som mengde, avhengig av valgt mal sin enhet.
+  ;['yttervegg', 'innervegg', 'ukjent_vegg'].forEach(katNavn => {
+    const lagsettListe = mengder[katNavn]?.lagsett || []
+    lagsettListe.forEach(ls => {
+      if (ls.brukerKategori !== 'baering') return  // Kun bæring i denne pass'en
+      const konst = aktivKonstruksjon(ls)
+      if (!konst) {
+        // Bæring som er klassifisert men ikke matchet — telles som hoppet
+        hoppedeAntall++
+        return
+      }
+      // Mengde avhengig av mal-enhet
+      let mengde
+      if (konst.enhet === 'stk') {
+        // Stk-baserte søyler: bruk antall fra IFC, fallback til totalLengde / 3m
+        mengde = ls.antall && ls.antall > 0
+          ? ls.antall
+          : (ls.totalLengde > 0 ? Math.max(1, Math.round(ls.totalLengde / 3)) : 0)
+      } else {
+        // lm-baserte bjelker: bruk totalLengde direkte
+        mengde = ls.totalLengde || 0
+      }
+      if (mengde <= 0) {
+        hoppedeAntall++
+        return
+      }
+      const bd = bibliotekTilBygningsdel(konst, mengde)
+      bd._kilde = 'bim_baering'
+      bd._ifcLagsett = ls.navn
+      bd._ifcAntall = ls.antall || 0
+      bd._ifcLengde = ls.totalLengde || 0
+      if (ls.tilpassetKonstruksjon) {
+        bd._tilpasset = true
+        bd._tilpasningsNotat = ls.tilpassetKonstruksjon._tilpasningsNotat || ''
+      }
+      const fag = konst.fag || 'tomrer'
+      leggTil(fag, bd)
+      bekreftedeAntall++
     })
   })
 
