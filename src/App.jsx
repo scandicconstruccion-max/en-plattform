@@ -41351,6 +41351,19 @@ function mapMaterialTilNS3451(materialnavn, kategori, lagPosisjon) {
   return null
 }
 
+// ─── RENSE MATERIALNAVN ───────────────────────────────────────────────────────
+// Stripper Archicad/Revit material-ID-tall som ofte henger på som "Gipsplate 335402423"
+// → "Gipsplate". Returnerer både rent navn og original ID hvis funnet.
+function renseMaterialnavn(navn) {
+  if (!navn) return { rent: 'Ukjent material', id: null }
+  // Match ID på slutten: minst 6 sammenhengende sifre, evt. med prefiks-tegn
+  const match = navn.match(/^(.+?)[\s_\-]+(\d{6,})\s*$/)
+  if (match) {
+    return { rent: match[1].trim(), id: match[2] }
+  }
+  return { rent: navn.trim(), id: null }
+}
+
 // ─── MATERIAL-FARGEPALETT ─────────────────────────────────────────────────────
 function getTverrsnittMaterialFarge(materialnavn) {
   const m = (materialnavn || '').toLowerCase()
@@ -41441,6 +41454,18 @@ function BimTverrsnittModal({ lagsett, onClose }) {
   const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
   const totalTykkelseMm = lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm
   const kategori = lagsett.brukerKategori || 'ukjent'
+
+  // ─── Data-kvalitet-flagg ───
+  // 1) Mangler tykkelse-data fra IFC (LayerThickness === 0)
+  const manglerTykkelse = lagListe.length > 0 && sumLagMm === 0
+  // 2) Lagsett er ikke klassifisert ennå
+  const erUkategorisert = kategori === 'ukjent' || kategori === 'ukjent_vegg'
+  // 3) Yttervegg/innervegg uten stender-lag — vanlig at IFC-eksport mangler
+  //    bindingsverk som eget materiale (det er ofte underforstått i isolasjonen)
+  const harStenderlag = lagListe.some(l => /stender|sviller|bindingsverk/i.test(l.material || l.navn || ''))
+  const burdeHaStender = (kategori === 'yttervegg' || kategori === 'innervegg') &&
+                         lagListe.some(l => detekterLagtype(lagMaterial(l)) === 'isolasjon')
+  const manglerStender = burdeHaStender && !harStenderlag
 
   // IFC-type fra første element
   const ifcType = (() => {
@@ -41747,11 +41772,13 @@ function BimTverrsnittModal({ lagsett, onClose }) {
 
   // Materialliste til høyre med NS 3451-koder
   const materiallisteRader = lagListe.map((lag, idx) => {
-    const navn = lagMaterial(lag)
+    const rawNavn = lagMaterial(lag)
+    const renset = renseMaterialnavn(rawNavn)
     const tykk = lagTykkelseMm(lag)
-    const ns3451 = mapMaterialTilNS3451(navn, kategori, lagPosisjon(idx))
-    const farge = getTverrsnittMaterialFarge(navn)
-    return { idx, navn, tykk, ns3451, farge }
+    // Bruk det rensede navnet for NS 3451-mapping og farge
+    const ns3451 = mapMaterialTilNS3451(renset.rent, kategori, lagPosisjon(idx))
+    const farge = getTverrsnittMaterialFarge(renset.rent)
+    return { idx, navn: renset.rent, navnId: renset.id, tykk, ns3451, farge }
   })
 
   // Eksport som SVG (full-size versjon)
@@ -41818,8 +41845,16 @@ function BimTverrsnittModal({ lagsett, onClose }) {
             <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
               📐 Konstruksjonsdetaljer
             </div>
-            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', marginTop: '2px' }}>
-              {lagsett.navn || 'Lagsett'}
+            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', marginTop: '2px', lineHeight: 1.35 }}>
+              {(() => {
+                // Rens hvert material-segment i lagsett-navnet
+                // (typisk format: "Gipsplate 335402423 + Isolasjon 285619191 + ...")
+                const navn = lagsett.navn || 'Lagsett'
+                if (!navn.includes('+')) {
+                  return renseMaterialnavn(navn).rent
+                }
+                return navn.split('+').map(s => renseMaterialnavn(s.trim()).rent).join(' + ')
+              })()}
             </div>
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
@@ -41848,6 +41883,38 @@ function BimTverrsnittModal({ lagsett, onClose }) {
             </div>
           ) : (
             <>
+              {/* Advarsels-banner: data-kvalitet-problemer */}
+              {(manglerTykkelse || erUkategorisert || manglerStender) && (
+                <div style={{ padding: '14px 22px 0' }}>
+                  <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', padding: '10px 12px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: '700', color: '#92400e', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span>⚠️</span><span>IFC-fila er ufullstendig</span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#78350f', lineHeight: 1.55 }}>
+                      {manglerTykkelse && (
+                        <div style={{ marginBottom: '3px' }}>
+                          <strong>Tykkelse mangler:</strong> Ingen av lagene har LayerThickness i IFC-fila. Tegningen viser
+                          lag-rekkefølgen, men ikke proporsjoner. Bruk "✏️ Supplér info" på lagsett-kortet for å fylle inn tykkelser.
+                        </div>
+                      )}
+                      {erUkategorisert && (
+                        <div style={{ marginBottom: '3px' }}>
+                          <strong>Bygningsdel ikke klassifisert:</strong> Velg en kategori (Yttervegg / Innervegg / Tak osv.) i Steg 1
+                          for å få riktig NS 3451-mapping og stender-deteksjon.
+                        </div>
+                      )}
+                      {manglerStender && !manglerTykkelse && (
+                        <div>
+                          <strong>Stender ikke modellert:</strong> Arkitekten har ikke lagt inn bindingsverk som eget materiale.
+                          Det er vanlig — stenderne er ofte underforstått som en del av isolasjonslaget. Tegningen viser bare lagene
+                          som er i IFC-fila.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Tabell-rad (ArchiCAD-stil) */}
               <div style={{ padding: '16px 22px 0' }}>
                 <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
@@ -41875,7 +41942,13 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                         {/* Bygningsdel */}
                         <td style={{ ...cellBody, borderBottom: 'none' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-                            <span style={{ fontWeight: '700' }}>{tverrsnittKategoriLabel(kategori)}</span>
+                            {erUkategorisert ? (
+                              <span style={{ color: '#d97706', fontSize: '11px', fontWeight: '600' }}>
+                                ⚠️ Ikke klassifisert
+                              </span>
+                            ) : (
+                              <span style={{ fontWeight: '700' }}>{tverrsnittKategoriLabel(kategori)}</span>
+                            )}
                             {lagsett.foreslattKategori && lagsett.foreslattKategori !== kategori && (
                               <span style={{ fontSize: '10px', color: '#94a3b8' }}>
                                 (foreslått: {tverrsnittKategoriLabel(lagsett.foreslattKategori)})
@@ -41901,7 +41974,9 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                         </td>
                         {/* Tykkelse */}
                         <td style={{ ...cellBody, borderBottom: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: '700' }}>
-                          {totalTykkelseMm.toFixed(0)} mm
+                          {manglerTykkelse
+                            ? <span style={{ color: '#d97706', fontSize: '11px', fontWeight: '600' }}>Ikke i IFC</span>
+                            : `${totalTykkelseMm.toFixed(0)} mm`}
                         </td>
                         {/* Antall */}
                         <td style={{ ...cellBody, borderBottom: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
@@ -42084,8 +42159,8 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                           {enheterMedPx.map((enhet, idx) => renderEnFull(enhet, idx))}
                           <rect x={padLR} y={padTop} width={tegnW} height={tegnH}
                             fill="none" stroke="#0f172a" strokeWidth="2.5" />
-                          {/* Tykkelses-mål under */}
-                          {enheterMedPx.map((enhet, idx) => {
+                          {/* Tykkelses-mål under (skjules helt når alle tykkelser er 0) */}
+                          {!manglerTykkelse && enheterMedPx.map((enhet, idx) => {
                             const cx = enhet.x + enhet.px / 2
                             return (
                               <g key={`maal-${idx}`}>
@@ -42102,11 +42177,19 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                               </g>
                             )
                           })}
-                          {/* Total-mål nederst */}
-                          <text x={svgW / 2} y={svgH - 4} fontSize="11" fontWeight="700"
-                            fill="#0f172a" fontFamily="system-ui, sans-serif" textAnchor="middle">
-                            Total: {totalTykkelseMm.toFixed(0)} mm
-                          </text>
+                          {/* Total-mål nederst (skjules hvis tykkelse mangler) */}
+                          {!manglerTykkelse && (
+                            <text x={svgW / 2} y={svgH - 4} fontSize="11" fontWeight="700"
+                              fill="#0f172a" fontFamily="system-ui, sans-serif" textAnchor="middle">
+                              Total: {totalTykkelseMm.toFixed(0)} mm
+                            </text>
+                          )}
+                          {manglerTykkelse && (
+                            <text x={svgW / 2} y={svgH - 4} fontSize="11" fontWeight="600"
+                              fill="#92400e" fontFamily="system-ui, sans-serif" textAnchor="middle" fontStyle="italic">
+                              ⚠️ Tykkelse mangler i IFC — supplér via "Supplér info"-knappen
+                            </text>
+                          )}
                         </>)
                       })()}
                     </svg>
@@ -42122,11 +42205,12 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                     <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
                       Materialliste (NS 3451)
                     </div>
-                    {materiallisteRader.map(({ idx, navn, tykk, ns3451, farge }) => (
+                    {materiallisteRader.map(({ idx, navn, navnId, tykk, ns3451, farge }) => (
                       <div key={idx} style={{
                         background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
                         padding: '8px 10px', display: 'flex', alignItems: 'flex-start', gap: '8px',
-                      }}>
+                      }}
+                      title={navnId ? `IFC material-ID: ${navnId}` : undefined}>
                         <div style={{
                           width: '10px', minHeight: '24px', borderRadius: '3px',
                           background: farge.fyll, border: `1px solid ${farge.strek}`, flexShrink: 0,
@@ -42158,24 +42242,26 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                               </span>
                             )}
                             <span style={{
-                              fontSize: '9px', color: '#475569', fontWeight: '600',
-                              fontVariantNumeric: 'tabular-nums', flexShrink: 0,
+                              fontSize: '9px', color: tykk > 0 ? '#475569' : '#d97706', fontWeight: '600',
+                              fontVariantNumeric: 'tabular-nums', flexShrink: 0, fontStyle: tykk > 0 ? 'normal' : 'italic',
                             }}>
-                              {tykk > 0 ? `${Math.round(tykk)} mm` : '—'}
+                              {tykk > 0 ? `${Math.round(tykk)} mm` : 'mangler'}
                             </span>
                           </div>
                         </div>
                       </div>
                     ))}
                     <div style={{
-                      background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px',
-                      padding: '8px 10px', display: 'flex', justifyContent: 'space-between', marginTop: '4px',
+                      background: manglerTykkelse ? '#fffbeb' : '#f0fdf4',
+                      border: manglerTykkelse ? '1px solid #fde68a' : '1px solid #bbf7d0',
+                      borderRadius: '6px', padding: '8px 10px',
+                      display: 'flex', justifyContent: 'space-between', marginTop: '4px',
                     }}>
-                      <span style={{ fontSize: '10px', color: '#15803d', fontWeight: '700' }}>
+                      <span style={{ fontSize: '10px', color: manglerTykkelse ? '#92400e' : '#15803d', fontWeight: '700' }}>
                         Total tykkelse
                       </span>
-                      <span style={{ fontSize: '11px', color: '#0f172a', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
-                        {totalTykkelseMm.toFixed(0)} mm
+                      <span style={{ fontSize: '11px', color: '#0f172a', fontWeight: '700', fontVariantNumeric: 'tabular-nums', fontStyle: manglerTykkelse ? 'italic' : 'normal' }}>
+                        {manglerTykkelse ? 'Mangler i IFC' : `${totalTykkelseMm.toFixed(0)} mm`}
                       </span>
                     </div>
                   </div>
