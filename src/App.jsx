@@ -41277,20 +41277,12 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
 // BimKlassifiseringSeksjon senere). Lukket som standard for å unngå støy
 // — brukeren klikker for å utforske.
 
-// ─── PATCH 19.B: VISUELL TVERRSNITT-POPUP (ArchiCAD-stil, horisontal) ─────────
-// Viser lagstrukturen som en illustrert tverrsnitt-tegning i SVG:
-// - Horisontal layout: EKSTERIØR venstre, INTERIØR høyre
-// - Lag som rektangler stablet horisontalt, proporsjonal til tykkelse
-// - Arkitekt-mønstre (ekte byggetegning-konvensjon):
-//     • Bobler for isolasjon  • Diagonal skravering for stender/trevirke
-//     • Prikker for betong  • Tett skravering for stål
-//     • Tykk farget linje for damp/vindsperre  • Murverk-mønster for tegl
-// - STENDERE som vertikale interrupts gjennom isolasjon (c/c 600mm-stil)
-//   Auto-detektert når et stender-lag har samme tykkelse som tilstøtende isolasjon.
-// - Tykkelses-mål under hvert lag
-// - Materialliste til høyre med NS 3451-koder
-// - Spec-badges (brann/lyd/bærende/U-verdi) på toppen
-// - Eksport som SVG-fil
+// ─── PATCH 19.B v2: VISUELL TVERRSNITT-POPUP (ArchiCAD tabell-rad-stil) ───────
+// Viser én lagsett-rad i ArchiCAD-stil:
+// [Tverrsnitt-thumbnail] | Navn | Bygningstype | IFC-type | Bæring | Tykkelse | Antall | Total
+// Under: materialliste med NS 3451-koder + spec-badges
+//
+// Plassering: knapp "📐 Vis tverrsnitt" i lagsett-kortets knapperad i Steg 2.
 
 // ─── NS 3451 BYGNINGSDELSTABELLEN ─────────────────────────────────────────────
 function mapMaterialTilNS3451(materialnavn, kategori, lagPosisjon) {
@@ -41330,16 +41322,12 @@ function mapMaterialTilNS3451(materialnavn, kategori, lagPosisjon) {
     if (kat.includes('vegg')) return { kode: '232', navn: 'Plasstøpt yttervegg' }
     return { kode: '222', navn: 'Bærende betongkonstruksjon' }
   }
-  if (/stål|stal|steel|metall|metal/i.test(m)) {
-    return { kode: '222', navn: 'Bærende stålkonstruksjon' }
-  }
+  if (/stål|stal|steel|metall|metal/i.test(m)) return { kode: '222', navn: 'Bærende stålkonstruksjon' }
   if (/stender|sviller/i.test(m)) {
     if (kat.includes('innervegg')) return { kode: '243', navn: 'Bæresystem innervegg (stender)' }
     return { kode: '233', navn: 'Bæresystem yttervegg (stender)' }
   }
-  if (/bjelke|drager|limtre|massivtre|clt/i.test(m)) {
-    return { kode: '222', navn: 'Bærende trekonstruksjon' }
-  }
+  if (/bjelke|drager|limtre|massivtre|clt/i.test(m)) return { kode: '222', navn: 'Bærende trekonstruksjon' }
   if (/osb|spon\s?plate|kryssfiner|finer|plywood|mdf|huntonit|asfalt\s?plate/i.test(m)) {
     if (kat.includes('tak')) return { kode: '262', navn: 'Taktro' }
     return { kode: '234', navn: 'Vindavstivende plate' }
@@ -41410,7 +41398,23 @@ function detekterLagtype(materialnavn) {
   return 'annet'
 }
 
-// ─── HOVED-KOMPONENT ──────────────────────────────────────────────────────────
+// ─── KATEGORI → LESBARE NAVN ──────────────────────────────────────────────────
+function tverrsnittKategoriLabel(kategori) {
+  const k = (kategori || '').toLowerCase()
+  if (k === 'yttervegg') return 'Yttervegg'
+  if (k === 'innervegg') return 'Innervegg'
+  if (k === 'fundament') return 'Fundament'
+  if (k === 'sokkel') return 'Sokkel'
+  if (k === 'bunnplate') return 'Bunnplate'
+  if (k === 'etasjeskille') return 'Etasjeskille'
+  if (k === 'tak') return 'Tak'
+  if (k === 'baering') return 'Bæresystem'
+  if (k === 'gulv' || k === 'dekke_paa_grunn') return 'Gulv'
+  if (k === 'ukjent_vegg' || k === 'ukjent') return 'Ukjent'
+  return kategori || '—'
+}
+
+// ─── HOVED-KOMPONENT (ArchiCAD tabell-rad-stil) ───────────────────────────────
 function BimTverrsnittModal({ lagsett, onClose }) {
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') onClose() }
@@ -41438,6 +41442,15 @@ function BimTverrsnittModal({ lagsett, onClose }) {
   const totalTykkelseMm = lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm
   const kategori = lagsett.brukerKategori || 'ukjent'
 
+  // IFC-type fra første element
+  const ifcType = (() => {
+    const e = (lagsett.elementer || [])[0]
+    return e?.ifcType || '—'
+  })()
+  // Pen-format: IFCWALL → IfcWall
+  const ifcTypeFormatted = ifcType === '—' ? '—' :
+    ifcType.charAt(0).toUpperCase() + ifcType.slice(1).toLowerCase().replace(/^ifc/, 'Ifc')
+
   // Spec-data
   const brukerSpec = lagsett.brukerSpec || null
   const ifcSpec = lagsett.ifcSpec || {}
@@ -41457,7 +41470,7 @@ function BimTverrsnittModal({ lagsett, onClose }) {
   const harBadges = brannVerdi || lydVerdi || baerendeVerdi || uVerdiVerdi
   const beskrivelse = brukerSpec?.beskrivelse || lagsett.tilpassetKonstruksjon?._tilpasningsNotat || ''
 
-  // Posisjon per lag (utvendig/midten/innvendig) for NS 3451-mapping
+  // Posisjon per lag for NS 3451-mapping
   const lagPosisjon = (idx) => {
     if (idx === 0) return 'utvendig'
     if (idx === lagListe.length - 1) return 'innvendig'
@@ -41530,20 +41543,12 @@ function BimTverrsnittModal({ lagsett, onClose }) {
   }
   renderEnheter.sort((a, b) => a.ankerIdx - b.ankerIdx)
 
-  // SVG dimensjoner
-  const svgW = 880
-  const svgH = 380
-  const padTop = 70
-  const padBottom = 80
-  const padLeft = 30
-  const padRight = 30
-  const tegnW = svgW - padLeft - padRight
-  const tegnH = svgH - padTop - padBottom
-
-  // Beregn x-posisjon for hver render-enhet
-  const sumRenderMm = renderEnheter.reduce((s, e) => s + e.mm, 0) || 1
-  const minLagPx = 22
-  const enheterMedPx = (() => {
+  // ─── SVG renderer (gjenbrukbar — kalles for både thumbnail og full) ────────
+  const renderTverrsnittSvg = ({ width, height, padding = 4, showLabels = false }) => {
+    const tegnW = width - padding * 2
+    const tegnH = height - padding * 2
+    const sumRenderMm = renderEnheter.reduce((s, e) => s + e.mm, 0) || 1
+    const minLagPx = showLabels ? 22 : 6
     let foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMm) * tegnW }))
     let underskudd = 0
     foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
@@ -41554,196 +41559,190 @@ function BimTverrsnittModal({ lagsett, onClose }) {
         foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
       }
     }
-    let xCursor = padLeft
-    return foreloepige.map(o => {
+    let xCursor = padding
+    const enheterMedPx = foreloepige.map(o => {
       const x = xCursor
       xCursor += o.px
       return { ...o, x }
     })
-  })()
 
-  // Render et lag som SVG (med pattern hvis aktuelt)
-  const renderLag = (enhet, idx) => {
-    if (enhet.type === 'kombinert') {
-      const stender = lagListe[enhet.idxStender]
-      const isolasjon = lagListe[enhet.idxIsolasjon]
-      const fargeIso = getTverrsnittMaterialFarge(lagMaterial(isolasjon))
-      const fargeStender = getTverrsnittMaterialFarge(lagMaterial(stender))
-      const patternId = `pat-iso-${idx}`
-      // Stendere c/c — vertikale rektangler innenfor lag-bredden
-      const stenderTegnBredde = Math.max(7, enhet.px * 0.16)
-      const ccPx = Math.max(50, enhet.px * 1.5)
-      const stenderPosisjoner = []
-      let p = enhet.x + enhet.px * 0.15
-      while (p + stenderTegnBredde <= enhet.x + enhet.px) {
-        stenderPosisjoner.push(p)
-        p += ccPx
+    const renderLag = (enhet, idx, uniqueId) => {
+      if (enhet.type === 'kombinert') {
+        const stender = lagListe[enhet.idxStender]
+        const isolasjon = lagListe[enhet.idxIsolasjon]
+        const fargeIso = getTverrsnittMaterialFarge(lagMaterial(isolasjon))
+        const fargeStender = getTverrsnittMaterialFarge(lagMaterial(stender))
+        const patternId = `pat-iso-${uniqueId}-${idx}`
+        const patternStr = showLabels ? '14' : '6'
+        const patternSize = showLabels ? 14 : 6
+        const cirkelR = showLabels ? 4.5 : 2
+        const stenderTegnBredde = Math.max(showLabels ? 7 : 3, enhet.px * 0.16)
+        const ccPx = Math.max(showLabels ? 50 : 14, enhet.px * 1.5)
+        const stenderPosisjoner = []
+        let p = enhet.x + enhet.px * 0.15
+        while (p + stenderTegnBredde <= enhet.x + enhet.px) {
+          stenderPosisjoner.push(p)
+          p += ccPx
+        }
+        return (
+          <g key={idx}>
+            <defs>
+              <pattern id={patternId} x="0" y="0" width={patternStr} height={patternStr} patternUnits="userSpaceOnUse">
+                <rect width={patternStr} height={patternStr} fill={fargeIso.fyll} />
+                <circle cx={patternSize / 2} cy={patternSize / 2} r={cirkelR} fill="none" stroke={fargeIso.strek} strokeWidth="0.7" opacity="0.7" />
+              </pattern>
+            </defs>
+            <rect x={enhet.x} y={padding} width={enhet.px} height={tegnH}
+              fill={`url(#${patternId})`} stroke="#1e293b" strokeWidth={showLabels ? '1.5' : '0.8'} />
+            {stenderPosisjoner.map((sx, si) => (
+              <g key={si}>
+                <rect x={sx} y={padding} width={stenderTegnBredde} height={tegnH}
+                  fill={fargeStender.fyll} stroke={fargeStender.strek} strokeWidth={showLabels ? '1' : '0.5'} />
+              </g>
+            ))}
+          </g>
+        )
       }
+
+      const lag = lagListe[enhet.idx]
+      const farge = getTverrsnittMaterialFarge(lagMaterial(lag))
+      const lagtype = detekterLagtype(lagMaterial(lag))
+      const patternId = `pat-${uniqueId}-${idx}`
+      let patternEl = null
+      let bgFill = farge.fyll
+
+      const skala = showLabels ? 1 : 0.45  // skaler ned mønstre i thumbnail
+      const ps = (n) => Math.max(2, n * skala)
+
+      switch (lagtype) {
+        case 'isolasjon': {
+          const sz = ps(14)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <circle cx={sz / 2} cy={sz / 2} r={sz * 0.32} fill="none" stroke={farge.strek} strokeWidth="0.7" opacity="0.7" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'eps': {
+          const sz = ps(8)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <line x1="0" y1="0" x2="0" y2={sz} stroke={farge.strek} strokeWidth="0.7" opacity="0.6" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'stender':
+        case 'limtre': {
+          const sz = ps(10)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <line x1="0" y1="0" x2="0" y2={sz} stroke={farge.strek} strokeWidth="1" opacity="0.7" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'betong': {
+          const sz = ps(8)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <circle cx={sz / 2} cy={sz / 2} r={Math.max(0.6, sz * 0.12)} fill={farge.strek} opacity="0.6" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'stål': {
+          const sz = ps(6)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <line x1="0" y1="0" x2="0" y2={sz} stroke={farge.strek} strokeWidth="0.7" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'tegl': {
+          const w = ps(20), h = ps(14)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={w} height={h} patternUnits="userSpaceOnUse">
+              <rect width={w} height={h} fill={farge.fyll} />
+              <line x1="0" y1={h / 2} x2={w} y2={h / 2} stroke={farge.strek} strokeWidth="0.7" />
+              <line x1="0" y1="0" x2="0" y2={h / 2} stroke={farge.strek} strokeWidth="0.7" />
+              <line x1={w / 2} y1={h / 2} x2={w / 2} y2={h} stroke={farge.strek} strokeWidth="0.7" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'leca': {
+          const sz = ps(10)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <circle cx={sz * 0.3} cy={sz * 0.4} r={Math.max(0.6, sz * 0.12)} fill={farge.strek} opacity="0.5" />
+              <circle cx={sz * 0.8} cy={sz * 0.2} r={Math.max(0.5, sz * 0.08)} fill={farge.strek} opacity="0.5" />
+              <circle cx={sz * 0.6} cy={sz * 0.8} r={Math.max(0.6, sz * 0.10)} fill={farge.strek} opacity="0.5" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'kledning': {
+          const sz = ps(14)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <line x1="0" y1="0" x2="0" y2={sz} stroke={farge.strek} strokeWidth="0.8" opacity="0.6" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'luft': {
+          const sz = ps(12)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <line x1="0" y1={sz} x2={sz} y2="0" stroke={farge.strek} strokeWidth="0.5" opacity="0.4" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        case 'gips': {
+          const sz = ps(20)
+          patternEl = (
+            <pattern id={patternId} x="0" y="0" width={sz} height={sz} patternUnits="userSpaceOnUse">
+              <rect width={sz} height={sz} fill={farge.fyll} />
+              <line x1="0" y1={sz} x2={sz} y2="0" stroke={farge.strek} strokeWidth="0.4" opacity="0.4" />
+            </pattern>
+          )
+          bgFill = `url(#${patternId})`; break
+        }
+        default:
+          bgFill = farge.fyll
+      }
+
       return (
         <g key={idx}>
-          <defs>
-            <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-              <rect width="14" height="14" fill={fargeIso.fyll} />
-              <circle cx="7" cy="7" r="4.5" fill="none" stroke={fargeIso.strek} strokeWidth="0.8" opacity="0.7" />
-            </pattern>
-          </defs>
-          <rect x={enhet.x} y={padTop} width={enhet.px} height={tegnH}
-            fill={`url(#${patternId})`} stroke="#1e293b" strokeWidth="1.5" />
-          {stenderPosisjoner.map((sx, si) => (
-            <g key={si}>
-              <rect x={sx} y={padTop} width={stenderTegnBredde} height={tegnH}
-                fill={fargeStender.fyll} stroke={fargeStender.strek} strokeWidth="1" />
-              <line x1={sx} y1={padTop + tegnH} x2={sx + stenderTegnBredde} y2={padTop}
-                stroke={fargeStender.strek} strokeWidth="0.7" opacity="0.5" />
-              <line x1={sx + stenderTegnBredde * 0.5} y1={padTop + tegnH}
-                x2={sx + stenderTegnBredde * 1.5} y2={padTop}
-                stroke={fargeStender.strek} strokeWidth="0.7" opacity="0.5" />
-            </g>
-          ))}
+          {patternEl && <defs>{patternEl}</defs>}
+          <rect x={enhet.x} y={padding} width={enhet.px} height={tegnH}
+            fill={bgFill} stroke="#1e293b" strokeWidth={showLabels ? '1.5' : '0.8'} />
         </g>
       )
     }
 
-    const lag = lagListe[enhet.idx]
-    const farge = getTverrsnittMaterialFarge(lagMaterial(lag))
-    const lagtype = detekterLagtype(lagMaterial(lag))
-    const patternId = `pat-${idx}`
-    let patternEl = null
-    let bgFill = farge.fyll
-
-    switch (lagtype) {
-      case 'isolasjon':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-            <rect width="14" height="14" fill={farge.fyll} />
-            <circle cx="7" cy="7" r="4.5" fill="none" stroke={farge.strek} strokeWidth="0.8" opacity="0.7" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'eps':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="8" height="8" fill={farge.fyll} />
-            <line x1="0" y1="0" x2="0" y2="8" stroke={farge.strek} strokeWidth="0.8" opacity="0.6" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'stender':
-      case 'limtre':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-            <rect width="10" height="10" fill={farge.fyll} />
-            <line x1="0" y1="0" x2="0" y2="10" stroke={farge.strek} strokeWidth="1.2" opacity="0.7" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'betong':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
-            <rect width="8" height="8" fill={farge.fyll} />
-            <circle cx="4" cy="4" r="1" fill={farge.strek} opacity="0.6" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'stål':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
-            <rect width="6" height="6" fill={farge.fyll} />
-            <line x1="0" y1="0" x2="0" y2="6" stroke={farge.strek} strokeWidth="0.8" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'tegl':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="20" height="14" patternUnits="userSpaceOnUse">
-            <rect width="20" height="14" fill={farge.fyll} />
-            <line x1="0" y1="7" x2="20" y2="7" stroke={farge.strek} strokeWidth="0.8" />
-            <line x1="0" y1="0" x2="0" y2="7" stroke={farge.strek} strokeWidth="0.8" />
-            <line x1="10" y1="7" x2="10" y2="14" stroke={farge.strek} strokeWidth="0.8" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'leca':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse">
-            <rect width="10" height="10" fill={farge.fyll} />
-            <circle cx="3" cy="4" r="1.2" fill={farge.strek} opacity="0.5" />
-            <circle cx="8" cy="2" r="0.8" fill={farge.strek} opacity="0.5" />
-            <circle cx="6" cy="8" r="1" fill={farge.strek} opacity="0.5" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'kledning':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
-            <rect width="14" height="14" fill={farge.fyll} />
-            <line x1="0" y1="0" x2="0" y2="14" stroke={farge.strek} strokeWidth="1" opacity="0.6" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'luft':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse">
-            <rect width="12" height="12" fill={farge.fyll} />
-            <line x1="0" y1="12" x2="12" y2="0" stroke={farge.strek} strokeWidth="0.6" opacity="0.4" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      case 'gips':
-        patternEl = (
-          <pattern id={patternId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
-            <rect width="20" height="20" fill={farge.fyll} />
-            <line x1="0" y1="20" x2="20" y2="0" stroke={farge.strek} strokeWidth="0.5" opacity="0.4" />
-          </pattern>
-        )
-        bgFill = `url(#${patternId})`
-        break
-      default:
-        bgFill = farge.fyll
-    }
+    const uniqueId = showLabels ? 'full' : 'thumb'
 
     return (
-      <g key={idx}>
-        {patternEl && <defs>{patternEl}</defs>}
-        <rect x={enhet.x} y={padTop} width={enhet.px} height={tegnH}
-          fill={bgFill} stroke="#1e293b" strokeWidth="1.5" />
-      </g>
+      <svg viewBox={`0 0 ${width} ${height}`} xmlns="http://www.w3.org/2000/svg"
+        style={{ width: '100%', height: 'auto', display: 'block' }}>
+        {enheterMedPx.map((enhet, idx) => renderLag(enhet, idx, uniqueId))}
+        <rect x={padding} y={padding} width={tegnW} height={tegnH}
+          fill="none" stroke="#0f172a" strokeWidth={showLabels ? '2' : '1.2'} />
+      </svg>
     )
-  }
-
-  // Tykkelses-mål under hvert lag
-  const renderTykkelseMaal = () => {
-    return enheterMedPx.map((enhet, idx) => {
-      const mmTekst = enhet.mm > 0 ? `${Math.round(enhet.mm)}` : '?'
-      const cx = enhet.x + enhet.px / 2
-      return (
-        <g key={`maal-${idx}`}>
-          <line x1={enhet.x} y1={padTop + tegnH + 6} x2={enhet.x} y2={padTop + tegnH + 22}
-            stroke="#475569" strokeWidth="1" />
-          <line x1={enhet.x + enhet.px} y1={padTop + tegnH + 6} x2={enhet.x + enhet.px} y2={padTop + tegnH + 22}
-            stroke="#475569" strokeWidth="1" />
-          <line x1={enhet.x} y1={padTop + tegnH + 14} x2={enhet.x + enhet.px} y2={padTop + tegnH + 14}
-            stroke="#475569" strokeWidth="0.8" />
-          <text x={cx} y={padTop + tegnH + 36} fontSize="11" fill="#0f172a"
-            fontFamily="system-ui, sans-serif" textAnchor="middle" fontWeight="600">
-            {mmTekst}
-          </text>
-          <text x={cx} y={padTop + tegnH + 50} fontSize="9" fill="#64748b"
-            fontFamily="system-ui, sans-serif" textAnchor="middle">
-            mm
-          </text>
-        </g>
-      )
-    })
   }
 
   // Materialliste til høyre med NS 3451-koder
@@ -41755,9 +41754,9 @@ function BimTverrsnittModal({ lagsett, onClose }) {
     return { idx, navn, tykk, ns3451, farge }
   })
 
-  // Eksport som SVG
+  // Eksport som SVG (full-size versjon)
   const lastNedSvg = () => {
-    const svgEl = document.getElementById('tverrsnitt-svg')
+    const svgEl = document.getElementById('tverrsnitt-svg-full')
     if (!svgEl) return
     const serializer = new XMLSerializer()
     const svgStr = '<?xml version="1.0" encoding="UTF-8"?>\n' + serializer.serializeToString(svgEl)
@@ -41774,7 +41773,7 @@ function BimTverrsnittModal({ lagsett, onClose }) {
 
   const badgeStil = (bg, br, c) => ({
     background: bg, border: `1px solid ${br}`, color: c,
-    padding: '5px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: '600',
+    padding: '4px 9px', borderRadius: '6px', fontSize: '11px', fontWeight: '600',
     display: 'inline-flex', alignItems: 'center', gap: '5px',
   })
   const ifcTag = (
@@ -41782,6 +41781,19 @@ function BimTverrsnittModal({ lagsett, onClose }) {
       IFC
     </span>
   )
+
+  // Tabell-celle-stiler (ArchiCAD-look)
+  const cellHeader = {
+    fontSize: '9px', fontWeight: '700', color: '#64748b',
+    textTransform: 'uppercase', letterSpacing: '0.5px',
+    padding: '8px 10px', borderBottom: '1px solid #e2e8f0',
+    background: '#f8fafc', whiteSpace: 'nowrap',
+  }
+  const cellBody = {
+    fontSize: '12px', color: '#0f172a', fontWeight: '500',
+    padding: '10px', borderBottom: '1px solid #e2e8f0',
+    verticalAlign: 'middle',
+  }
 
   return createPortal(
     <div onClick={onClose}
@@ -41792,32 +41804,27 @@ function BimTverrsnittModal({ lagsett, onClose }) {
       }}>
       <div onClick={(e) => e.stopPropagation()}
         style={{
-          background: 'white', borderRadius: '16px', width: '100%', maxWidth: '1100px',
+          background: 'white', borderRadius: '16px', width: '100%', maxWidth: '1200px',
           maxHeight: '94vh', display: 'flex', flexDirection: 'column',
           boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
         }}>
         {/* Header */}
         <div style={{
-          padding: '18px 22px 14px', borderBottom: '1px solid #e2e8f0',
+          padding: '16px 22px 14px', borderBottom: '1px solid #e2e8f0',
           background: 'linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)',
-          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
-              📐 Tverrsnitt · {kategori}
+            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+              📐 Konstruksjonsdetaljer
             </div>
-            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>
+            <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', marginTop: '2px' }}>
               {lagsett.navn || 'Lagsett'}
-            </div>
-            <div style={{ fontSize: '12px', color: '#475569', marginTop: '4px' }}>
-              Total tykkelse: <strong style={{ color: '#0f172a' }}>{totalTykkelseMm.toFixed(0)} mm</strong>
-              {' · '}{lagListe.length} lag
-              {kombinertePar.length > 0 && ` · ${kombinertePar.length} stender+isolasjon`}
             </div>
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
             <button onClick={lastNedSvg}
-              title="Last ned som SVG-fil"
+              title="Last ned tverrsnitt som SVG-fil"
               style={{
                 background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#15803d',
                 borderRadius: '8px', padding: '7px 12px', fontSize: '11px', fontWeight: '600',
@@ -41833,188 +41840,364 @@ function BimTverrsnittModal({ lagsett, onClose }) {
           </div>
         </div>
 
-        {/* Spec-badges */}
-        {harBadges && (
-          <div style={{ padding: '12px 22px', background: '#fafbfc', borderBottom: '1px solid #e2e8f0', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-            {brannVerdi && (
-              <div style={badgeStil('#fef2f2', '#fecaca', '#991b1b')}>
-                <span>🔥</span><span>Brann: {String(brannVerdi)}</span>
-                {brannKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {lydVerdi && (
-              <div style={badgeStil('#eff6ff', '#bfdbfe', '#1e40af')}>
-                <span>🔊</span><span>Lyd: {String(lydVerdi)}</span>
-                {lydKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {baerendeVerdi === 'Ja' && (
-              <div style={badgeStil('#fffbeb', '#fde68a', '#92400e')}>
-                <span>🏗️</span><span>Bærende</span>
-                {baerendeKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {baerendeVerdi === 'Nei' && (
-              <div style={badgeStil('#f1f5f9', '#cbd5e1', '#475569')}>
-                <span>—</span><span>Ikke-bærende</span>
-                {baerendeKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-            {uVerdiVerdi !== null && uVerdiVerdi !== undefined && (
-              <div style={badgeStil('#f0fdfa', '#99f6e4', '#115e59')}>
-                <span>🌡️</span>
-                <span>U: {typeof uVerdiVerdi === 'number' ? uVerdiVerdi.toFixed(2) : uVerdiVerdi} W/m²K</span>
-                {uVerdiKilde === 'ifc' && ifcTag}
-              </div>
-            )}
-          </div>
-        )}
-
         {/* Hovedinnhold */}
         <div style={{ overflow: 'auto', flex: 1, background: '#fafbfc' }}>
-          <div style={{ padding: '20px 22px' }}>
-            {lagListe.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13px' }}>
-                Ingen lag-data tilgjengelig fra IFC.
-              </div>
-            ) : (
-              <div style={{ display:'grid', gridTemplateColumns:'1fr 280px', gap:'16px' }}>
-                {/* SVG-tegning (venstre) */}
-                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '8px' }}>
-                  <svg id="tverrsnitt-svg" viewBox={`0 0 ${svgW} ${svgH}`}
-                    xmlns="http://www.w3.org/2000/svg"
-                    style={{ width: '100%', height: 'auto', display: 'block' }}>
-                    {/* EKSTERIØR-tag */}
-                    <text x={padLeft + 4} y={padTop - 36} fontSize="13" fontWeight="700"
-                      fill="#0f172a" fontFamily="system-ui, sans-serif" letterSpacing="0.5">
-                      ◄ EKSTERIØR / UTENFRA
-                    </text>
-                    <line x1={padLeft} y1={padTop - 22} x2={padLeft + 130} y2={padTop - 22}
-                      stroke="#0f172a" strokeWidth="1.5" />
-                    <polygon points={`${padLeft - 8},${padTop - 22} ${padLeft},${padTop - 26} ${padLeft},${padTop - 18}`}
-                      fill="#0f172a" />
-
-                    {/* INTERIØR-tag */}
-                    <text x={svgW - padRight - 4} y={padTop - 36} fontSize="13" fontWeight="700"
-                      fill="#0f172a" fontFamily="system-ui, sans-serif" letterSpacing="0.5"
-                      textAnchor="end">
-                      INTERIØR / INNOVER ►
-                    </text>
-                    <line x1={svgW - padRight - 130} y1={padTop - 22} x2={svgW - padRight} y2={padTop - 22}
-                      stroke="#0f172a" strokeWidth="1.5" />
-                    <polygon points={`${svgW - padRight + 8},${padTop - 22} ${svgW - padRight},${padTop - 26} ${svgW - padRight},${padTop - 18}`}
-                      fill="#0f172a" />
-
-                    {/* Lag-rektangler */}
-                    {enheterMedPx.map((enhet, idx) => renderLag(enhet, idx))}
-
-                    {/* Ytre ramme rundt hele tverrsnittet (tykkere svart) */}
-                    <rect x={padLeft} y={padTop} width={tegnW} height={tegnH}
-                      fill="none" stroke="#0f172a" strokeWidth="2.5" />
-
-                    {/* Tykkelses-mål under */}
-                    {renderTykkelseMaal()}
-
-                    {/* Total-mål helt nederst */}
-                    <line x1={padLeft} y1={svgH - 18} x2={svgW - padRight} y2={svgH - 18}
-                      stroke="#0f172a" strokeWidth="1.2" />
-                    <line x1={padLeft} y1={svgH - 22} x2={padLeft} y2={svgH - 14}
-                      stroke="#0f172a" strokeWidth="1.5" />
-                    <line x1={svgW - padRight} y1={svgH - 22} x2={svgW - padRight} y2={svgH - 14}
-                      stroke="#0f172a" strokeWidth="1.5" />
-                    <text x={svgW / 2} y={svgH - 4} fontSize="12" fontWeight="700"
-                      fill="#0f172a" fontFamily="system-ui, sans-serif" textAnchor="middle">
-                      Total: {totalTykkelseMm.toFixed(0)} mm
-                    </text>
-                  </svg>
-                </div>
-
-                {/* Materialliste (høyre) */}
-                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                  <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
-                    Materialliste (NS 3451)
-                  </div>
-                  {materiallisteRader.map(({ idx, navn, tykk, ns3451, farge }) => (
-                    <div key={idx} style={{
-                      background:'white', border:'1px solid #e2e8f0', borderRadius:'6px',
-                      padding:'8px 10px', display:'flex', alignItems:'flex-start', gap:'8px',
-                    }}>
-                      <div style={{
-                        width:'10px', minHeight:'24px', borderRadius:'3px',
-                        background: farge.fyll, border:`1px solid ${farge.strek}`, flexShrink:0,
-                      }} />
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
-                          <span style={{ fontSize:'9px', fontWeight:'700', color:'#475569',
-                            background:'#f1f5f9', padding:'1px 5px', borderRadius:'3px',
-                            fontFamily:'monospace', letterSpacing:'0.5px',
-                            minWidth:'26px', textAlign:'center', flexShrink:0,
-                          }}>
-                            {ns3451 ? ns3451.kode : '—'}
-                          </span>
-                          <span style={{ fontSize:'10px', color:'#0f172a', fontWeight:'600',
-                            overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flex:1,
-                          }}>
-                            {navn}
-                          </span>
-                        </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', gap:'6px' }}>
-                          {ns3451 && (
-                            <span style={{ fontSize:'9px', color:'#64748b', fontStyle:'italic',
-                              overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                            }}>
-                              {ns3451.navn}
+          {lagListe.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: '13px' }}>
+              Ingen lag-data tilgjengelig fra IFC.
+            </div>
+          ) : (
+            <>
+              {/* Tabell-rad (ArchiCAD-stil) */}
+              <div style={{ padding: '16px 22px 0' }}>
+                <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr>
+                        <th style={{ ...cellHeader, width: '180px', textAlign: 'center' }}>Tverrsnitt</th>
+                        <th style={{ ...cellHeader, textAlign: 'left' }}>Bygningsdel</th>
+                        <th style={{ ...cellHeader, textAlign: 'left' }}>IFC-type</th>
+                        <th style={{ ...cellHeader, textAlign: 'left' }}>Bæring</th>
+                        <th style={{ ...cellHeader, textAlign: 'right' }}>Tykkelse</th>
+                        <th style={{ ...cellHeader, textAlign: 'right' }}>Antall</th>
+                        <th style={{ ...cellHeader, textAlign: 'right' }}>Total</th>
+                        <th style={{ ...cellHeader, textAlign: 'center' }}>Lag</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {/* Tverrsnitt-thumbnail */}
+                        <td style={{ ...cellBody, padding: '8px 10px', borderBottom: 'none' }}>
+                          <div style={{ background: 'white', border: '1px solid #cbd5e1', borderRadius: '4px', padding: '2px', height: '52px' }}>
+                            {renderTverrsnittSvg({ width: 160, height: 48, padding: 2, showLabels: false })}
+                          </div>
+                        </td>
+                        {/* Bygningsdel */}
+                        <td style={{ ...cellBody, borderBottom: 'none' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span style={{ fontWeight: '700' }}>{tverrsnittKategoriLabel(kategori)}</span>
+                            {lagsett.foreslattKategori && lagsett.foreslattKategori !== kategori && (
+                              <span style={{ fontSize: '10px', color: '#94a3b8' }}>
+                                (foreslått: {tverrsnittKategoriLabel(lagsett.foreslattKategori)})
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        {/* IFC-type */}
+                        <td style={{ ...cellBody, borderBottom: 'none', fontFamily: 'ui-monospace, monospace', fontSize: '11px', color: '#475569' }}>
+                          {ifcTypeFormatted}
+                        </td>
+                        {/* Bæring */}
+                        <td style={{ ...cellBody, borderBottom: 'none' }}>
+                          {baerendeVerdi === 'Ja' ? (
+                            <span style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', padding: '3px 8px', borderRadius: '5px', fontSize: '10px', fontWeight: '700' }}>
+                              🏗️ Bærende
                             </span>
+                          ) : baerendeVerdi === 'Nei' ? (
+                            <span style={{ color: '#94a3b8', fontSize: '11px' }}>Ikke-bærende</span>
+                          ) : (
+                            <span style={{ color: '#cbd5e1', fontSize: '11px' }}>—</span>
                           )}
-                          <span style={{ fontSize:'9px', color:'#475569', fontWeight:'600',
-                            fontVariantNumeric:'tabular-nums', flexShrink:0,
-                          }}>
-                            {tykk > 0 ? `${Math.round(tykk)} mm` : '—'}
-                          </span>
-                        </div>
+                        </td>
+                        {/* Tykkelse */}
+                        <td style={{ ...cellBody, borderBottom: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: '700' }}>
+                          {totalTykkelseMm.toFixed(0)} mm
+                        </td>
+                        {/* Antall */}
+                        <td style={{ ...cellBody, borderBottom: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {lagsett.antall || '—'} {lagsett.antall ? 'stk' : ''}
+                        </td>
+                        {/* Total areal eller lengde */}
+                        <td style={{ ...cellBody, borderBottom: 'none', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                          {lagsett.totalAreal > 0 ? `${lagsett.totalAreal.toFixed(1)} m²` :
+                           lagsett.totalLengde > 0 ? `${lagsett.totalLengde.toFixed(1)} lm` : '—'}
+                        </td>
+                        {/* Antall lag */}
+                        <td style={{ ...cellBody, borderBottom: 'none', textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>
+                          {lagListe.length}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Spec-badges */}
+              {harBadges && (
+                <div style={{ padding: '12px 22px 0', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                  {brannVerdi && (
+                    <div style={badgeStil('#fef2f2', '#fecaca', '#991b1b')}>
+                      <span>🔥</span><span>Brann: {String(brannVerdi)}</span>
+                      {brannKilde === 'ifc' && ifcTag}
+                    </div>
+                  )}
+                  {lydVerdi && (
+                    <div style={badgeStil('#eff6ff', '#bfdbfe', '#1e40af')}>
+                      <span>🔊</span><span>Lyd: {String(lydVerdi)}</span>
+                      {lydKilde === 'ifc' && ifcTag}
+                    </div>
+                  )}
+                  {uVerdiVerdi !== null && uVerdiVerdi !== undefined && (
+                    <div style={badgeStil('#f0fdfa', '#99f6e4', '#115e59')}>
+                      <span>🌡️</span>
+                      <span>U: {typeof uVerdiVerdi === 'number' ? uVerdiVerdi.toFixed(2) : uVerdiVerdi} W/m²K</span>
+                      {uVerdiKilde === 'ifc' && ifcTag}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Stor tverrsnitt-tegning + materialliste */}
+              <div style={{ padding: '16px 22px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '14px' }}>
+                  {/* Stor tverrsnitt med EKSTERIØR/INTERIØR-tagger */}
+                  <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '12px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', padding: '0 4px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#0f172a' }}>
+                        <span>◄</span><span>EKSTERIØR / UTENFRA</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: '700', color: '#0f172a' }}>
+                        <span>INTERIØR / INNOVER</span><span>►</span>
                       </div>
                     </div>
-                  ))}
-                  <div style={{
-                    background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'6px',
-                    padding:'8px 10px', display:'flex', justifyContent:'space-between',
-                    marginTop:'4px',
-                  }}>
-                    <span style={{ fontSize:'10px', color:'#15803d', fontWeight:'700' }}>
-                      Total tykkelse
-                    </span>
-                    <span style={{ fontSize:'11px', color:'#0f172a', fontWeight:'700', fontVariantNumeric:'tabular-nums' }}>
-                      {totalTykkelseMm.toFixed(0)} mm
-                    </span>
+                    {/* Wrapper-svg som har hele renderingen */}
+                    <svg id="tverrsnitt-svg-full" viewBox="0 0 880 280" xmlns="http://www.w3.org/2000/svg"
+                      style={{ width: '100%', height: 'auto', display: 'block' }}>
+                      {(() => {
+                        // Inline rendering av full-size tverrsnitt med tykkelse-mål
+                        const svgW = 880, svgH = 280
+                        const padTop = 20, padBottom = 50, padLR = 30
+                        const tegnW = svgW - padLR * 2
+                        const tegnH = svgH - padTop - padBottom
+                        const sumRenderMm = renderEnheter.reduce((s, e) => s + e.mm, 0) || 1
+                        const minLagPx = 22
+                        let foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMm) * tegnW }))
+                        let underskudd = 0
+                        foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
+                        if (underskudd > 0) {
+                          const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.px, 0)
+                          if (justerbarSum > 0) {
+                            const faktor = (justerbarSum - underskudd) / justerbarSum
+                            foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
+                          }
+                        }
+                        let xCursor = padLR
+                        const enheterMedPx = foreloepige.map(o => {
+                          const x = xCursor; xCursor += o.px; return { ...o, x }
+                        })
+
+                        const renderEnFull = (enhet, idx) => {
+                          if (enhet.type === 'kombinert') {
+                            const stender = lagListe[enhet.idxStender]
+                            const isolasjon = lagListe[enhet.idxIsolasjon]
+                            const fargeIso = getTverrsnittMaterialFarge(lagMaterial(isolasjon))
+                            const fargeStender = getTverrsnittMaterialFarge(lagMaterial(stender))
+                            const patternId = `pat-iso-full-${idx}`
+                            const stenderTegnBredde = Math.max(7, enhet.px * 0.16)
+                            const ccPx = Math.max(50, enhet.px * 1.5)
+                            const stenderPosisjoner = []
+                            let p = enhet.x + enhet.px * 0.15
+                            while (p + stenderTegnBredde <= enhet.x + enhet.px) {
+                              stenderPosisjoner.push(p); p += ccPx
+                            }
+                            return (
+                              <g key={idx}>
+                                <defs>
+                                  <pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                                    <rect width="14" height="14" fill={fargeIso.fyll} />
+                                    <circle cx="7" cy="7" r="4.5" fill="none" stroke={fargeIso.strek} strokeWidth="0.8" opacity="0.7" />
+                                  </pattern>
+                                </defs>
+                                <rect x={enhet.x} y={padTop} width={enhet.px} height={tegnH}
+                                  fill={`url(#${patternId})`} stroke="#1e293b" strokeWidth="1.5" />
+                                {stenderPosisjoner.map((sx, si) => (
+                                  <rect key={si} x={sx} y={padTop} width={stenderTegnBredde} height={tegnH}
+                                    fill={fargeStender.fyll} stroke={fargeStender.strek} strokeWidth="1" />
+                                ))}
+                              </g>
+                            )
+                          }
+                          const lag = lagListe[enhet.idx]
+                          const farge = getTverrsnittMaterialFarge(lagMaterial(lag))
+                          const lagtype = detekterLagtype(lagMaterial(lag))
+                          const patternId = `pat-full-${idx}`
+                          let patternEl = null
+                          let bgFill = farge.fyll
+                          switch (lagtype) {
+                            case 'isolasjon':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                                <rect width="14" height="14" fill={farge.fyll} />
+                                <circle cx="7" cy="7" r="4.5" fill="none" stroke={farge.strek} strokeWidth="0.8" opacity="0.7" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'eps':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                                <rect width="8" height="8" fill={farge.fyll} />
+                                <line x1="0" y1="0" x2="0" y2="8" stroke={farge.strek} strokeWidth="0.8" opacity="0.6" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'stender': case 'limtre':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                                <rect width="10" height="10" fill={farge.fyll} />
+                                <line x1="0" y1="0" x2="0" y2="10" stroke={farge.strek} strokeWidth="1.2" opacity="0.7" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'betong':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="8" height="8" patternUnits="userSpaceOnUse">
+                                <rect width="8" height="8" fill={farge.fyll} />
+                                <circle cx="4" cy="4" r="1" fill={farge.strek} opacity="0.6" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'stål':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(135)">
+                                <rect width="6" height="6" fill={farge.fyll} />
+                                <line x1="0" y1="0" x2="0" y2="6" stroke={farge.strek} strokeWidth="0.8" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'tegl':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="20" height="14" patternUnits="userSpaceOnUse">
+                                <rect width="20" height="14" fill={farge.fyll} />
+                                <line x1="0" y1="7" x2="20" y2="7" stroke={farge.strek} strokeWidth="0.8" />
+                                <line x1="0" y1="0" x2="0" y2="7" stroke={farge.strek} strokeWidth="0.8" />
+                                <line x1="10" y1="7" x2="10" y2="14" stroke={farge.strek} strokeWidth="0.8" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'kledning':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="14" height="14" patternUnits="userSpaceOnUse">
+                                <rect width="14" height="14" fill={farge.fyll} />
+                                <line x1="0" y1="0" x2="0" y2="14" stroke={farge.strek} strokeWidth="1" opacity="0.6" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'gips':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+                                <rect width="20" height="20" fill={farge.fyll} />
+                                <line x1="0" y1="20" x2="20" y2="0" stroke={farge.strek} strokeWidth="0.5" opacity="0.4" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            case 'luft':
+                              patternEl = (<pattern id={patternId} x="0" y="0" width="12" height="12" patternUnits="userSpaceOnUse">
+                                <rect width="12" height="12" fill={farge.fyll} />
+                                <line x1="0" y1="12" x2="12" y2="0" stroke={farge.strek} strokeWidth="0.6" opacity="0.4" />
+                              </pattern>); bgFill = `url(#${patternId})`; break
+                            default: bgFill = farge.fyll
+                          }
+                          return (<g key={idx}>
+                            {patternEl && <defs>{patternEl}</defs>}
+                            <rect x={enhet.x} y={padTop} width={enhet.px} height={tegnH}
+                              fill={bgFill} stroke="#1e293b" strokeWidth="1.5" />
+                          </g>)
+                        }
+
+                        return (<>
+                          {enheterMedPx.map((enhet, idx) => renderEnFull(enhet, idx))}
+                          <rect x={padLR} y={padTop} width={tegnW} height={tegnH}
+                            fill="none" stroke="#0f172a" strokeWidth="2.5" />
+                          {/* Tykkelses-mål under */}
+                          {enheterMedPx.map((enhet, idx) => {
+                            const cx = enhet.x + enhet.px / 2
+                            return (
+                              <g key={`maal-${idx}`}>
+                                <line x1={enhet.x} y1={padTop + tegnH + 4} x2={enhet.x} y2={padTop + tegnH + 18}
+                                  stroke="#475569" strokeWidth="1" />
+                                <line x1={enhet.x + enhet.px} y1={padTop + tegnH + 4} x2={enhet.x + enhet.px} y2={padTop + tegnH + 18}
+                                  stroke="#475569" strokeWidth="1" />
+                                <line x1={enhet.x} y1={padTop + tegnH + 11} x2={enhet.x + enhet.px} y2={padTop + tegnH + 11}
+                                  stroke="#475569" strokeWidth="0.8" />
+                                <text x={cx} y={padTop + tegnH + 32} fontSize="11" fill="#0f172a"
+                                  fontFamily="system-ui, sans-serif" textAnchor="middle" fontWeight="600">
+                                  {enhet.mm > 0 ? Math.round(enhet.mm) : '?'}
+                                </text>
+                              </g>
+                            )
+                          })}
+                          {/* Total-mål nederst */}
+                          <text x={svgW / 2} y={svgH - 4} fontSize="11" fontWeight="700"
+                            fill="#0f172a" fontFamily="system-ui, sans-serif" textAnchor="middle">
+                            Total: {totalTykkelseMm.toFixed(0)} mm
+                          </text>
+                        </>)
+                      })()}
+                    </svg>
+                    {kombinertePar.length > 0 && (
+                      <div style={{ marginTop: '8px', fontSize: '10px', color: '#64748b', textAlign: 'center', fontStyle: 'italic' }}>
+                        Stendere tegnet som vertikale interrupts gjennom isolasjon · {kombinertePar.length} stender+isolasjon-par
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Materialliste */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>
+                      Materialliste (NS 3451)
+                    </div>
+                    {materiallisteRader.map(({ idx, navn, tykk, ns3451, farge }) => (
+                      <div key={idx} style={{
+                        background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
+                        padding: '8px 10px', display: 'flex', alignItems: 'flex-start', gap: '8px',
+                      }}>
+                        <div style={{
+                          width: '10px', minHeight: '24px', borderRadius: '3px',
+                          background: farge.fyll, border: `1px solid ${farge.strek}`, flexShrink: 0,
+                        }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                            <span style={{
+                              fontSize: '9px', fontWeight: '700', color: '#475569',
+                              background: '#f1f5f9', padding: '1px 5px', borderRadius: '3px',
+                              fontFamily: 'monospace', letterSpacing: '0.5px',
+                              minWidth: '26px', textAlign: 'center', flexShrink: 0,
+                            }}>
+                              {ns3451 ? ns3451.kode : '—'}
+                            </span>
+                            <span style={{
+                              fontSize: '10px', color: '#0f172a', fontWeight: '600',
+                              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1,
+                            }}>
+                              {navn}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px' }}>
+                            {ns3451 && (
+                              <span style={{
+                                fontSize: '9px', color: '#64748b', fontStyle: 'italic',
+                                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                              }}>
+                                {ns3451.navn}
+                              </span>
+                            )}
+                            <span style={{
+                              fontSize: '9px', color: '#475569', fontWeight: '600',
+                              fontVariantNumeric: 'tabular-nums', flexShrink: 0,
+                            }}>
+                              {tykk > 0 ? `${Math.round(tykk)} mm` : '—'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <div style={{
+                      background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '6px',
+                      padding: '8px 10px', display: 'flex', justifyContent: 'space-between', marginTop: '4px',
+                    }}>
+                      <span style={{ fontSize: '10px', color: '#15803d', fontWeight: '700' }}>
+                        Total tykkelse
+                      </span>
+                      <span style={{ fontSize: '11px', color: '#0f172a', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
+                        {totalTykkelseMm.toFixed(0)} mm
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Beskrivelse */}
-            {beskrivelse && (
-              <div style={{
-                marginTop: '16px', background: 'white', border: '1px solid #e2e8f0',
-                borderRadius: '10px', padding: '12px 14px',
-              }}>
-                <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
-                  Beskrivelse
-                </div>
-                <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
-                  {beskrivelse}
-                </div>
+                {/* Beskrivelse */}
+                {beskrivelse && (
+                  <div style={{
+                    marginTop: '14px', background: 'white', border: '1px solid #e2e8f0',
+                    borderRadius: '10px', padding: '12px 14px',
+                  }}>
+                    <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px' }}>
+                      Beskrivelse
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#334155', lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>
+                      {beskrivelse}
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-
-            {/* Fotnote */}
-            <div style={{
-              marginTop: '12px', fontSize: '10px', color: '#94a3b8',
-              textAlign: 'center', fontStyle: 'italic',
-            }}>
-              Lag vises i rekkefølgen IFC-fila beskriver dem · proporsjonal til tykkelse
-              {kombinertePar.length > 0 && ' · stendere tegnet som vertikale interrupts gjennom isolasjon'}
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}
@@ -42036,7 +42219,6 @@ function BimTverrsnittModal({ lagsett, onClose }) {
     document.body
   )
 }
-
 function BimLagsettDetaljer({ lagsett, isMob }) {
   const [aapen, setAapen] = useState(false)
 
