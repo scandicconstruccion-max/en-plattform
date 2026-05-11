@@ -41572,16 +41572,23 @@ function BimTverrsnittModal({ lagsett, onClose }) {
   const renderTverrsnittSvg = ({ width, height, padding = 4, showLabels = false }) => {
     const tegnW = width - padding * 2
     const tegnH = height - padding * 2
-    const sumRenderMm = renderEnheter.reduce((s, e) => s + e.mm, 0) || 1
+    const sumRenderMmRaw = renderEnheter.reduce((s, e) => s + e.mm, 0)
     const minLagPx = showLabels ? 22 : 6
-    let foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMm) * tegnW }))
-    let underskudd = 0
-    foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
-    if (underskudd > 0) {
-      const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.px, 0)
-      if (justerbarSum > 0) {
-        const faktor = (justerbarSum - underskudd) / justerbarSum
-        foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
+    // Fallback: hvis alle tykkelser er 0, fordel lagene likt over hele bredden
+    let foreloepige
+    if (sumRenderMmRaw === 0) {
+      const likBredde = tegnW / Math.max(1, renderEnheter.length)
+      foreloepige = renderEnheter.map(e => ({ ...e, px: likBredde }))
+    } else {
+      foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMmRaw) * tegnW }))
+      let underskudd = 0
+      foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
+      if (underskudd > 0) {
+        const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.px, 0)
+        if (justerbarSum > 0) {
+          const faktor = (justerbarSum - underskudd) / justerbarSum
+          foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
+        }
       }
     }
     let xCursor = padding
@@ -42044,16 +42051,23 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                         const padTop = 20, padBottom = 50, padLR = 30
                         const tegnW = svgW - padLR * 2
                         const tegnH = svgH - padTop - padBottom
-                        const sumRenderMm = renderEnheter.reduce((s, e) => s + e.mm, 0) || 1
+                        const sumRenderMmRaw = renderEnheter.reduce((s, e) => s + e.mm, 0)
                         const minLagPx = 22
-                        let foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMm) * tegnW }))
-                        let underskudd = 0
-                        foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
-                        if (underskudd > 0) {
-                          const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.px, 0)
-                          if (justerbarSum > 0) {
-                            const faktor = (justerbarSum - underskudd) / justerbarSum
-                            foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
+                        // Fallback: hvis alle tykkelser er 0, fordel lagene likt over hele bredden
+                        let foreloepige
+                        if (sumRenderMmRaw === 0) {
+                          const likBredde = tegnW / Math.max(1, renderEnheter.length)
+                          foreloepige = renderEnheter.map(e => ({ ...e, px: likBredde }))
+                        } else {
+                          foreloepige = renderEnheter.map(e => ({ ...e, px: (e.mm / sumRenderMmRaw) * tegnW }))
+                          let underskudd = 0
+                          foreloepige.forEach(o => { if (o.px < minLagPx) { underskudd += (minLagPx - o.px); o.px = minLagPx; o.justert = true } })
+                          if (underskudd > 0) {
+                            const justerbarSum = foreloepige.filter(o => !o.justert).reduce((s, o) => s + o.px, 0)
+                            if (justerbarSum > 0) {
+                              const faktor = (justerbarSum - underskudd) / justerbarSum
+                              foreloepige = foreloepige.map(o => o.justert ? o : { ...o, px: Math.max(minLagPx, o.px * faktor) })
+                            }
                           }
                         }
                         let xCursor = padLR
