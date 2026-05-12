@@ -47907,7 +47907,7 @@ function KalkulasjonPage({ onNavigate }) {
   )
 
   if (viewKalk) return <>
-    {showEditor && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={async () => {
+    {showEditor && <KalkProsjektEditor initial={editKalk} defaultProsjektType={valgtProsjektType} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={async () => {
       setShowEditor(false); setEditKalk(null); await load()
       if (viewKalk) {
         try {
@@ -48431,11 +48431,11 @@ function KalkulasjonPage({ onNavigate }) {
         </>
       )}
 
-      {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
+      {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} defaultProsjektType={valgtProsjektType} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
       {showOpprettValg && <KalkOpprettValgModal
         onClose={() => setShowOpprettValg(false)}
         onVelgHurtigstart={(pt) => { setValgtProsjektType(pt); setShowOpprettValg(false); setShowHurtigstart(true) }}
-        onVelgTom={(pt) => { setValgtProsjektType(pt); setShowOpprettValg(false); setEditKalk({ prosjekt_type: pt }); setShowEditor(true) }}
+        onVelgTom={(pt) => { setValgtProsjektType(pt); setShowOpprettValg(false); setEditKalk(null); setShowEditor(true) }}
       />}
       {showHurtigstart && <KalkHurtigstartModal onClose={() => setShowHurtigstart(false)} onComplete={async (data) => {
         try {
@@ -51189,7 +51189,7 @@ function KalkFaktorerPage({ onBack }) {
 
 // ─── PROSJEKT EDITOR (Opprett/rediger kalkulasjonsprosjekt) ──────────────────
 
-function KalkProsjektEditor({ initial, onClose, onSaved }) {
+function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) {
   const { user } = useAuth()
   const isEdit = !!initial
   const [form, setForm] = useState({
@@ -51201,7 +51201,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
     customer_orgnr: initial?.customer_orgnr || '',
     customer_id: initial?.customer_id || null,
     notes: initial?.notes || '',
-    prosjekt_type: initial?.prosjekt_type || 'nybygg',  // Patch 20
+    prosjekt_type: initial?.prosjekt_type || defaultProsjektType || 'nybygg',  // Patch 20
   })
   // Generer sekvensielt nummer ved nyopprettelse
   useEffect(() => {
@@ -51273,12 +51273,17 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
       const payload = sanitizeDbPayload({ ...form, kalkyler, faktorer, customer_id: customerId, total_cost: totals.totSelvkost, total_ex_mva: totals.totMedFortjeneste, profit_percent: totals.fortjenesteProsent, updated_at: new Date().toISOString() })
 
       if (isEdit) {
-        await supabase.from('calculations').update(payload).eq('id', initial.id)
+        const { error } = await supabase.from('calculations').update(payload).eq('id', initial.id)
+        if (error) throw error
       } else {
-        await supabase.from('calculations').insert({ ...payload, status: 'Utkast', created_by: user?.id })
+        const { error } = await supabase.from('calculations').insert({ ...payload, status: 'Utkast', created_by: user?.id })
+        if (error) throw error
       }
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) {
+      console.error('Kalkyle-lagring feilet:', e)
+      alert('Feil ved lagring: ' + (e.message || 'Ukjent feil. Sjekk konsoll for detaljer.'))
+    }
     finally { setSaving(false) }
   }
 
