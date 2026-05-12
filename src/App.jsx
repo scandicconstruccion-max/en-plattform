@@ -15537,6 +15537,7 @@ function FakturaPage() {
 
 function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const isMobFD = typeof window !== 'undefined' && window.innerWidth < 768
   const [inv, setInv] = useState(init)
   const [editing, setEditing] = useState(false)
@@ -15561,8 +15562,24 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm({ message: 'Slett denne fakturaen?', subMessage: 'Fakturaen slettes permanent.', danger: true }))) return
-    await supabase.from('invoices').delete().eq('id',inv.id)
+    // Norsk bokføringsforskrift § 7-3: Sendte fakturaer kan IKKE slettes.
+    // Feil må rettes via kreditnota for å bevare sporbarhet.
+    if (inv.status !== 'Utkast') {
+      await appAlert({
+        message: 'Fakturaen kan ikke slettes',
+        subMessage: inv.is_credit_note
+          ? 'Kreditnotaer er bokførte dokumenter og kan ikke slettes. Hvis kreditnotaen er feil, må du opprette en ny faktura som motpostering.'
+          : 'Etter norsk bokføringsforskrift (§ 7-3) er det forbudt å slette fakturaer som er sendt eller betalt. Bruk "↩️ Kredit" for å opprette en kreditnota i stedet.',
+        kind: 'warning',
+      })
+      return
+    }
+    if (!(await confirm({
+      message: 'Slett dette fakturautkastet?',
+      subMessage: 'Utkastet er ikke sendt og kan trygt slettes. Denne handlingen kan ikke angres.',
+      danger: true,
+    }))) return
+    await supabase.from('invoices').delete().eq('id', inv.id)
     onBack()
   }
 
@@ -15694,7 +15711,8 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
             {(inv.status==='Sendt'||overdue)&&<button onClick={sendPurring} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobFD ? '11px' : '13px', fontWeight:'600' }}>{isMobFD ? '⚠️ Purr' : '⚠️ Send purring'}</button>}
             {!isMobFD && inv.status!=='Kreditert'&&inv.status!=='Utkast'&&!inv.is_credit_note&&<button onClick={()=>{setShowKreditnota(true);setKreditMode('full');setKreditReason('');setKreditLines((inv.lines||[]).map(l=>({...l,_selected:true,_creditPct:100})))}} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>↩️ Kredit</button>}
             {inv.status!=='Betalt'&&<button onClick={()=>setEditing(true)} style={{ padding: isMobFD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobFD ? '12px' : '13px' }}>✏️</button>}
-            <button onClick={handleDelete} style={{ padding: isMobFD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobFD ? '12px' : '13px' }}>🗑️</button>
+            {/* Slett-knapp: kun for utkast (norsk bokføringsforskrift § 7-3) */}
+            {inv.status==='Utkast'&&<button onClick={handleDelete} style={{ padding: isMobFD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobFD ? '12px' : '13px' }} title="Slett utkast">🗑️</button>}
           </div>
         </div>
       </div>
