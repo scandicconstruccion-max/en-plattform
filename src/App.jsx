@@ -36408,6 +36408,8 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
 // Lar brukeren velge mellom Hurtigstart-veiviser eller tom kalkyle.
 
 function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
+  // Patch 20: Velg prosjekt-type før hovedvalget
+  const [prosjektType, setProsjektType] = useState('nybygg')
   const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
   useEffect(() => {
     const handler = () => setIsMob(window.innerWidth < 768)
@@ -36424,13 +36426,47 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
           <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'#f1f5f9', border:'none', borderRadius:'50%', width:'30px', height:'30px', cursor:'pointer', color:'#64748b', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <h2 style={{ margin:'0 0 4px', fontSize:'19px', fontWeight:'800', color:'#0f172a' }}>Nytt kalkulasjonsprosjekt</h2>
           <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>Hvordan vil du starte?</p>
+
+          {/* Patch 20: Velg prosjekt-type */}
+          <div style={{ marginTop:'14px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.4px', marginBottom:'6px' }}>
+              Prosjekt-type
+            </div>
+            <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+              {[
+                { val: 'nybygg', label: '🏗️ Nybygg', desc: 'Ny konstruksjon' },
+                { val: 'rehab', label: '🔨 Rehabilitering', desc: 'Riving / oppgradering' },
+                { val: 'blandet', label: '🔀 Blandet', desc: 'Begge typer' },
+              ].map(opt => (
+                <button key={opt.val} type="button" onClick={() => setProsjektType(opt.val)}
+                  style={{
+                    flex: 1, minWidth: '120px',
+                    background: prosjektType === opt.val
+                      ? (opt.val === 'rehab' ? '#fffbeb' : opt.val === 'blandet' ? '#faf5ff' : '#f0f9ff')
+                      : 'white',
+                    border: '1.5px solid ' + (prosjektType === opt.val
+                      ? (opt.val === 'rehab' ? '#fbbf24' : opt.val === 'blandet' ? '#c084fc' : '#38bdf8')
+                      : '#e2e8f0'),
+                    color: prosjektType === opt.val
+                      ? (opt.val === 'rehab' ? '#92400e' : opt.val === 'blandet' ? '#6b21a8' : '#0c4a6e')
+                      : '#475569',
+                    borderRadius: '8px', padding: '8px 10px', fontSize: '12px',
+                    fontWeight: prosjektType === opt.val ? '700' : '500',
+                    cursor: 'pointer', textAlign: 'left',
+                  }}>
+                  <div>{opt.label}</div>
+                  <div style={{ fontSize:'10px', fontWeight:'400', opacity:0.8, marginTop:'2px' }}>{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         <div style={{ padding:'20px 24px 24px' }}>
           <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'12px' }}>
 
             {/* Hurtigstart (først, anbefalt) */}
-            <button onClick={onVelgHurtigstart}
+            <button onClick={() => onVelgHurtigstart(prosjektType)}
               style={{
                 background:'linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%)',
                 border:'2px solid #c4b5fd',
@@ -36455,7 +36491,7 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
             </button>
 
             {/* Tom kalkyle */}
-            <button onClick={onVelgTom}
+            <button onClick={() => onVelgTom(prosjektType)}
               style={{
                 background:'linear-gradient(135deg, #faf5ff 0%, #eff6ff 100%)',
                 border:'2px solid #c4b5fd',
@@ -40288,6 +40324,8 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
   const [fag, setFag] = useState(() => mal?.fag || 'tomrer')
   const [enhet, setEnhet] = useState(() => mal?.enhet || 'm²')
   const [beskrivelse, setBeskrivelse] = useState(() => mal?.beskrivelse || '')
+  // Patch 20: Prosjekt-type — arves fra mal hvis valgt, default 'nybygg'
+  const [prosjektType, setProsjektType] = useState(() => mal?.prosjektType || 'nybygg')
 
   // Lag-struktur — fra mal hvis valgt, ellers fra IFC
   const [lag, setLag] = useState(() => {
@@ -40410,6 +40448,7 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
       kategori: kategoriValg,
       fag,
       enhet,
+      prosjektType,  // Patch 20
       beskrivelse,
       lag,
       materialer,
@@ -40519,6 +40558,37 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
               <label style={labelStil}>Beskrivelse</label>
               <input type="text" value={beskrivelse} onChange={e => setBeskrivelse(e.target.value)} style={inputStil}
                 placeholder="Kort beskrivelse av konstruksjonen..." />
+            </div>
+            {/* Patch 20: Prosjekt-type-velger */}
+            <div style={{ marginTop: '12px' }}>
+              <label style={labelStil}>Prosjekt-type</label>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {[
+                  { val: 'nybygg', label: '🏗️ Nybygg', desc: 'Ny konstruksjon' },
+                  { val: 'rehab', label: '🔨 Rehab', desc: 'Rehab / riving' },
+                  { val: 'blandet', label: '🔀 Blandet', desc: 'Begge typer' },
+                ].map(opt => (
+                  <button key={opt.val} type="button" onClick={() => setProsjektType(opt.val)}
+                    style={{
+                      flex: 1, minWidth: '110px',
+                      background: prosjektType === opt.val
+                        ? (opt.val === 'rehab' ? '#fffbeb' : opt.val === 'blandet' ? '#faf5ff' : '#f0f9ff')
+                        : 'white',
+                      border: '1.5px solid ' + (prosjektType === opt.val
+                        ? (opt.val === 'rehab' ? '#fbbf24' : opt.val === 'blandet' ? '#c084fc' : '#38bdf8')
+                        : '#e2e8f0'),
+                      color: prosjektType === opt.val
+                        ? (opt.val === 'rehab' ? '#92400e' : opt.val === 'blandet' ? '#6b21a8' : '#0c4a6e')
+                        : '#475569',
+                      borderRadius: '6px', padding: '6px 8px', fontSize: '11px',
+                      fontWeight: prosjektType === opt.val ? '700' : '500',
+                      cursor: 'pointer', textAlign: 'left',
+                    }}>
+                    <div>{opt.label}</div>
+                    <div style={{ fontSize: '9px', fontWeight: '400', opacity: 0.8, marginTop: '1px' }}>{opt.desc}</div>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -40771,8 +40841,10 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
 // Layout: Sidebar venstre (kategori-tre) + liste høyre (konstruksjoner).
 // Listen er alltid synlig — sidebaren tar smal kolonne.
 
-function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onClose }) {
+function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onClose, kalkyleProsjektType }) {
   const [sok, setSok] = useState('')
+  // Patch 20: Filter på prosjekt-type — auto-velg basert på kalkylen
+  const [filterProsjektType, setFilterProsjektType] = useState(kalkyleProsjektType || 'alle')
   // Default: forhåndsvalg lagsettets kategori, men kalkulatør kan velge "Alle"
   const initielKategori = brukerKategori && KATEGORI_MAPPING[brukerKategori]
     ? KATEGORI_MAPPING[brukerKategori]
@@ -40887,6 +40959,9 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
       })
     }
 
+    // Patch 20: Filter på prosjekt-type
+    liste = filterMalerEtterProsjektType(liste, filterProsjektType)
+
     // Beregn likhets-score for hver
     const scored = liste.map(k => {
       let score = 0
@@ -40908,7 +40983,7 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
     })
 
     return scored
-  }, [bibliotek, sok, valgtKategori, ifcLag, brukerKategori])
+  }, [bibliotek, sok, valgtKategori, ifcLag, brukerKategori, filterProsjektType])
 
   // Beskrivelse av en konstruksjon — bruker beskrivelse-feltet hvis det finnes,
   // ellers oppsummering av materialene
@@ -40981,6 +41056,32 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
 
         {/* Søkefelt */}
         <div style={{ padding: '12px 22px', borderBottom: '1px solid #e2e8f0', background: '#f8fafc' }}>
+          {/* Patch 20: Filter på prosjekt-type */}
+          <div style={{ display: 'flex', gap: '4px', marginBottom: '8px', flexWrap: 'wrap' }}>
+            {[
+              { val: 'alle', label: 'Alle', ikon: '' },
+              { val: 'nybygg', label: 'Nybygg', ikon: '🏗️' },
+              { val: 'rehab', label: 'Rehab', ikon: '🔨' },
+            ].map(opt => (
+              <button key={opt.val} onClick={() => setFilterProsjektType(opt.val)}
+                style={{
+                  background: filterProsjektType === opt.val
+                    ? (opt.val === 'rehab' ? '#fffbeb' : opt.val === 'nybygg' ? '#f0f9ff' : '#f1f5f9')
+                    : 'white',
+                  border: '1px solid ' + (filterProsjektType === opt.val
+                    ? (opt.val === 'rehab' ? '#fbbf24' : opt.val === 'nybygg' ? '#38bdf8' : '#cbd5e1')
+                    : '#e2e8f0'),
+                  color: filterProsjektType === opt.val
+                    ? (opt.val === 'rehab' ? '#92400e' : opt.val === 'nybygg' ? '#0c4a6e' : '#0f172a')
+                    : '#64748b',
+                  borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                  fontWeight: filterProsjektType === opt.val ? '700' : '500',
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px',
+                }}>
+                {opt.ikon && <span>{opt.ikon}</span>}<span>{opt.label}</span>
+              </button>
+            ))}
+          </div>
           <input
             type="text"
             placeholder="🔍 Søk på navn, kategori eller beskrivelse..."
@@ -41151,6 +41252,20 @@ function BimBibliotekSokModal({ lagsett, brukerKategori, bibliotek, onVelg, onCl
                           <span style={{ fontSize: '10px', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
                             {k.kategori || 'Ukjent'}
                           </span>
+                          {/* Patch 20: Prosjekt-type-badge */}
+                          {(() => {
+                            const ind = getProsjektTypeIndikator(k.prosjektType)
+                            if (!ind) return null
+                            return (
+                              <span style={{
+                                fontSize: '9px', fontWeight: '700', letterSpacing: '0.4px',
+                                color: ind.tekst, background: ind.kantlinje,
+                                padding: '2px 7px', borderRadius: '4px', whiteSpace: 'nowrap',
+                              }}>
+                                {ind.ikon} {ind.navn}
+                              </span>
+                            )
+                          })()}
                           {harMatch && (
                             <span style={{
                               fontSize: '10px',
@@ -41362,6 +41477,56 @@ function renseMaterialnavn(navn) {
     return { rent: match[1].trim(), id: match[2] }
   }
   return { rent: navn.trim(), id: null }
+}
+
+// ─── PROSJEKT-TYPE INDIKATOR (Patch 20) ───────────────────────────────────────
+// Returnerer visning-info for en mals prosjektType:
+//   { ikon, navn, farge, bg, kantlinje } eller null hvis ingen markering trengs.
+// Brukes på malkort i bibliotek, BIM-import, og kalkyle-rader.
+function getProsjektTypeIndikator(prosjektType) {
+  if (prosjektType === 'rehab') {
+    return {
+      ikon: '🔨', navn: 'REHAB',
+      tekst: '#92400e', bg: '#fffbeb', kantlinje: '#fde68a',
+    }
+  }
+  if (prosjektType === 'blandet') {
+    return {
+      ikon: '🔀', navn: 'BLANDET',
+      tekst: '#6b21a8', bg: '#faf5ff', kantlinje: '#e9d5ff',
+    }
+  }
+  if (prosjektType === 'nybygg') {
+    return {
+      ikon: '🏗️', navn: 'NYBYGG',
+      tekst: '#0c4a6e', bg: '#f0f9ff', kantlinje: '#bae6fd',
+    }
+  }
+  return null
+}
+
+// Filtrer maler etter prosjekt-type. 'alle' = ingen filtrering.
+// Hvis kalkyle er 'rehab', vis både 'rehab' og 'blandet'. Tilsvarende for nybygg.
+function filterMalerEtterProsjektType(maler, filter) {
+  if (!filter || filter === 'alle') return maler
+  return maler.filter(m => {
+    const mt = m.prosjektType || 'nybygg'  // null/undefined = nybygg som default
+    if (filter === 'rehab') return mt === 'rehab' || mt === 'blandet'
+    if (filter === 'nybygg') return mt === 'nybygg' || mt === 'blandet'
+    return true
+  })
+}
+
+// Sorter maler slik at riktig prosjekt-type kommer først.
+function sorterMalerEtterProsjektType(maler, prefer) {
+  if (!prefer || prefer === 'blandet') return maler
+  const score = (m) => {
+    const mt = m.prosjektType || 'nybygg'
+    if (mt === prefer) return 0
+    if (mt === 'blandet') return 1
+    return 2
+  }
+  return [...maler].sort((a, b) => score(a) - score(b))
 }
 
 // ─── MATERIAL-FARGEPALETT ─────────────────────────────────────────────────────
@@ -44300,6 +44465,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           lagsett={bibliotekSokLagsett}
           brukerKategori={bibliotekSokLagsett.brukerKategori}
           bibliotek={utvidetBibliotek}
+          kalkyleProsjektType={redigeringAvKalkyle?.prosjekt_type || null}
           onClose={() => setBibliotekSokLagsett(null)}
           onVelg={async (valgtKonstruksjon) => {
             await settMatch(bibliotekSokLagsett, valgtKonstruksjon, 'bibliotek')
@@ -47624,6 +47790,9 @@ function KalkulasjonPage({ onNavigate }) {
   // BIM-Kalkyle og Hurtigstart state
   const [showHurtigstart, setShowHurtigstart] = useState(false)
   const [showOpprettValg, setShowOpprettValg] = useState(false)
+  // Patch 20: Prosjekt-type valgt i KalkOpprettValgModal — passeres videre til
+  // Hurtigstart og tom-kalkyle-flyt
+  const [valgtProsjektType, setValgtProsjektType] = useState('nybygg')
   const [showBimUpsell, setShowBimUpsell] = useState(false)
   const [showBimImport, setShowBimImport] = useState(false)
   // Patch 14.D: Ved "Endre BIM-grunnlag" — kalkyle som skal redigeres med eksisterende sesjon-data
@@ -48127,6 +48296,20 @@ function KalkulasjonPage({ onNavigate }) {
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobK ? '13px' : '15px' }}>{k.title}</span>
                       {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
                       <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+                      {/* Patch 20: Prosjekt-type-pille */}
+                      {(() => {
+                        const ind = getProsjektTypeIndikator(k.prosjekt_type)
+                        if (!ind) return null
+                        return (
+                          <span style={{
+                            background: ind.bg, color: ind.tekst, border: `1px solid ${ind.kantlinje}`,
+                            padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
+                            letterSpacing:'0.3px',
+                          }}>
+                            {ind.ikon} {ind.navn}
+                          </span>
+                        )
+                      })()}
                     </div>
                     <div style={{ display:'flex', gap: isMobK ? '6px' : '12px', flexWrap:'wrap' }}>
                       {k.customer_name && <span style={{ fontSize: isMobK ? '11px' : '12px', color:'#64748b' }}>👤 {k.customer_name}</span>}
@@ -48251,8 +48434,8 @@ function KalkulasjonPage({ onNavigate }) {
       {showEditor && !viewKalk && <KalkProsjektEditor initial={editKalk} onClose={() => { setShowEditor(false); setEditKalk(null) }} onSaved={() => { setShowEditor(false); setEditKalk(null); load() }} />}
       {showOpprettValg && <KalkOpprettValgModal
         onClose={() => setShowOpprettValg(false)}
-        onVelgHurtigstart={() => { setShowOpprettValg(false); setShowHurtigstart(true) }}
-        onVelgTom={() => { setShowOpprettValg(false); setEditKalk(null); setShowEditor(true) }}
+        onVelgHurtigstart={(pt) => { setValgtProsjektType(pt); setShowOpprettValg(false); setShowHurtigstart(true) }}
+        onVelgTom={(pt) => { setValgtProsjektType(pt); setShowOpprettValg(false); setEditKalk({ prosjekt_type: pt }); setShowEditor(true) }}
       />}
       {showHurtigstart && <KalkHurtigstartModal onClose={() => setShowHurtigstart(false)} onComplete={async (data) => {
         try {
@@ -48306,6 +48489,7 @@ function KalkulasjonPage({ onNavigate }) {
             faktorer,
             status: 'Utkast',
             is_template: false,
+            prosjekt_type: valgtProsjektType,  // Patch 20
             total_cost: totals.totSelvkost,
             total_ex_mva: totals.totMedFortjeneste,
             profit_percent: totals.fortjenesteProsent,
@@ -48365,7 +48549,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '7083223', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydbånd for bjelker', mengde: 2, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Trinnlyddempende matte', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm (dobbel)', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'tom_etasje_betong_pabygg', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille over betong (påbygg)', beskrivelse: 'Trebjelkelag oppå eksisterende betongdekke — typisk ved påbygg/rehabilitering',
+  { id: 'tom_etasje_betong_pabygg', prosjektType: 'rehab', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille over betong (påbygg)', beskrivelse: 'Trebjelkelag oppå eksisterende betongdekke — typisk ved påbygg/rehabilitering',
     arbeidsarter: [{ beskrivelse: 'Montering svill og bjelkelag', grunntid: 0.30 }, { beskrivelse: 'Isolering 100mm', grunntid: 0.10 }, { beskrivelse: 'Undergulv sponplate', grunntid: 0.15 }, { beskrivelse: 'Fuktsperre mot betong', grunntid: 0.08 }],
     materialer: [{ varenavn: 'Fuktsperre 0.2mm', mengde: 1.1, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Svillebjelker 48×98', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Festemateriell betong', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
@@ -48406,7 +48590,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Stålstendere 150mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'tom_yv_rehabilitering', fag: 'tomrer', kategori: 'Yttervegg', name: 'Etterisolering yttervegg utvendig', beskrivelse: 'Etterisolering av eksisterende vegg utvendig med 50-100mm, vindsperre og ny kledning',
+  { id: 'tom_yv_rehabilitering', prosjektType: 'rehab', fag: 'tomrer', kategori: 'Yttervegg', name: 'Etterisolering yttervegg utvendig', beskrivelse: 'Etterisolering av eksisterende vegg utvendig med 50-100mm, vindsperre og ny kledning',
     arbeidsarter: [{ beskrivelse: 'Demontering gammel kledning', grunntid: 0.20 }, { beskrivelse: 'Utlekting og isolering 100mm', grunntid: 0.25 }, { beskrivelse: 'Vindsperre', grunntid: 0.10 }, { beskrivelse: 'Sløyfer og ny kledning', grunntid: 0.40 }],
     materialer: [{ varenavn: 'Utlekting 48×98', mengde: 3, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning ny', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
@@ -48468,7 +48652,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Lekter', mengde: 3, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Stålplater profilerte', mengde: 1.1, enhet: 'm²', enhetspris: 195 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'tom_tak_omtekking', fag: 'tomrer', kategori: 'Yttertak', name: 'Omtekking tak (rehabilitering)', beskrivelse: 'Riving gammel tekking, ny undertak, lekting og takstein',
+  { id: 'tom_tak_omtekking', prosjektType: 'rehab', fag: 'tomrer', kategori: 'Yttertak', name: 'Omtekking tak (rehabilitering)', beskrivelse: 'Riving gammel tekking, ny undertak, lekting og takstein',
     arbeidsarter: [{ beskrivelse: 'Riving gammel tekking', grunntid: 0.20 }, { beskrivelse: 'Ny undertak', grunntid: 0.12 }, { beskrivelse: 'Ny lekting', grunntid: 0.15 }, { beskrivelse: 'Legging ny takstein', grunntid: 0.25 }],
     materialer: [{ varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Takstein ny', mengde: 10, enhet: 'stk/m²', enhetspris: 22 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 30 }],
     underleverandorer: [], enhet: 'm²'
@@ -48485,17 +48669,17 @@ const BYGNINGSDEL_BIBLIOTEK = [
     underleverandorer: [], enhet: 'm²'
   },
   // Dører og vinduer
-  { id: 'tom_dor_ytter', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør standard', beskrivelse: 'Montering av standard ytterdør inkl. karm, foring og listverk',
+  { id: 'tom_dor_ytter', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør standard', beskrivelse: 'Montering av standard ytterdør inkl. karm, foring og listverk',
     arbeidsarter: [{ beskrivelse: 'Demontering gammel dør', grunntid: 0.7 }, { beskrivelse: 'Montering ny ytterdør', grunntid: 3.0 }, { beskrivelse: 'Foring og listverk', grunntid: 1.8 }],
     materialer: [{ varenavn: 'Ytterdør m/karm', mengde: 1, enhet: 'stk', enhetspris: 8500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 250 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'tom_vindu_std', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 2-lags', beskrivelse: 'Montering vindu med foring og listverk',
+  { id: 'tom_vindu_std', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 2-lags', beskrivelse: 'Montering vindu med foring og listverk',
     arbeidsarter: [{ beskrivelse: 'Demontering gammelt vindu', grunntid: 0.7 }, { beskrivelse: 'Montering nytt vindu', grunntid: 2.0 }, { beskrivelse: 'Foring og listverk', grunntid: 1.2 }],
     materialer: [{ varenavn: 'Vindu 2-lags 120×120', mengde: 1, enhet: 'stk', enhetspris: 4200 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 180 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'tom_vindu_3lag', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 3-lags energi', beskrivelse: 'Montering 3-lags energivindu med foring og listverk',
+  { id: 'tom_vindu_3lag', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 3-lags energi', beskrivelse: 'Montering 3-lags energivindu med foring og listverk',
     arbeidsarter: [{ beskrivelse: 'Demontering gammelt vindu', grunntid: 0.7 }, { beskrivelse: 'Montering nytt vindu', grunntid: 2.0 }, { beskrivelse: 'Foring og listverk', grunntid: 1.2 }],
     materialer: [{ varenavn: 'Vindu 3-lags energi 120×120', mengde: 1, enhet: 'stk', enhetspris: 6800 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 180 }],
     underleverandorer: [], enhet: 'stk'
@@ -48511,17 +48695,17 @@ const BYGNINGSDEL_BIBLIOTEK = [
     underleverandorer: [], enhet: 'stk'
   },
   // Tilleggsvarianter for BIM-Kalkyle (Patch 4) — kvalitetsnivåer
-  { id: 'tom_vindu_passiv', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 passivhus', beskrivelse: '3-lags passivhus-vindu med U-verdi <0.8, høy lufttetthet — montering m/foring og listverk',
+  { id: 'tom_vindu_passiv', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Vindu 120×120 passivhus', beskrivelse: '3-lags passivhus-vindu med U-verdi <0.8, høy lufttetthet — montering m/foring og listverk',
     arbeidsarter: [{ beskrivelse: 'Demontering gammelt vindu', grunntid: 0.7 }, { beskrivelse: 'Montering passivhus-vindu', grunntid: 2.4 }, { beskrivelse: 'Foring og listverk', grunntid: 1.2 }, { beskrivelse: 'Lufttetting med tape', grunntid: 0.4 }],
     materialer: [{ varenavn: 'Passivhus-vindu 120×120', mengde: 1, enhet: 'stk', enhetspris: 10500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 650 }, { varenavn: 'Tetningsbånd og tape', mengde: 1, enhet: 'rs', enhetspris: 350 }, { varenavn: 'Skruer og skum', mengde: 1, enhet: 'rs', enhetspris: 180 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'tom_dor_ytter_energi', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør energi/sikkerhet', beskrivelse: 'Energieffektiv ytterdør med sikkerhetslås og isolert kjerne — montering m/karm og listverk',
+  { id: 'tom_dor_ytter_energi', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør energi/sikkerhet', beskrivelse: 'Energieffektiv ytterdør med sikkerhetslås og isolert kjerne — montering m/karm og listverk',
     arbeidsarter: [{ beskrivelse: 'Demontering gammel dør', grunntid: 0.7 }, { beskrivelse: 'Montering ny ytterdør', grunntid: 3.5 }, { beskrivelse: 'Foring og listverk', grunntid: 1.8 }, { beskrivelse: 'Sikkerhetsbeslag og lås', grunntid: 0.5 }],
     materialer: [{ varenavn: 'Ytterdør energi m/karm og lås', mengde: 1, enhet: 'stk', enhetspris: 18500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Skruer, skum, tettemasse', mengde: 1, enhet: 'rs', enhetspris: 250 }],
     underleverandorer: [], enhet: 'stk'
   },
-  { id: 'tom_dor_ytter_passiv', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør passivhus', beskrivelse: 'Passivhus-ytterdør med U-verdi <0.8 og høy lufttetthet — montering m/karm og lufttetting',
+  { id: 'tom_dor_ytter_passiv', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Ytterdør passivhus', beskrivelse: 'Passivhus-ytterdør med U-verdi <0.8 og høy lufttetthet — montering m/karm og lufttetting',
     arbeidsarter: [{ beskrivelse: 'Demontering gammel dør', grunntid: 0.7 }, { beskrivelse: 'Montering passivhus-dør', grunntid: 4.0 }, { beskrivelse: 'Foring og listverk', grunntid: 1.8 }, { beskrivelse: 'Lufttetting med tape', grunntid: 0.5 }],
     materialer: [{ varenavn: 'Passivhus-ytterdør m/karm', mengde: 1, enhet: 'stk', enhetspris: 28500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Tetningsbånd og tape', mengde: 1, enhet: 'rs', enhetspris: 450 }, { varenavn: 'Skruer og skum', mengde: 1, enhet: 'rs', enhetspris: 250 }],
     underleverandorer: [], enhet: 'stk'
@@ -48626,7 +48810,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Sparkelmasse fin', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Grunning', mengde: 0.1, enhet: 'l/m²', enhetspris: 65 }, { varenavn: 'Veggmaling innvendig', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'mal_vegg_ommaling', fag: 'maler', kategori: 'Vegg innvendig', name: 'Ommaling vegg (eksisterende)', beskrivelse: 'Vask, lett sparkling, sliping og 2 strøk på tidligere malt vegg',
+  { id: 'mal_vegg_ommaling', prosjektType: 'rehab', fag: 'maler', kategori: 'Vegg innvendig', name: 'Ommaling vegg (eksisterende)', beskrivelse: 'Vask, lett sparkling, sliping og 2 strøk på tidligere malt vegg',
     arbeidsarter: [{ beskrivelse: 'Vask og rengjøring', grunntid: 0.05 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.18 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.22 }],
     materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.15, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Veggmaling innvendig', mengde: 0.2, enhet: 'l/m²', enhetspris: 85 }],
     underleverandorer: [], enhet: 'm²'
@@ -48657,7 +48841,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Himlingsmaling', mengde: 0.2, enhet: 'l/m²', enhetspris: 75 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'mal_him_ommaling', fag: 'maler', kategori: 'Himling', name: 'Ommaling himling (eksisterende)', beskrivelse: 'Vask, lett sparkling og 2 strøk på tidligere malt himling',
+  { id: 'mal_him_ommaling', prosjektType: 'rehab', fag: 'maler', kategori: 'Himling', name: 'Ommaling himling (eksisterende)', beskrivelse: 'Vask, lett sparkling og 2 strøk på tidligere malt himling',
     arbeidsarter: [{ beskrivelse: 'Vask', grunntid: 0.05 }, { beskrivelse: 'Sparkling', grunntid: 0.12 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.22 }],
     materialer: [{ varenavn: 'Sparkelmasse', mengde: 0.15, enhet: 'kg/m²', enhetspris: 45 }, { varenavn: 'Himlingsmaling', mengde: 0.2, enhet: 'l/m²', enhetspris: 75 }],
     underleverandorer: [], enhet: 'm²'
@@ -48668,7 +48852,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Grunning utvendig tre', mengde: 0.12, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Dekkbeis/fasademaling', mengde: 0.25, enhet: 'l/m²', enhetspris: 110 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'mal_fas_ommaling', fag: 'maler', kategori: 'Fasade', name: 'Ommaling fasade (vedlikehold)', beskrivelse: 'Vask, skraping, grunding og 2 strøk maling på eksisterende kledning',
+  { id: 'mal_fas_ommaling', prosjektType: 'rehab', fag: 'maler', kategori: 'Fasade', name: 'Ommaling fasade (vedlikehold)', beskrivelse: 'Vask, skraping, grunding og 2 strøk maling på eksisterende kledning',
     arbeidsarter: [{ beskrivelse: 'Høytrykksvask', grunntid: 0.06 }, { beskrivelse: 'Skraping/sliping', grunntid: 0.15 }, { beskrivelse: 'Grunding flekker', grunntid: 0.05 }, { beskrivelse: 'Maling 2 strøk', grunntid: 0.28 }],
     materialer: [{ varenavn: 'Grunning utvendig', mengde: 0.08, enhet: 'l/m²', enhetspris: 85 }, { varenavn: 'Fasademaling', mengde: 0.28, enhet: 'l/m²', enhetspris: 110 }, { varenavn: 'Slipepapir/skraper', mengde: 1, enhet: 'rs/m²', enhetspris: 5 }],
     underleverandorer: [], enhet: 'm²'
@@ -48711,7 +48895,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
     underleverandorer: [], enhet: 'm²'
   },
   // Spesial/rehabilitering
-  { id: 'mal_fjerning_tapet', fag: 'maler', kategori: 'Rehabilitering', name: 'Fjerning av tapet', beskrivelse: 'Bløtgjøring og fjerning av gammel tapet, sparkling etter',
+  { id: 'mal_fjerning_tapet', prosjektType: 'rehab', fag: 'maler', kategori: 'Rehabilitering', name: 'Fjerning av tapet', beskrivelse: 'Bløtgjøring og fjerning av gammel tapet, sparkling etter',
     arbeidsarter: [{ beskrivelse: 'Bløtgjøring og fjerning', grunntid: 0.20 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.20 }],
     materialer: [{ varenavn: 'Tapetfjerner/dampmaskin', mengde: 1, enhet: 'rs/m²', enhetspris: 5 }, { varenavn: 'Sparkelmasse', mengde: 0.3, enhet: 'kg/m²', enhetspris: 45 }],
     underleverandorer: [], enhet: 'm²'
@@ -48834,12 +49018,12 @@ const BYGNINGSDEL_BIBLIOTEK = [
     underleverandorer: [], enhet: 'm²'
   },
   // Rehabilitering
-  { id: 'mur_riving_flis', fag: 'murer', kategori: 'Rehabilitering', name: 'Riving av flis vegg/gulv', beskrivelse: 'Riving av eksisterende flis og lim — klargjøring for ny flislegging',
+  { id: 'mur_riving_flis', prosjektType: 'rehab', fag: 'murer', kategori: 'Rehabilitering', name: 'Riving av flis vegg/gulv', beskrivelse: 'Riving av eksisterende flis og lim — klargjøring for ny flislegging',
     arbeidsarter: [{ beskrivelse: 'Riving flis og lim', grunntid: 0.35 }, { beskrivelse: 'Rengjøring og klargjøring', grunntid: 0.10 }, { beskrivelse: 'Bortkjøring avfall', grunntid: 0.05 }],
     materialer: [{ varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 35 }, { varenavn: 'Støvtetting/tildekking', mengde: 1, enhet: 'rs/m²', enhetspris: 10 }],
     underleverandorer: [], enhet: 'm²'
   },
-  { id: 'mur_peis_pipe', fag: 'murer', kategori: 'Rehabilitering', name: 'Piperehab./påmuring', beskrivelse: 'Rehabilitering av pipe over tak — ny påmuring og beslag',
+  { id: 'mur_peis_pipe', prosjektType: 'rehab', fag: 'murer', kategori: 'Rehabilitering', name: 'Piperehab./påmuring', beskrivelse: 'Rehabilitering av pipe over tak — ny påmuring og beslag',
     arbeidsarter: [{ beskrivelse: 'Riving gammel påmuring', grunntid: 2.0 }, { beskrivelse: 'Ny oppmuring', grunntid: 3.0 }, { beskrivelse: 'Pussing og tetting', grunntid: 1.5 }],
     materialer: [{ varenavn: 'Murstein/Leca pipehode', mengde: 1, enhet: 'rs', enhetspris: 2500 }, { varenavn: 'Murmørtel', mengde: 1, enhet: 'rs', enhetspris: 350 }, { varenavn: 'Beslag pipe', mengde: 1, enhet: 'sett', enhetspris: 2800 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs', enhetspris: 500 }],
     underleverandorer: [], enhet: 'stk'
@@ -50115,6 +50299,8 @@ function KalkBibliotekPage({ onBack }) {
   const [activeFag, setActiveFag] = useState('tomrer')
   const [expandedKat, setExpandedKat] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
+  // Patch 20: Filter på prosjekt-type
+  const [filterProsjektType, setFilterProsjektType] = useState('alle')
 
   useEffect(() => {
     supabase.from('bygningsdel_bibliotek').select('*').order('created_at', { ascending: false })
@@ -50164,13 +50350,43 @@ function KalkBibliotekPage({ onBack }) {
         <div style={{ flex:1, padding:'20px 28px' }}>
           <h2 style={{ fontSize:'18px', fontWeight:'700', color:'#0f172a', margin:'0 0 16px' }}>{fag.emoji} {fag.name}</h2>
 
+          {/* Patch 20: Filter på prosjekt-type */}
+          <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
+            {[
+              { val: 'alle', label: 'Alle', ikon: '' },
+              { val: 'nybygg', label: 'Nybygg', ikon: '🏗️' },
+              { val: 'rehab', label: 'Rehab', ikon: '🔨' },
+            ].map(opt => (
+              <button key={opt.val} onClick={() => setFilterProsjektType(opt.val)}
+                style={{
+                  background: filterProsjektType === opt.val
+                    ? (opt.val === 'rehab' ? '#fffbeb' : opt.val === 'nybygg' ? '#f0f9ff' : '#f1f5f9')
+                    : 'white',
+                  border: '1px solid ' + (filterProsjektType === opt.val
+                    ? (opt.val === 'rehab' ? '#fbbf24' : opt.val === 'nybygg' ? '#38bdf8' : '#cbd5e1')
+                    : '#e2e8f0'),
+                  color: filterProsjektType === opt.val
+                    ? (opt.val === 'rehab' ? '#92400e' : opt.val === 'nybygg' ? '#0c4a6e' : '#0f172a')
+                    : '#64748b',
+                  borderRadius: '8px', padding: '6px 12px', fontSize: '12px',
+                  fontWeight: filterProsjektType === opt.val ? '700' : '500',
+                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
+                }}>
+                {opt.ikon && <span>{opt.ikon}</span>}<span>{opt.label}</span>
+              </button>
+            ))}
+          </div>
+
           {Object.keys(fagData).length === 0 ? (
             <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
               <div style={{ fontSize:'36px', marginBottom:'8px' }}>📦</div>
               <p>Ingen bygningsdeler i biblioteket for {fag.name} ennå.</p>
             </div>
           ) : (
-            Object.entries(fagData).map(([kat, items]) => (
+            Object.entries(fagData).map(([kat, allItems]) => {
+              const items = filterMalerEtterProsjektType(allItems, filterProsjektType)
+              if (items.length === 0) return null
+              return (
               <div key={kat} style={{ marginBottom:'12px' }}>
                 <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
                   style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'12px 16px', borderRadius:'12px', border:'1px solid #f1f5f9', background: expandedKat === kat ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>
@@ -50181,12 +50397,28 @@ function KalkBibliotekPage({ onBack }) {
 
                 {expandedKat === kat && (
                   <div style={{ paddingLeft:'16px', marginTop:'6px' }}>
-                    {items.map(bd => (
-                      <div key={bd.id} style={{ background:'white', borderRadius:'10px', border:'1px solid #f1f5f9', marginBottom:'6px', overflow:'hidden' }}>
+                    {items.map(bd => {
+                      const bdInd = getProsjektTypeIndikator(bd.prosjektType || bd.prosjekt_type)
+                      return (
+                      <div key={bd.id} style={{
+                        background: bdInd?.bg || 'white',
+                        borderRadius:'10px',
+                        border: '1px solid ' + (bdInd?.kantlinje || '#f1f5f9'),
+                        marginBottom:'6px', overflow:'hidden',
+                      }}>
                         <button onClick={() => setExpandedBd(expandedBd === bd.id ? null : bd.id)}
                           style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
                           <span style={{ color:'#64748b' }}>{expandedBd === bd.id ? '▼' : '▶'}</span>
                           <span style={{ fontWeight:'600', color:'#0f172a' }}>{bd.name}</span>
+                          {bdInd && (
+                            <span style={{
+                              background: bdInd.kantlinje, color: bdInd.tekst,
+                              fontSize:'9px', fontWeight:'700', padding:'2px 6px',
+                              borderRadius:'4px', letterSpacing:'0.4px',
+                            }}>
+                              {bdInd.ikon} {bdInd.navn}
+                            </span>
+                          )}
                           {bd.source_user && <span style={{ background:'#fefce8', color:'#ca8a04', fontSize:'10px', fontWeight:'600', padding:'1px 6px', borderRadius:'4px' }}>Egen</span>}
                           <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8' }}>per {bd.enhet || 'stk'}</span>
                         </button>
@@ -50216,11 +50448,12 @@ function KalkBibliotekPage({ onBack }) {
                           </div>
                         )}
                       </div>
-                    ))}
+                    )})}
                   </div>
                 )}
               </div>
-            ))
+              )
+            })
           )}
         </div>
       </div>
@@ -50968,6 +51201,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved }) {
     customer_orgnr: initial?.customer_orgnr || '',
     customer_id: initial?.customer_id || null,
     notes: initial?.notes || '',
+    prosjekt_type: initial?.prosjekt_type || 'nybygg',  // Patch 20
   })
   // Generer sekvensielt nummer ved nyopprettelse
   useEffect(() => {
@@ -51613,6 +51847,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showSaveTemplate, setShowSaveTemplate] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [templateDesc, setTemplateDesc] = useState('')
+  // Patch 20: Velg prosjekt-type ved lagring av kalkyle-mal
+  const [templateProsjektType, setTemplateProsjektType] = useState(k.prosjekt_type || 'nybygg')
 
   const handleSaveAsTemplate = async () => {
     if (!templateName.trim()) return alert('Malnavn er påkrevd')
@@ -51621,6 +51857,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
         title: templateName.trim(),
         template_description: templateDesc.trim() || null,
         is_template: true,
+        prosjekt_type: templateProsjektType,  // Patch 20
         kalkyler: k.kalkyler,
         faktorer: k.faktorer,
         status: 'Mal',
@@ -54280,6 +54517,37 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beskrivelse (valgfritt)</label>
                 <textarea value={templateDesc} onChange={e => setTemplateDesc(e.target.value)} placeholder="Beskriv hva malen dekker, f.eks. «Komplett kalkyle for enebolig med tømrer, maler, rørlegger og elektriker»"
                   rows={3} style={{ width:'100%', padding:'10px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', resize:'none' }} />
+              </div>
+              {/* Patch 20: Prosjekt-type-velger */}
+              <div>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Prosjekt-type</label>
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                  {[
+                    { val: 'nybygg', label: '🏗️ Nybygg', desc: 'Ny konstruksjon' },
+                    { val: 'rehab', label: '🔨 Rehabilitering', desc: 'Riving / oppgradering' },
+                    { val: 'blandet', label: '🔀 Blandet', desc: 'Begge typer' },
+                  ].map(opt => (
+                    <button key={opt.val} type="button" onClick={() => setTemplateProsjektType(opt.val)}
+                      style={{
+                        flex: 1, minWidth: '140px',
+                        background: templateProsjektType === opt.val
+                          ? (opt.val === 'rehab' ? '#fffbeb' : opt.val === 'blandet' ? '#faf5ff' : '#f0f9ff')
+                          : 'white',
+                        border: '1.5px solid ' + (templateProsjektType === opt.val
+                          ? (opt.val === 'rehab' ? '#fbbf24' : opt.val === 'blandet' ? '#c084fc' : '#38bdf8')
+                          : '#e2e8f0'),
+                        color: templateProsjektType === opt.val
+                          ? (opt.val === 'rehab' ? '#92400e' : opt.val === 'blandet' ? '#6b21a8' : '#0c4a6e')
+                          : '#475569',
+                        borderRadius: '10px', padding: '10px 12px', fontSize: '13px',
+                        fontWeight: templateProsjektType === opt.val ? '700' : '500',
+                        cursor: 'pointer', textAlign: 'left',
+                      }}>
+                      <div>{opt.label}</div>
+                      <div style={{ fontSize:'11px', fontWeight:'400', opacity:0.8, marginTop:'2px' }}>{opt.desc}</div>
+                    </button>
+                  ))}
+                </div>
               </div>
               <div style={{ display:'flex', justifyContent:'flex-end', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
                 <button onClick={() => setShowSaveTemplate(false)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
