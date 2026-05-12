@@ -9250,7 +9250,28 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   useEffect(() => { loadRevisions() }, [q.id])
 
   const handleDelete = async () => {
-    if (!(await confirm({ message: 'Slett dette tilbudet?', subMessage: 'Tilbudet og alle tilhørende linjer slettes permanent.', danger: true }))) return
+    // Bygge-/anleggsbransjen har 10 års oppbevaringskrav på aksepterte tilbud
+    // (= byggekontrakter), jf. bokføringsforskriften § 8-1-5. Vi viser advarsel
+    // som forklarer regelverket, men tillater sletting hvis bruker bekrefter.
+    const erAkseptert = q.status === 'Akseptert'
+    const erSendt = q.status === 'Sendt'
+    let subMessage = 'Tilbudet og alle tilhørende linjer slettes permanent.'
+    if (erAkseptert) {
+      subMessage = '⚠️ Dette tilbudet er AKSEPTERT og regnes som en byggekontrakt. ' +
+        'Etter bokføringsforskriften § 8-1-5 skal byggekontrakter oppbevares i 10 år. ' +
+        'Sletting kan svekke sporbarhet ved tvist eller bokettersyn. ' +
+        'Vi anbefaler at du beholder tilbudet. Bedriften er selv ansvarlig for å følge lovkravene.'
+    } else if (erSendt) {
+      subMessage = '⚠️ Dette tilbudet er sendt til kunden. Sletting kan svekke ' +
+        'sporbarhet hvis det senere oppstår spørsmål om hva som ble tilbudt. Bedriften ' +
+        'er selv ansvarlig for å vurdere om oppbevaring er nødvendig.'
+    }
+    if (!(await confirm({
+      message: erAkseptert ? 'Slett akseptert tilbud?' : erSendt ? 'Slett sendt tilbud?' : 'Slett dette tilbudet?',
+      subMessage,
+      danger: true,
+      confirmLabel: erAkseptert ? 'Slett likevel' : 'Slett',
+    }))) return
     await supabase.from('quotes').delete().eq('id', q.id)
     onBack()
   }
@@ -10712,7 +10733,29 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm({ message: 'Slett dette anbudet?', subMessage: 'Anbudet og alle tilhørende data slettes permanent.', danger: true }))) return
+    // Bygge-/anleggsbransjen har 10 års oppbevaringskrav på anbud/kalkyler,
+    // jf. bokføringsforskriften § 8-1-5. Vi viser advarsel som forklarer
+    // regelverket, men tillater sletting hvis bruker bekrefter.
+    const erTildelt = t.status === 'Tildelt' || t.status === 'Akseptert'
+    const erSendt = t.status === 'Sendt' || t.status === 'Levert'
+    let subMessage = 'Anbudet og alle tilhørende data slettes permanent.'
+    if (erTildelt) {
+      subMessage = '⚠️ Dette anbudet er TILDELT og regnes som en byggekontrakt. ' +
+        'Etter bokføringsforskriften § 8-1-5 skal byggekontrakter med anbud/kalkyler ' +
+        'oppbevares i 10 år. Sletting kan svekke sporbarhet ved tvist eller bokettersyn. ' +
+        'Vi anbefaler sterkt at du beholder anbudet. Bedriften er selv ansvarlig for ' +
+        'å følge lovkravene.'
+    } else if (erSendt) {
+      subMessage = '⚠️ Dette anbudet er levert/sendt. Etter bokføringsforskriften ' +
+        '§ 8-1-5 har bygge-/anleggsbransjen 10 års oppbevaringskrav på anbud og ' +
+        'kalkyler. Bedriften er selv ansvarlig for å vurdere om oppbevaring er nødvendig.'
+    }
+    if (!(await confirm({
+      message: erTildelt ? 'Slett tildelt anbud?' : erSendt ? 'Slett levert anbud?' : 'Slett dette anbudet?',
+      subMessage,
+      danger: true,
+      confirmLabel: erTildelt ? 'Slett likevel' : 'Slett',
+    }))) return
     await supabase.from('tenders').delete().eq('id', t.id)
     onBack()
   }
@@ -11781,7 +11824,28 @@ function EndringsmeldingPage() {
   }
 
   const handleDelete = async (em) => {
-    if (!(await confirm({ message: 'Slett denne endringsmeldingen?', subMessage: `"${em.title}" slettes permanent. Denne handlingen kan ikke angres.`, danger: true }))) return
+    // Godkjente endringsmeldinger blir del av byggekontrakten og dekkes av
+    // bokføringsforskriften § 8-1-5 (10 års oppbevaring). Sendte endringsmeldinger
+    // bør beholdes for audit/tvist. Vi viser advarsel og lar bruker bekrefte.
+    const erGodkjent = em.status === 'Godkjent'
+    const erSendt = em.status === 'Sendt'
+    let subMessage = `"${em.title}" slettes permanent. Denne handlingen kan ikke angres.`
+    if (erGodkjent) {
+      subMessage = `⚠️ "${em.title}" er GODKJENT av kunden og inngår dermed i byggekontrakten. ` +
+        'Etter bokføringsforskriften § 8-1-5 skal byggekontrakter oppbevares i 10 år. ' +
+        'Sletting kan svekke sporbarhet ved tvist eller bokettersyn. Vi anbefaler sterkt ' +
+        'at du beholder endringsmeldingen. Bedriften er selv ansvarlig for å følge lovkravene.'
+    } else if (erSendt) {
+      subMessage = `⚠️ "${em.title}" er sendt til kunden. Endringsmeldinger som er sendt ` +
+        'bør beholdes for sporbarhet ved tvist eller bokettersyn. Bedriften er selv ansvarlig ' +
+        'for å vurdere om oppbevaring er nødvendig.'
+    }
+    if (!(await confirm({
+      message: erGodkjent ? 'Slett godkjent endringsmelding?' : erSendt ? 'Slett sendt endringsmelding?' : 'Slett denne endringsmeldingen?',
+      subMessage,
+      danger: true,
+      confirmLabel: erGodkjent ? 'Slett likevel' : 'Slett',
+    }))) return
     await supabase.from('endringsmeldinger').delete().eq('id', em.id)
     load()
   }
@@ -13747,8 +13811,35 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   }
 
   const handleDelete = async () => {
-    if (!(await confirm({ message: 'Slett denne ordren?', subMessage: 'Ordren og alle endringsmeldinger slettes permanent.', danger: true }))) return
-    await supabase.from('orders').delete().eq('id',o.id)
+    // Ordrelister har 10 års oppbevaringskrav etter bokføringsforskriften § 8-1-5.
+    // Vi viser advarsel som forklarer regelverket, men tillater sletting hvis
+    // bruker bekrefter.
+    const erBekreftet = o.status === 'Bekreftet' || o.status === 'Akseptert'
+    const erSendt = o.status === 'Sendt' || o.status === 'Sendt til kunde'
+    const erUtfort = o.status === 'Utført' || o.status === 'Levert' || o.status === 'Ferdig'
+    let subMessage = 'Ordren og alle endringsmeldinger slettes permanent.'
+    if (erUtfort) {
+      subMessage = '⚠️ Denne ordren er UTFØRT. Etter bokføringsforskriften § 8-1-5 ' +
+        'skal ordrelister oppbevares i 10 år. Sletting kan svekke sporbarhet ved ' +
+        'tvist eller bokettersyn. Vi anbefaler sterkt at du beholder ordren. ' +
+        'Bedriften er selv ansvarlig for å følge lovkravene.'
+    } else if (erBekreftet) {
+      subMessage = '⚠️ Denne ordren er BEKREFTET og er dermed inngått som avtale. ' +
+        'Etter bokføringsforskriften § 8-1-5 skal ordrelister oppbevares i 10 år. ' +
+        'Sletting kan svekke sporbarhet ved tvist eller bokettersyn. Bedriften er ' +
+        'selv ansvarlig for å følge lovkravene.'
+    } else if (erSendt) {
+      subMessage = '⚠️ Denne ordren er sendt til kunden. Etter bokføringsforskriften ' +
+        '§ 8-1-5 har bygge-/anleggsbransjen 10 års oppbevaringskrav på ordrelister. ' +
+        'Bedriften er selv ansvarlig for å vurdere om oppbevaring er nødvendig.'
+    }
+    if (!(await confirm({
+      message: erUtfort ? 'Slett utført ordre?' : erBekreftet ? 'Slett bekreftet ordre?' : erSendt ? 'Slett sendt ordre?' : 'Slett denne ordren?',
+      subMessage,
+      danger: true,
+      confirmLabel: (erUtfort || erBekreftet) ? 'Slett likevel' : 'Slett',
+    }))) return
+    await supabase.from('orders').delete().eq('id', o.id)
     onBack()
   }
 
