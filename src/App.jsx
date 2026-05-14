@@ -473,24 +473,41 @@ const moduleSections = [
   },
 ]
 
-function ModuleCard({ module, onNavigate, isMobile }) {
+function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
   const m = moduleCards.find(x => x.id === module)
   if (!m) return null
+  const handleClick = () => {
+    if (isLocked && onUpsell) onUpsell(m.id)
+    else onNavigate(m.id)
+  }
   return (
-    <button onClick={() => onNavigate(m.id)}
-      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: isMobile ? '12px' : '14px', padding: isMobile ? '10px' : '14px', cursor: 'pointer', textAlign: isMobile ? 'center' : 'left', transition: 'box-shadow 0.2s' }}
+    <button onClick={handleClick}
+      style={{ background: 'white', border: '1px solid #f1f5f9', borderRadius: isMobile ? '12px' : '14px',
+        padding: isMobile ? '10px' : '14px', cursor: 'pointer', textAlign: isMobile ? 'center' : 'left',
+        transition: 'box-shadow 0.2s', opacity: isLocked ? 0.6 : 1, position: 'relative' }}
       onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'}
       onMouseLeave={e => e.currentTarget.style.boxShadow = 'none'}>
-      <div style={{ width: isMobile ? '32px' : '38px', height: isMobile ? '32px' : '38px', borderRadius: '10px', background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: isMobile ? '16px' : '18px', marginBottom: isMobile ? '6px' : '10px', ...(isMobile ? { margin: '0 auto 6px' } : {}) }}>
+      <div style={{ width: isMobile ? '32px' : '38px', height: isMobile ? '32px' : '38px', borderRadius: '10px',
+        background: m.color, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: isMobile ? '16px' : '18px', marginBottom: isMobile ? '6px' : '10px',
+        ...(isMobile ? { margin: '0 auto 6px' } : {}),
+        filter: isLocked ? 'grayscale(0.4)' : 'none' }}>
         {m.emoji}
       </div>
-      <div style={{ fontWeight: '600', color: '#0f172a', fontSize: isMobile ? '11px' : '13px', marginBottom: isMobile ? '0' : '3px' }}>{m.name}</div>
+      <div style={{ fontWeight: '600', color: isLocked ? '#94a3b8' : '#0f172a',
+        fontSize: isMobile ? '11px' : '13px', marginBottom: isMobile ? '0' : '3px' }}>{m.name}</div>
       {!isMobile && <div style={{ color: '#94a3b8', fontSize: '11px' }}>{m.desc}</div>}
+      {isLocked && (
+        <div style={{ fontSize: isMobile ? '9px' : '10px', color: '#2563eb',
+          fontStyle: 'italic', marginTop: '4px' }}>
+          bestill her
+        </div>
+      )}
     </button>
   )
 }
 
-function Dashboard({ onNavigate, user }) {
+function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell }) {
   const days = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag']
   const months = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']
   const d = new Date()
@@ -601,7 +618,24 @@ function Dashboard({ onNavigate, user }) {
                 gridTemplateColumns: mob ? 'repeat(3, 1fr)' : 'repeat(auto-fill, minmax(130px, 1fr))',
                 gap: mob ? '8px' : '12px'
               }}>
-                {section.modules.map(id => <ModuleCard key={id} module={id} onNavigate={onNavigate} isMobile={mob} />)}
+                {section.modules.map(id => {
+                  // Map navId → required module for access check
+                  const navToModule = {
+                    dashboard: null, prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke',
+                    sjekklister: 'grunnpakke', avvik: 'grunnpakke', hms: 'grunnpakke',
+                    maskiner: 'grunnpakke', ansatte: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
+                    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul',
+                    endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
+                    timelister: 'timelister', ressursplan: 'ressursplan',
+                    kalender: 'kalender', chat: 'chat',
+                    befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
+                    minbedrift: null, brukeradmin: null,
+                  }
+                  const reqMod = navToModule[id]
+                  const locked = activeModules && reqMod && !trialActive && !(activeModules || []).includes(reqMod)
+                  return <ModuleCard key={id} module={id} onNavigate={onNavigate} isMobile={mob}
+                    isLocked={locked} onUpsell={onUpsell} />
+                })}
               </div>
             </div>
           ))}
@@ -16500,6 +16534,204 @@ function FeedbackPromptModal({ onSendFeedback, onIkkeNa, onSluttSporre }) {
   )
 }
 
+
+// ─── PATCH 23: MODUL-UPSELL-POPUP ────────────────────────────────────────────
+// Vises når brukeren klikker en låst modul i sidebaren eller dashboard.
+// Henter pris og features fra MODULE_CATALOG, lar brukeren bestille direkte.
+
+function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const [bestiller, setBestiller] = useState(false)
+
+  // Map navId → moduleId (modul-katalogen bruker delvis andre IDer enn nav)
+  // For grunnpakke-moduler er det ingen "modul å kjøpe" — den modulen er allerede
+  // del av grunnpakken. Da viser vi info om grunnpakken i stedet.
+  const navToCatalog = {
+    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul',
+    endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
+    timelister: 'timelister', ressursplan: 'ressursplan',
+    kalender: 'kalender', chat: 'chat',
+    befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
+  }
+  const modulId = navToCatalog[navId] || navId
+  const mod = MODULE_CATALOG.find(m => m.id === modulId)
+
+  // Hent visnings-info — navn, emoji, beskrivelse, farge fra moduleCards
+  const navInfo = navItems.find(n => n.id === navId)
+  const cardInfo = moduleCards.find(c => c.id === navId)
+  const visningsnavn = mod?.name || navInfo?.label || 'Modul'
+  const emoji = mod?.emoji || navInfo?.emoji || cardInfo?.emoji || '📦'
+  const headerBg = cardInfo?.color || '#f0f9ff'
+
+  // Bygg features-liste — kombiner katalog-beskrivelse til punkter
+  const features = mod?.includes ? mod.includes.map(s => s) : (mod?.desc ? mod.desc.split(/\.\s+/).filter(s => s.trim().length > 8).slice(0, 6) : [])
+
+  const erPerBedrift = mod?.perCompany
+  const prisTekst = mod ? (
+    mod.pricePerUser ? `${mod.pricePerUser} kr` :
+    mod.price ? `${mod.price.toLocaleString('nb-NO')} kr` : 'Pris ved henvendelse'
+  ) : 'Pris ved henvendelse'
+  const enhetTekst = mod ? (
+    mod.pricePerUser ? '/ måned per bruker' :
+    mod.perCompany ? '/ måned per bedrift' :
+    mod.price ? '/ måned' : ''
+  ) : ''
+
+  const handleBestill = async () => {
+    if (!mod) {
+      appAlert({ message: 'Kunne ikke finne modul i katalogen', kind: 'error' })
+      return
+    }
+    // Bekreft før bestilling
+    const ok = await confirm({
+      message: `Bestill ${mod.name}?`,
+      subMessage: `Modulen aktiveres umiddelbart og du faktureres ${prisTekst}${enhetTekst} fra og med inneværende måned. Du kan deaktivere når som helst fra Min bedrift.`,
+      danger: false,
+      confirmLabel: 'Bestill og aktiver',
+    })
+    if (!ok) return
+
+    setBestiller(true)
+    try {
+      // Hent gjeldende settings
+      const { data: settings, error: settingsErr } = await supabase.from('company_settings').select('*').limit(1).single()
+      if (settingsErr || !settings) throw new Error('Kunne ikke hente bedriftsinnstillinger')
+
+      let newModules = [...(settings.active_modules || [])]
+      if (newModules.includes(mod.id)) {
+        appAlert({ message: 'Modulen er allerede aktiv', kind: 'info' })
+        setBestiller(false)
+        return
+      }
+      newModules.push(mod.id)
+
+      // Avhengighet: BIM-Kalkyle krever basis Kalkulasjon
+      if (mod.id === 'bim_kalkyle' && !newModules.includes('kalkulator')) {
+        newModules.push('kalkulator')
+      }
+
+      const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
+      if (settings.subscription_status === 'trial') {
+        updates.subscription_status = 'active'
+      }
+
+      const { error: updateErr } = await supabase.from('company_settings').update(updates).eq('id', settings.id)
+      if (updateErr) throw updateErr
+
+      // Notify platform owner
+      try {
+        const { data: owners } = await supabase.from('user_profiles').select('id').eq('platform_role', 'platform_owner')
+        if (owners?.length) {
+          for (const owner of owners) {
+            await supabase.from('notifications').insert({
+              user_id: owner.id,
+              title: '💰 Ny modulkjøp',
+              message: `${settings.name || 'Bedrift'} har kjøpt ${mod.name} (${prisTekst}${enhetTekst})`,
+              type: 'system',
+            })
+          }
+        }
+      } catch (e) { /* ignorer */ }
+
+      await appAlert({
+        message: `✓ ${mod.name} er aktivert`,
+        subMessage: `Du har nå tilgang til modulen. Den er lagt til abonnementet ditt.`,
+        kind: 'success',
+      })
+      onModulAktivert(newModules)
+      onClose()
+    } catch (e) {
+      console.error('Modul-bestilling feilet:', e)
+      await appAlert({
+        message: 'Kunne ikke bestille modulen',
+        subMessage: e.message || 'Prøv igjen om litt, eller kontakt support@enplattform.no',
+        kind: 'error',
+      })
+    } finally {
+      setBestiller(false)
+    }
+  }
+
+  return createPortal(
+    <div onClick={(e) => { if (e.target === e.currentTarget && !bestiller) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
+        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', backdropFilter: 'blur(4px)',
+      }}>
+      <div style={{
+        background: 'white', borderRadius: '16px', width: '100%', maxWidth: '420px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
+      }}>
+        {/* Header med farget bakgrunn */}
+        <div style={{ background: headerBg, padding: '22px 22px 18px', textAlign: 'center', position: 'relative' }}>
+          <button onClick={() => !bestiller && onClose()} aria-label="Lukk"
+            style={{ position: 'absolute', top: '10px', right: '14px', background: 'rgba(255,255,255,0.5)',
+              border: 'none', borderRadius: '50%', width: '28px', height: '28px', cursor: bestiller ? 'not-allowed' : 'pointer',
+              color: '#475569', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 0, lineHeight: 1, opacity: bestiller ? 0.4 : 1 }}>×</button>
+          <div style={{ fontSize: '40px', marginBottom: '4px' }}>{emoji}</div>
+          <h2 style={{ margin: '0 0 2px', fontSize: '19px', fontWeight: '700', color: '#0f172a' }}>{visningsnavn}</h2>
+          <p style={{ margin: 0, fontSize: '12px', color: '#475569', fontWeight: '500' }}>
+            {mod?.required ? 'Grunnpakke' : 'Tilleggsmodul'}
+          </p>
+        </div>
+
+        <div style={{ padding: '20px 22px 8px' }}>
+          {/* Pris */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '14px' }}>
+            <span style={{ fontSize: '28px', fontWeight: '800', color: '#0f172a' }}>{prisTekst}</span>
+            <span style={{ fontSize: '13px', color: '#64748b' }}>{enhetTekst}</span>
+          </div>
+
+          {/* Beskrivelse */}
+          {mod?.desc && (
+            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
+              {mod.desc}
+            </p>
+          )}
+
+          {/* Features */}
+          {features.length > 0 && (
+            <>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b',
+                letterSpacing: '0.5px', textTransform: 'uppercase', marginBottom: '8px' }}>
+                Inkluderer
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+                {features.map((f, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px',
+                    fontSize: '13px', color: '#0f172a' }}>
+                    <span style={{ color: '#059669', fontSize: '14px', flexShrink: 0, lineHeight: 1.4 }}>✓</span>
+                    <span style={{ lineHeight: 1.4 }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 22px 18px', display: 'flex', gap: '8px' }}>
+          <button onClick={() => !bestiller && onClose()} disabled={bestiller}
+            style={{ background: 'white', border: '1px solid #e2e8f0', color: '#475569',
+              borderRadius: '8px', padding: '9px 16px', fontSize: '13px', fontWeight: '600',
+              cursor: bestiller ? 'not-allowed' : 'pointer', opacity: bestiller ? 0.5 : 1 }}>
+            Senere
+          </button>
+          <button onClick={handleBestill} disabled={bestiller}
+            style={{ flex: 1, background: '#059669', border: '1px solid #059669', color: 'white',
+              borderRadius: '8px', padding: '9px 16px', fontSize: '13px', fontWeight: '700',
+              cursor: bestiller ? 'not-allowed' : 'pointer', opacity: bestiller ? 0.7 : 1 }}>
+            {bestiller ? 'Bestiller...' : 'Bestill nå'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
 
 function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const confirm = useConfirm()
@@ -57584,6 +57816,9 @@ function AppContent() {
   const [subPage, setSubPage] = React.useState(null) // tracks detail views within modules
   const detailCleanupRef = React.useRef(null) // callback to close current detail view
 
+  // Patch 23: Modul-upsell state — holder navId for valgt låst modul
+  const [upsellModul, setUpsellModul] = React.useState(null)
+
   // Patch 21: Tilbakemelding-system state
   const [showFeedbackModal, setShowFeedbackModal] = React.useState(false)
   const [uleseTilbakemeldinger, setUleseTilbakemeldinger] = React.useState(0)
@@ -57759,11 +57994,15 @@ function AppContent() {
                     const isActive = activePage === item.id
                     const locked = !isModuleActive(item.id)
                     return (
-                      <button key={item.id} onClick={() => navigate(item.id)}
-                        style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'none', cursor:'pointer', background:isActive?'#ecfdf5':'transparent', color:locked?'#cbd5e1':isActive?'#059669':'#475569', fontWeight:isActive?'700':'400', fontSize:'15px', textAlign:'left', marginBottom:'2px', opacity:locked?0.7:1 }}>
-                        <span style={{ fontSize:'18px', flexShrink:0 }}>{locked?'🔒':item.emoji}</span>
+                      <button key={item.id}
+                        onClick={() => {
+                          if (locked) { setUpsellModul(item.id); setMobileMenuOpen(false) }
+                          else navigate(item.id)
+                        }}
+                        style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'none', cursor:'pointer', background:isActive?'#ecfdf5':'transparent', color:locked?'#94a3b8':isActive?'#059669':'#475569', fontWeight:isActive?'700':'400', fontSize:'15px', textAlign:'left', marginBottom:'2px', opacity:locked?0.65:1 }}>
+                        <span style={{ fontSize:'18px', flexShrink:0 }}>{item.emoji}</span>
                         <span style={{ flex:1 }}>{item.label}</span>
-                        {locked && <span style={{ fontSize:'10px', color:'#94a3b8' }}>PRO</span>}
+                        {locked && <span style={{ fontSize:'11px', color:'#2563eb', fontStyle:'italic' }}>bestill her</span>}
                       </button>
                     )
                   })}
@@ -57852,11 +58091,13 @@ function AppContent() {
                 const isActive = activePage === item.id
                 const locked = !isModuleActive(item.id)
                 return (
-                  <button key={item.id} onClick={() => navigate(item.id)} title={collapsed ? (item.label + (locked ? ' (låst)' : '')) : undefined}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#cbd5e1' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.7 : 1 }}>
-                    <span style={{ fontSize: '16px', flexShrink: 0 }}>{locked ? '🔒' : item.emoji}</span>
+                  <button key={item.id}
+                    onClick={() => locked ? setUpsellModul(item.id) : navigate(item.id)}
+                    title={collapsed ? (item.label + (locked ? ' — bestill her' : '')) : undefined}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#94a3b8' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.65 : 1 }}>
+                    <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
                     {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
-                    {!collapsed && locked && <span style={{ fontSize: '10px', color: '#94a3b8', flexShrink: 0 }}>PRO</span>}
+                    {!collapsed && locked && <span style={{ fontSize: '10px', color: '#2563eb', fontStyle: 'italic', flexShrink: 0 }}>bestill her</span>}
                   </button>
                 )
               })}
@@ -57947,6 +58188,15 @@ function AppContent() {
           </div>
         </div>
 
+        {/* Patch 23: Modul-upsell-popup */}
+        {upsellModul && (
+          <ModulUpsellPopup
+            navId={upsellModul}
+            onClose={() => setUpsellModul(null)}
+            onModulAktivert={(nyeModuler) => setActiveModules(nyeModuler)}
+          />
+        )}
+
         {/* Patch 21: Tilbakemelding-modal */}
         {showFeedbackModal && (
           <FeedbackModal
@@ -58026,7 +58276,10 @@ function AppContent() {
         {isPageLocked ? (
           <LockedModulePage pageId={page} onNavigate={navigate} />
         ) : (<>
-        {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
+        {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user}
+          activeModules={activeModules}
+          trialActive={trialInfo?.status === 'trial' && !trialInfo?.isExpired}
+          onUpsell={(navId) => setUpsellModul(navId)} />}
         {page === 'feedback-admin' && <FeedbackAdminPage onBack={() => navigate('dashboard')} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
