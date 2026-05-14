@@ -264,7 +264,7 @@ function AuthProvider({ children }) {
   const loadProfile = async (authUser) => {
     if (!authUser) { setProfile(null); return }
     try {
-      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role').eq('id', authUser.id).single()
+      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role, created_at, feedback_prompt_disabled, feedback_prompt_last_shown').eq('id', authUser.id).single()
       if (error) {
         // Fallback without platform_role if column doesn't exist yet
         const { data: fallback } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
@@ -15625,6 +15625,881 @@ function FakturaPage() {
     </div>
   )
 }
+
+// ─── PATCH 21: TILBAKEMELDING-SYSTEM ──────────────────────────────────────────
+// Lar brukere sende ros/ris/ønske via en modal. Lagres i Supabase med
+// automatisk kontekst (side, prosjekt, nettleser) + valgfri skjermbilde.
+// Admin (@enplattform.no) ser alle via FeedbackAdminPage.
+//
+// Knappen ligger i sidebaren over bruker-blokken, med rød prikk hvis admin
+// har uleste tilbakemeldinger.
+
+// ─── FEEDBACK-KONTEKST: hent nåværende side-info ─────────────────────────────
+function getFeedbackContext(activePage, viewKalk, editKalk) {
+  // Map activePage til lesbart navn
+  const sideNavn = {
+    dashboard: 'Dashboard',
+    prosjekter: 'Prosjekter',
+    prosjektfiler: 'Prosjektfiler',
+    sjekklister: 'Sjekklister',
+    avvik: 'Avvik',
+    hms: 'HMS & Risiko',
+    maskiner: 'Maskiner',
+    ansatte: 'Ansatte',
+    kunder: 'Kundeoversikt',
+    varsler: 'Varsler',
+    kalkulator: 'Kalkulasjon',
+    tilbud: 'Tilbud',
+    anbudsmodul: 'Anbudsmodul',
+    endringsmelding: 'Endringer',
+    ordre: 'Ordre',
+    faktura: 'Faktura',
+    timelister: 'Timelister',
+    ressursplan: 'Ressursplan',
+    kalender: 'Kalender',
+    chat: 'Intern Chat',
+    befaring: 'Befaring',
+    bildedok: 'Bildedok',
+    fdv: 'FDV',
+    crm: 'CRM',
+    minbedrift: 'Min bedrift',
+    brukeradmin: 'Brukere',
+    superadmin: 'Kontrollpanel',
+  }[activePage] || activePage || 'Ukjent side'
+
+  // Detaljvisning hvis brukeren har åpnet en kalkyle
+  let kontekst = sideNavn
+  if (viewKalk?.kalk_number || editKalk?.kalk_number) {
+    const k = viewKalk || editKalk
+    kontekst = `${sideNavn} › ${k.kalk_number || 'Detaljvisning'}`
+  }
+
+  // Nettleser-info
+  const ua = navigator.userAgent
+  let nettleser = 'Ukjent'
+  if (/Chrome\/(\d+)/.test(ua) && !/Edg/.test(ua)) {
+    nettleser = `Chrome ${ua.match(/Chrome\/(\d+)/)[1]}`
+  } else if (/Firefox\/(\d+)/.test(ua)) {
+    nettleser = `Firefox ${ua.match(/Firefox\/(\d+)/)[1]}`
+  } else if (/Safari\/(\d+)/.test(ua) && !/Chrome/.test(ua)) {
+    nettleser = 'Safari'
+  } else if (/Edg\/(\d+)/.test(ua)) {
+    nettleser = `Edge ${ua.match(/Edg\/(\d+)/)[1]}`
+  }
+
+  return {
+    pageContext: kontekst,
+    pageUrl: window.location.hash || '/',
+    userAgent: nettleser,
+    viewport: `${window.innerWidth}×${window.innerHeight}`,
+  }
+}
+
+// ─── SKJERMBILDE-FANGST (html2canvas, lazy-loaded) ───────────────────────────
+async function lastNedHtml2Canvas() {
+  if (window.html2canvas) return window.html2canvas
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script')
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js'
+    script.onload = () => resolve(window.html2canvas)
+    script.onerror = () => reject(new Error('Kunne ikke laste html2canvas'))
+    document.head.appendChild(script)
+  })
+}
+
+async function takSkjermbilde() {
+  try {
+    const h2c = await lastNedHtml2Canvas()
+    const canvas = await h2c(document.body, {
+      scale: 0.75,            // ~25% mindre fil
+      logging: false,
+      useCORS: true,
+      ignoreElements: (el) => {
+        // Ikke ta med selve feedback-modalen i bildet
+        return el.classList?.contains('feedback-modal-skip') || false
+      },
+    })
+    return await new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/png', 0.85)
+    })
+  } catch (e) {
+    console.error('Skjermbilde feilet:', e)
+    return null
+  }
+}
+
+// ─── HOVED-MODAL ──────────────────────────────────────────────────────────────
+function FeedbackModal({ onClose, kontekst }) {
+  const { user, displayName } = useAuth()
+  const appAlert = useAppAlert()
+  const [type, setType] = useState('ros')
+  const [tittel, setTittel] = useState('')
+  const [melding, setMelding] = useState('')
+  const [skjermbildeBlob, setSkjermbildeBlob] = useState(null)
+  const [skjermbildeTar, setSkjermbildeTar] = useState(false)
+  const [tarSkjermbildeNa, setTarSkjermbildeNa] = useState(true)
+  const [kanKontakte, setKanKontakte] = useState(true)
+  const [sender, setSender] = useState(false)
+
+  // Ta skjermbilde umiddelbart ved åpning
+  useEffect(() => {
+    if (!tarSkjermbildeNa) return
+    let avbrutt = false
+    setSkjermbildeTar(true)
+    // Vent litt så modal-åpning ikke kommer med i bildet
+    const timer = setTimeout(async () => {
+      const blob = await takSkjermbilde()
+      if (!avbrutt) {
+        setSkjermbildeBlob(blob)
+        setSkjermbildeTar(false)
+      }
+    }, 300)
+    return () => { avbrutt = true; clearTimeout(timer) }
+  }, [tarSkjermbildeNa])
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !sender) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, sender])
+
+  const typeOpts = [
+    { val: 'ros', ikon: '👍', label: 'Ros', desc: 'Hva fungerer bra?', fyll: '#f0fdf4', kant: '#86efac', tekst: '#15803d' },
+    { val: 'ris', ikon: '👎', label: 'Ris', desc: 'Hva fungerer dårlig?', fyll: '#fef2f2', kant: '#fca5a5', tekst: '#dc2626' },
+    { val: 'onske', ikon: '💡', label: 'Ønske', desc: 'Hva mangler / vil du ha?', fyll: '#eff6ff', kant: '#93c5fd', tekst: '#2563eb' },
+  ]
+  const valgtType = typeOpts.find(o => o.val === type)
+
+  const handleSend = async () => {
+    if (!melding.trim()) {
+      await appAlert({ message: 'Beskrivelse er påkrevd', subMessage: 'Skriv hva du vil dele med oss.', kind: 'warning' })
+      return
+    }
+    setSender(true)
+    try {
+      // Hent bedriftsnavn
+      let companyName = null
+      try {
+        const { data: cs } = await supabase.from('company_settings').select('company_name').limit(1).single()
+        companyName = cs?.company_name || null
+      } catch(e) {}
+
+      // Last opp skjermbilde først (hvis aktivt)
+      let screenshotPath = null
+      if (skjermbildeBlob && user?.id) {
+        const filnavn = `${user.id}/${Date.now()}.png`
+        const { error: uploadError } = await supabase.storage
+          .from('feedback-skjermbilder')
+          .upload(filnavn, skjermbildeBlob, {
+            contentType: 'image/png',
+            cacheControl: '3600',
+          })
+        if (!uploadError) {
+          screenshotPath = filnavn
+        } else {
+          console.warn('Skjermbilde-opplasting feilet:', uploadError)
+        }
+      }
+
+      // Insert feedback
+      const { data: created, error } = await supabase
+        .from('feedback')
+        .insert({
+          user_id: user?.id || null,
+          user_email: user?.email || null,
+          user_name: displayName || null,
+          company_name: companyName,
+          type,
+          title: tittel.trim() || null,
+          message: melding.trim(),
+          page_context: kontekst.pageContext,
+          page_url: kontekst.pageUrl,
+          user_agent: kontekst.userAgent,
+          viewport: kontekst.viewport,
+          screenshot_path: screenshotPath,
+          may_contact: kanKontakte,
+          status: 'ny',
+        })
+        .select()
+        .single()
+
+      if (error) throw error
+
+      // Trigger Edge Function for e-post-varsling (når den er deployed)
+      // Kommentert ut til Resend er satt opp. Fjern kommentaren da:
+      // supabase.functions.invoke('send-feedback-notification', { body: { feedbackId: created.id } })
+      //   .catch(e => console.warn('E-post-varsling feilet (kan ignoreres):', e))
+
+      await appAlert({
+        message: '✓ Tilbakemelding sendt',
+        subMessage: 'Takk! Vi setter pris på at du tar deg tid. Vi leser alt som kommer inn.',
+        kind: 'success',
+      })
+      onClose()
+    } catch (e) {
+      console.error('Feedback-send feilet:', e)
+      await appAlert({
+        message: 'Kunne ikke sende',
+        subMessage: e.message || 'Prøv igjen om litt, eller send e-post til support@enplattform.no',
+        kind: 'error',
+      })
+    } finally {
+      setSender(false)
+    }
+  }
+
+  const skjermbildeSize = skjermbildeBlob ? `${Math.round(skjermbildeBlob.size / 1024)} KB` : ''
+
+  return createPortal(
+    <div className="feedback-modal-skip" onClick={(e) => { if (e.target === e.currentTarget && !sender) onClose() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
+        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', backdropFilter: 'blur(4px)',
+      }}>
+      <div style={{
+        background: 'white', borderRadius: '16px', width: '100%', maxWidth: '520px',
+        maxHeight: '95vh', display: 'flex', flexDirection: 'column',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '16px 22px 14px', borderBottom: '1px solid #e2e8f0',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '18px' }}>💬</span>
+            <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>
+              Send tilbakemelding
+            </h2>
+          </div>
+          <button onClick={() => !sender && onClose()} aria-label="Lukk"
+            style={{ background: 'none', border: 'none', cursor: sender ? 'not-allowed' : 'pointer',
+              color: '#94a3b8', fontSize: '24px', padding: '0 4px', opacity: sender ? 0.4 : 1 }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: '18px 22px' }}>
+          {/* Type-velger */}
+          <div style={{ marginBottom: '16px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748b',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
+              Type tilbakemelding
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+              {typeOpts.map(opt => (
+                <button key={opt.val} type="button" onClick={() => setType(opt.val)}
+                  style={{
+                    background: type === opt.val ? opt.fyll : 'white',
+                    border: '1.5px solid ' + (type === opt.val ? opt.kant : '#e2e8f0'),
+                    color: type === opt.val ? opt.tekst : '#475569',
+                    borderRadius: '8px', padding: '10px 6px',
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column',
+                    alignItems: 'center', gap: '3px', transition: 'all 0.15s',
+                  }}>
+                  <span style={{ fontSize: '18px' }}>{opt.ikon}</span>
+                  <span style={{ fontSize: '12px', fontWeight: '700' }}>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '6px' }}>
+              {valgtType.desc}
+            </div>
+          </div>
+
+          {/* Tittel */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748b',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+              Tittel <span style={{ color: '#cbd5e1', fontWeight: '400', textTransform: 'none' }}>(valgfri)</span>
+            </label>
+            <input type="text" value={tittel} onChange={(e) => setTittel(e.target.value)}
+              placeholder="Kort oppsummering"
+              style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0',
+                borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+
+          {/* Melding */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748b',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+              Beskrivelse *
+            </label>
+            <textarea value={melding} onChange={(e) => setMelding(e.target.value)} rows={4}
+              placeholder={type === 'ros' ? 'Fortell oss hva som fungerer godt...'
+                : type === 'ris' ? 'Hva har skapt frustrasjon eller stopper deg?'
+                : 'Hva mangler systemet for at det skal være enda mer nyttig for deg?'}
+              style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0',
+                borderRadius: '8px', fontSize: '13px', outline: 'none', boxSizing: 'border-box',
+                resize: 'vertical', minHeight: '90px', fontFamily: 'inherit', lineHeight: 1.5 }} />
+          </div>
+
+          {/* Kontekst-boks */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748b',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+              Kontekst <span style={{ color: '#cbd5e1', fontWeight: '400', textTransform: 'none' }}>(fanges automatisk)</span>
+            </label>
+            <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '10px 12px',
+              fontSize: '12px', color: '#475569', display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <span style={{ fontSize: '14px', flexShrink: 0 }}>📍</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: '600', color: '#0f172a' }}>{kontekst.pageContext}</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
+                  {kontekst.userAgent} · {kontekst.viewport}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Skjermbilde */}
+          <div style={{ marginBottom: '14px' }}>
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#64748b',
+              textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+              Skjermbilde
+            </label>
+            {skjermbildeTar ? (
+              <div style={{ background: '#f1f5f9', borderRadius: '8px', padding: '10px 12px',
+                fontSize: '12px', color: '#64748b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>⏳</span><span>Tar skjermbilde...</span>
+              </div>
+            ) : skjermbildeBlob ? (
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px',
+                padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '32px', height: '28px', borderRadius: '4px',
+                    background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px' }}>
+                    📷
+                  </div>
+                  <div style={{ fontSize: '12px' }}>
+                    <div style={{ fontWeight: '600', color: '#0f172a' }}>Tatt automatisk</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{skjermbildeSize}</div>
+                  </div>
+                </div>
+                <button type="button" onClick={() => setSkjermbildeBlob(null)}
+                  style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px',
+                    padding: '4px 10px', fontSize: '11px', cursor: 'pointer', color: '#64748b' }}>
+                  Fjern
+                </button>
+              </div>
+            ) : (
+              <div style={{ background: '#fefce8', border: '1px solid #fde68a', borderRadius: '8px',
+                padding: '8px 12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                fontSize: '12px', color: '#854d0e' }}>
+                <span>Ingen skjermbilde inkludert</span>
+                <button type="button" onClick={() => { setTarSkjermbildeNa(true) }}
+                  style={{ background: 'white', border: '1px solid #fde68a', borderRadius: '6px',
+                    padding: '4px 10px', fontSize: '11px', cursor: 'pointer', color: '#854d0e' }}>
+                  Ta nytt
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Kontakt-checkbox */}
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12px',
+            color: '#475569', cursor: 'pointer', userSelect: 'none' }}>
+            <input type="checkbox" checked={kanKontakte} onChange={(e) => setKanKontakte(e.target.checked)}
+              style={{ marginTop: '2px', accentColor: '#059669' }} />
+            <span>
+              Det er greit at vi kontakter deg på{' '}
+              <strong style={{ color: '#0f172a', fontWeight: '600' }}>{user?.email}</strong>
+              {' '}hvis vi har oppfølgingsspørsmål
+            </span>
+          </label>
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '12px 22px', borderTop: '1px solid #e2e8f0',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+            Sendes til <strong>support@enplattform.no</strong>
+          </span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button type="button" onClick={() => !sender && onClose()} disabled={sender}
+              style={{ background: 'white', border: '1px solid #e2e8f0', color: '#475569',
+                borderRadius: '8px', padding: '8px 16px', fontSize: '13px', fontWeight: '600',
+                cursor: sender ? 'not-allowed' : 'pointer', opacity: sender ? 0.5 : 1 }}>
+              Avbryt
+            </button>
+            <button type="button" onClick={handleSend} disabled={sender}
+              style={{ background: '#059669', border: '1px solid #059669', color: 'white',
+                borderRadius: '8px', padding: '8px 18px', fontSize: '13px', fontWeight: '700',
+                cursor: sender ? 'not-allowed' : 'pointer', opacity: sender ? 0.7 : 1 }}>
+              {sender ? 'Sender...' : 'Send'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ─── ADMIN-SIDE (kun for @enplattform.no) ────────────────────────────────────
+function FeedbackAdminPage({ onBack }) {
+  const { user } = useAuth()
+  const appAlert = useAppAlert()
+  const erAdmin = user?.email?.endsWith('@enplattform.no')
+
+  const [feedback, setFeedback] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [filterType, setFilterType] = useState('alle')
+  const [filterStatus, setFilterStatus] = useState('alle')
+  const [valgt, setValgt] = useState(null)
+
+  useEffect(() => {
+    if (!erAdmin) return
+    const load = async () => {
+      const { data, error } = await supabase
+        .from('feedback')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!error) setFeedback(data || [])
+      setLoading(false)
+    }
+    load()
+  }, [erAdmin])
+
+  const updateStatus = async (id, nyStatus) => {
+    const updates = { status: nyStatus }
+    if (nyStatus === 'lest' && !feedback.find(f => f.id === id)?.read_at) {
+      updates.read_at = new Date().toISOString()
+    }
+    if (nyStatus === 'lost') {
+      updates.resolved_at = new Date().toISOString()
+    }
+    const { error } = await supabase.from('feedback').update(updates).eq('id', id)
+    if (error) {
+      appAlert({ message: 'Kunne ikke oppdatere', subMessage: error.message, kind: 'error' })
+      return
+    }
+    setFeedback(prev => prev.map(f => f.id === id ? { ...f, ...updates } : f))
+    if (valgt?.id === id) setValgt(v => ({ ...v, ...updates }))
+  }
+
+  const getScreenshotUrl = async (path) => {
+    if (!path) return null
+    const { data } = await supabase.storage
+      .from('feedback-skjermbilder')
+      .createSignedUrl(path, 60 * 60)
+    return data?.signedUrl || null
+  }
+
+  const [skjermbildeUrl, setSkjermbildeUrl] = useState(null)
+  useEffect(() => {
+    if (!valgt?.screenshot_path) { setSkjermbildeUrl(null); return }
+    getScreenshotUrl(valgt.screenshot_path).then(setSkjermbildeUrl)
+  }, [valgt?.screenshot_path])
+
+  if (!erAdmin) {
+    return (
+      <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+        <div style={{ fontSize: '40px', marginBottom: '12px' }}>🔒</div>
+        <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>Ingen tilgang</h2>
+        <p style={{ color: '#64748b', marginTop: '8px' }}>
+          Tilbakemelding-admin er kun tilgjengelig for @enplattform.no-brukere.
+        </p>
+        <button onClick={onBack} style={{ marginTop: '16px', background: '#059669', color: 'white',
+          border: 'none', borderRadius: '8px', padding: '8px 18px', cursor: 'pointer', fontWeight: '600' }}>
+          Tilbake
+        </button>
+      </div>
+    )
+  }
+
+  const filtrert = feedback.filter(f => {
+    if (filterType !== 'alle' && f.type !== filterType) return false
+    if (filterStatus !== 'alle' && f.status !== filterStatus) return false
+    return true
+  })
+
+  const antallNy = feedback.filter(f => f.status === 'ny').length
+
+  const typeKonfig = {
+    ros: { ikon: '👍', label: 'Ros', farge: '#15803d', bg: '#f0fdf4', kant: '#86efac' },
+    ris: { ikon: '👎', label: 'Ris', farge: '#dc2626', bg: '#fef2f2', kant: '#fca5a5' },
+    onske: { ikon: '💡', label: 'Ønske', farge: '#2563eb', bg: '#eff6ff', kant: '#93c5fd' },
+  }
+  const statusKonfig = {
+    ny: { label: 'Ny', farge: '#dc2626', bg: '#fef2f2' },
+    lest: { label: 'Lest', farge: '#0891b2', bg: '#ecfeff' },
+    under_behandling: { label: 'Under behandling', farge: '#ca8a04', bg: '#fefce8' },
+    lost: { label: 'Løst', farge: '#15803d', bg: '#f0fdf4' },
+    avvist: { label: 'Avvist', farge: '#64748b', bg: '#f1f5f9' },
+  }
+
+  return (
+    <div style={{ padding: '20px 28px', maxWidth: '1400px', margin: '0 auto' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div>
+          <h1 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#0f172a' }}>
+            💬 Tilbakemelding
+          </h1>
+          <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '13px' }}>
+            {feedback.length} totalt · {antallNy > 0 && (
+              <span style={{ background: '#fef2f2', color: '#dc2626', padding: '2px 8px',
+                borderRadius: '6px', fontWeight: '700', fontSize: '11px' }}>
+                {antallNy} nye
+              </span>
+            )}
+          </p>
+        </div>
+        <button onClick={onBack} style={{ background: 'white', border: '1px solid #e2e8f0',
+          borderRadius: '8px', padding: '8px 16px', cursor: 'pointer', fontSize: '13px' }}>
+          ← Tilbake
+        </button>
+      </div>
+
+      {/* Filtre */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
+        {['alle', 'ros', 'ris', 'onske'].map(t => (
+          <button key={t} onClick={() => setFilterType(t)}
+            style={{ background: filterType === t ? '#059669' : 'white',
+              color: filterType === t ? 'white' : '#475569',
+              border: '1px solid ' + (filterType === t ? '#059669' : '#e2e8f0'),
+              borderRadius: '8px', padding: '6px 12px', fontSize: '12px',
+              cursor: 'pointer', fontWeight: filterType === t ? '700' : '500' }}>
+            {t === 'alle' ? 'Alle' : typeKonfig[t].ikon + ' ' + typeKonfig[t].label}
+          </button>
+        ))}
+        <div style={{ width: '1px', background: '#e2e8f0', margin: '0 4px' }} />
+        {['alle', 'ny', 'lest', 'under_behandling', 'lost', 'avvist'].map(s => (
+          <button key={s} onClick={() => setFilterStatus(s)}
+            style={{ background: filterStatus === s ? '#0f172a' : 'white',
+              color: filterStatus === s ? 'white' : '#475569',
+              border: '1px solid ' + (filterStatus === s ? '#0f172a' : '#e2e8f0'),
+              borderRadius: '8px', padding: '6px 12px', fontSize: '12px',
+              cursor: 'pointer', fontWeight: filterStatus === s ? '700' : '500' }}>
+            {s === 'alle' ? 'Alle status' : statusKonfig[s].label}
+          </button>
+        ))}
+      </div>
+
+      {/* Liste + detalj */}
+      <div style={{ display: 'grid', gridTemplateColumns: valgt ? '1fr 1fr' : '1fr', gap: '20px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster...</div>
+          ) : filtrert.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8', background: 'white',
+              borderRadius: '10px', border: '1px solid #f1f5f9' }}>
+              Ingen tilbakemelding matcher filteret.
+            </div>
+          ) : filtrert.map(f => {
+            const tk = typeKonfig[f.type] || typeKonfig.ros
+            const sk = statusKonfig[f.status] || statusKonfig.ny
+            const erValgt = valgt?.id === f.id
+            return (
+              <button key={f.id} onClick={() => setValgt(f)}
+                style={{ background: erValgt ? '#f0fdf4' : 'white',
+                  border: '1px solid ' + (erValgt ? '#86efac' : '#e2e8f0'),
+                  borderRadius: '10px', padding: '14px 16px', cursor: 'pointer',
+                  textAlign: 'left', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <span style={{ background: tk.bg, color: tk.farge, padding: '3px 10px',
+                    borderRadius: '5px', fontSize: '11px', fontWeight: '700' }}>
+                    {tk.ikon} {tk.label}
+                  </span>
+                  <span style={{ background: sk.bg, color: sk.farge, padding: '3px 10px',
+                    borderRadius: '5px', fontSize: '11px', fontWeight: '600' }}>
+                    {sk.label}
+                  </span>
+                  <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: 'auto' }}>
+                    {new Date(f.created_at).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' })}
+                  </span>
+                </div>
+                {f.title && (
+                  <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '14px' }}>{f.title}</div>
+                )}
+                <div style={{ fontSize: '13px', color: '#475569', overflow: 'hidden',
+                  textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical' }}>
+                  {f.message}
+                </div>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                  {f.user_name || 'Anonym'} {f.user_email && `· ${f.user_email}`} {f.page_context && `· ${f.page_context}`}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Detaljvisning */}
+        {valgt && (
+          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #e2e8f0',
+            padding: '18px 22px', height: 'fit-content', position: 'sticky', top: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                {(() => {
+                  const tk = typeKonfig[valgt.type] || typeKonfig.ros
+                  return (
+                    <span style={{ background: tk.bg, color: tk.farge, padding: '4px 12px',
+                      borderRadius: '6px', fontSize: '12px', fontWeight: '700' }}>
+                      {tk.ikon} {tk.label}
+                    </span>
+                  )
+                })()}
+              </div>
+              <button onClick={() => setValgt(null)} aria-label="Lukk detalj"
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '20px' }}>×</button>
+            </div>
+
+            {valgt.title && (
+              <h3 style={{ margin: '0 0 10px', fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
+                {valgt.title}
+              </h3>
+            )}
+            <div style={{ background: '#f8fafc', borderRadius: '8px', padding: '12px 14px',
+              fontSize: '13px', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap', marginBottom: '14px' }}>
+              {valgt.message}
+            </div>
+
+            <table style={{ width: '100%', fontSize: '12px', marginBottom: '14px' }}>
+              <tbody>
+                <tr><td style={{ color: '#64748b', padding: '4px 0' }}>Fra</td>
+                    <td style={{ padding: '4px 0', fontWeight: '600' }}>{valgt.user_name || 'Anonym'}</td></tr>
+                {valgt.user_email && (
+                  <tr><td style={{ color: '#64748b', padding: '4px 0' }}>E-post</td>
+                      <td style={{ padding: '4px 0' }}>
+                        <a href={`mailto:${valgt.user_email}`} style={{ color: '#2563eb' }}>{valgt.user_email}</a>
+                      </td></tr>
+                )}
+                {valgt.company_name && (
+                  <tr><td style={{ color: '#64748b', padding: '4px 0' }}>Bedrift</td>
+                      <td style={{ padding: '4px 0' }}>{valgt.company_name}</td></tr>
+                )}
+                {valgt.page_context && (
+                  <tr><td style={{ color: '#64748b', padding: '4px 0' }}>Side</td>
+                      <td style={{ padding: '4px 0', fontFamily: 'monospace', fontSize: '11px' }}>{valgt.page_context}</td></tr>
+                )}
+                {valgt.user_agent && (
+                  <tr><td style={{ color: '#64748b', padding: '4px 0' }}>Nettleser</td>
+                      <td style={{ padding: '4px 0', fontSize: '11px', color: '#475569' }}>
+                        {valgt.user_agent} · {valgt.viewport}
+                      </td></tr>
+                )}
+                <tr><td style={{ color: '#64748b', padding: '4px 0' }}>Mottatt</td>
+                    <td style={{ padding: '4px 0' }}>{new Date(valgt.created_at).toLocaleString('nb-NO')}</td></tr>
+                <tr><td style={{ color: '#64748b', padding: '4px 0' }}>Kontakt OK?</td>
+                    <td style={{ padding: '4px 0' }}>{valgt.may_contact ? '✅ Ja' : '❌ Nei'}</td></tr>
+              </tbody>
+            </table>
+
+            {skjermbildeUrl && (
+              <div style={{ marginBottom: '14px' }}>
+                <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b',
+                  textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '6px' }}>
+                  Skjermbilde
+                </div>
+                <a href={skjermbildeUrl} target="_blank" rel="noopener noreferrer">
+                  <img src={skjermbildeUrl} alt="Skjermbilde"
+                    style={{ width: '100%', borderRadius: '8px', border: '1px solid #e2e8f0' }} />
+                </a>
+              </div>
+            )}
+
+            <div>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b',
+                textTransform: 'uppercase', letterSpacing: '0.4px', marginBottom: '8px' }}>
+                Endre status
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {Object.entries(statusKonfig).map(([s, k]) => (
+                  <button key={s} onClick={() => updateStatus(valgt.id, s)}
+                    disabled={valgt.status === s}
+                    style={{ background: valgt.status === s ? k.bg : 'white',
+                      color: valgt.status === s ? k.farge : '#475569',
+                      border: '1px solid ' + (valgt.status === s ? k.farge : '#e2e8f0'),
+                      borderRadius: '6px', padding: '5px 10px', fontSize: '11px',
+                      cursor: valgt.status === s ? 'default' : 'pointer',
+                      fontWeight: valgt.status === s ? '700' : '500',
+                      opacity: valgt.status === s ? 1 : 0.85 }}>
+                    {k.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+// ─── PATCH 22: SMART FEEDBACK-PROMPT ──────────────────────────────────────────
+// Vises proaktivt midt på dashboard når brukeren oppfyller alle kriterier:
+//   • Konto >= 14 dager gammel
+//   • Brukt >= 5 forskjellige moduler (sporet via localStorage)
+//   • Ikke vist siste 30 dager (DB + localStorage backup)
+//   • Bruker har ikke valgt "Slutt å spørre"
+//   • Ingen feedback sendt siste 60 dager (allerede engasjert)
+
+const FEEDBACK_PROMPT_KEY_LAST_SHOWN = 'enpf_prompt_last_shown_v1'
+const FEEDBACK_PROMPT_KEY_MODULES = 'enpf_modules_used_v1'
+const FEEDBACK_PROMPT_MIN_DAYS_SINCE_SIGNUP = 14
+const FEEDBACK_PROMPT_MIN_MODULES = 5
+const FEEDBACK_PROMPT_COOLDOWN_DAYS = 30
+const FEEDBACK_PROMPT_RECENT_FEEDBACK_DAYS = 60
+
+// Sporer at brukeren har besøkt en modul — kalles fra navigate()
+function sporModulbruk(modulId) {
+  if (!modulId || typeof window === 'undefined') return
+  try {
+    const raw = localStorage.getItem(FEEDBACK_PROMPT_KEY_MODULES)
+    const set = new Set(raw ? JSON.parse(raw) : [])
+    if (set.has(modulId)) return
+    set.add(modulId)
+    localStorage.setItem(FEEDBACK_PROMPT_KEY_MODULES, JSON.stringify([...set]))
+  } catch (e) {
+    // Ignorer (kan være Safari private mode)
+  }
+}
+
+function antallModulerBrukt() {
+  try {
+    const raw = localStorage.getItem(FEEDBACK_PROMPT_KEY_MODULES)
+    return raw ? JSON.parse(raw).length : 0
+  } catch { return 0 }
+}
+
+function getLastPromptShown() {
+  try {
+    const v = localStorage.getItem(FEEDBACK_PROMPT_KEY_LAST_SHOWN)
+    return v ? new Date(v) : null
+  } catch { return null }
+}
+
+function setLastPromptShown() {
+  try {
+    localStorage.setItem(FEEDBACK_PROMPT_KEY_LAST_SHOWN, new Date().toISOString())
+  } catch {}
+}
+
+// Hovedlogikk: skal prompten vises nå?
+async function skalViseFeedbackPrompt({ user, profile }) {
+  if (!user?.id) return false
+  if (profile?.feedback_prompt_disabled) return false
+
+  // 1) Konto-alder
+  const createdAt = profile?.created_at ? new Date(profile.created_at) : null
+  if (!createdAt) return false
+  const dagerSidenRegistrert = (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
+  if (dagerSidenRegistrert < FEEDBACK_PROMPT_MIN_DAYS_SINCE_SIGNUP) return false
+
+  // 2) Antall moduler brukt
+  if (antallModulerBrukt() < FEEDBACK_PROMPT_MIN_MODULES) return false
+
+  // 3) Cooldown — sjekk både DB og localStorage
+  const dbLastShown = profile?.feedback_prompt_last_shown ? new Date(profile.feedback_prompt_last_shown) : null
+  const localLastShown = getLastPromptShown()
+  const sistVist = [dbLastShown, localLastShown].filter(Boolean).sort((a, b) => b - a)[0]
+  if (sistVist) {
+    const dagerSiden = (Date.now() - sistVist.getTime()) / (1000 * 60 * 60 * 24)
+    if (dagerSiden < FEEDBACK_PROMPT_COOLDOWN_DAYS) return false
+  }
+
+  // 4) Har bruker nylig sendt feedback? Ikke spør i tilfelle
+  try {
+    const siden = new Date(Date.now() - FEEDBACK_PROMPT_RECENT_FEEDBACK_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    const { count } = await supabase.from('feedback')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+      .gte('created_at', siden)
+    if ((count || 0) > 0) return false
+  } catch (e) {
+    // Kan ikke sjekke — la prompten vises uansett
+  }
+
+  return true
+}
+
+// Selve prompt-modalen
+function FeedbackPromptModal({ onSendFeedback, onIkkeNa, onSluttSporre }) {
+  const [behandler, setBehandler] = useState(false)
+
+  // Lukk ved Escape = "Ikke nå"
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !behandler) onIkkeNa() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onIkkeNa, behandler])
+
+  const handleSluttSporre = async () => {
+    setBehandler(true)
+    await onSluttSporre()
+    setBehandler(false)
+  }
+
+  return createPortal(
+    <div onClick={(e) => { if (e.target === e.currentTarget && !behandler) onIkkeNa() }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
+        zIndex: 9998, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px', backdropFilter: 'blur(4px)',
+      }}>
+      <div style={{
+        background: 'white', borderRadius: '16px', width: '100%', maxWidth: '420px',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)', position: 'relative', overflow: 'hidden',
+      }}>
+        {/* Lukk-X */}
+        <button onClick={() => !behandler && onIkkeNa()} aria-label="Lukk"
+          style={{ position: 'absolute', top: '12px', right: '14px', background: 'none',
+            border: 'none', fontSize: '22px', color: '#94a3b8', cursor: behandler ? 'not-allowed' : 'pointer',
+            padding: '4px 8px', lineHeight: 1 }}>×</button>
+
+        {/* Ikon */}
+        <div style={{ padding: '24px 24px 0', display: 'flex', justifyContent: 'center' }}>
+          <div style={{ width: '52px', height: '52px', borderRadius: '50%', background: '#ecfdf5',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '26px' }}>
+            💬
+          </div>
+        </div>
+
+        {/* Tekst */}
+        <div style={{ padding: '14px 24px 0', textAlign: 'center' }}>
+          <h3 style={{ margin: '0 0 8px', fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>
+            Hvordan synes du En Plattform fungerer?
+          </h3>
+          <p style={{ margin: '0 0 20px', fontSize: '13px', lineHeight: 1.6, color: '#64748b' }}>
+            Vi er fortsatt i tidlig fase og setter stor pris på tilbakemelding.
+            Det tar bare et halvt minutt, og hjelper oss å bli bedre.
+          </p>
+        </div>
+
+        {/* Knapper */}
+        <div style={{ padding: '0 24px 16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <button onClick={onSendFeedback} disabled={behandler}
+            style={{ background: '#059669', border: '1px solid #059669', color: 'white',
+              borderRadius: '8px', padding: '10px 16px', fontSize: '13px', fontWeight: '700',
+              cursor: behandler ? 'not-allowed' : 'pointer', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', gap: '8px', opacity: behandler ? 0.6 : 1 }}>
+            <span style={{ fontSize: '14px' }}>💬</span>
+            <span>Send tilbakemelding</span>
+          </button>
+          <button onClick={() => !behandler && onIkkeNa()} disabled={behandler}
+            style={{ background: 'white', border: '1px solid #e2e8f0', color: '#475569',
+              borderRadius: '8px', padding: '10px 16px', fontSize: '13px', fontWeight: '600',
+              cursor: behandler ? 'not-allowed' : 'pointer', opacity: behandler ? 0.6 : 1 }}>
+            Ikke nå
+          </button>
+        </div>
+
+        {/* Opt-out */}
+        <div style={{ padding: '12px 24px 18px', textAlign: 'center', borderTop: '1px solid #f1f5f9' }}>
+          <button onClick={handleSluttSporre} disabled={behandler}
+            style={{ background: 'none', border: 'none', fontSize: '11px', color: '#94a3b8',
+              cursor: behandler ? 'not-allowed' : 'pointer', textDecoration: 'underline', padding: '4px',
+              opacity: behandler ? 0.6 : 1 }}>
+            {behandler ? 'Lagrer...' : 'Slutt å spørre meg'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 
 function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const confirm = useConfirm()
@@ -56514,7 +57389,7 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 // ─── END BEFARING VIEW PAGE ────────────────────────────────────────────────────
 
 function AppContent() {
-  const { user, loading, supabase, displayName, isPlatformOwner } = useAuth()
+  const { user, loading, supabase, displayName, isPlatformOwner, profile } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
@@ -56709,6 +57584,56 @@ function AppContent() {
   const [subPage, setSubPage] = React.useState(null) // tracks detail views within modules
   const detailCleanupRef = React.useRef(null) // callback to close current detail view
 
+  // Patch 21: Tilbakemelding-system state
+  const [showFeedbackModal, setShowFeedbackModal] = React.useState(false)
+  const [uleseTilbakemeldinger, setUleseTilbakemeldinger] = React.useState(0)
+  const erTilbakemeldingAdmin = user?.email?.endsWith('@enplattform.no')
+
+  // Hent antall uleste tilbakemeldinger for admin
+  React.useEffect(() => {
+    if (!erTilbakemeldingAdmin) return
+    const hent = async () => {
+      const { count } = await supabase.from('feedback')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'ny')
+      setUleseTilbakemeldinger(count || 0)
+    }
+    hent()
+  }, [erTilbakemeldingAdmin, page])
+
+  // Patch 22: Smart feedback-prompt state
+  const [showFeedbackPrompt, setShowFeedbackPrompt] = React.useState(false)
+
+  // Evaluer om prompten skal vises — kun på dashboard
+  React.useEffect(() => {
+    if (page !== 'dashboard' || !user || !profile) return
+    if (showFeedbackPrompt || showFeedbackModal) return
+    // Vent litt etter dashboard-laste så det ikke er for aggressivt
+    const timer = setTimeout(async () => {
+      const skalVise = await skalViseFeedbackPrompt({ user, profile })
+      if (skalVise) {
+        setShowFeedbackPrompt(true)
+        setLastPromptShown()
+        // Lagre også i DB for cross-device cooldown
+        try {
+          await supabase.from('user_profiles')
+            .update({ feedback_prompt_last_shown: new Date().toISOString() })
+            .eq('id', user.id)
+        } catch (e) { /* ignorer */ }
+      }
+    }, 2500)
+    return () => clearTimeout(timer)
+  }, [page, user, profile, showFeedbackPrompt, showFeedbackModal])
+
+  const handleFeedbackPromptSluttSporre = async () => {
+    try {
+      await supabase.from('user_profiles')
+        .update({ feedback_prompt_disabled: true })
+        .eq('id', user.id)
+    } catch (e) { console.warn('Kunne ikke lagre opt-out:', e) }
+    setShowFeedbackPrompt(false)
+  }
+
   // When entering a detail view, call this to register back-navigation
   // Make available globally for child components
   window.__enterDetailView = null
@@ -56727,6 +57652,8 @@ function AppContent() {
     detailCleanupRef.current = null // rydd opp fra eventuell detaljvisning
     setMobileMenuOpen(false)
     window.scrollTo(0, 0)
+    // Patch 22: Spor modulbruk for smart feedback-prompt
+    sporModulbruk(p)
   }
   // Gjør navigate globalt tilgjengelig (for child-komponenter som vil navigere direkte)
   window.__navigate = navigate
@@ -56843,6 +57770,37 @@ function AppContent() {
                 </div>
               ))}
             </nav>
+            {/* Patch 21: Tilbakemelding-knapp (mobil) */}
+            <div style={{ padding:'8px', borderTop:'1px solid #f1f5f9' }}>
+              <button onClick={() => { setShowFeedbackModal(true); setMobileMenuOpen(false) }}
+                style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
+                  borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
+                  color:'#475569', fontSize:'15px', textAlign:'left', marginBottom:'2px' }}>
+                <span style={{ fontSize:'18px', flexShrink:0 }}>💬</span>
+                <span style={{ flex:1 }}>Tilbakemelding</span>
+              </button>
+              {erTilbakemeldingAdmin && (
+                <button onClick={() => { navigate('feedback-admin'); setMobileMenuOpen(false) }}
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
+                    borderRadius:'10px', border:'none', cursor:'pointer',
+                    background: activePage === 'feedback-admin' ? '#ecfdf5' : 'transparent',
+                    color: activePage === 'feedback-admin' ? '#059669' : '#475569', fontSize:'15px',
+                    textAlign:'left', fontWeight: activePage === 'feedback-admin' ? '700' : '400' }}>
+                  <span style={{ fontSize:'18px', flexShrink:0, position:'relative' }}>
+                    📬
+                    {uleseTilbakemeldinger > 0 && (
+                      <span style={{ position:'absolute', top:'-4px', right:'-6px', background:'#dc2626',
+                        color:'white', borderRadius:'999px', minWidth:'16px', height:'16px', padding:'0 5px',
+                        fontSize:'10px', fontWeight:'700', display:'flex', alignItems:'center',
+                        justifyContent:'center', lineHeight: 1 }}>
+                        {uleseTilbakemeldinger > 9 ? '9+' : uleseTilbakemeldinger}
+                      </span>
+                    )}
+                  </span>
+                  <span style={{ flex:1 }}>Admin tilbakemelding</span>
+                </button>
+              )}
+            </div>
             {/* Bruker */}
             <div style={{ padding:'14px 16px', borderTop:'1px solid #f1f5f9' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
@@ -56905,6 +57863,39 @@ function AppContent() {
             </div>
           ))}
         </nav>
+        {/* Patch 21: Tilbakemelding-knapp */}
+        <div style={{ padding: '8px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+          <button onClick={() => setShowFeedbackModal(true)} title={collapsed ? 'Tilbakemelding' : undefined}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+              padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
+              cursor: 'pointer', background: 'transparent', color: '#475569', fontSize: '14px',
+              justifyContent: collapsed ? 'center' : 'flex-start', position: 'relative' }}>
+            <span style={{ fontSize: '16px', flexShrink: 0 }}>💬</span>
+            {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Tilbakemelding</span>}
+          </button>
+          {erTilbakemeldingAdmin && (
+            <button onClick={() => navigate('feedback-admin')} title={collapsed ? `Admin (${uleseTilbakemeldinger} nye)` : undefined}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
+                cursor: 'pointer', background: activePage === 'feedback-admin' ? '#ecfdf5' : 'transparent',
+                color: activePage === 'feedback-admin' ? '#059669' : '#475569', fontSize: '14px',
+                justifyContent: collapsed ? 'center' : 'flex-start', position: 'relative', marginTop: '2px',
+                fontWeight: activePage === 'feedback-admin' ? '600' : '400' }}>
+              <span style={{ fontSize: '16px', flexShrink: 0, position: 'relative' }}>
+                📬
+                {uleseTilbakemeldinger > 0 && (
+                  <span style={{ position: 'absolute', top: '-4px', right: '-6px',
+                    background: '#dc2626', color: 'white', borderRadius: '999px', minWidth: '14px',
+                    height: '14px', padding: '0 4px', fontSize: '9px', fontWeight: '700',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+                    {uleseTilbakemeldinger > 9 ? '9+' : uleseTilbakemeldinger}
+                  </span>
+                )}
+              </span>
+              {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Admin</span>}
+            </button>
+          )}
+        </div>
         <div style={{ padding: '12px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
           {!collapsed ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -56955,6 +57946,23 @@ function AppContent() {
             )}
           </div>
         </div>
+
+        {/* Patch 21: Tilbakemelding-modal */}
+        {showFeedbackModal && (
+          <FeedbackModal
+            onClose={() => setShowFeedbackModal(false)}
+            kontekst={getFeedbackContext(activePage, null, null)}
+          />
+        )}
+
+        {/* Patch 22: Proaktiv feedback-prompt — kun på dashboard når kriterier oppfylt */}
+        {showFeedbackPrompt && !showFeedbackModal && (
+          <FeedbackPromptModal
+            onSendFeedback={() => { setShowFeedbackPrompt(false); setShowFeedbackModal(true) }}
+            onIkkeNa={() => setShowFeedbackPrompt(false)}
+            onSluttSporre={handleFeedbackPromptSluttSporre}
+          />
+        )}
 
         {/* Trial banner */}
         {trialInfo?.status === 'trial' && !trialInfo.isExpired && (
@@ -57019,6 +58027,7 @@ function AppContent() {
           <LockedModulePage pageId={page} onNavigate={navigate} />
         ) : (<>
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user} />}
+        {page === 'feedback-admin' && <FeedbackAdminPage onBack={() => navigate('dashboard')} />}
         {page === 'prosjekter' && <ProsjekterPage onNavigateDetail={openProject} />}
         {page === 'prosjektfiler' && <ProsjektfilerPage />}
         {page === 'sjekklister' && <SjekklistePage onNavigateDetail={(id) => { window.history.pushState({ page: 'sjekkliste_detaljer', checklistId: id }, '', '#sjekkliste_detaljer'); setPage('sjekkliste_detaljer'); setChecklistId(id) }} />}
