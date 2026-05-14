@@ -380,6 +380,7 @@ const navGroups = [
     title: 'ØKONOMI & KONTRAKT',
     items: [
       { id: 'kalkulator', label: 'Kalkulasjon', emoji: '🧮' },
+      { id: 'bim_kalkyle', label: 'BIM-Kalkyle',  emoji: '📐' },
       { id: 'tilbud',      label: 'Tilbud',       emoji: '📋' },
       { id: 'anbudsmodul', label: 'Anbudsmodul',  emoji: '⚖️' },
       { id: 'endringsmelding', label: 'Endringer', emoji: '🔄' },
@@ -430,6 +431,7 @@ const moduleCards = [
   { id: 'maskiner', name: 'Maskiner', desc: 'Maskin- og utstyrsregister', emoji: '🚜', color: '#fff7ed' },
   { id: 'tilbud', name: 'Tilbud', desc: 'Tilbudsadministrasjon', emoji: '📋', color: '#ecfeff' },
   { id: 'kalkulator', name: 'Kalkulasjon', desc: 'Kostnadskalkulasjon og fortjeneste', emoji: '🧮', color: '#fef9c3' },
+  { id: 'bim_kalkyle', name: 'BIM-Kalkyle', desc: 'IFC-import og auto-mengdeberegning', emoji: '📐', color: '#e0e7ff' },
   { id: 'anbudsmodul', name: 'Anbudsportal', desc: 'Leverandøranbud', emoji: '⚖️', color: '#fff7ed' },
   { id: 'ordre', name: 'Ordre', desc: 'Arbeidsordre', emoji: '📝', color: '#eef2ff' },
   { id: 'endringsmelding', name: 'Endringer', desc: 'Endringsmeldinger og tilleggsarbeid', emoji: '🔄', color: '#fef9c3' },
@@ -457,7 +459,7 @@ const moduleSections = [
   },
   {
     title: '💰 ØKONOMI & KONTRAKT',
-    modules: ['kalkulator', 'tilbud', 'anbudsmodul', 'endringsmelding', 'ordre', 'faktura'],
+    modules: ['kalkulator', 'bim_kalkyle', 'tilbud', 'anbudsmodul', 'endringsmelding', 'ordre', 'faktura'],
   },
   {
     title: '👷 PERSONELL & RESSURSER',
@@ -478,7 +480,7 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
   if (!m) return null
   const handleClick = () => {
     if (isLocked && onUpsell) onUpsell(m.id)
-    else onNavigate(m.id)
+    else onNavigate(m.id === 'bim_kalkyle' ? 'kalkulator' : m.id)
   }
   return (
     <button onClick={handleClick}
@@ -624,7 +626,7 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell }) {
                     dashboard: null, prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke',
                     sjekklister: 'grunnpakke', avvik: 'grunnpakke', hms: 'grunnpakke',
                     maskiner: 'grunnpakke', ansatte: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
-                    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul',
+                    kalkulator: 'kalkulator', bim_kalkyle: 'bim_kalkyle', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul',
                     endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
                     timelister: 'timelister', ressursplan: 'ressursplan',
                     kalender: 'kalender', chat: 'chat',
@@ -16578,17 +16580,38 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
     mod.price ? '/ måned' : ''
   ) : ''
 
+  // Patch 23.1: Avhengighets-info — sjekk om bruker mangler påkrevde moduler
+  const [aktiveMods, setAktiveMods] = useState(null)
+  useEffect(() => {
+    supabase.from('company_settings').select('active_modules').limit(1).single()
+      .then(({ data }) => setAktiveMods(data?.active_modules || []))
+      .catch(() => setAktiveMods([]))
+  }, [])
+  const manglendeAvh = (mod?.requires || []).filter(reqId => !(aktiveMods || []).includes(reqId))
+  const avhModuler = manglendeAvh.map(id => MODULE_CATALOG.find(m => m.id === id)).filter(Boolean)
+  const harAvhengighet = avhModuler.length > 0
+
+  // Beregn total pris hvis avhengigheter må aktiveres samtidig
+  const totalPrice = (mod?.price || 0) + avhModuler.reduce((s, a) => s + (a.price || 0), 0)
+
   const handleBestill = async () => {
     if (!mod) {
       appAlert({ message: 'Kunne ikke finne modul i katalogen', kind: 'error' })
       return
     }
-    // Bekreft før bestilling
+    // Bekreft før bestilling — inkluder avhengigheter i meldingen
+    let confirmMessage = `Bestill ${mod.name}?`
+    let confirmSub = `Modulen aktiveres umiddelbart og du faktureres ${prisTekst}${enhetTekst} fra og med inneværende måned. Du kan deaktivere når som helst fra Min bedrift.`
+    if (harAvhengighet) {
+      const avhNavn = avhModuler.map(a => a.name).join(' og ')
+      confirmMessage = `Bestill ${mod.name} + ${avhNavn}?`
+      confirmSub = `${mod.name} krever ${avhNavn}. Alle aktiveres samtidig. Total: ${totalPrice.toLocaleString('nb-NO')} kr / måned. Du kan deaktivere når som helst fra Min bedrift.`
+    }
     const ok = await confirm({
-      message: `Bestill ${mod.name}?`,
-      subMessage: `Modulen aktiveres umiddelbart og du faktureres ${prisTekst}${enhetTekst} fra og med inneværende måned. Du kan deaktivere når som helst fra Min bedrift.`,
+      message: confirmMessage,
+      subMessage: confirmSub,
       danger: false,
-      confirmLabel: 'Bestill og aktiver',
+      confirmLabel: harAvhengighet ? 'Bestill alle og aktiver' : 'Bestill og aktiver',
     })
     if (!ok) return
 
@@ -16606,9 +16629,9 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
       }
       newModules.push(mod.id)
 
-      // Avhengighet: BIM-Kalkyle krever basis Kalkulasjon
-      if (mod.id === 'bim_kalkyle' && !newModules.includes('kalkulator')) {
-        newModules.push('kalkulator')
+      // Avhengighet: aktiver alle påkrevde moduler samtidig (Patch 23.1)
+      for (const reqId of (mod.requires || [])) {
+        if (!newModules.includes(reqId)) newModules.push(reqId)
       }
 
       const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
@@ -16690,6 +16713,28 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
             <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#475569', lineHeight: 1.6 }}>
               {mod.desc}
             </p>
+          )}
+
+          {/* Avhengighets-banner (Patch 23.1) */}
+          {harAvhengighet && (
+            <div style={{ background: '#fef3c7', border: '1px solid #fde68a', borderRadius: '10px',
+              padding: '12px 14px', marginBottom: '14px' }}>
+              <div style={{ fontSize: '12px', fontWeight: '700', color: '#92400e', marginBottom: '4px',
+                display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ fontSize: '14px' }}>⚠️</span>
+                <span>Krever {avhModuler.length === 1 ? 'én annen modul' : 'flere moduler'}</span>
+              </div>
+              <div style={{ fontSize: '12px', color: '#78350f', lineHeight: 1.5 }}>
+                {mod.name} fungerer kun sammen med{' '}
+                {avhModuler.map((a, i) => (
+                  <React.Fragment key={a.id}>
+                    {i > 0 && (i === avhModuler.length - 1 ? ' og ' : ', ')}
+                    <strong>{a.name}</strong>
+                  </React.Fragment>
+                ))}.
+                {' '}Begge aktiveres ved bestilling. Total: <strong>{totalPrice.toLocaleString('nb-NO')} kr / måned</strong>.
+              </div>
+            </div>
           )}
 
           {/* Features */}
@@ -57788,7 +57833,7 @@ function AppContent() {
     dashboard: null, // always accessible
     prosjekter: 'grunnpakke', prosjektfiler: 'grunnpakke', sjekklister: 'grunnpakke',
     avvik: 'grunnpakke', hms: 'grunnpakke', maskiner: 'grunnpakke', ansatte: 'grunnpakke', kunder: 'grunnpakke', varsler: null,
-    kalkulator: 'kalkulator', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
+    kalkulator: 'kalkulator', bim_kalkyle: 'bim_kalkyle', tilbud: 'tilbud', anbudsmodul: 'anbudsmodul', endringsmelding: 'endringsmelding', ordre: 'ordre', faktura: 'faktura',
     timelister: 'timelister', ressursplan: 'ressursplan',
     kalender: 'kalender', chat: 'chat',
     befaring: 'befaring', bildedok: 'bildedok', fdv: 'fdv', crm: 'crm',
@@ -57997,7 +58042,7 @@ function AppContent() {
                       <button key={item.id}
                         onClick={() => {
                           if (locked) { setUpsellModul(item.id); setMobileMenuOpen(false) }
-                          else navigate(item.id)
+                          else navigate(item.id === 'bim_kalkyle' ? 'kalkulator' : item.id)
                         }}
                         style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'none', cursor:'pointer', background:isActive?'#ecfdf5':'transparent', color:locked?'#94a3b8':isActive?'#059669':'#475569', fontWeight:isActive?'700':'400', fontSize:'15px', textAlign:'left', marginBottom:'2px', opacity:locked?0.65:1 }}>
                         <span style={{ fontSize:'18px', flexShrink:0 }}>{item.emoji}</span>
@@ -58092,7 +58137,7 @@ function AppContent() {
                 const locked = !isModuleActive(item.id)
                 return (
                   <button key={item.id}
-                    onClick={() => locked ? setUpsellModul(item.id) : navigate(item.id)}
+                    onClick={() => locked ? setUpsellModul(item.id) : navigate(item.id === 'bim_kalkyle' ? 'kalkulator' : item.id)}
                     title={collapsed ? (item.label + (locked ? ' — bestill her' : '')) : undefined}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#94a3b8' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.65 : 1 }}>
                     <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
