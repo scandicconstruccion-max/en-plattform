@@ -264,7 +264,7 @@ function AuthProvider({ children }) {
   const loadProfile = async (authUser) => {
     if (!authUser) { setProfile(null); return }
     try {
-      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role, created_at, feedback_prompt_disabled, feedback_prompt_last_shown').eq('id', authUser.id).single()
+      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role, created_at, feedback_prompt_disabled, feedback_prompt_last_shown, onboarding_completed').eq('id', authUser.id).single()
       if (error) {
         // Fallback without platform_role if column doesn't exist yet
         const { data: fallback } = await supabase.from('user_profiles').select('full_name, avatar_url, role').eq('id', authUser.id).single()
@@ -306,7 +306,7 @@ function AuthProvider({ children }) {
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
   const isPlatformOwner = profile?.platform_role === 'platform_owner'
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, loading, supabase }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, loading, supabase, reloadProfile: () => loadProfile(user) }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -16774,6 +16774,287 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
         </div>
       </div>
     </div>,
+    document.body
+  )
+}
+
+// ─── PATCH 24: ONBOARDING-SYSTEM ──────────────────────────────────────────────
+// Brukes for å gi nye brukere en intro til systemet (dashboard) og hver enkelt
+// modul ved første besøk. Onboarding-status lagres i user_profiles.onboarding_completed
+// som JSONB. Verdier: ISO-tidsstempel (fullført) | "skipped" (hoppet over) | mangler.
+
+// Helper: sjekk om en onboarding er gjennomført eller hoppet over
+function harSettOnboarding(onboardingCompleted, modulId) {
+  if (!onboardingCompleted) return false
+  const v = onboardingCompleted[modulId]
+  return !!v // ISO-streng eller "skipped" => sett som sett
+}
+
+// Helper: marker onboarding som fullført eller hoppet over
+async function markerOnboarding(userId, modulId, status = 'completed') {
+  if (!userId || !modulId) return
+  try {
+    // Hent gjeldende JSONB
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('onboarding_completed')
+      .eq('id', userId)
+      .single()
+    const ny = { ...(profile?.onboarding_completed || {}) }
+    ny[modulId] = status === 'skipped' ? 'skipped' : new Date().toISOString()
+    await supabase
+      .from('user_profiles')
+      .update({ onboarding_completed: ny })
+      .eq('id', userId)
+  } catch (e) {
+    console.warn('Kunne ikke lagre onboarding-status:', e)
+  }
+}
+
+// ─── DASHBOARD VELKOMST-MODAL (4 slides) ─────────────────────────────────────
+function DashboardIntroModal({ onClose, onComplete }) {
+  const { displayName } = useAuth()
+  const [steg, setSteg] = useState(0)
+  const firstName = (displayName || 'der').split(' ')[0]
+
+  const slides = [
+    {
+      ikon: '👋',
+      tittel: `Velkommen, ${firstName}!`,
+      tekst: 'En Plattform er bygget for norske byggebedrifter — fra ettmannsforetak til større entreprenører. Her er hovedidéen i 30 sekunder.',
+      bg: 'linear-gradient(135deg, #059669 0%, #0891b2 100%)',
+    },
+    {
+      ikon: '🔗',
+      tittel: 'Alt henger sammen',
+      tekst: 'Lag en kalkyle → bygg tilbud → konverter til ordre → faktureres etter levering. Endringer underveis dokumenteres som endringsmeldinger. Du jobber én gang, dataene følger med.',
+      bg: 'linear-gradient(135deg, #2563eb 0%, #7c3aed 100%)',
+    },
+    {
+      ikon: '✅',
+      tittel: 'KS-system i bunn',
+      tekst: 'Sjekklister, avvik, HMS-håndbok, befaringer og bildedokumentasjon er bygget inn. Du oppfyller dokumentasjonskravene fra byggherrer, NS-standarder og Arbeidstilsynet uten ekstra arbeid.',
+      bg: 'linear-gradient(135deg, #ea580c 0%, #dc2626 100%)',
+    },
+    {
+      ikon: '🚀',
+      tittel: 'Kom i gang',
+      tekst: 'Start med å opprette ditt første prosjekt. Eller test ut Kalkulasjon-modulen for å se hvordan kostnader beregnes. Du kan alltid trykke "💬 Tilbakemelding" om du står fast eller har ønsker.',
+      bg: 'linear-gradient(135deg, #7c3aed 0%, #db2777 100%)',
+      cta: 'Opprett første prosjekt',
+      ctaNav: 'prosjekter',
+    },
+  ]
+
+  const erSiste = steg === slides.length - 1
+  const naa = slides[steg]
+
+  const handleNeste = () => {
+    if (erSiste) onComplete()
+    else setSteg(s => s + 1)
+  }
+
+  const handleHopp = () => {
+    onClose('skipped')
+  }
+
+  return createPortal(
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.65)',
+      zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '16px', backdropFilter: 'blur(6px)',
+    }}>
+      <div style={{
+        background: 'white', borderRadius: '20px', width: '100%', maxWidth: '480px',
+        boxShadow: '0 25px 80px rgba(0,0,0,0.4)', overflow: 'hidden',
+      }}>
+        {/* Header med gradient */}
+        <div style={{ background: naa.bg, padding: '32px 28px 28px', textAlign: 'center', color: 'white', position: 'relative' }}>
+          <button onClick={handleHopp} aria-label="Hopp over"
+            style={{ position: 'absolute', top: '12px', right: '14px', background: 'rgba(255,255,255,0.2)',
+              border: 'none', borderRadius: '50%', width: '30px', height: '30px', cursor: 'pointer',
+              color: 'white', fontSize: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: 0, lineHeight: 1 }}>×</button>
+          <div style={{ fontSize: '54px', marginBottom: '8px', lineHeight: 1 }}>{naa.ikon}</div>
+          <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: '800', letterSpacing: '-0.02em' }}>
+            {naa.tittel}
+          </h2>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '22px 28px 12px', textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.65, color: '#334155' }}>
+            {naa.tekst}
+          </p>
+        </div>
+
+        {/* Progress dots */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '6px', padding: '10px 0 16px' }}>
+          {slides.map((_, i) => (
+            <div key={i}
+              style={{
+                width: i === steg ? '20px' : '6px', height: '6px',
+                borderRadius: '999px',
+                background: i === steg ? '#0f172a' : '#e2e8f0',
+                transition: 'all 0.25s',
+              }} />
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '0 28px 24px', display: 'flex', gap: '10px', alignItems: 'center' }}>
+          {!erSiste && (
+            <button onClick={handleHopp}
+              style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '13px',
+                cursor: 'pointer', padding: '8px 4px', fontWeight: '500' }}>
+              Hopp over
+            </button>
+          )}
+          <div style={{ flex: 1 }} />
+          {steg > 0 && (
+            <button onClick={() => setSteg(s => s - 1)}
+              style={{ background: 'white', border: '1px solid #e2e8f0', color: '#475569',
+                borderRadius: '8px', padding: '9px 16px', fontSize: '13px', fontWeight: '600',
+                cursor: 'pointer' }}>
+              ← Tilbake
+            </button>
+          )}
+          <button onClick={handleNeste}
+            style={{ background: '#0f172a', border: '1px solid #0f172a', color: 'white',
+              borderRadius: '8px', padding: '9px 18px', fontSize: '13px', fontWeight: '700',
+              cursor: 'pointer' }}>
+            {erSiste ? (naa.cta || 'Kom i gang') : 'Neste →'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ─── MODUL-ONBOARDING SLIDE-OVER (struktur — tekster legges til etterpå) ────
+// onboardingTekster mappes per modul-id. Tom for nå (legges til når vi har avklart).
+const MODUL_ONBOARDING_TEKSTER = {
+  // Fylles ut etter at dashboard-intro er testet
+}
+
+function ModulOnboardingPanel({ modulId, onClose, onComplete }) {
+  const tekster = MODUL_ONBOARDING_TEKSTER[modulId]
+  if (!tekster) return null  // Ingen onboarding for denne modulen ennå
+
+  return createPortal(
+    <>
+      {/* Mørkt overlay som klikk lukker (men ikke for påtrengende) */}
+      <div onClick={() => onClose('skipped')}
+        style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.3)',
+          zIndex: 9990, backdropFilter: 'blur(2px)' }} />
+
+      {/* Slide-over fra høyre */}
+      <div style={{
+        position: 'fixed', top: 0, right: 0, bottom: 0, width: '100%', maxWidth: '420px',
+        background: 'white', zIndex: 9991, display: 'flex', flexDirection: 'column',
+        boxShadow: '-20px 0 50px rgba(0,0,0,0.2)',
+        animation: 'enp-slide-in 0.3s ease-out',
+      }}>
+        <style>{`
+          @keyframes enp-slide-in {
+            from { transform: translateX(100%); }
+            to { transform: translateX(0); }
+          }
+        `}</style>
+
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid #e2e8f0',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '24px' }}>{tekster.ikon}</span>
+            <div>
+              <div style={{ fontSize: '10px', fontWeight: '700', color: '#64748b',
+                textTransform: 'uppercase', letterSpacing: '0.5px' }}>Bli kjent med</div>
+              <h2 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#0f172a' }}>
+                {tekster.tittel}
+              </h2>
+            </div>
+          </div>
+          <button onClick={() => onClose('skipped')} aria-label="Lukk"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+              fontSize: '24px', padding: '4px 8px', lineHeight: 1 }}>×</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
+          {/* Hva-modulen-gjør */}
+          <div style={{ marginBottom: '22px' }}>
+            <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b',
+              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>
+              Hva er dette?
+            </div>
+            <p style={{ margin: 0, fontSize: '14px', lineHeight: 1.65, color: '#334155' }}>
+              {tekster.hvaErDet}
+            </p>
+          </div>
+
+          {/* Modulkoblinger — viktig for upsell */}
+          {tekster.koblinger && tekster.koblinger.length > 0 && (
+            <div style={{ marginBottom: '22px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b',
+                textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                Henger sammen med
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {tekster.koblinger.map((k, i) => (
+                  <div key={i} style={{ background: '#f0f9ff', border: '1px solid #bae6fd',
+                    borderRadius: '10px', padding: '10px 12px', display: 'flex', gap: '10px',
+                    alignItems: 'flex-start' }}>
+                    <span style={{ fontSize: '18px', flexShrink: 0 }}>{k.ikon}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '700', color: '#0c4a6e', marginBottom: '2px' }}>
+                        {k.modul}
+                      </div>
+                      <div style={{ fontSize: '12px', color: '#075985', lineHeight: 1.5 }}>
+                        {k.beskrivelse}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Slik kommer du i gang */}
+          {tekster.kommIGang && tekster.kommIGang.length > 0 && (
+            <div style={{ marginBottom: '22px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b',
+                textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '10px' }}>
+                Slik kommer du i gang
+              </div>
+              <ol style={{ margin: 0, paddingLeft: '22px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {tekster.kommIGang.map((s, i) => (
+                  <li key={i} style={{ fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>{s}</li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{ padding: '14px 24px 18px', borderTop: '1px solid #e2e8f0',
+          display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button onClick={() => onClose('skipped')}
+            style={{ background: 'none', border: 'none', color: '#64748b', fontSize: '12px',
+              cursor: 'pointer', padding: '6px 8px', textDecoration: 'underline' }}>
+            Vis meg en gang til
+          </button>
+          <div style={{ flex: 1 }} />
+          <button onClick={onComplete}
+            style={{ background: '#059669', border: '1px solid #059669', color: 'white',
+              borderRadius: '8px', padding: '9px 20px', fontSize: '13px', fontWeight: '700',
+              cursor: 'pointer' }}>
+            Forstått
+          </button>
+        </div>
+      </div>
+    </>,
     document.body
   )
 }
@@ -57666,7 +57947,7 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 // ─── END BEFARING VIEW PAGE ────────────────────────────────────────────────────
 
 function AppContent() {
-  const { user, loading, supabase, displayName, isPlatformOwner, profile } = useAuth()
+  const { user, loading, supabase, displayName, isPlatformOwner, profile, reloadProfile } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
@@ -57863,6 +58144,27 @@ function AppContent() {
 
   // Patch 23: Modul-upsell state — holder navId for valgt låst modul
   const [upsellModul, setUpsellModul] = React.useState(null)
+
+  // Patch 24: Onboarding-system state
+  const [aktivOnboarding, setAktivOnboarding] = React.useState(null)  // 'dashboard' | modul-id | null
+  // Auto-trigger basert på onboarding_completed i profile
+  React.useEffect(() => {
+    if (!profile) return
+    const completed = profile.onboarding_completed || {}
+    // Dashboard-intro: vis hvis aldri sett OG bruker er på dashboard
+    if (page === 'dashboard' && !harSettOnboarding(completed, 'dashboard')) {
+      const t = setTimeout(() => setAktivOnboarding('dashboard'), 800)
+      return () => clearTimeout(t)
+    }
+    // Modul-onboarding: vis hvis bruker besøker en modul for første gang
+    // (men kun hvis dashboard-intro er sett, så vi ikke overlapper)
+    if (page !== 'dashboard' && harSettOnboarding(completed, 'dashboard')) {
+      if (MODUL_ONBOARDING_TEKSTER[page] && !harSettOnboarding(completed, page)) {
+        const t = setTimeout(() => setAktivOnboarding(page), 600)
+        return () => clearTimeout(t)
+      }
+    }
+  }, [page, profile])
 
   // Patch 21: Tilbakemelding-system state
   const [showFeedbackModal, setShowFeedbackModal] = React.useState(false)
@@ -58232,6 +58534,43 @@ function AppContent() {
             )}
           </div>
         </div>
+
+        {/* Patch 24: Onboarding-modaler */}
+        {aktivOnboarding === 'dashboard' && (
+          <DashboardIntroModal
+            onClose={async (status = 'completed') => {
+              await markerOnboarding(user?.id, 'dashboard', status)
+              setAktivOnboarding(null)
+              if (reloadProfile) reloadProfile()
+            }}
+            onComplete={async () => {
+              await markerOnboarding(user?.id, 'dashboard', 'completed')
+              setAktivOnboarding(null)
+              if (reloadProfile) reloadProfile()
+              // Hvis siste slide har CTA → naviger
+              navigate('prosjekter')
+            }}
+          />
+        )}
+        {aktivOnboarding && aktivOnboarding !== 'dashboard' && (
+          <ModulOnboardingPanel
+            modulId={aktivOnboarding}
+            onClose={async (status = 'skipped') => {
+              if (status === 'skipped') {
+                // "Vis meg en gang til" — IKKE marker som sett
+              } else {
+                await markerOnboarding(user?.id, aktivOnboarding, 'skipped')
+                if (reloadProfile) reloadProfile()
+              }
+              setAktivOnboarding(null)
+            }}
+            onComplete={async () => {
+              await markerOnboarding(user?.id, aktivOnboarding, 'completed')
+              setAktivOnboarding(null)
+              if (reloadProfile) reloadProfile()
+            }}
+          />
+        )}
 
         {/* Patch 23: Modul-upsell-popup */}
         {upsellModul && (
