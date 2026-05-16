@@ -480,7 +480,7 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
   if (!m) return null
   const handleClick = () => {
     if (isLocked && onUpsell) onUpsell(m.id)
-    else onNavigate(m.id === 'bim_kalkyle' ? 'kalkulator' : m.id)
+    else onNavigate(m.id)
   }
   return (
     <button onClick={handleClick}
@@ -49350,7 +49350,7 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
 
 // ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
 
-function KalkulasjonPage({ onNavigate }) {
+function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   const { user } = useAuth()
   const appAlert = useAppAlert()
   const confirm = useConfirm()
@@ -49389,6 +49389,17 @@ function KalkulasjonPage({ onNavigate }) {
       .then(({ data }) => setBimActiveModules(data?.active_modules || []))
       .catch(() => {})
   }, [])
+
+  // Patch 23.2: Direkte-navigering fra BIM-Kalkyle i sidebar/dashboard
+  // Når brukeren klikker BIM-Kalkyle skal de gå rett til IFC-opplasting,
+  // ikke til kalkyle-listen først.
+  useEffect(() => {
+    if (autoOpenBim && bimActiveModules.length > 0) {
+      if (hasBimKalkyle(bimActiveModules)) setShowBimImport(true)
+      else setShowBimUpsell(true)
+    }
+  }, [autoOpenBim, bimActiveModules])
+
   const handleBimKalkyleClick = () => {
     if (hasBimKalkyle(bimActiveModules)) setShowBimImport(true)
     else setShowBimUpsell(true)
@@ -58829,7 +58840,7 @@ function AppContent() {
                       <button key={item.id}
                         onClick={() => {
                           if (locked) { setUpsellModul(item.id); setMobileMenuOpen(false) }
-                          else navigate(item.id === 'bim_kalkyle' ? 'kalkulator' : item.id)
+                          else navigate(item.id)
                         }}
                         style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'none', cursor:'pointer', background:isActive?'#ecfdf5':'transparent', color:locked?'#94a3b8':isActive?'#059669':'#475569', fontWeight:isActive?'700':'400', fontSize:'15px', textAlign:'left', marginBottom:'2px', opacity:locked?0.65:1 }}>
                         <span style={{ fontSize:'18px', flexShrink:0 }}>{item.emoji}</span>
@@ -58924,7 +58935,7 @@ function AppContent() {
                 const locked = !isModuleActive(item.id)
                 return (
                   <button key={item.id}
-                    onClick={() => locked ? setUpsellModul(item.id) : navigate(item.id === 'bim_kalkyle' ? 'kalkulator' : item.id)}
+                    onClick={() => locked ? setUpsellModul(item.id) : navigate(item.id)}
                     title={collapsed ? (item.label + (locked ? ' — bestill her' : '')) : undefined}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#94a3b8' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.65 : 1 }}>
                     <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
@@ -59167,7 +59178,7 @@ function AppContent() {
         {page === 'avvik' && <AvvikPage />}
         {page === 'hms' && <HmsPage />}
         {page === 'maskiner' && <MaskinPage />}
-        {page === 'kalkulator' && <KalkulasjonPage onNavigate={navigate} />}
+        {(page === 'kalkulator' || page === 'bim_kalkyle') && <KalkulasjonPage onNavigate={navigate} autoOpenBim={page === 'bim_kalkyle'} />}
         {page === 'tilbud' && <TilbudPage />}
         {page === 'anbudsmodul' && <AnbudsPage />}
         {page === 'endringsmelding' && <EndringsmeldingPage />}
