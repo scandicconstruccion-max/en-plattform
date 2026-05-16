@@ -16935,7 +16935,465 @@ function DashboardIntroModal({ onClose, onComplete }) {
 // ─── MODUL-ONBOARDING SLIDE-OVER (struktur — tekster legges til etterpå) ────
 // onboardingTekster mappes per modul-id. Tom for nå (legges til når vi har avklart).
 const MODUL_ONBOARDING_TEKSTER = {
-  // Fylles ut etter at dashboard-intro er testet
+  // ─── PROSJEKTER ──────────────────────────────────────────────────────────
+  prosjekter: {
+    ikon: '🏗️',
+    tittel: 'Prosjekter',
+    hvaErDet: 'Prosjekter samler all aktivitet, dokumentasjon og økonomi knyttet til én bestemt jobb på ett sted. Du kan godt sende tilbud, lage kalkyler og fakturere uten å opprette et prosjekt — men når du knytter alt til et prosjekt, har du full oversikt fra første kontakt til ferdig FDV. Når byggherren eller revisoren spør om noe to år senere, finner du det med ett klikk.',
+    koblinger: [
+      { ikon: '🧮', modul: 'Kalkulasjon', beskrivelse: 'Estimer kostnader og fortjeneste før du gir tilbud' },
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Lag tilbud knyttet til prosjektet' },
+      { ikon: '📝', modul: 'Ordre', beskrivelse: 'Aksepterte tilbud blir til ordre automatisk' },
+      { ikon: '🧾', modul: 'Faktura', beskrivelse: 'Faktureres fra ordren, med riktig kunde og beløp' },
+      { ikon: '🔄', modul: 'Endringsmelding', beskrivelse: 'Dokumenter endringer i omfang underveis' },
+      { ikon: '⏱️', modul: 'Timelister', beskrivelse: 'Ansatte fører timer på prosjektet' },
+      { ikon: '📌', modul: 'Ressursplan', beskrivelse: 'Planlegg hvem som jobber når' },
+      { ikon: '✅', modul: 'Sjekklister', beskrivelse: 'KS-dokumentasjon arkiveres på prosjektet' },
+      { ikon: '⚠️', modul: 'Avvik', beskrivelse: 'Registrer og lukk avvik per prosjekt' },
+      { ikon: '🦺', modul: 'HMS', beskrivelse: 'Risikoanalyse per prosjekt' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Befaringsrapporter lagres her' },
+      { ikon: '📸', modul: 'Bildedok', beskrivelse: 'Bilder samles på prosjektet' },
+      { ikon: '📚', modul: 'FDV', beskrivelse: 'Genererer FDV-dokumentasjon ved levering' },
+      { ikon: '💬', modul: 'Chat', beskrivelse: 'Egen prosjekt-chat for teamet' },
+      { ikon: '📁', modul: 'Prosjektfiler', beskrivelse: 'Alle filer på ett sted' },
+    ],
+    kommIGang: [
+      'Klikk "+ Nytt prosjekt" øverst',
+      'Fyll inn prosjektnavn, adresse og kunde',
+      'Du kan opprette underprosjekter for delvise leveranser',
+      'Start med kalkyle eller tilbud — så bygger resten seg ut etterhvert',
+    ],
+  },
+
+  // ─── PROSJEKTFILER ───────────────────────────────────────────────────────
+  prosjektfiler: {
+    ikon: '📁',
+    tittel: 'Prosjektfiler',
+    hvaErDet: 'Alle filer knyttet til et prosjekt på ett sted — tegninger, kontrakter, fotodokumentasjon, anbudsunderlag, leveringsbekreftelser. Slipper å lete i e-poster eller Dropbox når noe må fram.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Filene organiseres per prosjekt' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Befaringsbilder og rapporter lagres her' },
+      { ikon: '📸', modul: 'Bildedok', beskrivelse: 'Bilder fra jobben kobles automatisk' },
+      { ikon: '📚', modul: 'FDV', beskrivelse: 'FDV-dokumentasjonen bygges fra prosjektfilene' },
+    ],
+    kommIGang: [
+      'Åpne et prosjekt og gå til Filer-fanen',
+      'Dra-og-slipp filer eller klikk for å laste opp',
+      'Sett mappestruktur som passer arbeidsflyten din (tegninger, kontrakt, foto, FDV)',
+      'Del lenker med kunder eller UE-er direkte fra systemet',
+    ],
+  },
+
+  // ─── SJEKKLISTER ─────────────────────────────────────────────────────────
+  sjekklister: {
+    ikon: '✅',
+    tittel: 'Sjekklister',
+    hvaErDet: 'Digitale sjekklister for kvalitetskontroll, sikker jobbanalyse (SJA) og HMS. Systemet kommer med 58 ferdige maler fordelt på 10 fag — du kan også lage dine egne. Sluttføring og signering skjer på mobil på bygget.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Sjekklister kobles til prosjektet og blir KS-dokumentasjon' },
+      { ikon: '⚠️', modul: 'Avvik', beskrivelse: 'Punkter som ikke er OK blir automatisk avvik' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Sjekklister kan fylles ut underveis i befaring' },
+      { ikon: '🦺', modul: 'HMS', beskrivelse: 'SJA-skjemaer og HMS-sjekklister henter fra HMS-håndboka' },
+      { ikon: '📚', modul: 'FDV', beskrivelse: 'Utfylte sjekklister inngår i FDV-dokumentasjonen' },
+    ],
+    kommIGang: [
+      'Velg en mal som passer faget ditt (tømrer, elektriker, rørlegger m.fl.)',
+      'Tildel sjekklisten til ansatt eller prosjekt',
+      'Fyll ut på mobil ute på byggeplassen',
+      'Signer digitalt — bevis på utført KS-arbeid lagres i prosjektet',
+    ],
+  },
+
+  // ─── AVVIK ───────────────────────────────────────────────────────────────
+  avvik: {
+    ikon: '⚠️',
+    tittel: 'Avvik',
+    hvaErDet: 'Registrer feil, mangler, nestenulykker og skader så snart de oppdages. Hvert avvik dokumenteres med bilde, beskrivelse, alvorlighetsgrad og tiltak — og lukkes når det er rettet. Krav fra Arbeidstilsynet og byggherrer.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Avvik knyttes til prosjekt og ansatt' },
+      { ikon: '✅', modul: 'Sjekklister', beskrivelse: 'Punkter som ikke er OK blir avvik automatisk' },
+      { ikon: '🦺', modul: 'HMS', beskrivelse: 'HMS-avvik trekkes inn i risikobildet' },
+      { ikon: '📸', modul: 'Bildedok', beskrivelse: 'Bilder av avviket vedlegges' },
+    ],
+    kommIGang: [
+      'Klikk "+ Nytt avvik" på mobil eller PC',
+      'Beskriv avviket, ta bilde, sett alvorlighetsgrad',
+      'Tildel ansvar for retting',
+      'Når rettet — lukk avviket med dokumentasjon på tiltak',
+    ],
+  },
+
+  // ─── HMS ─────────────────────────────────────────────────────────────────
+  hms: {
+    ikon: '🦺',
+    tittel: 'HMS & Risiko',
+    hvaErDet: 'Komplett HMS-håndbok for bedriften din — internkontroll, sikker jobbanalyse, vernerunder, risikovurdering. Du tilpasser malene til din bedrift én gang, så er du dekket for det grunnleggende.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Risikoanalyse per prosjekt' },
+      { ikon: '✅', modul: 'Sjekklister', beskrivelse: 'SJA-skjemaer henter fra HMS-håndboka' },
+      { ikon: '⚠️', modul: 'Avvik', beskrivelse: 'HMS-avvik dokumenteres her' },
+      { ikon: '👥', modul: 'Ansatte', beskrivelse: 'Opplæring og verneombud spores per ansatt' },
+    ],
+    kommIGang: [
+      'Gå gjennom HMS-håndboka og tilpass til din bedrift',
+      'Sett opp vernerunder i Kalender',
+      'Lag risikovurdering for første prosjekt',
+      'Del HMS-dokumentasjonen med byggherrer ved oppstart',
+    ],
+  },
+
+  // ─── MASKINER ────────────────────────────────────────────────────────────
+  maskiner: {
+    ikon: '🚜',
+    tittel: 'Maskiner',
+    hvaErDet: 'Oversikt over maskiner, kjøretøy og utstyr — service-intervaller, kontroller, hvor utstyret er nå. Slipper å lure på hvor lifta står eller når kompressoren skal til service.',
+    koblinger: [
+      { ikon: '📌', modul: 'Ressursplan', beskrivelse: 'Reserver maskiner sammen med folk på prosjekt' },
+      { ikon: '⏱️', modul: 'Timelister', beskrivelse: 'Maskintimer kan føres sammen med arbeidstimer' },
+      { ikon: '🗓️', modul: 'Kalender', beskrivelse: 'Service-intervaller og sertifikat-fornyelser' },
+    ],
+    kommIGang: [
+      'Klikk "+ Ny maskin" og fyll inn type, modell, registreringsnummer',
+      'Legg inn neste service- eller kontrolldato',
+      'Knytt maskinen til prosjekt eller ansatt når den er i bruk',
+      'Få varsel før service eller kontroller forfaller',
+    ],
+  },
+
+  // ─── ANSATTE ─────────────────────────────────────────────────────────────
+  ansatte: {
+    ikon: '👥',
+    tittel: 'Ansatte',
+    hvaErDet: 'Sentralt register over ansatte med kontaktinfo, sertifikater, kurs, kompetanse og timer-historikk. Når byggherren spør "hvem har dere på prosjektet?" har du dokumentasjon klar.',
+    koblinger: [
+      { ikon: '⏱️', modul: 'Timelister', beskrivelse: 'Ansatte fører timer på prosjekt' },
+      { ikon: '📌', modul: 'Ressursplan', beskrivelse: 'Planlegg hvem som jobber når' },
+      { ikon: '⚠️', modul: 'Avvik', beskrivelse: 'Avvik knyttes til ansvarlig ansatt' },
+      { ikon: '✅', modul: 'Sjekklister', beskrivelse: 'Sjekklister tildeles ansatt' },
+      { ikon: '🦺', modul: 'HMS', beskrivelse: 'Opplæring og verneombud spores per ansatt' },
+    ],
+    kommIGang: [
+      'Klikk "+ Ny ansatt" og fyll inn navn, telefon, e-post',
+      'Last opp sertifikater og kursbevis',
+      'Inviter ansatte til å logge inn selv (egen timeføring)',
+      'Sett opp varsel når sertifikater nærmer seg utløp',
+    ],
+  },
+
+  // ─── KUNDEOVERSIKT ───────────────────────────────────────────────────────
+  kunder: {
+    ikon: '🤝',
+    tittel: 'Kundeoversikt',
+    hvaErDet: 'Felles kundedatabase brukt av alle moduler — tilbud, ordre, faktura, anbud. Legg til en kunde én gang, så er den tilgjengelig overalt. Holder også historikk: hva du har tilbudt, fakturert og hva som er åpent.',
+    koblinger: [
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Tilbud sendes til registrerte kunder' },
+      { ikon: '📝', modul: 'Ordre', beskrivelse: 'Ordre kobles til kunde' },
+      { ikon: '🧾', modul: 'Faktura', beskrivelse: 'Faktura sendes til kundens fakturaadresse' },
+      { ikon: '⚖️', modul: 'Anbudsmodul', beskrivelse: 'UE-er og leverandører lagres som kunder' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Hvert prosjekt knyttes til en kunde' },
+    ],
+    kommIGang: [
+      'Klikk "+ Ny kunde" og fyll inn navn, orgnr, kontaktinfo',
+      'Hent automatisk fra Brønnøysund med kun orgnr',
+      'Sett ulike kontakt-, fakturerings- og leveringsadresser',
+      'Få oversikt over åpne tilbud og fakturaer per kunde',
+    ],
+  },
+
+  // ─── KALKULASJON ─────────────────────────────────────────────────────────
+  kalkulator: {
+    ikon: '🧮',
+    tittel: 'Kalkulasjon',
+    hvaErDet: 'Detaljert kostnadskalkulasjon med materialer, timer, påslag og fortjeneste. Bruk ferdige bygningsdel-maler eller lag egne. Du ser hvor mye du tjener før du i det hele tatt sender tilbud — slipper kalkyler som blir tap.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Kalkyler kobles til prosjekt' },
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Konverter kalkyle til tilbud med ett klikk' },
+      { ikon: '📐', modul: 'BIM-Kalkyle', beskrivelse: 'Importer IFC-modell og få automatisk mengdeuttak' },
+      { ikon: '⚖️', modul: 'Anbudsmodul', beskrivelse: 'Bruk UE-priser direkte i kalkylen' },
+      { ikon: '👥', modul: 'Ansatte', beskrivelse: 'Planlegg hvem som skal utføre arbeidet' },
+      { ikon: '📌', modul: 'Ressursplan', beskrivelse: 'Bygg ressursplan direkte fra kalkylen' },
+    ],
+    kommIGang: [
+      'Klikk "+ Nytt kalkulasjonsprosjekt"',
+      'Velg prosjekt-type: nybygg, rehabilitering eller blandet',
+      'Bruk hurtigstart-veiviseren eller bygg fra bunnen av',
+      'Hent ferdige bygningsdel-maler fra biblioteket (180+ maler tilgjengelig)',
+    ],
+  },
+
+  // ─── BIM-KALKYLE ─────────────────────────────────────────────────────────
+  bim_kalkyle: {
+    ikon: '📐',
+    tittel: 'BIM-Kalkyle',
+    hvaErDet: 'Last opp IFC-modell (eller DWG/PDF-tegning) og få automatisk mengdeberegning. Systemet matcher elementer mot konstruksjonsbiblioteket ditt og bygger kalkylen for deg — du går fra "tegning på bordet" til "ferdig kalkyle" på minutter, ikke dager.',
+    koblinger: [
+      { ikon: '🧮', modul: 'Kalkulasjon', beskrivelse: 'BIM-data fyller kalkylen automatisk — krever Kalkulasjon-modulen' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'BIM-kalkyler knyttes til prosjekt' },
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Send tilbudet videre når kalkylen er klar' },
+      { ikon: '⚖️', modul: 'Anbudsmodul', beskrivelse: 'Bruk UE-priser på BIM-beregnede mengder' },
+    ],
+    kommIGang: [
+      'Last opp IFC-fila fra arkitekten eller rådgiveren',
+      'Systemet analyserer og foreslår matching mot konstruksjonsbiblioteket',
+      'Tilpass eller bekreft hver match (eller la systemet gjøre det automatisk)',
+      'Gå direkte videre til tilbud når kalkylen er klar',
+    ],
+  },
+
+  // ─── TILBUD ──────────────────────────────────────────────────────────────
+  tilbud: {
+    ikon: '📋',
+    tittel: 'Tilbud',
+    hvaErDet: 'Lag og send profesjonelle tilbud med poster, priser og betingelser. Send som PDF, godkjenn med digital signatur. Holder oversikt over alle tilbud — hva som er åpent, akseptert og avslått.',
+    koblinger: [
+      { ikon: '🤝', modul: 'Kundeoversikt', beskrivelse: 'Tilbud sendes til registrerte kunder' },
+      { ikon: '🧮', modul: 'Kalkulasjon', beskrivelse: 'Konverter kalkyle direkte til tilbud' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Tilbud kan knyttes til prosjekt' },
+      { ikon: '📝', modul: 'Ordre', beskrivelse: 'Akseptert tilbud blir til ordre med ett klikk' },
+      { ikon: '⚖️', modul: 'Anbudsmodul', beskrivelse: 'Bygg tilbud basert på UE-priser' },
+    ],
+    kommIGang: [
+      'Klikk "+ Nytt tilbud" eller konverter fra kalkyle',
+      'Velg kunde og fyll inn poster (eller importer fra kalkyle)',
+      'Send som PDF — kunden kan akseptere med digital signatur',
+      'Aksepterte tilbud kan konverteres til ordre direkte',
+    ],
+  },
+
+  // ─── ANBUDSMODUL ─────────────────────────────────────────────────────────
+  anbudsmodul: {
+    ikon: '⚖️',
+    tittel: 'Anbudsmodul',
+    hvaErDet: 'Send forespørsler til underentreprenører og leverandører — få priser tilbake og sammenlign side ved side. Automatisk matching av poster på tvers av tilbud gjør at du ser hvem som er billigst på hva, ikke bare totalpris.',
+    koblinger: [
+      { ikon: '🧮', modul: 'Kalkulasjon', beskrivelse: 'Bruk UE-priser direkte i kalkylen' },
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Bygg tilbud basert på beste UE-priser' },
+      { ikon: '🤝', modul: 'Kundeoversikt', beskrivelse: 'UE-er og leverandører lagres som kunder' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Anbud kobles til prosjekt' },
+    ],
+    kommIGang: [
+      'Klikk "+ Nytt anbud" og legg inn poster du vil ha priser på',
+      'Velg UE-er og send forespørsel — de svarer via lenke uten å logge inn',
+      'Få automatisk sammenligning når svarene kommer inn',
+      'Velg vinner og send tildelings-/avslags-meldinger med ett klikk',
+    ],
+  },
+
+  // ─── ENDRINGSMELDING ─────────────────────────────────────────────────────
+  endringsmelding: {
+    ikon: '🔄',
+    tittel: 'Endringsmeldinger',
+    hvaErDet: 'Når kunden ber om endringer underveis — eller du oppdager at noe må gjøres annerledes — dokumenter det skriftlig. Beskytter deg ved tvist og sikrer at du får betalt for ekstraarbeid.',
+    koblinger: [
+      { ikon: '📝', modul: 'Ordre', beskrivelse: 'Endringsmeldinger knyttes til opprinnelig ordre' },
+      { ikon: '🧾', modul: 'Faktura', beskrivelse: 'Godkjente endringer faktureres separat eller samlet' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Holdes oversikt over alle endringer per prosjekt' },
+      { ikon: '🤝', modul: 'Kundeoversikt', beskrivelse: 'Send digitalt for kundens godkjenning' },
+    ],
+    kommIGang: [
+      'Klikk "+ Ny endringsmelding" på prosjektet eller ordren',
+      'Beskriv endringen, sett kostnad og påvirkning på tid',
+      'Send til kunden for digital godkjenning',
+      'Når godkjent — beløp legges automatisk til faktura',
+    ],
+  },
+
+  // ─── ORDRE ───────────────────────────────────────────────────────────────
+  ordre: {
+    ikon: '📝',
+    tittel: 'Ordre',
+    hvaErDet: 'Aksepterte tilbud blir til ordre — den formelle bekreftelsen på at jobben skal utføres. Holder oversikt over leveringsdato, restbeløp og status (under arbeid, levert, fakturert).',
+    koblinger: [
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Ordre bygges fra akseptert tilbud' },
+      { ikon: '🧾', modul: 'Faktura', beskrivelse: 'Faktureres fra ordren — slipper å taste på nytt' },
+      { ikon: '🔄', modul: 'Endringsmelding', beskrivelse: 'Endringer underveis dokumenteres som endringsmeldinger' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Ordre kobles til prosjekt' },
+      { ikon: '🤝', modul: 'Kundeoversikt', beskrivelse: 'Send ordrebekreftelse til kunde digitalt' },
+    ],
+    kommIGang: [
+      'Konverter et akseptert tilbud — eller opprett ordre direkte',
+      'Sett leveringsdato og fyll inn detaljer',
+      'Send ordrebekreftelse til kunden for digital signering',
+      'Fakturer hele eller deler av ordren etter levering',
+    ],
+  },
+
+  // ─── FAKTURA ─────────────────────────────────────────────────────────────
+  faktura: {
+    ikon: '🧾',
+    tittel: 'Faktura',
+    hvaErDet: 'Fakturer raskt fra ordre, kalkyle eller fritt. KID-nummer, MVA-koder og forfallsdato regnes ut automatisk. Følger norske bokføringsregler — sendte fakturaer kan ikke slettes, kun krediteres.',
+    koblinger: [
+      { ikon: '📝', modul: 'Ordre', beskrivelse: 'Faktureres direkte fra ordre uten å taste på nytt' },
+      { ikon: '🔄', modul: 'Endringsmelding', beskrivelse: 'Godkjente endringer inkluderes automatisk' },
+      { ikon: '⏱️', modul: 'Timelister', beskrivelse: 'Fører timer rett inn på fakturaen' },
+      { ikon: '🤝', modul: 'Kundeoversikt', beskrivelse: 'Sendes til kundens fakturaadresse' },
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Fakturer per prosjekt for oversikt' },
+    ],
+    kommIGang: [
+      'Klikk "+ Ny faktura" eller fakturer direkte fra en ordre',
+      'Kontroller poster, MVA og forfall — alt forhåndsutfylt',
+      'Send som PDF eller via EHF til offentlig sektor',
+      'Feil faktura? Bruk "↩️ Kredit" for å lage kreditnota (sletting er ikke tillatt etter bokføringsloven)',
+    ],
+  },
+
+  // ─── TIMELISTER ──────────────────────────────────────────────────────────
+  timelister: {
+    ikon: '⏱️',
+    tittel: 'Timelister',
+    hvaErDet: 'Ansatte fører timer på prosjekt fra mobilen — du som leder godkjenner i ettertid. Skiller mellom faktur­erbare og ikke-fakturerbare timer, sporer overtid og kjøretøytid.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Timer føres på riktig prosjekt' },
+      { ikon: '👥', modul: 'Ansatte', beskrivelse: 'Hver ansatt har sin egen timeløpning' },
+      { ikon: '🧾', modul: 'Faktura', beskrivelse: 'Godkjente timer importeres rett inn på fakturaen' },
+      { ikon: '📌', modul: 'Ressursplan', beskrivelse: 'Sammenlign planlagte vs faktiske timer' },
+      { ikon: '🚜', modul: 'Maskiner', beskrivelse: 'Maskintimer føres sammen med arbeidstimer' },
+    ],
+    kommIGang: [
+      'Inviter ansatte til å laste ned mobilversjonen',
+      'Sett opp lønnstyper (normal, overtid, helligdag, kjøretøytid)',
+      'Ansatte fører timer fortløpende — du godkjenner ukentlig',
+      'Eksporter til lønnssystem eller importer direkte til faktura',
+    ],
+  },
+
+  // ─── RESSURSPLAN ─────────────────────────────────────────────────────────
+  ressursplan: {
+    ikon: '📌',
+    tittel: 'Ressursplan',
+    hvaErDet: 'Visuell kalender over hvem som jobber på hva — folk, maskiner og materialer planlagt time for time. Drar-og-slipp for å flytte oppgaver. Ser umiddelbart om noen er dobbeltbooket eller om kapasiteten ikke holder.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Planlegg ressurser per prosjekt' },
+      { ikon: '👥', modul: 'Ansatte', beskrivelse: 'Reserver folk eller plassholdere' },
+      { ikon: '🚜', modul: 'Maskiner', beskrivelse: 'Booke maskiner sammen med folk' },
+      { ikon: '⏱️', modul: 'Timelister', beskrivelse: 'Se planlagte mot faktiske timer' },
+      { ikon: '🗓️', modul: 'Kalender', beskrivelse: 'Reservasjoner vises i kalenderen' },
+      { ikon: '🧮', modul: 'Kalkulasjon', beskrivelse: 'Bygg ressursplan direkte fra kalkylen' },
+    ],
+    kommIGang: [
+      'Velg ukesvisning eller flerukers Gantt',
+      'Dra-og-slipp ansatt eller maskin på prosjekt for den dagen',
+      'Få varsel hvis noen blir dobbeltbooket',
+      'Del planen med kunder eller UE-er etter behov',
+    ],
+  },
+
+  // ─── KALENDER ────────────────────────────────────────────────────────────
+  kalender: {
+    ikon: '🗓️',
+    tittel: 'Kalender',
+    hvaErDet: 'Felles kalender med alt som skjer på tvers av prosjekter — befaringer, leveringer, frister, vernerunder, service-intervaller. Samlet på ett sted så du slipper å sjekke flere systemer.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Frister og milepæler vises i kalenderen' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Planlagte befaringer dukker opp automatisk' },
+      { ikon: '📌', modul: 'Ressursplan', beskrivelse: 'Ressursreservasjoner synes i kalenderen' },
+      { ikon: '🚜', modul: 'Maskiner', beskrivelse: 'Service- og kontrolldatoer' },
+      { ikon: '🦺', modul: 'HMS', beskrivelse: 'Vernerunder og HMS-aktiviteter' },
+    ],
+    kommIGang: [
+      'Velg dag-, uke- eller månedsvisning',
+      'Filtrer på prosjekt eller ansatt etter behov',
+      'Klikk på en hendelse for å gå direkte til modul',
+      'Eksporter til Outlook eller Google Calendar',
+    ],
+  },
+
+  // ─── CHAT ────────────────────────────────────────────────────────────────
+  chat: {
+    ikon: '💬',
+    tittel: 'Intern chat',
+    hvaErDet: 'Chat-kanaler per prosjekt eller team. Slipper å lete i WhatsApp-grupper etter hva som ble sagt. Meldinger arkiveres på prosjektet — også brukbar dokumentasjon ved tvist.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Egen chat-kanal per prosjekt' },
+      { ikon: '👥', modul: 'Ansatte', beskrivelse: 'Direkte-meldinger til kolleger' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Del observasjoner fra befaring i chat' },
+    ],
+    kommIGang: [
+      'Åpne et prosjekt og gå til Chat-fanen',
+      'Inviter ansatte som jobber på prosjektet',
+      'Del bilder, filer og meldinger fortløpende',
+      'Tråden arkiveres når prosjektet er ferdig',
+    ],
+  },
+
+  // ─── BEFARING ────────────────────────────────────────────────────────────
+  befaring: {
+    ikon: '📷',
+    tittel: 'Befaring',
+    hvaErDet: 'Strukturert befaringsverktøy for mobil — registrer observasjoner med bilder, GPS-koordinater og automatisk dato. Brukbart for forhåndsbefaring, kontrollbefaring, sluttbefaring og overtakelse.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Befaringer arkiveres på prosjektet' },
+      { ikon: '✅', modul: 'Sjekklister', beskrivelse: 'Fyll ut sjekklister underveis i befaring' },
+      { ikon: '⚠️', modul: 'Avvik', beskrivelse: 'Observasjoner med feil blir avvik' },
+      { ikon: '📸', modul: 'Bildedok', beskrivelse: 'Bilder fra befaring lagres som bildedokumentasjon' },
+      { ikon: '📚', modul: 'FDV', beskrivelse: 'Sluttbefaring inngår i FDV-dokumentasjonen' },
+    ],
+    kommIGang: [
+      'Velg type befaring (forhånds-, kontroll-, slutt-)',
+      'Ta bilder og legg til kommentar på hver observasjon',
+      'GPS-posisjonering settes automatisk',
+      'Generer PDF-rapport som sendes til byggherre eller kunde',
+    ],
+  },
+
+  // ─── BILDEDOK ────────────────────────────────────────────────────────────
+  bildedok: {
+    ikon: '📸',
+    tittel: 'Bildedokumentasjon',
+    hvaErDet: 'Strukturert bildearkiv per prosjekt — viktig dokumentasjon for byggherrer, forsikring og tvistesaker. Bilder får automatisk dato, posisjon og kobling til byggetrinn.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'Bilder organiseres per prosjekt og byggetrinn' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Befaringsbilder kobles automatisk' },
+      { ikon: '⚠️', modul: 'Avvik', beskrivelse: 'Bilder dokumenterer avvik før retting' },
+      { ikon: '📚', modul: 'FDV', beskrivelse: 'Bilder inngår i FDV-leveransen' },
+    ],
+    kommIGang: [
+      'Last opp bilder fra mobil eller PC',
+      'Kategoriser per byggetrinn (grunn, råbygg, finish, etc.)',
+      'Skriv kommentar på viktige bilder',
+      'Del album med byggherre eller forsikring ved behov',
+    ],
+  },
+
+  // ─── FDV ─────────────────────────────────────────────────────────────────
+  fdv: {
+    ikon: '📚',
+    tittel: 'FDV-dokumentasjon',
+    hvaErDet: 'Forvaltning, drift og vedlikehold — den dokumentasjonen som overleveres til byggherren ved ferdigstillelse. Systemet samler automatisk produktdatablad, utstyrsinformasjon, sjekklister og garantiopplysninger.',
+    koblinger: [
+      { ikon: '🏗️', modul: 'Prosjekter', beskrivelse: 'FDV genereres per prosjekt' },
+      { ikon: '✅', modul: 'Sjekklister', beskrivelse: 'Utfylte sjekklister inngår automatisk' },
+      { ikon: '📷', modul: 'Befaring', beskrivelse: 'Sluttbefaring vedlegges FDV' },
+      { ikon: '📸', modul: 'Bildedok', beskrivelse: 'Bilder fra arbeidet inkluderes' },
+      { ikon: '📁', modul: 'Prosjektfiler', beskrivelse: 'Tegninger og kontrakter trekkes inn automatisk' },
+    ],
+    kommIGang: [
+      'Sett opp FDV-mal som passer byggherren (NS 3456 eller egen)',
+      'Last opp produktdatablad underveis i prosjektet',
+      'Når jobben er ferdig — generer komplett FDV-pakke',
+      'Lever som PDF, ZIP eller direkte til byggherrens FDV-system',
+    ],
+  },
+
+  // ─── CRM ─────────────────────────────────────────────────────────────────
+  crm: {
+    ikon: '🎯',
+    tittel: 'CRM',
+    hvaErDet: 'Spore prospekter, oppfølginger og salgsmuligheter — fra første kontakt til signert kontrakt. Aktivitetslogg per kunde, påminnelser om oppfølging, salgspipeline.',
+    koblinger: [
+      { ikon: '🤝', modul: 'Kundeoversikt', beskrivelse: 'CRM bygger på kundedatabasen' },
+      { ikon: '📋', modul: 'Tilbud', beskrivelse: 'Følg opp åpne tilbud automatisk' },
+      { ikon: '⚖️', modul: 'Anbudsmodul', beskrivelse: 'Følg opp anbudssvar og leverandørrelasjoner' },
+      { ikon: '🗓️', modul: 'Kalender', beskrivelse: 'Påminnelser om oppfølgings-samtaler' },
+    ],
+    kommIGang: [
+      'Legg inn prospekter du jobber med',
+      'Logg aktiviteter (samtale, befaring, e-post)',
+      'Sett oppfølgingsdato — få varsel når det er på tide',
+      'Konverter prospekt til kunde når avtalen er i havn',
+    ],
+  },
 }
 
 function ModulOnboardingPanel({ modulId, onClose, onComplete }) {
@@ -35088,6 +35546,33 @@ function MinBedriftPage() {
               <button onClick={handleSaveInfo} disabled={saving}
                 style={{ padding: isMobMB ? '12px' : '12px 28px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', cursor:saving?'not-allowed':'pointer', fontSize: isMobMB ? '14px' : '15px', fontWeight:'700', width: isMobMB ? '100%' : 'auto' }}>
                 {saving ? 'Lagrer...' : isMobMB ? '✅ Lagre' : '✅ Lagre bedriftsinformasjon'}
+              </button>
+            </div>
+
+            {/* Patch 24: Hjelp & opplæring */}
+            <div style={mbCard}>
+              {mbSec('Hjelp og opplæring')}
+              <div style={{ fontSize:'13px', color:'#475569', marginBottom:'14px', lineHeight:1.5 }}>
+                Velkomst-introen og modul-veiledningene vises automatisk første gang du besøker en side.
+                Du kan starte alle på nytt hvis du vil se gjennom dem igjen.
+              </div>
+              <button onClick={async () => {
+                if (!user?.id) return
+                try {
+                  await supabase.from('user_profiles').update({ onboarding_completed: {} }).eq('id', user.id)
+                  appAlert({
+                    message: '✓ Opplæring nullstilt',
+                    subMessage: 'Velkomst-modalen vises igjen neste gang du går til Dashboard. Modul-veiledningene vises når du besøker hver modul.',
+                    kind: 'success',
+                  })
+                } catch (e) {
+                  appAlert({ message: 'Kunne ikke nullstille', subMessage: e.message, kind: 'error' })
+                }
+              }}
+                style={{ padding:'10px 18px', background:'white', color:'#475569',
+                  border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer',
+                  fontSize:'13px', fontWeight:'600' }}>
+                🔄 Vis alle introer på nytt
               </button>
             </div>
           </>
