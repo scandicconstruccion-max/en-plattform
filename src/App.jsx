@@ -33080,6 +33080,10 @@ function FdvUePortalPage() {
   const [uploading, setUploading] = useState(false)
   const [done, setDone] = useState(false)
   const [form, setForm] = useState({ title: '', doc_type: 'manual', ns3456_kapittel: '1', notes: '', file: null })
+  // Patch 27 fix: Custom alert/confirm-state for offentlig side (uten Context)
+  const [popup, setPopup] = useState(null)  // { type: 'alert' | 'confirm', title, message, onConfirm, kind }
+  const showAlert = (message, kind = 'info', title = null) => setPopup({ type: 'alert', title, message, kind })
+  const showConfirm = (message, onConfirm, title = null) => setPopup({ type: 'confirm', title, message, onConfirm })
 
   useEffect(() => {
     // URL-format: #fdv_ue_levering?token=XXX
@@ -33117,7 +33121,7 @@ function FdvUePortalPage() {
 
   const handleUpload = async () => {
     if (!form.file || !form.title) {
-      alert('Velg fil og fyll inn tittel')
+      showAlert('Velg fil og fyll inn tittel', 'warning')
       return
     }
     setUploading(true)
@@ -33157,23 +33161,24 @@ function FdvUePortalPage() {
       if (fileInput) fileInput.value = ''
       await refreshDocs()
     } catch (e) {
-      alert('Opplasting feilet: ' + (e.message || e.toString()))
+      showAlert('Opplasting feilet: ' + (e.message || e.toString()), 'error')
     } finally {
       setUploading(false)
     }
   }
 
-  const handleFerdig = async () => {
-    if (!confirm('Markere som ferdig? Du kan fortsatt laste opp dokumenter etterpå om noe mangler.')) return
-    const hash = window.location.hash
-    const tokenMatch = hash.match(/token=([A-Z0-9]+)/i)
-    const token = tokenMatch[1]
-    try {
-      await supabase.rpc('mark_ue_request_complete', { p_token: token })
-      setDone(true)
-    } catch (e) {
-      alert('Kunne ikke markere som ferdig: ' + e.message)
-    }
+  const handleFerdig = () => {
+    showConfirm('Markere som ferdig? Du kan fortsatt laste opp dokumenter etterpå om noe mangler.', async () => {
+      const hash = window.location.hash
+      const tokenMatch = hash.match(/token=([A-Z0-9]+)/i)
+      const token = tokenMatch[1]
+      try {
+        await supabase.rpc('mark_ue_request_complete', { p_token: token })
+        setDone(true)
+      } catch (e) {
+        showAlert('Kunne ikke markere som ferdig: ' + e.message, 'error')
+      }
+    })
   }
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><p style={{ color:'#64748b' }}>Laster...</p></div>
@@ -33318,6 +33323,37 @@ function FdvUePortalPage() {
           Levert via <strong>En Plattform</strong>
         </p>
       </div>
+
+      {/* Patch 27 fix: Intern popup-modal (samme design som systemets ConfirmDialog) */}
+      {popup && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.5)' }} onClick={() => popup.type === 'alert' && setPopup(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'16px', maxWidth:'440px', width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+            <div style={{ padding:'24px 24px 18px' }}>
+              {popup.title && <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>{popup.title}</h3>}
+              <div style={{ fontSize:'14px', lineHeight:1.6, color: popup.kind === 'error' ? '#991b1b' : popup.kind === 'warning' ? '#92400e' : popup.kind === 'success' ? '#065f46' : '#334155', whiteSpace:'pre-wrap' }}>
+                {popup.message}
+              </div>
+            </div>
+            <div style={{ padding:'14px 20px', background:'#f8fafc', borderTop:'1px solid #e2e8f0', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
+              {popup.type === 'confirm' && (
+                <button onClick={() => setPopup(null)}
+                  style={{ padding:'10px 18px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600', minHeight:'44px' }}>
+                  Avbryt
+                </button>
+              )}
+              <button onClick={() => {
+                const onConfirm = popup.onConfirm
+                setPopup(null)
+                if (onConfirm) onConfirm()
+              }}
+                style={{ padding:'10px 18px', background: popup.kind === 'error' ? '#dc2626' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', minHeight:'44px' }}>
+                {popup.type === 'confirm' ? 'Ja, fortsett' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
