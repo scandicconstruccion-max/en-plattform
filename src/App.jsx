@@ -33303,16 +33303,29 @@ function FdvUePortalPage() {
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
               {documents.map(d => (
-                <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px' }}>
-                  <span style={{ fontSize:'20px' }}>📄</span>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{d.title}</div>
-                    <div style={{ fontSize:'11px', color:'#64748b' }}>
-                      Kap. {d.ns3456_kapittel} · {new Date(d.uploaded_at).toLocaleString('nb-NO')}
-                      {d.status === 'rejected' && <span style={{ color:'#dc2626', marginLeft:'8px' }}>· Avvist: {d.rejected_reason}</span>}
-                      {d.status === 'approved' && <span style={{ color:'#15803d', marginLeft:'8px' }}>· ✓ Godkjent</span>}
+                <div key={d.id} style={{ display:'flex', flexDirection:'column', gap:0, background: d.status === 'rejected' ? '#fef2f2' : '#f8fafc', border: `1px solid ${d.status === 'rejected' ? '#fecaca' : '#e2e8f0'}`, borderRadius:'10px', overflow:'hidden' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px' }}>
+                    <span style={{ fontSize:'20px' }}>{d.status === 'rejected' ? '⚠️' : d.status === 'approved' ? '✅' : '📄'}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{d.title}</div>
+                      <div style={{ fontSize:'11px', color:'#64748b' }}>
+                        Kap. {d.ns3456_kapittel} · {new Date(d.uploaded_at).toLocaleString('nb-NO')}
+                        {d.status === 'approved' && <span style={{ color:'#15803d', marginLeft:'8px', fontWeight:'700' }}>· Godkjent</span>}
+                        {d.status === 'pending' && <span style={{ color:'#92400e', marginLeft:'8px', fontWeight:'700' }}>· Venter på godkjenning</span>}
+                      </div>
                     </div>
                   </div>
+                  {/* Patch 27 fix v4: Tydelig avvisingsgrunn med rød boks */}
+                  {d.status === 'rejected' && d.rejected_reason && (
+                    <div style={{ borderTop:'1px solid #fecaca', padding:'10px 14px', background:'#fef2f2' }}>
+                      <div style={{ fontSize:'10px', fontWeight:'700', color:'#991b1b', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'4px' }}>
+                        🚫 Avvist — vennligst rett opp og lever på nytt
+                      </div>
+                      <div style={{ fontSize:'13px', color:'#7f1d1d', lineHeight:1.5, whiteSpace:'pre-wrap' }}>
+                        {d.rejected_reason}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -33668,11 +33681,36 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
     try {
       await supabase.from('fdv_ue_documents').update({ status: 'rejected', rejected_reason: avvisGrunn.trim(), reviewed_at: new Date().toISOString() }).eq('id', doc.id)
       await loggAktivitet(req.id, `Avvist: ${doc.title}`, { doc_id: doc.id, title: doc.title, grunn: avvisGrunn.trim() })
+
+      // Patch 27 fix v4: Send avvisingsvarsel til UE via e-post
+      let emailSent = false
+      if (req.ue_contact_email) {
+        try {
+          const { error: emailErr } = await supabase.functions.invoke('send-ue-fdv-invitation', {
+            body: {
+              requestId: req.id,
+              type: 'rejection',
+              rejectedDocTitle: doc.title,
+              rejectedReason: avvisGrunn.trim(),
+            }
+          })
+          if (!emailErr) emailSent = true
+        } catch { /* fallback under */ }
+      }
+
       await loadDocsFor(req.id)
       setAvvisModal(null)
       setAvvisGrunn('')
       setDocDetalj(null)
-      appAlert({ message: '✓ Dokument avvist', subMessage: 'UE kan se grunnen og laste opp nytt dokument.', kind: 'info' })
+      appAlert({
+        message: '✓ Dokument avvist',
+        subMessage: emailSent
+          ? `E-post sendt til ${req.ue_contact_email} med begrunnelse og lenke for ny levering.`
+          : (req.ue_contact_email
+              ? 'E-post-utsending feilet — kontakt UE manuelt med begrunnelsen.'
+              : 'UE har ingen e-postadresse — kontakt manuelt med begrunnelsen.'),
+        kind: emailSent ? 'success' : 'warning',
+      })
     } catch (e) {
       appAlert({ message: 'Feilet', subMessage: e.message, kind: 'error' })
     }
