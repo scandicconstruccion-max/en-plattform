@@ -33258,18 +33258,23 @@ function FdvUePortalPage() {
               <div>
                 <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Velg fil *</label>
                 <input id="fdv-ue-file-input" type="file" onChange={e => setForm({...form, file: e.target.files?.[0] || null})}
-                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.zip"
-                  style={{ width:'100%', padding:'8px', fontSize:'13px' }} />
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.zip,image/*"
+                  style={{ width:'100%', padding:'10px', fontSize:'14px', minHeight:'44px', boxSizing:'border-box', border:'1px solid #e2e8f0', borderRadius:'10px' }} />
                 <div style={{ fontSize:'11px', color:'#64748b', marginTop:'4px' }}>Maks 50 MB · PDF, Word, Excel, bilder, DWG, ZIP</div>
+                {/* Patch 27: Kamera-direkte for UE-er på mobil */}
+                <label style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'8px', marginTop:'8px', padding:'12px', background: form.file?.type?.startsWith('image/') ? '#ecfdf5' : '#f8fafc', border:`1px solid ${form.file?.type?.startsWith('image/') ? '#10b981' : '#cbd5e1'}`, borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color: form.file?.type?.startsWith('image/') ? '#065f46' : '#475569', minHeight:'48px' }}>
+                  <input type="file" accept="image/*" capture="environment" onChange={e => setForm({...form, file: e.target.files?.[0] || null})} style={{ display:'none' }} />
+                  {form.file?.type?.startsWith('image/') ? `✓ Bilde valgt: ${form.file.name.substring(0,24)}` : '📸 Eller ta bilde med kamera'}
+                </label>
               </div>
 
               <div>
                 <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Kommentar (valgfritt)</label>
-                <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={2} style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', resize:'vertical' }} />
+                <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={2} style={{ width:'100%', padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'16px', boxSizing:'border-box', resize:'vertical' }} />
               </div>
 
               <button onClick={handleUpload} disabled={uploading || !form.file || !form.title}
-                style={{ padding:'12px 24px', background: uploading || !form.file || !form.title ? '#9ca3af' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: uploading || !form.file || !form.title ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+                style={{ padding:'14px 24px', background: uploading || !form.file || !form.title ? '#9ca3af' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: uploading || !form.file || !form.title ? 'not-allowed' : 'pointer', fontSize:'15px', fontWeight:'700', minHeight:'52px' }}>
                 {uploading ? 'Laster opp...' : '📤 Last opp'}
               </button>
             </div>
@@ -33354,7 +33359,12 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
   }
 
   const handleSave = async () => {
+    console.log('[FDV-UE] handleSave START', { form, projectId, userId: user?.id })
     if (!form.ue_name) { appAlert({ message: 'UE-navn er påkrevd', kind: 'warning' }); return }
+    if (!projectId) {
+      appAlert({ message: 'Velg prosjekt først', subMessage: 'Du må velge et prosjekt fra dropdown-en før du kan opprette UE-forespørsel.', kind: 'warning' })
+      return
+    }
     setSaving(true)
     try {
       const token = genererUeToken()
@@ -33372,17 +33382,23 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
         token,
         created_by: user?.id,
       }
+      console.log('[FDV-UE] Insert-data:', insertData)
       // Prøv å hente company_id hvis den finnes (valgfritt)
       try {
         const { data: profile } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-        if (profile?.company_id) insertData.company_id = profile.company_id
-      } catch {}
-      const { error } = await supabase.from('fdv_ue_requests').insert(insertData)
+        if (profile?.company_id) {
+          insertData.company_id = profile.company_id
+          console.log('[FDV-UE] La til company_id:', profile.company_id)
+        }
+      } catch (e) { console.log('[FDV-UE] company_id ikke funnet (OK):', e?.message) }
+      const { data, error } = await supabase.from('fdv_ue_requests').insert(insertData).select().single()
+      console.log('[FDV-UE] Insert-resultat:', { data, error })
       if (error) throw error
       await appAlert({ message: '✓ UE-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
       onSaved()
     } catch (e) {
-      await appAlert({ message: 'Kunne ikke opprette', subMessage: e.message, kind: 'error' })
+      console.error('[FDV-UE] FEIL:', e)
+      await appAlert({ message: 'Kunne ikke opprette', subMessage: e.message || JSON.stringify(e), kind: 'error' })
     } finally {
       setSaving(false)
     }
@@ -33806,6 +33822,13 @@ function FDVPage() {
   const { user } = useAuth()
   const appAlert = useAppAlert()
   const confirm = useConfirm()
+  // Patch 27: Mobile-detection + felt-funksjoner
+  const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
+  useEffect(() => {
+    const onResize = () => setIsMob(window.innerWidth < 768)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
   const [components, setComponents] = useState([])
   const [documents, setDocuments] = useState([])
   const [autoDocs, setAutoDocs] = useState([])  // Patch 25: auto-fangede virtuelle dokumenter
@@ -34198,13 +34221,50 @@ function FDVPage() {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
+      <style>{`
+        /* Patch 27: Mobile-optimaliseringer for FDV */
+        @media (max-width: 767px) {
+          .fdv-header { padding: 14px 16px !important; }
+          .fdv-header-title { font-size: 18px !important; }
+          .fdv-header-subtitle { font-size: 11px !important; }
+          .fdv-header-actions { width: 100%; flex-wrap: wrap; }
+          .fdv-header-actions button { flex: 1 1 calc(50% - 4px); justify-content: center; min-height: 44px; }
+          .fdv-progress { padding: 12px 14px !important; }
+          .fdv-progress-circle { width: 48px !important; height: 48px !important; font-size: 14px !important; }
+          .fdv-tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+          .fdv-tabs button { white-space: nowrap; min-height: 44px; padding: 10px 14px !important; }
+          .fdv-filter-row { flex-direction: column; align-items: stretch !important; }
+          .fdv-filter-row > * { width: 100% !important; max-width: 100% !important; min-height: 44px; box-sizing: border-box; }
+          .fdv-body { padding: 14px !important; }
+          .fdv-grid { grid-template-columns: 1fr !important; }
+          .fdv-card { padding: 14px !important; }
+          .fdv-card-emoji { font-size: 28px !important; }
+          .fdv-doc-row { padding: 12px 14px !important; }
+          .fdv-doc-row a { padding: 8px 12px; min-height: 36px; display: inline-flex; align-items: center; }
+          .fdv-modal-content { width: 100% !important; max-width: 100% !important; height: 100% !important; max-height: 100% !important; border-radius: 0 !important; }
+          .fdv-modal-overlay { padding: 0 !important; align-items: stretch !important; }
+          .fdv-modal-form { padding: 16px !important; }
+          .fdv-modal-form input, .fdv-modal-form select, .fdv-modal-form textarea {
+            font-size: 16px !important; /* Hindrer iOS-zoom */
+            min-height: 44px;
+            box-sizing: border-box;
+          }
+          .fdv-modal-actions { flex-direction: column-reverse !important; }
+          .fdv-modal-actions button { width: 100% !important; min-height: 48px !important; }
+          .fdv-ue-card { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
+          .fdv-ue-card-actions { width: 100%; flex-wrap: wrap; }
+          .fdv-ue-card-actions button { flex: 1 1 calc(50% - 4px); min-height: 40px; }
+        }
+        /* Touch-target minimum for alle skjermer */
+        .fdv-btn-touch { min-height: 44px; min-width: 44px; }
+      `}</style>
+      <div className="fdv-header" style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px', flexWrap:'wrap', gap:'12px' }}>
-          <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📚 FDV-dokumentasjon</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Forvaltning, Drift og Vedlikehold · NS 3456:2022 + NS 3451</p>
+          <div style={{ minWidth: 0, flex: '1 1 200px' }}>
+            <h1 className="fdv-header-title" style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📚 FDV-dokumentasjon</h1>
+            <p className="fdv-header-subtitle" style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Forvaltning, Drift og Vedlikehold · NS 3456:2022 + NS 3451</p>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+          <div className="fdv-header-actions" style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
             {filterProject !== 'alle' && (
               <button onClick={eksporterZIP} title="Last ned ZIP med NS 3456-mappestruktur"
                 style={{ padding:'10px 16px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
@@ -34220,11 +34280,11 @@ function FDVPage() {
 
         {/* Patch 25: Progresjons-banner (kun når prosjekt valgt) */}
         {filterProject !== 'alle' && (
-          <div style={{ background: progressPct >= 80 ? '#ecfdf5' : progressPct >= 50 ? '#fffbeb' : '#fef2f2',
+          <div className="fdv-progress" style={{ background: progressPct >= 80 ? '#ecfdf5' : progressPct >= 50 ? '#fffbeb' : '#fef2f2',
             border: `1px solid ${progressPct >= 80 ? '#bbf7d0' : progressPct >= 50 ? '#fde68a' : '#fecaca'}`,
             borderRadius:'12px', padding:'14px 18px', marginBottom:'14px',
             display:'flex', alignItems:'center', gap:'14px' }}>
-            <div style={{ width:'56px', height:'56px', borderRadius:'50%',
+            <div className="fdv-progress-circle" style={{ width:'56px', height:'56px', borderRadius:'50%',
               background: progressPct >= 80 ? '#dcfce7' : progressPct >= 50 ? '#fef3c7' : '#fee2e2',
               color: progressPct >= 80 ? '#15803d' : progressPct >= 50 ? '#92400e' : '#b91c1c',
               display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'16px', flexShrink:0 }}>
@@ -34261,8 +34321,8 @@ function FDVPage() {
           </div>
         )}
 
-        <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
-          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+        <div className="fdv-filter-row" style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+          <div className="fdv-tabs" style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['kapitler','📚 NS 3456'],['ue','👷 UE-leveranser'],['komponenter','🔩 Komponenter'],['dokumenter','📄 Alle dokumenter']].map(([v,l])=>(
               <button key={v} onClick={()=>{setView(v); setAktivtKapittel(null)}} style={{ padding:'8px 16px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
             ))}
@@ -34282,11 +34342,11 @@ function FDVPage() {
         </div>
       </div>
 
-      <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'14px' }}>
+      <div className="fdv-body" style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'14px' }}>
 
         {/* PATCH 25: NS 3456-VISNING */}
         {view === 'kapitler' && !aktivtKapittel && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+          <div className="fdv-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
             {NS3456_KAPITLER.map(kap => {
               const kapDocs = dokumenterPerKapittel[kap.id] || []
               const ekte = kapDocs.filter(d => !d._virtual).length
@@ -34373,7 +34433,7 @@ function FDVPage() {
 
         {/* EKSISTERENDE: KOMPONENTER */}
         {view === 'komponenter' && (
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+          <div className="fdv-grid" style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
             {filteredComps.map(c => (
               <button key={c.id} onClick={() => setSelectedComp(c)}
                 style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'14px', cursor:'pointer', textAlign:'left' }}>
@@ -34436,35 +34496,98 @@ function FDVPage() {
 
 function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
   const isEdit=!!initial
-  const [form, setForm] = useState({ name:initial?.name||'', category:initial?.category||'', location:initial?.location||'', project_id:initial?.project_id||'', manufacturer:initial?.manufacturer||'', model:initial?.model||'', serial_number:initial?.serial_number||'', installed_date:initial?.installed_date||'', next_service_date:initial?.next_service_date||'', service_interval_months:initial?.service_interval_months||'', notes:initial?.notes||'' })
+  const [form, setForm] = useState({ name:initial?.name||'', category:initial?.category||'', location:initial?.location||'', project_id:initial?.project_id||'', manufacturer:initial?.manufacturer||'', model:initial?.model||'', serial_number:initial?.serial_number||'', installed_date:initial?.installed_date||'', next_service_date:initial?.next_service_date||'', service_interval_months:initial?.service_interval_months||'', notes:initial?.notes||'', latitude:initial?.latitude||null, longitude:initial?.longitude||null })
   const [saving, setSaving] = useState(false)
+  const [bildeFil, setBildeFil] = useState(null)
+  const [gpsHenter, setGpsHenter] = useState(false)
+  const [qrAktiv, setQrAktiv] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  const appAlert = useAppAlert()
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
   const lbl=t=><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{t}</label>
 
+  // Patch 27: Hent GPS-koordinater (felt-funksjon)
+  const hentGps = () => {
+    if (!navigator.geolocation) {
+      appAlert({ message: 'GPS ikke tilgjengelig', subMessage: 'Din enhet eller nettleser støtter ikke GPS.', kind: 'warning' })
+      return
+    }
+    setGpsHenter(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        set('latitude', pos.coords.latitude)
+        set('longitude', pos.coords.longitude)
+        setGpsHenter(false)
+        appAlert({ message: '✓ GPS-posisjon hentet', subMessage: `Lat: ${pos.coords.latitude.toFixed(6)}, Lng: ${pos.coords.longitude.toFixed(6)}`, kind: 'success' })
+      },
+      (err) => {
+        setGpsHenter(false)
+        appAlert({ message: 'Kunne ikke hente GPS', subMessage: err.message || 'Sjekk at GPS-tillatelse er gitt.', kind: 'error' })
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    )
+  }
+
+  // Patch 27: QR-/strekkodeskanner med BarcodeDetector API
+  // Returnerer false hvis ikke støttet — vi viser da fallback-melding.
+  const startQRSkann = async () => {
+    if (!('BarcodeDetector' in window)) {
+      appAlert({ message: 'Strekkodeskanner ikke støttet', subMessage: 'Din nettleser støtter ikke BarcodeDetector API. Bruk Chrome eller Edge på Android, eller fyll inn manuelt.', kind: 'info' })
+      return
+    }
+    setQrAktiv(true)
+  }
+
   const handleSave = async () => {
-    if (!form.name.trim()) return alert('Navn er påkrevd')
+    if (!form.name.trim()) { appAlert({ message: 'Navn er påkrevd', kind: 'warning' }); return }
     setSaving(true)
     try {
       const payload={...form,project_id:form.project_id||null,installed_date:form.installed_date||null,next_service_date:form.next_service_date||null,service_interval_months:form.service_interval_months?parseInt(form.service_interval_months):null,updated_at:new Date().toISOString()}
+      let compId = initial?.id
       if (isEdit) { const {error}=await supabase.from('fdv_components').update(payload).eq('id',initial.id); if(error) throw error }
-      else { const {error}=await supabase.from('fdv_components').insert({...payload,created_by:user?.id}); if(error) throw error }
+      else {
+        const {data, error}=await supabase.from('fdv_components').insert({...payload,created_by:user?.id}).select().single()
+        if(error) throw error
+        compId = data?.id
+      }
+      // Patch 27: Last opp bilde hvis tatt med kamera
+      if (bildeFil && compId) {
+        try {
+          const ext = bildeFil.name.split('.').pop() || 'jpg'
+          const path = `${compId}/${Date.now()}.${ext}`
+          const { error: upErr } = await supabase.storage.from('fdv-bilder').upload(path, bildeFil, { upsert: false })
+          if (!upErr) {
+            const { data: pub } = supabase.storage.from('fdv-bilder').getPublicUrl(path)
+            await supabase.from('fdv_documents').insert({
+              title: `Foto av ${form.name}`,
+              project_id: form.project_id || null,
+              component_id: compId,
+              file_url: pub?.publicUrl,
+              file_name: bildeFil.name,
+              doc_type: 'annet',
+              ns3456_kapittel: kategoriTilNS3456Kapittel(form.category),
+              created_by: user?.id,
+            })
+          }
+        } catch (e) { console.warn('Bilde-opplasting feilet:', e) }
+      }
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+    } catch(e) { appAlert({ message: 'Kunne ikke lagre', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div className="fdv-modal-overlay" style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'620px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+      <div className="fdv-modal-content" style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'620px',maxHeight:'92vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>🔩 {isEdit?'Rediger':'Ny'} komponent</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <div className="fdv-modal-actions" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer...':isEdit?'Lagre':'Legg til'}</button>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
+        <div className="fdv-modal-form" style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'grid',gridTemplateColumns:'1fr 1fr',gap:'12px' }}>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Navn *')}<input value={form.name} onChange={e=>set('name',e.target.value)} placeholder="F.eks. Ventilasjon aggregat" style={fInp} /></div>
           <div>{lbl('Kategori')}<select value={form.category} onChange={e=>set('category',e.target.value)} style={fInp}><option value="">Velg...</option>{FDV_CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
           <div>{lbl('Plassering')}<input value={form.location} onChange={e=>set('location',e.target.value)} placeholder="F.eks. Kjeller / Rom 101" style={fInp} /></div>
@@ -34475,9 +34598,139 @@ function FDVComponentModal({ projects, user, initial, onClose, onSaved }) {
           <div>{lbl('Installasjonsdato')}<input type="date" value={form.installed_date} onChange={e=>set('installed_date',e.target.value)} style={fInp} /></div>
           <div>{lbl('Neste service')}<input type="date" value={form.next_service_date} onChange={e=>set('next_service_date',e.target.value)} style={fInp} /></div>
           <div>{lbl('Serviceintervall (mnd)')}<input type="number" value={form.service_interval_months} onChange={e=>set('service_interval_months',e.target.value)} placeholder="12" style={fInp} /></div>
+
+          {/* Patch 27: Felt-funksjoner (kamera, QR, GPS) */}
+          <div style={{ gridColumn:'1/-1', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginTop:'4px' }}>
+            <div style={{ fontSize:'11px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'10px' }}>📲 Felt-verktøy</div>
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+              {/* Kamera-knapp: bruker capture for å åpne kamera direkte på mobil */}
+              <label style={{ flex:'1 1 140px', padding:'10px 12px', background: bildeFil ? '#ecfdf5' : 'white', border: bildeFil ? '1px solid #10b981' : '1px solid #cbd5e1', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color: bildeFil ? '#065f46' : '#475569', textAlign:'center', minHeight:'44px', display:'flex', alignItems:'center', justifyContent:'center', gap:'6px' }}>
+                <input type="file" accept="image/*" capture="environment" onChange={e => setBildeFil(e.target.files?.[0] || null)} style={{ display:'none' }} />
+                {bildeFil ? `✓ ${bildeFil.name.substring(0, 16)}${bildeFil.name.length > 16 ? '...' : ''}` : '📸 Ta bilde'}
+              </label>
+              {/* QR-skanner */}
+              <button type="button" onClick={startQRSkann}
+                style={{ flex:'1 1 140px', padding:'10px 12px', background:'white', border:'1px solid #cbd5e1', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569', minHeight:'44px' }}>
+                🔍 Skann QR/strekkode
+              </button>
+              {/* GPS-knapp */}
+              <button type="button" onClick={hentGps} disabled={gpsHenter}
+                style={{ flex:'1 1 140px', padding:'10px 12px', background: form.latitude ? '#ecfdf5' : 'white', border: form.latitude ? '1px solid #10b981' : '1px solid #cbd5e1', borderRadius:'10px', cursor: gpsHenter ? 'wait' : 'pointer', fontSize:'13px', fontWeight:'600', color: form.latitude ? '#065f46' : '#475569', minHeight:'44px' }}>
+                {gpsHenter ? '⏳ Henter...' : form.latitude ? `✓ GPS lagret` : '📍 Hent GPS'}
+              </button>
+            </div>
+            {bildeFil && (
+              <div style={{ marginTop:'8px', fontSize:'11px', color:'#475569' }}>
+                Bilde lastes opp og kobles automatisk til komponenten når du lagrer.
+              </div>
+            )}
+            {form.latitude && (
+              <div style={{ marginTop:'8px', fontSize:'11px', color:'#475569' }}>
+                GPS: {form.latitude.toFixed(6)}, {form.longitude.toFixed(6)}
+              </div>
+            )}
+          </div>
+
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} style={{ ...fInp,resize:'none' }} /></div>
         </div>
 
+        {/* Patch 27: QR-skanner-overlay */}
+        {qrAktiv && (
+          <QRSkannerModal
+            onClose={() => setQrAktiv(false)}
+            onScanned={(verdi) => {
+              setQrAktiv(false)
+              set('serial_number', verdi)
+              appAlert({ message: `✓ Skannet: ${verdi}`, subMessage: 'Verdi lagt til i serienummer-feltet.', kind: 'success' })
+            }}
+          />
+        )}
+
+      </div>
+    </div>
+  )
+}
+
+// Patch 27: QR-/strekkodeskanner — bruker native BarcodeDetector API
+function QRSkannerModal({ onClose, onScanned }) {
+  const videoRef = React.useRef(null)
+  const [feilmelding, setFeilmelding] = useState(null)
+  const [skannet, setSkannet] = useState(null)
+
+  useEffect(() => {
+    let stream = null
+    let intervalId = null
+    let cancelled = false
+
+    const start = async () => {
+      try {
+        if (!('BarcodeDetector' in window)) {
+          setFeilmelding('Din nettleser støtter ikke BarcodeDetector. Bruk Chrome eller Edge på Android, eller fyll inn manuelt.')
+          return
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        })
+        if (cancelled || !videoRef.current) return
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+
+        // eslint-disable-next-line no-undef
+        const detector = new BarcodeDetector({
+          formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'data_matrix']
+        })
+        intervalId = setInterval(async () => {
+          if (!videoRef.current || cancelled) return
+          try {
+            const codes = await detector.detect(videoRef.current)
+            if (codes && codes.length > 0) {
+              const verdi = codes[0].rawValue
+              setSkannet(verdi)
+              clearInterval(intervalId)
+              setTimeout(() => onScanned(verdi), 600)
+            }
+          } catch { /* ignorer */ }
+        }, 400)
+      } catch (e) {
+        setFeilmelding(`Kunne ikke åpne kamera: ${e.message}. Sjekk at kamera-tillatelse er gitt.`)
+      }
+    }
+    start()
+
+    return () => {
+      cancelled = true
+      if (intervalId) clearInterval(intervalId)
+      if (stream) stream.getTracks().forEach(t => t.stop())
+    }
+  }, [onScanned])
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', zIndex:200, display:'flex', flexDirection:'column', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ padding:'14px 18px', display:'flex', justifyContent:'space-between', alignItems:'center', color:'white' }}>
+        <div style={{ fontSize:'16px', fontWeight:'700' }}>🔍 Skann strekkode / QR</div>
+        <button onClick={onClose} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'white', fontSize:'24px', cursor:'pointer', padding:'4px 12px', borderRadius:'8px', minHeight:'40px', minWidth:'40px' }}>×</button>
+      </div>
+      <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}>
+        {feilmelding ? (
+          <div style={{ padding:'24px', textAlign:'center', color:'white', maxWidth:'400px' }}>
+            <div style={{ fontSize:'48px', marginBottom:'12px' }}>⚠️</div>
+            <div style={{ fontSize:'14px', lineHeight:1.5, marginBottom:'18px' }}>{feilmelding}</div>
+            <button onClick={onClose} style={{ padding:'12px 24px', background:'white', color:'#0f172a', border:'none', borderRadius:'10px', fontWeight:'700', cursor:'pointer', minHeight:'48px' }}>Lukk</button>
+          </div>
+        ) : (
+          <>
+            <video ref={videoRef} playsInline muted style={{ maxWidth:'100%', maxHeight:'70vh', borderRadius:'12px' }} />
+            <div style={{ position:'absolute', inset:'10%', border:'2px solid rgba(255,255,255,0.6)', borderRadius:'12px', pointerEvents:'none' }} />
+            {skannet && (
+              <div style={{ position:'absolute', bottom:'24px', left:'50%', transform:'translateX(-50%)', background:'#10b981', color:'white', padding:'12px 20px', borderRadius:'12px', fontWeight:'700', fontSize:'14px' }}>
+                ✓ Skannet: {skannet}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+      <div style={{ padding:'14px 18px', textAlign:'center', color:'rgba(255,255,255,0.7)', fontSize:'12px' }}>
+        Hold kameraet stødig mot strekkoden eller QR-koden
       </div>
     </div>
   )
@@ -34510,26 +34763,26 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
   const filteredComponents = form.project_id ? components.filter(c=>c.project_id===form.project_id) : components
 
   return (
-    <div style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
+    <div className="fdv-modal-overlay" style={{ position:'fixed',inset:0,zIndex:100,display:'flex',alignItems:'center',justifyContent:'center',padding:'16px' }}>
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
+      <div className="fdv-modal-content" style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
           <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📎 Last opp FDV-dokument</h2>
-          <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+          <div className="fdv-modal-actions" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Laster opp...':'Last opp'}</button>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
           </div>
         </div>
-        <div style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
+        <div className="fdv-modal-form" style={{ overflowY:'auto',flex:1,padding:'20px 24px',display:'flex',flexDirection:'column',gap:'12px' }}>
           {[['Tittel *','title','text','F.eks. Brukermanual ventilasjon']].map(([l,k,t,ph])=>(
             <div key={k}><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>{l}</label><input type={t} value={form[k]} onChange={e=>set(k,e.target.value)} placeholder={ph} style={fInp} /></div>
           ))}
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'8px' }}>Dokumenttype</label>
-            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : 'repeat(3,1fr)',gap:'6px' }}>
+            <div style={{ display:'grid',gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr 1fr' : 'repeat(3,1fr)',gap:'6px' }}>
               {Object.entries(FDV_DOC_TYPES).map(([k,v])=>(
-                <button key={k} onClick={()=>set('doc_type',k)} style={{ padding:'7px',borderRadius:'8px',border:`2px solid ${form.doc_type===k?'#059669':'#e2e8f0'}`,background:form.doc_type===k?'#f0fdf4':'white',cursor:'pointer',fontSize:'11px',fontWeight:'700',color:form.doc_type===k?'#059669':'#64748b' }}>{v.emoji} {v.label}</button>
+                <button key={k} onClick={()=>set('doc_type',k)} style={{ padding:'10px 7px',borderRadius:'8px',border:`2px solid ${form.doc_type===k?'#059669':'#e2e8f0'}`,background:form.doc_type===k?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'700',color:form.doc_type===k?'#059669':'#64748b',minHeight:'44px' }}>{v.emoji} {v.label}</button>
               ))}
             </div>
           </div>
@@ -34538,7 +34791,12 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Mappe</label><input value={form.folder_path} onChange={e=>set('folder_path',e.target.value)} placeholder="/Ventilasjon" style={fInp} /></div>
           <div>
             <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Fil</label>
-            <input type="file" onChange={e=>setFile(e.target.files?.[0]||null)} accept=".pdf,.doc,.docx,.dwg,.png,.jpg" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',boxSizing:'border-box' }} />
+            <input type="file" onChange={e=>setFile(e.target.files?.[0]||null)} accept=".pdf,.doc,.docx,.dwg,.png,.jpg,image/*" style={{ width:'100%',padding:'9px 12px',border:'1px solid #e2e8f0',borderRadius:'10px',fontSize:'13px',boxSizing:'border-box',minHeight:'44px' }} />
+            {/* Patch 27: Kamera-knapp for direkte foto */}
+            <label style={{ display:'flex',alignItems:'center',justifyContent:'center',gap:'8px',marginTop:'8px',padding:'12px',background: file ? '#ecfdf5' : '#f8fafc',border:`1px solid ${file ? '#10b981' : '#cbd5e1'}`,borderRadius:'10px',cursor:'pointer',fontSize:'13px',fontWeight:'600',color: file ? '#065f46' : '#475569',minHeight:'48px' }}>
+              <input type="file" accept="image/*" capture="environment" onChange={e=>setFile(e.target.files?.[0]||null)} style={{ display:'none' }} />
+              {file && file.type?.startsWith('image/') ? `✓ Bilde valgt: ${file.name.substring(0,20)}` : '📸 Eller ta bilde med kamera'}
+            </label>
           </div>
         </div>
 
