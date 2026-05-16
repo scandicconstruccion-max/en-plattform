@@ -47733,13 +47733,15 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
           </div>
 
           <div style={{ marginTop:'18px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'14px 16px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'6px' }}>💡 Slik fungerer det</div>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'6px' }}>💡 Slik fungerer BIM-Kalkyle</div>
             <ol style={{ margin:0, padding:'0 0 0 18px', fontSize:'12px', color:'#1e3a8a', lineHeight:1.7 }}>
-              <li>Last opp IFC-fil fra arkitekten din</li>
-              <li>Systemet leser geometri og lagstruktur (kjører kun i din nettleser — filen forlater aldri din maskin)</li>
-              <li>Mengder beregnes automatisk: vegger, vinduer, dører, tak, gulv (kommer i neste oppdatering)</li>
-              <li>Konstruksjoner matches mot ditt bibliotek (kommer)</li>
-              <li>Kalkyle genereres med ekte mengder — du justerer, godkjenner og oppretter (kommer)</li>
+              <li>Last opp IFC-fil (IFC2X3 eller IFC4) fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy</li>
+              <li>Systemet leser geometri, lagstruktur og materialer lokalt i nettleseren — filen forlater aldri din maskin</li>
+              <li>Automatisk mengdeuttak for vegger, vinduer, dører, tak, gulv, etasjeskiller, søyler, bjelker, trapper og sanitærutstyr</li>
+              <li>Diagnose-rapport viser kvalitet på geometri-uttrekk så du vet hva som kan stoles på</li>
+              <li>3D-visning av hele bygget med lagsett uthevet — klikk på et lagsett for å se det i modellen</li>
+              <li>Visuelt tverrsnitt av lagstrukturen og bibliotek-matching mot dine konstruksjoner med likhets-score</li>
+              <li>Tilpasningspanel med IFC-supplering (brann, lyd, U-verdi, bæring) — kalkyle genereres med ekte mengder, klar for tilbud</li>
             </ol>
           </div>
         </div>
