@@ -34225,32 +34225,34 @@ function FDVPage() {
       <style>{`
         /* Patch 27: Mobile-optimaliseringer for FDV */
         @media (max-width: 767px) {
-          .fdv-header { padding: 14px 16px !important; }
+          .fdv-header { padding: 12px 14px !important; }
           .fdv-header-title { font-size: 18px !important; }
           .fdv-header-subtitle { font-size: 11px !important; }
-          .fdv-header-actions { width: 100%; flex-wrap: wrap; }
-          .fdv-header-actions button { flex: 1 1 calc(50% - 4px); justify-content: center; min-height: 44px; }
-          .fdv-progress { padding: 12px 14px !important; }
-          .fdv-progress-circle { width: 48px !important; height: 48px !important; font-size: 14px !important; }
-          .fdv-tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
-          .fdv-tabs button { white-space: nowrap; min-height: 44px; padding: 10px 14px !important; }
-          .fdv-filter-row { flex-direction: column; align-items: stretch !important; }
+          .fdv-header-actions { width: 100%; flex-wrap: wrap; gap: 6px !important; }
+          .fdv-header-actions button { flex: 1 1 calc(50% - 4px); justify-content: center; min-height: 44px; font-size: 13px !important; }
+          .fdv-progress { padding: 10px 12px !important; gap: 10px !important; margin-bottom: 10px !important; }
+          .fdv-progress-circle { width: 44px !important; height: 44px !important; font-size: 13px !important; }
+          .fdv-tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+          .fdv-tabs::-webkit-scrollbar { display: none; }
+          .fdv-tabs button { white-space: nowrap; min-height: 44px; padding: 10px 14px !important; font-size: 12px !important; flex-shrink: 0; }
+          .fdv-filter-row { flex-direction: column; align-items: stretch !important; gap: 8px !important; }
           .fdv-filter-row > * { width: 100% !important; max-width: 100% !important; min-height: 44px; box-sizing: border-box; }
-          .fdv-body { padding: 14px !important; }
-          .fdv-grid { grid-template-columns: 1fr !important; }
+          .fdv-filter-row input, .fdv-filter-row select { font-size: 16px !important; }
+          .fdv-body { padding: 12px !important; gap: 10px !important; }
+          .fdv-grid { grid-template-columns: 1fr !important; gap: 8px !important; }
           .fdv-card { padding: 14px !important; }
           .fdv-card-emoji { font-size: 28px !important; }
           .fdv-doc-row { padding: 12px 14px !important; }
           .fdv-doc-row a { padding: 8px 12px; min-height: 36px; display: inline-flex; align-items: center; }
           .fdv-modal-content { width: 100% !important; max-width: 100% !important; height: 100% !important; max-height: 100% !important; border-radius: 0 !important; }
           .fdv-modal-overlay { padding: 0 !important; align-items: stretch !important; }
-          .fdv-modal-form { padding: 16px !important; }
+          .fdv-modal-form { padding: 16px !important; grid-template-columns: 1fr !important; }
           .fdv-modal-form input, .fdv-modal-form select, .fdv-modal-form textarea {
             font-size: 16px !important; /* Hindrer iOS-zoom */
             min-height: 44px;
             box-sizing: border-box;
           }
-          .fdv-modal-actions { flex-direction: column-reverse !important; }
+          .fdv-modal-actions { flex-direction: column-reverse !important; width: 100%; }
           .fdv-modal-actions button { width: 100% !important; min-height: 48px !important; }
           .fdv-ue-card { flex-direction: column !important; align-items: flex-start !important; gap: 10px !important; }
           .fdv-ue-card-actions { width: 100%; flex-wrap: wrap; }
@@ -59200,7 +59202,7 @@ function AppContent() {
   const isTablet = windowWidth >= 768 && windowWidth < 1024
 
   // Feltmoduler — fulloptimert for mobil
-  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator','bim_kalkyle','ressursplan']
+  const FIELD_MODULES = ['dashboard','prosjekter','prosjektfiler','sjekklister','avvik','hms','maskiner','kunder','tilbud','faktura','anbudsmodul','ansatte','varsler','endringsmelding','ordre','chat','timelister','kalender','befaring','bildedok','minbedrift','brukeradmin','kalkulator','bim_kalkyle','ressursplan','fdv']
   const isFieldModule = (id) => FIELD_MODULES.includes(id)
 
   // Load active modules from company_settings
