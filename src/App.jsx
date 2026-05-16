@@ -48632,6 +48632,10 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     if (autoOpenBim && bimActiveModules.length > 0) {
       if (hasBimKalkyle(bimActiveModules)) setShowBimImport(true)
       else setShowBimUpsell(true)
+    } else if (!autoOpenBim) {
+      // Brukeren navigerte fra bim_kalkyle til kalkulator — lukk BIM-flyten
+      setShowBimImport(false)
+      setShowBimUpsell(false)
     }
   }, [autoOpenBim, bimActiveModules])
 
@@ -48778,7 +48782,12 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
 
   if (showBimImport) return <BimImportPage
-    onTilbake={() => { setShowBimImport(false); setEditBimSesjon(null) }}
+    onTilbake={() => {
+      setShowBimImport(false)
+      setEditBimSesjon(null)
+      // Hvis brukeren kom direkte fra bim_kalkyle-URL, naviger til kalkulator-listen
+      if (autoOpenBim && onNavigate) onNavigate('kalkulator')
+    }}
     onAlert={appAlert}
     onKalkyleOpprettet={async (created) => {
       // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
@@ -58375,7 +58384,7 @@ function AppContent() {
         {page === 'varsler' && <VarslerPage onNavigate={navigate} />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'varsler' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'bim_kalkyle' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'varsler' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
         </>)}
