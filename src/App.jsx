@@ -33394,11 +33394,12 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
       const { data, error } = await supabase.from('fdv_ue_requests').insert(insertData).select().single()
       console.log('[FDV-UE] Insert-resultat:', { data, error })
       if (error) throw error
-      await appAlert({ message: '✓ UE-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
+      // Patch 26 fix: Lukk modalen først, så vis suksess (uten å vente)
       onSaved()
+      appAlert({ message: '✓ UE-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
     } catch (e) {
       console.error('[FDV-UE] FEIL:', e)
-      await appAlert({ message: 'Kunne ikke opprette', subMessage: e.message || JSON.stringify(e), kind: 'error' })
+      appAlert({ message: 'Kunne ikke opprette', subMessage: e.message || JSON.stringify(e), kind: 'error' })
     } finally {
       setSaving(false)
     }
