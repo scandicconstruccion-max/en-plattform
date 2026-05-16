@@ -33357,12 +33357,9 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
     if (!form.ue_name) { appAlert({ message: 'UE-navn er påkrevd', kind: 'warning' }); return }
     setSaving(true)
     try {
-      // Hent company_id
-      const { data: profile } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
       const token = genererUeToken()
-      const { error } = await supabase.from('fdv_ue_requests').insert({
+      const insertData = {
         project_id: projectId,
-        company_id: profile?.company_id,
         ue_name: form.ue_name,
         ue_contact_name: form.ue_contact_name || null,
         ue_contact_email: form.ue_contact_email || null,
@@ -33374,7 +33371,13 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
         status: 'pending',
         token,
         created_by: user?.id,
-      })
+      }
+      // Prøv å hente company_id hvis den finnes (valgfritt)
+      try {
+        const { data: profile } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
+        if (profile?.company_id) insertData.company_id = profile.company_id
+      } catch {}
+      const { error } = await supabase.from('fdv_ue_requests').insert(insertData)
       if (error) throw error
       await appAlert({ message: '✓ UE-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
       onSaved()
