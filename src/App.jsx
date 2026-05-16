@@ -32887,17 +32887,186 @@ const FDV_DOC_TYPES = {
   annet:       { label:'Annet',        emoji:'📄' },
 }
 
+// Patch 25: NS 3456:2022 hovedkapittel-struktur
+const NS3456_KAPITLER = [
+  { id: '1', navn: 'Generell FDVU',         beskrivelse: 'Tegninger som bygget, byggeprotokoll, garantier, kontrakter, sluttrapporter', emoji: '📚' },
+  { id: '2', navn: 'Bygning',               beskrivelse: '21 Grunn og fundamenter · 22 Bæresystem · 23 Yttervegger · 24 Innervegger · 25 Dekker · 26 Yttertak · 27 Fast inventar · 28 Trapper · 29 Andre bygningsdeler', emoji: '🏗️' },
+  { id: '3', navn: 'VVS-installasjoner',    beskrivelse: '31 Sanitær · 32 Varme · 33 Brannslokking · 34 Gass · 35 Kjøling · 36 Luftbehandling · 37 Komfortkjøling', emoji: '🚰' },
+  { id: '4', navn: 'Elkraft',               beskrivelse: '41 Generelle anlegg · 42 Høyspent · 43 Lavspent forsyning · 44 Belysning · 45 Elvarme · 46 Reservekraft', emoji: '⚡' },
+  { id: '5', navn: 'Tele og automatisering',beskrivelse: '51 Generelle anlegg · 52 Integrert kommunikasjon · 53 Telefoni · 54 Alarm og signal · 55 Lyd og bilde · 56 Automatisering', emoji: '📡' },
+  { id: '6', navn: 'Andre installasjoner',  beskrivelse: '61 Prefabrikkerte rom · 62 Person- og varetransport · 63 Transportanlegg · 64 Scene- og studio · 65 Avfallshåndtering', emoji: '⚙️' },
+  { id: '7', navn: 'Utendørs',              beskrivelse: '71 Bearbeidet terreng · 72 Konstruksjoner utendørs · 73 Utendørs VVS · 74 Utendørs elkraft · 75 Utendørs tele · 76 Veier og plasser · 77 Park og hage', emoji: '🌳' },
+]
+
+// Mapping fra fag-id (FAGGRUPPER) til NS 3456 hovedkapittel
+function fagTilNS3456Kapittel(fagId) {
+  const map = {
+    tomrer: '2',         // Bygning (vegger, dekker, tak, innredning)
+    murer: '2',          // Bygning
+    betong: '2',         // Bygning
+    grunnarbeid: '2',    // Bygning (grunn/fundamenter)
+    maler: '2',          // Bygning (overflater)
+    blikkenslager: '2',  // Bygning (tak/fasade)
+    rorleger: '3',       // VVS
+    elektriker: '4',     // Elkraft
+    ventilasjon: '3',    // VVS (luftbehandling)
+    rigg: '1',           // Generell
+    ue: '1',             // Generell (sub-entreprenør)
+  }
+  return map[fagId] || '1'
+}
+
+// Mapping fra FDV_CATEGORIES (eksisterende komponent-kategorier) til NS 3456
+function kategoriTilNS3456Kapittel(kategori) {
+  const map = {
+    'Ventilasjon':  '3',
+    'Elektro':      '4',
+    'VVS/Rør':      '3',
+    'Heis':         '6',
+    'Brann':        '3',
+    'Alarm':        '5',
+    'Tak/Fasade':   '2',
+    'Gulv/Vegg':    '2',
+    'Kjøling':      '3',
+    'Oppvarming':   '3',
+    'Utendørs':     '7',
+    'Annet':        '1',
+  }
+  return map[kategori] || '1'
+}
+
+// Auto-fang: hent dokumenter som kan auto-trekkes inn i FDV for et prosjekt.
+// Returnerer et flatt array av "virtuelle" FDV-dokumenter (ikke lagret i fdv_documents
+// ennå — kun avledet fra eksisterende moduler).
+async function hentAutoFangedeDokumenter(projectId) {
+  if (!projectId || projectId === 'alle') return []
+  const resultat = []
+
+  try {
+    // 1) Sjekklister med status 'fullført'
+    const { data: sjekklister } = await supabase
+      .from('checklists')
+      .select('id, title, status, template_id, created_at, updated_at')
+      .eq('project_id', projectId)
+      .in('status', ['fullført', 'ferdig'])
+    for (const sl of (sjekklister || [])) {
+      // Forsøk å hente kategori fra template
+      let kapittel = '1'
+      if (sl.template_id) {
+        try {
+          const { data: tmpl } = await supabase
+            .from('checklist_templates')
+            .select('category')
+            .eq('id', sl.template_id)
+            .single()
+          if (tmpl?.category) kapittel = fagTilNS3456Kapittel(tmpl.category)
+        } catch {}
+      }
+      resultat.push({
+        id: `auto-sjekk-${sl.id}`,
+        title: sl.title || 'Sjekkliste',
+        ns3456_kapittel: kapittel,
+        auto_source: 'sjekkliste',
+        auto_source_id: sl.id,
+        doc_type: 'rapport',
+        created_at: sl.created_at,
+        updated_at: sl.updated_at,
+        _virtual: true,
+      })
+    }
+
+    // 2) Befaringer (alle typer)
+    const { data: befaringer } = await supabase
+      .from('inspections')
+      .select('id, date, type, status, purpose, created_at')
+      .eq('project_id', projectId)
+    for (const b of (befaringer || [])) {
+      const tittel = b.purpose || b.type || 'Befaring'
+      resultat.push({
+        id: `auto-bef-${b.id}`,
+        title: `${tittel} (${b.date || ''})`.trim(),
+        ns3456_kapittel: '1',  // Befaringer hører til Generell FDVU
+        auto_source: 'befaring',
+        auto_source_id: b.id,
+        doc_type: 'rapport',
+        created_at: b.created_at,
+        updated_at: b.created_at,
+        _virtual: true,
+      })
+    }
+
+    // 3) Avvik med status 'lukket'
+    const { data: avvik } = await supabase
+      .from('deviations')
+      .select('id, title, deviation_number, status, category, created_at, closed_at')
+      .eq('project_id', projectId)
+      .in('status', ['lukket', 'closed', 'lost'])
+    for (const a of (avvik || [])) {
+      resultat.push({
+        id: `auto-avvik-${a.id}`,
+        title: `Avvik ${a.deviation_number || ''}: ${a.title || ''}`.trim(),
+        ns3456_kapittel: '1',  // Avvikslogg hører til Generell
+        auto_source: 'avvik',
+        auto_source_id: a.id,
+        doc_type: 'rapport',
+        created_at: a.created_at,
+        updated_at: a.closed_at || a.created_at,
+        _virtual: true,
+      })
+    }
+
+    // 4) Prosjektfiler — særlig tegninger
+    const { data: filer } = await supabase
+      .from('project_files')
+      .select('id, file_name, file_url, folder_path, created_at')
+      .eq('project_id', projectId)
+    for (const f of (filer || [])) {
+      // Klassifiser basert på filnavn/mappe
+      const navn = (f.file_name || '').toLowerCase()
+      const mappe = (f.folder_path || '').toLowerCase()
+      let kapittel = '1'
+      if (/tegning|drawing|plan|snitt|fasade|dwg/i.test(navn) || /tegning|drawing/i.test(mappe)) kapittel = '1'
+      else if (/elektro|el-|elektrisk/i.test(navn + mappe)) kapittel = '4'
+      else if (/vvs|rør|sanitær|vent/i.test(navn + mappe)) kapittel = '3'
+      else if (/tele|alarm|automasjon/i.test(navn + mappe)) kapittel = '5'
+
+      resultat.push({
+        id: `auto-fil-${f.id}`,
+        title: f.file_name || 'Prosjektfil',
+        ns3456_kapittel: kapittel,
+        auto_source: 'prosjektfil',
+        auto_source_id: f.id,
+        file_url: f.file_url,
+        doc_type: 'tegning',
+        created_at: f.created_at,
+        updated_at: f.created_at,
+        _virtual: true,
+      })
+    }
+  } catch (e) {
+    console.warn('Auto-fang feilet:', e)
+  }
+
+  return resultat
+}
+
 const fInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
+
 
 function FDVPage() {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
   const [components, setComponents] = useState([])
   const [documents, setDocuments] = useState([])
+  const [autoDocs, setAutoDocs] = useState([])  // Patch 25: auto-fangede virtuelle dokumenter
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
   const [filterProject, setFilterProject] = useState('alle')
   const [filterCat, setFilterCat] = useState('alle')
-  const [view, setView] = useState('komponenter')
+  const [view, setView] = useState('kapitler')  // 'kapitler' (ny default) | 'komponenter' | 'dokumenter'
+  const [aktivtKapittel, setAktivtKapittel] = useState(null)  // For NS 3456-drill-down
   const [showNewComp, setShowNewComp] = useState(false)
   const [showUploadDoc, setShowUploadDoc] = useState(false)
   const [selectedComp, setSelectedComp] = useState(null)
@@ -32916,6 +33085,16 @@ function FDVPage() {
   }
   useEffect(()=>{ load() },[])
 
+  // Patch 25: Auto-fang når prosjekt velges
+  useEffect(() => {
+    if (filterProject === 'alle') { setAutoDocs([]); return }
+    let cancelled = false
+    hentAutoFangedeDokumenter(filterProject).then(d => {
+      if (!cancelled) setAutoDocs(d)
+    })
+    return () => { cancelled = true }
+  }, [filterProject])
+
   // Service reminders
   const today = new Date().toISOString().split('T')[0]
   const servicedue = components.filter(c=>c.next_service_date&&c.next_service_date<=new Date(Date.now()+30*24*60*60*1000).toISOString().split('T')[0])
@@ -32933,13 +33112,140 @@ function FDVPage() {
     return true
   })
 
+  // Patch 25: Kombiner ekte og virtuelle dokumenter for NS 3456-visning
+  // Filtrér ut virtuelle som allerede er synkronisert (samme auto_source_id)
+  const synkroniserteIds = new Set(documents.filter(d => d.auto_source_id).map(d => d.auto_source_id))
+  const filtrerteAutoDocs = autoDocs.filter(d => !synkroniserteIds.has(d.auto_source_id))
+  const alleDokumenter = filterProject === 'alle' ? filteredDocs : [...filteredDocs, ...filtrerteAutoDocs]
+
+  // Gruppe dokumenter per NS 3456-kapittel
+  const dokumenterPerKapittel = NS3456_KAPITLER.reduce((acc, kap) => {
+    acc[kap.id] = alleDokumenter.filter(d => {
+      // Ekte dokumenter har ns3456_kapittel-felt — virtuelle har det allerede satt
+      return d.ns3456_kapittel === kap.id
+    })
+    return acc
+  }, {})
+
+  // Progresjons-statistikk
+  const totalDokumenter = alleDokumenter.length
+  const ekteDokumenter = filteredDocs.length
+  const autoFangede = filtrerteAutoDocs.length
+  const progressPct = totalDokumenter > 0 ? Math.round((ekteDokumenter / totalDokumenter) * 100) : 0
+
+  // Patch 25: Synkroniser auto-fangede dokumenter inn i fdv_documents
+  const synkroniserAutoFang = async () => {
+    if (filterProject === 'alle' || filtrerteAutoDocs.length === 0) return
+    const ok = await confirm({
+      message: `Synkroniser ${filtrerteAutoDocs.length} auto-fangede dokumenter?`,
+      subMessage: 'Dokumentene legges til FDV-listen og kan eksporteres som del av FDV-pakken. Du kan slette dem etterpå om noen ikke passer.',
+      danger: false,
+      confirmLabel: 'Ja, synkroniser',
+    })
+    if (!ok) return
+
+    setSyncing(true)
+    try {
+      const rows = filtrerteAutoDocs.map(d => ({
+        title: d.title,
+        project_id: filterProject,
+        ns3456_kapittel: d.ns3456_kapittel,
+        auto_source: d.auto_source,
+        auto_source_id: d.auto_source_id,
+        auto_synced_at: new Date().toISOString(),
+        doc_type: d.doc_type || 'rapport',
+        file_url: d.file_url || null,
+        file_name: d.title,
+        folder_path: NS3456_KAPITLER.find(k => k.id === d.ns3456_kapittel)?.navn || '',
+        created_by: user?.id,
+      }))
+      const { error } = await supabase.from('fdv_documents').insert(rows)
+      if (error) throw error
+      await appAlert({
+        message: `✓ ${rows.length} dokumenter synkronisert`,
+        subMessage: 'Dokumentene er nå del av FDV-pakken og kan eksporteres.',
+        kind: 'success',
+      })
+      await load()
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke synkronisere', subMessage: e.message, kind: 'error' })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Patch 25: ZIP-eksport med NS 3456-struktur
+  const eksporterZIP = async () => {
+    if (filterProject === 'alle') {
+      appAlert({ message: 'Velg et prosjekt først', kind: 'warning' })
+      return
+    }
+    try {
+      // Lazy-load JSZip
+      if (typeof window.JSZip === 'undefined') {
+        await new Promise((resolve, reject) => {
+          const script = document.createElement('script')
+          script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+          script.onload = resolve
+          script.onerror = reject
+          document.head.appendChild(script)
+        })
+      }
+      const JSZip = window.JSZip
+      const zip = new JSZip()
+
+      const proj = projects.find(p => p.id === filterProject)
+      const projName = proj?.name || 'prosjekt'
+
+      // Lag NS 3456-mappestruktur
+      for (const kap of NS3456_KAPITLER) {
+        const mappeNavn = `${kap.id} ${kap.navn}`
+        const folder = zip.folder(mappeNavn)
+
+        // Legg til dokumenter i kapittelet
+        const kapDocs = alleDokumenter.filter(d => d.ns3456_kapittel === kap.id)
+        const indexContent = [
+          `${kap.navn}`,
+          '═'.repeat(50),
+          '',
+          kap.beskrivelse,
+          '',
+          `Antall dokumenter: ${kapDocs.length}`,
+          '',
+          'INNHOLD:',
+          ...kapDocs.map((d, i) => `  ${i+1}. ${d.title}${d._virtual ? ' (auto-fanget)' : ''}`),
+        ].join('\n')
+        folder.file('00 - INDEKS.txt', indexContent)
+      }
+
+      // Generér ZIP
+      const blob = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `FDV-${projName.replace(/[^a-zA-Z0-9_-]/g, '_')}-${today}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      appAlert({
+        message: '✓ ZIP lastet ned',
+        subMessage: 'NS 3456-mappestrukturen er klar. Filer må legges inn i mappene manuelt eller via "Overlever til byggherre".',
+        kind: 'success',
+      })
+    } catch (e) {
+      console.error('ZIP-eksport feilet:', e)
+      appAlert({ message: 'Kunne ikke generere ZIP', subMessage: e.message, kind: 'error' })
+    }
+  }
+
   const exportFDVPakke = async () => {
     try {
       const pdf = await createBrandedPdf()
       const { doc, pw, ph, ml, mr, cw, hex, setC, setF, setD } = pdf
 
       const proj = filterProject !== 'alle' ? projects.find(p => p.id === filterProject) : null
-      const projDocs = filterProject !== 'alle' ? filteredDocs : documents
+      const projDocs = filterProject !== 'alle' ? alleDokumenter : documents
       const projComps = filterProject !== 'alle' ? filteredComps : components
 
       pdf.drawHeader('FDV-DOKUMENTASJON', proj?.name || 'Alle prosjekter')
@@ -32948,7 +33254,7 @@ function FDVPage() {
       const checkSpace = n => { if (y + n > ph - 18) addPage() }
 
       setC(hex('#64748b')); doc.setFontSize(11); doc.setFont('helvetica', 'normal')
-      doc.text(`${projComps.length} komponenter · ${projDocs.length} dokumenter`, ml, y); y += 8
+      doc.text(`${projComps.length} komponenter · ${projDocs.length} dokumenter · NS 3456:2022`, ml, y); y += 8
 
       // ── Prosjektinformasjon ──
       if (proj) {
@@ -32959,89 +33265,66 @@ function FDVPage() {
         const projInfo = [
           { label: 'PROSJEKT', value: proj.name || '—' },
           { label: 'PROSJEKTNR', value: proj.project_number || '—' },
-          { label: 'ADRESSE', value: [proj.address_street, proj.address_city].filter(Boolean).join(', ') || '—' },
-          { label: 'STATUS', value: proj.status || '—' },
         ]
-        const colW = cw / projInfo.length
-        projInfo.forEach((c, i) => {
-          const cx = ml + 5 + i * colW
-          setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
-          doc.text(c.label, cx, y + 6)
+        const colW = cw / 2
+        projInfo.forEach((info, i) => {
+          const x = ml + 6 + (i % 2) * colW
+          const py = y + 6 + Math.floor(i / 2) * 11
+          setC(hex('#64748b')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
+          doc.text(info.label, x, py)
           setC(hex('#0f172a')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-          const lines = doc.splitTextToSize(String(c.value), colW - 6)
-          doc.text(lines.slice(0, 2), cx, y + 12)
+          doc.text(info.value, x, py + 4)
         })
-        y += infoH + 6
+        y += infoH + 8
+      }
+
+      // ── NS 3456-struktur ──
+      checkSpace(20)
+      setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+      doc.text('NS 3456-STRUKTUR', ml, y); y += 8
+
+      for (const kap of NS3456_KAPITLER) {
+        const kapDocs = projDocs.filter(d => d.ns3456_kapittel === kap.id)
+        if (kapDocs.length === 0) continue
+        checkSpace(15)
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        doc.text(`${kap.id} ${kap.navn} (${kapDocs.length})`, ml, y); y += 6
+        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+        kapDocs.forEach(d => {
+          checkSpace(5)
+          doc.text(`  · ${d.title}${d._virtual ? ' (auto-fanget)' : ''}`, ml, y); y += 4.5
+        })
+        y += 3
       }
 
       // ── Komponenter ──
-      setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
-      doc.text(`KOMPONENTER (${projComps.length})`, ml, y); y += 8
+      if (projComps.length > 0) {
+        checkSpace(20)
+        y += 4
+        setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+        doc.text(`KOMPONENTER (${projComps.length})`, ml, y); y += 8
 
-      if (projComps.length === 0) {
-        setC(hex('#94a3b8')); doc.setFontSize(10); doc.setFont('helvetica', 'italic')
-        doc.text('Ingen komponenter registrert.', ml, y); y += 8
-      } else {
         projComps.forEach(c => {
-          checkSpace(32)
-          // Kort-bakgrunn
+          checkSpace(22)
           setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
-          doc.roundedRect(ml, y, cw, 28, 2, 2, 'FD')
+          doc.roundedRect(ml, y, cw, 18, 2, 2, 'FD')
 
-          setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+          setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
           doc.text(c.name || '(uten navn)', ml + 4, y + 6)
 
           setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-          const line1 = [
+          const info = [
             c.category && `Kategori: ${c.category}`,
-            c.location && `Plassering: ${c.location}`,
-          ].filter(Boolean).join('  ·  ')
-          if (line1) doc.text(line1, ml + 4, y + 11)
-
-          const line2 = [
-            c.manufacturer && `Produsent: ${c.manufacturer}`,
+            c.manufacturer && `Leverandør: ${c.manufacturer}`,
             c.model && `Modell: ${c.model}`,
-            c.serial_number && `Serienr: ${c.serial_number}`,
-          ].filter(Boolean).join('  ·  ')
-          if (line2) doc.text(line2, ml + 4, y + 16)
-
-          const line3 = [
-            c.installed_date && `Installert: ${c.installed_date}`,
+            c.location && `Plassering: ${c.location}`,
             c.next_service_date && `Neste service: ${c.next_service_date}`,
           ].filter(Boolean).join('  ·  ')
-          if (line3) doc.text(line3, ml + 4, y + 21)
+          const lines = doc.splitTextToSize(info, cw - 10)
+          doc.text(lines[0] || '', ml + 4, y + 11)
+          if (lines[1]) doc.text(lines[1], ml + 4, y + 15)
 
-          y += 32
-        })
-      }
-
-      // ── Dokumenter ──
-      checkSpace(20)
-      y += 4
-      setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
-      doc.text(`DOKUMENTER (${projDocs.length})`, ml, y); y += 8
-
-      if (projDocs.length === 0) {
-        setC(hex('#94a3b8')); doc.setFontSize(10); doc.setFont('helvetica', 'italic')
-        doc.text('Ingen dokumenter registrert.', ml, y); y += 8
-      } else {
-        projDocs.forEach(d => {
-          checkSpace(20)
-          setF(hex('#f8fafc')); setD(hex('#e2e8f0'))
-          doc.roundedRect(ml, y, cw, 16, 2, 2, 'FD')
-
-          setC(hex('#0f172a')); doc.setFontSize(10); doc.setFont('helvetica', 'bold')
-          const titleLines = doc.splitTextToSize(d.title || '(uten tittel)', cw - 10)
-          doc.text(titleLines[0], ml + 4, y + 6)
-
-          setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-          const docInfo = [
-            `Type: ${FDV_DOC_TYPES[d.doc_type]?.label || '—'}`,
-            `Mappe: ${d.folder_path || '/'}`,
-          ].join('  ·  ')
-          doc.text(docInfo, ml + 4, y + 11)
-
-          y += 20
+          y += 22
         })
       }
 
@@ -33051,7 +33334,7 @@ function FDVPage() {
       doc.save(`FDV-${safeName}-${today}.pdf`)
     } catch (e) {
       console.error('[fdv] PDF-eksport feilet:', e)
-      alert('Kunne ikke generere PDF: ' + (e.message || e.toString()))
+      appAlert({ message: 'Kunne ikke generere PDF', subMessage: e.message, kind: 'error' })
     }
   }
 
@@ -33062,15 +33345,58 @@ function FDVPage() {
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px', flexWrap:'wrap', gap:'12px' }}>
           <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🏛️ FDV</h1>
-            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Forvaltning, Drift og Vedlikehold</p>
+            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📚 FDV-dokumentasjon</h1>
+            <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Forvaltning, Drift og Vedlikehold · NS 3456:2022 + NS 3451</p>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={()=>view==='komponenter'?setShowNewComp(true):setShowUploadDoc(true)} style={{ padding:'10px 18px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+            {filterProject !== 'alle' && (
+              <button onClick={eksporterZIP} title="Last ned ZIP med NS 3456-mappestruktur"
+                style={{ padding:'10px 16px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                📦 Last ned ZIP
+              </button>
+            )}
+            <button onClick={()=>view==='komponenter'?setShowNewComp(true):setShowUploadDoc(true)}
+              style={{ padding:'10px 18px',background:'#059669',color:'white',border:'none',borderRadius:'12px',cursor:'pointer',fontSize:'13px',fontWeight:'700' }}>
               {view==='komponenter'?'+ Ny komponent':'📎 Last opp dokument'}
             </button>
           </div>
         </div>
+
+        {/* Patch 25: Progresjons-banner (kun når prosjekt valgt) */}
+        {filterProject !== 'alle' && (
+          <div style={{ background: progressPct >= 80 ? '#ecfdf5' : progressPct >= 50 ? '#fffbeb' : '#fef2f2',
+            border: `1px solid ${progressPct >= 80 ? '#bbf7d0' : progressPct >= 50 ? '#fde68a' : '#fecaca'}`,
+            borderRadius:'12px', padding:'14px 18px', marginBottom:'14px',
+            display:'flex', alignItems:'center', gap:'14px' }}>
+            <div style={{ width:'56px', height:'56px', borderRadius:'50%',
+              background: progressPct >= 80 ? '#dcfce7' : progressPct >= 50 ? '#fef3c7' : '#fee2e2',
+              color: progressPct >= 80 ? '#15803d' : progressPct >= 50 ? '#92400e' : '#b91c1c',
+              display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'16px', flexShrink:0 }}>
+              {progressPct}%
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'6px' }}>
+                <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>
+                  {ekteDokumenter} av {totalDokumenter} dokumenter klare
+                  {autoFangede > 0 && <span style={{ fontWeight:'400', color:'#64748b' }}> · {autoFangede} klar for synkronisering</span>}
+                </span>
+                {autoFangede > 0 && (
+                  <button onClick={synkroniserAutoFang} disabled={syncing}
+                    style={{ padding:'6px 12px', background:'#2563eb', color:'white', border:'none', borderRadius:'8px', cursor:syncing?'not-allowed':'pointer', fontSize:'12px', fontWeight:'600' }}>
+                    {syncing ? 'Synkroniserer...' : '🔄 Synkroniser fra moduler'}
+                  </button>
+                )}
+              </div>
+              <div style={{ background:'#e2e8f0', borderRadius:'999px', height:'6px', marginTop:'8px', overflow:'hidden' }}>
+                <div style={{ background: progressPct >= 80 ? '#22c55e' : progressPct >= 50 ? '#f59e0b' : '#ef4444',
+                  height:'100%', borderRadius:'999px', width: `${progressPct}%` }} />
+              </div>
+              <div style={{ fontSize:'11px', color:'#64748b', marginTop:'6px' }}>
+                Auto-fang: sjekklister, befaringer, avvik og tegninger trekkes inn fra prosjektet
+              </div>
+            </div>
+          </div>
+        )}
 
         {servicedue.length>0&&(
           <div style={{ background:'#fffbeb', borderRadius:'12px', padding:'12px 16px', border:'1px solid #fde68a', marginBottom:'14px', display:'flex', alignItems:'center', gap:'10px' }}>
@@ -33081,8 +33407,8 @@ function FDVPage() {
 
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['komponenter','🔩 Komponenter'],['dokumenter','📄 Dokumenter']].map(([v,l])=>(
-              <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 16px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+            {[['kapitler','📚 NS 3456'],['komponenter','🔩 Komponenter'],['dokumenter','📄 Alle dokumenter']].map(([v,l])=>(
+              <button key={v} onClick={()=>{setView(v); setAktivtKapittel(null)}} style={{ padding:'8px 16px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
             ))}
           </div>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...fInp,maxWidth:'200px' }} />
@@ -33102,94 +33428,141 @@ function FDVPage() {
 
       <div style={{ padding:'20px 32px', display:'flex', flexDirection:'column', gap:'14px' }}>
 
-        {/* KOMPONENTER */}
-        {view==='komponenter'&&(
-          filteredComps.length===0 ? (
-            <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'60px 20px',textAlign:'center' }}>
-              <div style={{ fontSize:'40px',marginBottom:'12px' }}>🔩</div>
-              <h3 style={{ margin:'0 0 6px',color:'#0f172a' }}>Ingen komponenter registrert</h3>
-              <p style={{ margin:0,color:'#94a3b8',fontSize:'14px' }}>Legg til tekniske installasjoner og utstyr.</p>
-            </div>
-          ) : (
-            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {filteredComps.map(comp=>{
-                const proj=projects.find(p=>p.id===comp.project_id)
-                const overdue=comp.next_service_date&&comp.next_service_date<today
-                const soonService=comp.next_service_date&&!overdue&&comp.next_service_date<=new Date(Date.now()+30*24*60*60*1000).toISOString().split('T')[0]
-                const compDocs=documents.filter(d=>d.component_id===comp.id)
-                return (
-                  <div key={comp.id} onClick={()=>setSelectedComp(comp)}
-                    style={{ background:'white',borderRadius:'14px',border:`1px solid ${overdue?'#fecaca':soonService?'#fde68a':'#f1f5f9'}`,padding:'16px 20px',cursor:'pointer',display:'flex',alignItems:'center',gap:'16px',transition:'box-shadow 0.15s' }}
-                    onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-                    <div style={{ width:'44px',height:'44px',borderRadius:'12px',background:overdue?'#fef2f2':soonService?'#fffbeb':'#f0fdf4',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'22px',flexShrink:0 }}>🔩</div>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
-                        <span style={{ fontWeight:'700',color:'#0f172a',fontSize:'15px' }}>{comp.name}</span>
-                        {comp.category&&<span style={{ background:'#f8fafc',color:'#64748b',border:'1px solid #f1f5f9',padding:'2px 8px',borderRadius:'999px',fontSize:'11px' }}>{comp.category}</span>}
-                        {overdue&&<span style={{ background:'#fef2f2',color:'#dc2626',border:'1px solid #fecaca',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>🔧 Service forfalt</span>}
-                        {soonService&&<span style={{ background:'#fffbeb',color:'#d97706',border:'1px solid #fde68a',padding:'2px 8px',borderRadius:'999px',fontSize:'11px',fontWeight:'700' }}>⏰ Service snart</span>}
-                      </div>
-                      <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
-                        {comp.manufacturer&&<span>🏭 {comp.manufacturer}{comp.model?` · ${comp.model}`:''}</span>}
-                        {comp.location&&<span>📍 {comp.location}</span>}
-                        {proj&&<span style={{ color:'#2563eb',fontWeight:'500' }}>🏗️ {proj.name}</span>}
-                        {comp.next_service_date&&<span style={{ color:overdue?'#dc2626':soonService?'#d97706':'#64748b',fontWeight:overdue||soonService?'700':'400' }}>🔧 Service: {comp.next_service_date}</span>}
-                        {compDocs.length>0&&<span>📄 {compDocs.length} dok.</span>}
+        {/* PATCH 25: NS 3456-VISNING */}
+        {view === 'kapitler' && !aktivtKapittel && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+            {NS3456_KAPITLER.map(kap => {
+              const kapDocs = dokumenterPerKapittel[kap.id] || []
+              const ekte = kapDocs.filter(d => !d._virtual).length
+              const auto = kapDocs.filter(d => d._virtual).length
+              return (
+                <button key={kap.id} onClick={() => setAktivtKapittel(kap)}
+                  style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'16px', cursor:'pointer', textAlign:'left', transition:'all 0.15s' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.06)' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}>
+                  <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', marginBottom:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span style={{ fontSize:'24px' }}>{kap.emoji}</span>
+                      <div>
+                        <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.5px' }}>KAPITTEL {kap.id}</div>
+                        <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{kap.navn}</div>
                       </div>
                     </div>
-                    <span style={{ color:'#94a3b8',fontSize:'18px' }}>›</span>
                   </div>
-                )
-              })}
-            </div>
-          )
+                  <p style={{ fontSize:'11px', color:'#64748b', margin:'0 0 12px', lineHeight:1.5 }}>{kap.beskrivelse}</p>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', fontWeight:'600' }}>
+                    <span style={{ color:'#059669' }}>{ekte} dokumenter</span>
+                    {auto > 0 && <span style={{ color:'#2563eb' }}>· +{auto} auto-fanget</span>}
+                    {ekte === 0 && auto === 0 && filterProject !== 'alle' && <span style={{ color:'#94a3b8' }}>Ingenting ennå</span>}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
         )}
 
-        {/* DOKUMENTER */}
-        {view==='dokumenter'&&(
-          filteredDocs.length===0 ? (
-            <div style={{ background:'white',borderRadius:'14px',border:'1px solid #f1f5f9',padding:'60px 20px',textAlign:'center' }}>
-              <div style={{ fontSize:'40px',marginBottom:'12px' }}>📄</div>
-              <h3 style={{ margin:'0 0 6px',color:'#0f172a' }}>Ingen FDV-dokumenter</h3>
-              <p style={{ margin:0,color:'#94a3b8',fontSize:'14px' }}>Last opp manualer, sertifikater og tegninger.</p>
-            </div>
-          ) : (
-            <div>
-              {/* Group by folder */}
-              {[...new Set(filteredDocs.map(d=>d.folder_path||'/'))].sort().map(folder=>{
-                const folderDocs=filteredDocs.filter(d=>(d.folder_path||'/')===folder)
-                return (
-                  <div key={folder} style={{ marginBottom:'16px' }}>
-                    <div style={{ fontSize:'13px',fontWeight:'700',color:'#64748b',marginBottom:'8px',display:'flex',alignItems:'center',gap:'6px' }}>
-                      <span>📁</span>{folder}
-                      <span style={{ color:'#cbd5e1',fontWeight:'400' }}>({folderDocs.length})</span>
+        {/* Drill-down: ett kapittel valgt */}
+        {view === 'kapitler' && aktivtKapittel && (
+          <div>
+            <button onClick={() => setAktivtKapittel(null)}
+              style={{ padding:'8px 14px', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', marginBottom:'12px' }}>
+              ← Tilbake til alle kapitler
+            </button>
+            <div style={{ background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', padding:'18px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
+                <span style={{ fontSize:'32px' }}>{aktivtKapittel.emoji}</span>
+                <div>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>KAPITTEL {aktivtKapittel.id}</div>
+                  <h2 style={{ fontSize:'20px', fontWeight:'700', color:'#0f172a', margin:0 }}>{aktivtKapittel.navn}</h2>
+                </div>
+              </div>
+              <p style={{ fontSize:'13px', color:'#64748b', lineHeight:1.6, marginBottom:'18px' }}>{aktivtKapittel.beskrivelse}</p>
+
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {(dokumenterPerKapittel[aktivtKapittel.id] || []).map(d => (
+                  <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px',
+                    background: d._virtual ? '#eff6ff' : '#f8fafc',
+                    border:`1px solid ${d._virtual ? '#bfdbfe' : '#e2e8f0'}`,
+                    borderRadius:'10px' }}>
+                    <span style={{ fontSize:'18px' }}>{FDV_DOC_TYPES[d.doc_type]?.emoji || '📄'}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{d.title}</div>
+                      <div style={{ fontSize:'11px', color:'#64748b' }}>
+                        {d._virtual ? `Auto-fanget fra ${d.auto_source}` : 'Lagret i FDV'}
+                      </div>
                     </div>
-                    <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-                      {folderDocs.map(doc=>{
-                        const proj=projects.find(p=>p.id===doc.project_id)
-                        const comp=doc.component_id?{name:'Komponent'}:null
-                        const typeInfo=FDV_DOC_TYPES[doc.doc_type]||FDV_DOC_TYPES.annet
-                        return (
-                          <div key={doc.id} style={{ display:'flex',alignItems:'center',gap:'12px',padding:'12px 16px',background:'white',borderRadius:'12px',border:'1px solid #f1f5f9' }}>
-                            <span style={{ fontSize:'20px',flexShrink:0 }}>{typeInfo.emoji}</span>
-                            <div style={{ flex:1,minWidth:0 }}>
-                              <div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a' }}>{doc.title}</div>
-                              <div style={{ display:'flex',gap:'10px',fontSize:'11px',color:'#64748b',marginTop:'2px' }}>
-                                <span>{typeInfo.label}</span>
-                                {proj&&<span>🏗️ {proj.name}</span>}
-                                <span>{new Date(doc.created_at).toLocaleDateString('nb-NO')}</span>
-                              </div>
-                            </div>
-                            {doc.file_url&&<a href={doc.file_url} target="_blank" rel="noreferrer" onClick={e=>e.stopPropagation()} style={{ padding:'6px 12px',background:'#f0fdf4',color:'#059669',border:'none',borderRadius:'8px',cursor:'pointer',fontSize:'12px',fontWeight:'600',textDecoration:'none' }}>↓ Last ned</a>}
-                          </div>
-                        )
-                      })}
-                    </div>
+                    {d._virtual && (
+                      <span style={{ fontSize:'10px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'3px 8px', borderRadius:'4px' }}>AUTO</span>
+                    )}
+                    {d.file_url && (
+                      <a href={d.file_url} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none' }}>↗ Åpne</a>
+                    )}
                   </div>
-                )
-              })}
+                ))}
+                {(dokumenterPerKapittel[aktivtKapittel.id] || []).length === 0 && (
+                  <div style={{ padding:'32px', textAlign:'center', color:'#94a3b8', fontSize:'13px' }}>
+                    Ingen dokumenter i dette kapittelet ennå
+                  </div>
+                )}
+              </div>
             </div>
-          )
+          </div>
+        )}
+
+        {/* EKSISTERENDE: KOMPONENTER */}
+        {view === 'komponenter' && (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:'12px' }}>
+            {filteredComps.map(c => (
+              <button key={c.id} onClick={() => setSelectedComp(c)}
+                style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'14px', cursor:'pointer', textAlign:'left' }}>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>{c.name}</div>
+                <div style={{ fontSize:'11px', color:'#64748b' }}>{c.category}{c.location?` · ${c.location}`:''}</div>
+                {c.next_service_date && (
+                  <div style={{ fontSize:'11px', color: c.next_service_date < today ? '#dc2626' : '#92400e', marginTop:'6px' }}>
+                    🔧 Neste service: {c.next_service_date}
+                  </div>
+                )}
+              </button>
+            ))}
+            {filteredComps.length === 0 && (
+              <div style={{ gridColumn:'1/-1', padding:'40px', textAlign:'center', color:'#94a3b8' }}>
+                Ingen komponenter ennå. Klikk "+ Ny komponent" for å starte.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* EKSISTERENDE: ALLE DOKUMENTER */}
+        {view === 'dokumenter' && (
+          <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+            {alleDokumenter.map(d => (
+              <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'10px 14px',
+                background: d._virtual ? '#eff6ff' : 'white',
+                border:`1px solid ${d._virtual ? '#bfdbfe' : '#e2e8f0'}`,
+                borderRadius:'10px' }}>
+                <span style={{ fontSize:'18px' }}>{FDV_DOC_TYPES[d.doc_type]?.emoji || '📄'}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{d.title}</div>
+                  <div style={{ fontSize:'11px', color:'#64748b' }}>
+                    NS 3456 kap. {d.ns3456_kapittel || '?'} · {d._virtual ? `Auto-fanget fra ${d.auto_source}` : 'Lagret i FDV'}
+                  </div>
+                </div>
+                {d._virtual && (
+                  <span style={{ fontSize:'10px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'3px 8px', borderRadius:'4px' }}>AUTO</span>
+                )}
+                {d.file_url && (
+                  <a href={d.file_url} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none' }}>↗ Åpne</a>
+                )}
+              </div>
+            ))}
+            {alleDokumenter.length === 0 && (
+              <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8' }}>
+                Ingen dokumenter ennå.
+              </div>
+            )}
+          </div>
         )}
       </div>
 
