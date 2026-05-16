@@ -33053,6 +33053,752 @@ async function hentAutoFangedeDokumenter(projectId) {
 const fInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 
 
+// ─── PATCH 26: FDV FASE 2 — UE-PORTAL + KLIKKBAR INNHOLDSFORTEGNELSE ──────
+
+// Token-generator: 32-tegn random base32
+function genererUeToken() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+  let token = ''
+  for (let i = 0; i < 32; i++) {
+    token += chars.charAt(Math.floor(Math.random() * chars.length))
+  }
+  return token
+}
+
+// Bygg UE-portal-lenke
+function byggUePortalLenke(token) {
+  const base = window.location.origin
+  return `${base}/#fdv_ue_levering?token=${token}`
+}
+
+// ─── OFFENTLIG: FDV UE-OPPLASTINGS-SIDE ─────────────────────────────────────
+function FdvUePortalPage() {
+  const [request, setRequest] = useState(null)
+  const [documents, setDocuments] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const [done, setDone] = useState(false)
+  const [form, setForm] = useState({ title: '', doc_type: 'manual', ns3456_kapittel: '1', notes: '', file: null })
+
+  useEffect(() => {
+    // URL-format: #fdv_ue_levering?token=XXX
+    const hash = window.location.hash
+    const tokenMatch = hash.match(/token=([A-Z0-9]+)/i)
+    if (!tokenMatch) { setError('Ugyldig lenke — mangler token'); setLoading(false); return }
+    const token = tokenMatch[1]
+
+    // Hent forespørsel via RPC (offentlig tilgang)
+    Promise.all([
+      supabase.rpc('get_ue_request_by_token', { p_token: token }),
+      supabase.rpc('get_ue_documents_by_token', { p_token: token }),
+    ]).then(([reqRes, docsRes]) => {
+      if (reqRes.error || !reqRes.data || reqRes.data.length === 0) {
+        setError('Fant ikke forespørselen. Lenken kan være utløpt.')
+        setLoading(false)
+        return
+      }
+      setRequest(reqRes.data[0])
+      setDocuments(docsRes.data || [])
+      setLoading(false)
+    }).catch(e => {
+      setError('Kunne ikke laste data: ' + e.message)
+      setLoading(false)
+    })
+  }, [])
+
+  const refreshDocs = async () => {
+    const hash = window.location.hash
+    const tokenMatch = hash.match(/token=([A-Z0-9]+)/i)
+    if (!tokenMatch) return
+    const { data } = await supabase.rpc('get_ue_documents_by_token', { p_token: tokenMatch[1] })
+    setDocuments(data || [])
+  }
+
+  const handleUpload = async () => {
+    if (!form.file || !form.title) {
+      alert('Velg fil og fyll inn tittel')
+      return
+    }
+    setUploading(true)
+    try {
+      const hash = window.location.hash
+      const tokenMatch = hash.match(/token=([A-Z0-9]+)/i)
+      const token = tokenMatch[1]
+
+      // Last opp fil til Supabase Storage
+      const fileExt = form.file.name.split('.').pop()
+      const fileName = `${token}/${Date.now()}-${form.file.name}`
+      const { error: uploadErr } = await supabase.storage
+        .from('fdv-ue-files')
+        .upload(fileName, form.file, { cacheControl: '3600', upsert: false })
+      if (uploadErr) throw uploadErr
+
+      // Hent signed URL (gjelder 10 år for FDV)
+      const { data: urlData } = await supabase.storage
+        .from('fdv-ue-files')
+        .createSignedUrl(fileName, 60 * 60 * 24 * 365 * 10)
+
+      // Registrer i database via RPC
+      const { error: rpcErr } = await supabase.rpc('upload_ue_document', {
+        p_token: token,
+        p_title: form.title,
+        p_file_url: urlData?.signedUrl || '',
+        p_file_name: form.file.name,
+        p_doc_type: form.doc_type,
+        p_ns3456_kapittel: form.ns3456_kapittel,
+        p_notes: form.notes,
+      })
+      if (rpcErr) throw rpcErr
+
+      setForm({ title: '', doc_type: 'manual', ns3456_kapittel: form.ns3456_kapittel, notes: '', file: null })
+      // Reset file input
+      const fileInput = document.getElementById('fdv-ue-file-input')
+      if (fileInput) fileInput.value = ''
+      await refreshDocs()
+    } catch (e) {
+      alert('Opplasting feilet: ' + (e.message || e.toString()))
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleFerdig = async () => {
+    if (!confirm('Markere som ferdig? Du kan fortsatt laste opp dokumenter etterpå om noe mangler.')) return
+    const hash = window.location.hash
+    const tokenMatch = hash.match(/token=([A-Z0-9]+)/i)
+    const token = tokenMatch[1]
+    try {
+      await supabase.rpc('mark_ue_request_complete', { p_token: token })
+      setDone(true)
+    } catch (e) {
+      alert('Kunne ikke markere som ferdig: ' + e.message)
+    }
+  }
+
+  if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif' }}><p style={{ color:'#64748b' }}>Laster...</p></div>
+
+  if (error) return (
+    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'100vh', fontFamily:'system-ui,sans-serif', padding:'20px' }}>
+      <div style={{ maxWidth:'500px', textAlign:'center' }}>
+        <div style={{ fontSize:'48px', marginBottom:'16px' }}>⚠️</div>
+        <h1 style={{ color:'#0f172a', margin:'0 0 8px' }}>Lenken er ugyldig</h1>
+        <p style={{ color:'#64748b' }}>{error}</p>
+      </div>
+    </div>
+  )
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc', padding:'20px 16px' }}>
+      <div style={{ maxWidth:'720px', margin:'0 auto' }}>
+        {/* Header */}
+        <div style={{ background:'white', borderRadius:'16px', padding:'24px', marginBottom:'16px', boxShadow:'0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'16px' }}>
+            <div style={{ width:'48px', height:'48px', borderRadius:'12px', background:'#ecfdf5', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>📚</div>
+            <div>
+              <h1 style={{ margin:0, fontSize:'22px', fontWeight:'700', color:'#0f172a' }}>FDV-leveranse</h1>
+              <p style={{ margin:'2px 0 0', fontSize:'13px', color:'#64748b' }}>Prosjekt: <strong>{request.project_name}</strong></p>
+            </div>
+          </div>
+
+          <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:'12px', padding:'14px 16px', fontSize:'13px', color:'#0c4a6e' }}>
+            <div style={{ fontWeight:'700', marginBottom:'6px' }}>Hei {request.ue_contact_name || request.ue_name}!</div>
+            <div>Du er invitert til å levere FDV-dokumentasjon for prosjektet over. Last opp dokumenter under — ingen pålogging nødvendig.</div>
+            {request.deadline && (
+              <div style={{ marginTop:'8px', fontWeight:'600' }}>Frist: {new Date(request.deadline).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}</div>
+            )}
+          </div>
+
+          {request.forventet_dokumenter && (
+            <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'14px 16px', marginTop:'12px', fontSize:'13px', color:'#78350f', whiteSpace:'pre-wrap' }}>
+              <strong>Hva som forventes:</strong><br />{request.forventet_dokumenter}
+            </div>
+          )}
+        </div>
+
+        {done && (
+          <div style={{ background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'16px', padding:'24px', marginBottom:'16px', textAlign:'center' }}>
+            <div style={{ fontSize:'48px', marginBottom:'8px' }}>✅</div>
+            <h2 style={{ margin:'0 0 8px', color:'#15803d' }}>Takk! Levering registrert.</h2>
+            <p style={{ margin:0, fontSize:'13px', color:'#166534' }}>Entreprenøren har fått beskjed. Du kan fortsatt laste opp mer hvis noe mangler.</p>
+          </div>
+        )}
+
+        {/* Opplasting-skjema */}
+        {!done && (
+          <div style={{ background:'white', borderRadius:'16px', padding:'24px', marginBottom:'16px', boxShadow:'0 2px 8px rgba(0,0,0,0.04)' }}>
+            <h2 style={{ margin:'0 0 16px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>📎 Last opp et dokument</h2>
+
+            <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
+              <div>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Tittel *</label>
+                <input value={form.title} onChange={e => setForm({...form, title: e.target.value})} placeholder="F.eks. Datablad for ventilasjonsaggregat" style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box' }} />
+              </div>
+
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+                <div>
+                  <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Type</label>
+                  <select value={form.doc_type} onChange={e => setForm({...form, doc_type: e.target.value})} style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', background:'white' }}>
+                    <option value="manual">📖 Manual</option>
+                    <option value="sertifikat">🏅 Sertifikat</option>
+                    <option value="tegning">📐 Tegning</option>
+                    <option value="rapport">📋 Rapport</option>
+                    <option value="garanti">🛡️ Garanti</option>
+                    <option value="annet">📄 Annet</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>NS 3456-kapittel</label>
+                  <select value={form.ns3456_kapittel} onChange={e => setForm({...form, ns3456_kapittel: e.target.value})} style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', background:'white' }}>
+                    {NS3456_KAPITLER.map(k => <option key={k.id} value={k.id}>{k.id} {k.navn}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Velg fil *</label>
+                <input id="fdv-ue-file-input" type="file" onChange={e => setForm({...form, file: e.target.files?.[0] || null})}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.dwg,.zip"
+                  style={{ width:'100%', padding:'8px', fontSize:'13px' }} />
+                <div style={{ fontSize:'11px', color:'#64748b', marginTop:'4px' }}>Maks 50 MB · PDF, Word, Excel, bilder, DWG, ZIP</div>
+              </div>
+
+              <div>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Kommentar (valgfritt)</label>
+                <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} rows={2} style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', resize:'vertical' }} />
+              </div>
+
+              <button onClick={handleUpload} disabled={uploading || !form.file || !form.title}
+                style={{ padding:'12px 24px', background: uploading || !form.file || !form.title ? '#9ca3af' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: uploading || !form.file || !form.title ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
+                {uploading ? 'Laster opp...' : '📤 Last opp'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Tidligere opplastede dokumenter */}
+        <div style={{ background:'white', borderRadius:'16px', padding:'24px', boxShadow:'0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'12px' }}>
+            <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>📁 Dine leveranser ({documents.length})</h2>
+            {!done && documents.length > 0 && (
+              <button onClick={handleFerdig}
+                style={{ padding:'8px 16px', background:'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+                ✅ Marker som ferdig
+              </button>
+            )}
+          </div>
+
+          {documents.length === 0 ? (
+            <p style={{ color:'#94a3b8', fontSize:'13px', textAlign:'center', padding:'24px 0' }}>Ingen dokumenter lastet opp ennå</p>
+          ) : (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {documents.map(d => (
+                <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px' }}>
+                  <span style={{ fontSize:'20px' }}>📄</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{d.title}</div>
+                    <div style={{ fontSize:'11px', color:'#64748b' }}>
+                      Kap. {d.ns3456_kapittel} · {new Date(d.uploaded_at).toLocaleString('nb-NO')}
+                      {d.status === 'rejected' && <span style={{ color:'#dc2626', marginLeft:'8px' }}>· Avvist: {d.rejected_reason}</span>}
+                      {d.status === 'approved' && <span style={{ color:'#15803d', marginLeft:'8px' }}>· ✓ Godkjent</span>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <p style={{ textAlign:'center', fontSize:'12px', color:'#94a3b8', marginTop:'24px' }}>
+          Levert via <strong>En Plattform</strong>
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ─── ENTREPRENØR-SIDE: NY UE-FORESPØRSEL MODAL ──────────────────────────────
+function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
+  const { user } = useAuth()
+  const appAlert = useAppAlert()
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({
+    ue_name: '',
+    ue_contact_name: '',
+    ue_contact_email: '',
+    ue_contact_phone: '',
+    fag: [],
+    ns3456_kapitler: [],
+    forventet_dokumenter: '',
+    deadline: '',
+  })
+
+  const toggleFag = (id) => {
+    const ny = form.fag.includes(id) ? form.fag.filter(f => f !== id) : [...form.fag, id]
+    // Auto-velg NS 3456-kapitler basert på fag
+    const kapitler = new Set(form.ns3456_kapitler)
+    if (form.fag.includes(id)) {
+      // Fjerner — sjekk om kapittelet trengs av andre fag
+      const fjernetKap = fagTilNS3456Kapittel(id)
+      const trengsAvAndre = ny.some(f => fagTilNS3456Kapittel(f) === fjernetKap)
+      if (!trengsAvAndre) kapitler.delete(fjernetKap)
+    } else {
+      kapitler.add(fagTilNS3456Kapittel(id))
+    }
+    setForm({ ...form, fag: ny, ns3456_kapitler: Array.from(kapitler) })
+  }
+
+  const toggleKapittel = (id) => {
+    const ny = form.ns3456_kapitler.includes(id) ? form.ns3456_kapitler.filter(k => k !== id) : [...form.ns3456_kapitler, id]
+    setForm({ ...form, ns3456_kapitler: ny })
+  }
+
+  const handleSave = async () => {
+    if (!form.ue_name) { appAlert({ message: 'UE-navn er påkrevd', kind: 'warning' }); return }
+    setSaving(true)
+    try {
+      // Hent company_id
+      const { data: profile } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
+      const token = genererUeToken()
+      const { error } = await supabase.from('fdv_ue_requests').insert({
+        project_id: projectId,
+        company_id: profile?.company_id,
+        ue_name: form.ue_name,
+        ue_contact_name: form.ue_contact_name || null,
+        ue_contact_email: form.ue_contact_email || null,
+        ue_contact_phone: form.ue_contact_phone || null,
+        fag: form.fag,
+        ns3456_kapitler: form.ns3456_kapitler,
+        forventet_dokumenter: form.forventet_dokumenter || null,
+        deadline: form.deadline || null,
+        status: 'pending',
+        token,
+        created_by: user?.id,
+      })
+      if (error) throw error
+      await appAlert({ message: '✓ UE-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
+      onSaved()
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke opprette', subMessage: e.message, kind: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ background:'white', borderRadius:'16px', width:'100%', maxWidth:'560px', maxHeight:'90vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700' }}>👷 Ny UE-forespørsel</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'22px', color:'#94a3b8' }}>×</button>
+        </div>
+
+        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'12px' }}>
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>UE-bedrift *</label>
+            <input value={form.ue_name} onChange={e => setForm({...form, ue_name: e.target.value})} placeholder="F.eks. El-installasjon Bergen AS" style={{ ...fInp }} />
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Kontaktperson</label>
+              <input value={form.ue_contact_name} onChange={e => setForm({...form, ue_contact_name: e.target.value})} style={{ ...fInp }} />
+            </div>
+            <div>
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>E-post</label>
+              <input type="email" value={form.ue_contact_email} onChange={e => setForm({...form, ue_contact_email: e.target.value})} style={{ ...fInp }} />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Telefon</label>
+            <input value={form.ue_contact_phone} onChange={e => setForm({...form, ue_contact_phone: e.target.value})} style={{ ...fInp }} />
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Fag (én eller flere)</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+              {FAGGRUPPER.filter(f => f.id !== 'ue').map(f => (
+                <button key={f.id} type="button" onClick={() => toggleFag(f.id)}
+                  style={{ padding:'6px 12px', borderRadius:'8px', border:'1px solid', cursor:'pointer', fontSize:'12px', fontWeight:'600',
+                    borderColor: form.fag.includes(f.id) ? '#059669' : '#e2e8f0',
+                    background: form.fag.includes(f.id) ? '#ecfdf5' : 'white',
+                    color: form.fag.includes(f.id) ? '#15803d' : '#475569' }}>
+                  {f.emoji} {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>NS 3456-kapitler (auto-foreslått)</label>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+              {NS3456_KAPITLER.map(k => (
+                <button key={k.id} type="button" onClick={() => toggleKapittel(k.id)}
+                  style={{ padding:'5px 10px', borderRadius:'8px', border:'1px solid', cursor:'pointer', fontSize:'11px', fontWeight:'600',
+                    borderColor: form.ns3456_kapitler.includes(k.id) ? '#2563eb' : '#e2e8f0',
+                    background: form.ns3456_kapitler.includes(k.id) ? '#eff6ff' : 'white',
+                    color: form.ns3456_kapitler.includes(k.id) ? '#1e40af' : '#64748b' }}>
+                  {k.emoji} {k.id} {k.navn}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Hva som forventes (valgfritt)</label>
+            <textarea value={form.forventet_dokumenter} onChange={e => setForm({...form, forventet_dokumenter: e.target.value})} rows={3}
+              placeholder="F.eks.&#10;- Datablad for hovedtavle&#10;- Som bygget-tegninger&#10;- Garantibevis"
+              style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', boxSizing:'border-box', resize:'vertical', fontFamily:'inherit' }} />
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Frist</label>
+            <input type="date" value={form.deadline} onChange={e => setForm({...form, deadline: e.target.value})} style={{ ...fInp, maxWidth:'200px' }} />
+          </div>
+        </div>
+
+        <div style={{ padding:'14px 24px', borderTop:'1px solid #e2e8f0', display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+          <button onClick={onClose} disabled={saving}
+            style={{ padding:'10px 18px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+            Avbryt
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            style={{ padding:'10px 18px', background: saving ? '#9ca3af' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+            {saving ? 'Lagrer...' : 'Opprett UE-forespørsel'}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ─── ENTREPRENØR-SIDE: UE-ADMINISTRASJON ────────────────────────────────────
+function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const [requests, setRequests] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [showNy, setShowNy] = useState(false)
+  const [sendingFor, setSendingFor] = useState(null)
+  const [expanded, setExpanded] = useState(null)
+  const [docsFor, setDocsFor] = useState({})  // { requestId: [docs] }
+
+  const load = async () => {
+    if (!projectId || projectId === 'alle') { setRequests([]); setLoading(false); return }
+    setLoading(true)
+    try {
+      const { data } = await supabase.from('fdv_ue_requests').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
+      setRequests(data || [])
+    } finally {
+      setLoading(false)
+    }
+  }
+  useEffect(() => { load() }, [projectId])
+
+  const loadDocsFor = async (requestId) => {
+    const { data } = await supabase.from('fdv_ue_documents').select('*').eq('ue_request_id', requestId).order('uploaded_at', { ascending: false })
+    setDocsFor(prev => ({ ...prev, [requestId]: data || [] }))
+  }
+
+  const toggleExpand = async (req) => {
+    if (expanded === req.id) {
+      setExpanded(null)
+    } else {
+      setExpanded(req.id)
+      if (!docsFor[req.id]) await loadDocsFor(req.id)
+    }
+  }
+
+  const kopierLenke = (req) => {
+    const lenke = byggUePortalLenke(req.token)
+    navigator.clipboard.writeText(lenke).then(() => {
+      appAlert({ message: '✓ Lenke kopiert', subMessage: 'Lim inn i e-post, SMS eller WhatsApp til UE.', kind: 'success' })
+    }).catch(() => {
+      // Fallback: vis lenken
+      appAlert({ message: 'Kopier lenken manuelt', subMessage: lenke, kind: 'info' })
+    })
+  }
+
+  const sendInvitasjon = async (req, type = 'invitation') => {
+    if (!req.ue_contact_email) {
+      appAlert({ message: 'UE har ingen e-postadresse', subMessage: 'Bruk "Kopier lenke" og send manuelt via e-post eller SMS.', kind: 'warning' })
+      return
+    }
+    setSendingFor(req.id)
+    try {
+      const { error } = await supabase.functions.invoke('send-ue-fdv-invitation', { body: { requestId: req.id, type } })
+      if (error) throw error
+      await appAlert({
+        message: type === 'reminder' ? '✓ Påminnelse sendt' : '✓ Invitasjon sendt',
+        subMessage: `E-post sendt til ${req.ue_contact_email}`,
+        kind: 'success',
+      })
+      await load()
+    } catch (e) {
+      await appAlert({
+        message: 'E-post feilet — bruk manuell kopier-lenke',
+        subMessage: 'Edge Function må deployes og Resend må være satt opp. Inntil da, bruk "Kopier lenke"-knappen.',
+        kind: 'warning',
+      })
+    } finally {
+      setSendingFor(null)
+    }
+  }
+
+  const godkjennDoc = async (doc, req) => {
+    try {
+      // Marker som godkjent
+      await supabase.from('fdv_ue_documents').update({ status: 'approved', reviewed_at: new Date().toISOString() }).eq('id', doc.id)
+      // Legg til i fdv_documents
+      await supabase.from('fdv_documents').insert({
+        title: doc.title,
+        project_id: projectId,
+        ns3456_kapittel: doc.ns3456_kapittel,
+        auto_source: 'ue',
+        auto_source_id: doc.id,
+        auto_synced_at: new Date().toISOString(),
+        doc_type: doc.doc_type,
+        file_url: doc.file_url,
+        file_name: doc.file_name,
+        folder_path: NS3456_KAPITLER.find(k => k.id === doc.ns3456_kapittel)?.navn || '',
+      })
+      await loadDocsFor(req.id)
+      if (onLevertGodkjent) onLevertGodkjent()
+      appAlert({ message: '✓ Dokument godkjent', subMessage: 'Lagt til i FDV-pakken.', kind: 'success' })
+    } catch (e) {
+      appAlert({ message: 'Feilet', subMessage: e.message, kind: 'error' })
+    }
+  }
+
+  const avvis = async (doc, req) => {
+    const grunn = prompt('Avvisingsgrunn (sendes til UE):')
+    if (!grunn) return
+    try {
+      await supabase.from('fdv_ue_documents').update({ status: 'rejected', rejected_reason: grunn, reviewed_at: new Date().toISOString() }).eq('id', doc.id)
+      await loadDocsFor(req.id)
+      appAlert({ message: '✓ Dokument avvist', kind: 'info' })
+    } catch (e) {
+      appAlert({ message: 'Feilet', subMessage: e.message, kind: 'error' })
+    }
+  }
+
+  const slettRequest = async (req) => {
+    const ok = await confirm({
+      message: `Slett UE-forespørsel til ${req.ue_name}?`,
+      subMessage: 'Lenken blir ugyldig og UE kan ikke lenger laste opp dokumenter. Allerede leverte dokumenter blir slettet.',
+      danger: true,
+    })
+    if (!ok) return
+    try {
+      await supabase.from('fdv_ue_requests').delete().eq('id', req.id)
+      await load()
+    } catch (e) {
+      appAlert({ message: 'Feilet', subMessage: e.message, kind: 'error' })
+    }
+  }
+
+  if (!projectId || projectId === 'alle') {
+    return (
+      <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8', background:'white', borderRadius:'12px', border:'1px solid #e2e8f0' }}>
+        Velg et prosjekt øverst for å administrere UE-forespørsler
+      </div>
+    )
+  }
+
+  if (loading) return <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8' }}>Laster...</div>
+
+  // Status-tellere
+  const tellSent = requests.filter(r => r.status === 'sent').length
+  const tellInProgress = requests.filter(r => r.status === 'in_progress').length
+  const tellCompleted = requests.filter(r => r.status === 'completed').length
+  const today = new Date().toISOString().split('T')[0]
+  const tellOverdue = requests.filter(r => r.deadline && r.deadline < today && r.status !== 'completed').length
+
+  return (
+    <div>
+      {/* Statistikk */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(140px, 1fr))', gap:'10px', marginBottom:'14px' }}>
+        <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px 14px' }}>
+          <div style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>TOTALT</div>
+          <div style={{ fontSize:'22px', fontWeight:'700', color:'#0f172a' }}>{requests.length}</div>
+        </div>
+        <div style={{ background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px 14px' }}>
+          <div style={{ fontSize:'11px', color:'#15803d', fontWeight:'600' }}>FERDIG</div>
+          <div style={{ fontSize:'22px', fontWeight:'700', color:'#15803d' }}>{tellCompleted}</div>
+        </div>
+        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'12px 14px' }}>
+          <div style={{ fontSize:'11px', color:'#1e40af', fontWeight:'600' }}>UNDERVEIS</div>
+          <div style={{ fontSize:'22px', fontWeight:'700', color:'#1e40af' }}>{tellInProgress}</div>
+        </div>
+        <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 14px' }}>
+          <div style={{ fontSize:'11px', color:'#92400e', fontWeight:'600' }}>SENDT</div>
+          <div style={{ fontSize:'22px', fontWeight:'700', color:'#92400e' }}>{tellSent}</div>
+        </div>
+        {tellOverdue > 0 && (
+          <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'12px 14px' }}>
+            <div style={{ fontSize:'11px', color:'#b91c1c', fontWeight:'600' }}>FORSINKET</div>
+            <div style={{ fontSize:'22px', fontWeight:'700', color:'#b91c1c' }}>{tellOverdue}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Handling-knapper */}
+      <div style={{ display:'flex', gap:'8px', marginBottom:'14px', flexWrap:'wrap' }}>
+        <button onClick={() => setShowNy(true)}
+          style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
+          + Ny UE-forespørsel
+        </button>
+        {requests.filter(r => r.status !== 'completed' && r.ue_contact_email).length > 0 && (
+          <button onClick={async () => {
+            const ok = await confirm({
+              message: 'Send påminnelse til alle som ikke er ferdige?',
+              subMessage: `Det sendes e-post til ${requests.filter(r => r.status !== 'completed' && r.ue_contact_email).length} UE-er.`,
+            })
+            if (!ok) return
+            for (const r of requests.filter(r => r.status !== 'completed' && r.ue_contact_email)) {
+              await sendInvitasjon(r, 'reminder')
+            }
+          }}
+            style={{ padding:'10px 18px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+            🔔 Send påminnelse til alle
+          </button>
+        )}
+      </div>
+
+      {/* Liste over UE-er */}
+      {requests.length === 0 ? (
+        <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8', background:'white', borderRadius:'12px', border:'1px solid #e2e8f0' }}>
+          Ingen UE-forespørsler ennå. Klikk "+ Ny UE-forespørsel" for å starte.
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+          {requests.map(req => {
+            const isOverdue = req.deadline && req.deadline < today && req.status !== 'completed'
+            const initialer = req.ue_name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase()
+            const statusInfo = {
+              pending: { bg:'#f1f5f9', col:'#475569', txt:'Ikke sendt' },
+              sent: { bg:'#fef3c7', col:'#92400e', txt:'Påminnelse sendt' },
+              in_progress: { bg:'#dbeafe', col:'#1e40af', txt:'Underveis' },
+              completed: { bg:'#dcfce7', col:'#15803d', txt:'Komplett' },
+            }[req.status] || { bg:'#f1f5f9', col:'#475569', txt: req.status }
+            const fagDisplay = (req.fag || []).map(f => FAGGRUPPER.find(g => g.id === f)?.name).filter(Boolean).join(', ')
+
+            return (
+              <div key={req.id} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+                <div style={{ padding:'12px 16px', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer' }} onClick={() => toggleExpand(req)}>
+                  <div style={{ width:'40px', height:'40px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'13px', color:'#475569', flexShrink:0 }}>
+                    {initialer}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{req.ue_name}</div>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>
+                      {fagDisplay || 'Ingen fag valgt'}
+                      {req.deadline && <span style={{ color: isOverdue ? '#dc2626' : '#64748b', marginLeft:'8px' }}>· Frist: {new Date(req.deadline).toLocaleDateString('nb-NO')}</span>}
+                    </div>
+                  </div>
+                  <span style={{ fontSize:'11px', fontWeight:'700', padding:'4px 10px', borderRadius:'6px', background: isOverdue ? '#fee2e2' : statusInfo.bg, color: isOverdue ? '#b91c1c' : statusInfo.col, flexShrink:0 }}>
+                    {isOverdue ? '⚠️ Forsinket' : statusInfo.txt}
+                  </span>
+                  <span style={{ color:'#94a3b8', fontSize:'14px' }}>{expanded === req.id ? '▴' : '▾'}</span>
+                </div>
+
+                {expanded === req.id && (
+                  <div style={{ borderTop:'1px solid #e2e8f0', padding:'14px 16px', background:'#f8fafc' }}>
+                    {/* Kontaktinfo og handling */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', fontSize:'12px', marginBottom:'14px' }}>
+                      <div><strong>Kontakt:</strong> {req.ue_contact_name || '—'}</div>
+                      <div><strong>E-post:</strong> {req.ue_contact_email || '—'}</div>
+                      <div><strong>Telefon:</strong> {req.ue_contact_phone || '—'}</div>
+                      <div><strong>Sendt:</strong> {req.invited_at ? new Date(req.invited_at).toLocaleDateString('nb-NO') : 'Ikke ennå'}</div>
+                    </div>
+
+                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'12px' }}>
+                      <button onClick={() => kopierLenke(req)}
+                        style={{ padding:'7px 12px', background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                        🔗 Kopier lenke
+                      </button>
+                      {req.ue_contact_email && req.status === 'pending' && (
+                        <button onClick={() => sendInvitasjon(req, 'invitation')} disabled={sendingFor === req.id}
+                          style={{ padding:'7px 12px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>
+                          {sendingFor === req.id ? 'Sender...' : '📧 Send invitasjon'}
+                        </button>
+                      )}
+                      {req.ue_contact_email && req.status !== 'pending' && req.status !== 'completed' && (
+                        <button onClick={() => sendInvitasjon(req, 'reminder')} disabled={sendingFor === req.id}
+                          style={{ padding:'7px 12px', background:'#2563eb', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700' }}>
+                          {sendingFor === req.id ? 'Sender...' : '🔔 Send påminnelse'}
+                        </button>
+                      )}
+                      <button onClick={() => slettRequest(req)}
+                        style={{ padding:'7px 12px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>
+                        🗑️ Slett
+                      </button>
+                    </div>
+
+                    {req.forventet_dokumenter && (
+                      <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'10px 12px', fontSize:'12px', color:'#475569', marginBottom:'12px', whiteSpace:'pre-wrap' }}>
+                        <strong>Hva som forventes:</strong><br />{req.forventet_dokumenter}
+                      </div>
+                    )}
+
+                    {/* Leverte dokumenter */}
+                    <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'6px' }}>
+                      LEVERTE DOKUMENTER ({(docsFor[req.id] || []).length})
+                    </div>
+                    {(docsFor[req.id] || []).length === 0 ? (
+                      <div style={{ padding:'14px', textAlign:'center', color:'#94a3b8', fontSize:'12px', background:'white', borderRadius:'8px' }}>
+                        Ingen dokumenter levert ennå
+                      </div>
+                    ) : (
+                      <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                        {(docsFor[req.id] || []).map(doc => (
+                          <div key={doc.id} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'10px 12px', display:'flex', alignItems:'center', gap:'10px' }}>
+                            <span style={{ fontSize:'16px' }}>📄</span>
+                            <div style={{ flex:1, minWidth:0 }}>
+                              <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{doc.title}</div>
+                              <div style={{ fontSize:'11px', color:'#64748b' }}>
+                                Kap. {doc.ns3456_kapittel} · {new Date(doc.uploaded_at).toLocaleDateString('nb-NO')}
+                              </div>
+                            </div>
+                            {doc.file_url && (
+                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                                style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none' }}>↗ Åpne</a>
+                            )}
+                            {doc.status === 'submitted' && (
+                              <>
+                                <button onClick={() => godkjennDoc(doc, req)}
+                                  style={{ padding:'4px 10px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>
+                                  ✓ Godkjenn
+                                </button>
+                                <button onClick={() => avvis(doc, req)}
+                                  style={{ padding:'4px 10px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600' }}>
+                                  ✕ Avvis
+                                </button>
+                              </>
+                            )}
+                            {doc.status === 'approved' && <span style={{ fontSize:'11px', color:'#15803d', fontWeight:'700' }}>✓ Godkjent</span>}
+                            {doc.status === 'rejected' && <span style={{ fontSize:'11px', color:'#dc2626', fontWeight:'700' }} title={doc.rejected_reason}>✕ Avvist</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {showNy && <FdvNyUeRequestModal projectId={projectId} onClose={() => setShowNy(false)} onSaved={() => { setShowNy(false); load() }} />}
+    </div>
+  )
+}
+
+
 function FDVPage() {
   const { user } = useAuth()
   const appAlert = useAppAlert()
@@ -33197,13 +33943,50 @@ function FDVPage() {
       const proj = projects.find(p => p.id === filterProject)
       const projName = proj?.name || 'prosjekt'
 
-      // Lag NS 3456-mappestruktur
+      // Lag NS 3456-mappestruktur + klikkbar HTML-innholdsfortegnelse (Patch 26)
+      const tocHtml = []
+      tocHtml.push('<!DOCTYPE html><html lang="nb"><head><meta charset="UTF-8">')
+      tocHtml.push(`<title>FDV-dokumentasjon — ${projName}</title>`)
+      tocHtml.push('<style>')
+      tocHtml.push('body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:900px;margin:40px auto;padding:20px;color:#1f2937;line-height:1.6}')
+      tocHtml.push('h1{color:#059669;border-bottom:3px solid #059669;padding-bottom:10px}')
+      tocHtml.push('h2{color:#0f172a;margin-top:30px;background:#f8fafc;padding:12px 16px;border-radius:8px;border-left:4px solid #059669}')
+      tocHtml.push('.kap-info{font-size:14px;color:#64748b;margin:8px 0 16px 16px;font-style:italic}')
+      tocHtml.push('ul{list-style:none;padding-left:16px}')
+      tocHtml.push('li{margin:8px 0;padding:8px 12px;background:white;border:1px solid #e5e7eb;border-radius:6px}')
+      tocHtml.push('li a{color:#2563eb;text-decoration:none;font-weight:600}')
+      tocHtml.push('li a:hover{text-decoration:underline}')
+      tocHtml.push('.empty{color:#9ca3af;font-style:italic;padding-left:16px}')
+      tocHtml.push('.summary{background:#ecfdf5;border:1px solid #bbf7d0;padding:16px;border-radius:8px;margin-bottom:30px}')
+      tocHtml.push('.summary strong{color:#059669}')
+      tocHtml.push('.footer{margin-top:60px;padding-top:20px;border-top:1px solid #e5e7eb;font-size:12px;color:#9ca3af;text-align:center}')
+      tocHtml.push('</style></head><body>')
+      tocHtml.push(`<h1>📚 FDV-dokumentasjon</h1>`)
+      tocHtml.push(`<div class="summary"><strong>Prosjekt:</strong> ${projName}<br/><strong>Standard:</strong> NS 3456:2022 + NS 3451<br/><strong>Generert:</strong> ${new Date().toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}<br/><strong>Antall kapitler:</strong> ${NS3456_KAPITLER.length} · <strong>Antall dokumenter:</strong> ${alleDokumenter.length}</div>`)
+      tocHtml.push('<p>Klikk på et kapittel under for å åpne mappen:</p>')
+
       for (const kap of NS3456_KAPITLER) {
         const mappeNavn = `${kap.id} ${kap.navn}`
         const folder = zip.folder(mappeNavn)
-
-        // Legg til dokumenter i kapittelet
         const kapDocs = alleDokumenter.filter(d => d.ns3456_kapittel === kap.id)
+
+        // HTML-innholdsfortegnelse
+        tocHtml.push(`<h2>${kap.emoji} <a href="./${encodeURIComponent(mappeNavn)}/" style="color:inherit;text-decoration:none">${kap.id} ${kap.navn}</a> <span style="font-size:14px;color:#64748b;font-weight:normal">(${kapDocs.length} dokumenter)</span></h2>`)
+        tocHtml.push(`<div class="kap-info">${kap.beskrivelse}</div>`)
+
+        if (kapDocs.length === 0) {
+          tocHtml.push('<div class="empty">Ingen dokumenter i dette kapittelet</div>')
+        } else {
+          tocHtml.push('<ul>')
+          kapDocs.forEach((d, i) => {
+            const lenke = d.file_url ? `<a href="${d.file_url}" target="_blank">${d.title}</a>` : d.title
+            const autoTag = d._virtual ? ' <em style="font-size:11px;color:#2563eb">(auto-fanget)</em>' : ''
+            tocHtml.push(`<li>${i+1}. ${lenke}${autoTag}</li>`)
+          })
+          tocHtml.push('</ul>')
+        }
+
+        // Tekst-INDEKS for hver mappe
         const indexContent = [
           `${kap.navn}`,
           '═'.repeat(50),
@@ -33217,6 +34000,12 @@ function FDVPage() {
         ].join('\n')
         folder.file('00 - INDEKS.txt', indexContent)
       }
+
+      tocHtml.push('<div class="footer">Generert av En Plattform · enplattform.no</div>')
+      tocHtml.push('</body></html>')
+
+      // Plasser innholdsfortegnelsen i ZIP-roten — åpnes som standard når brukeren pakker ut
+      zip.file('00 - INNHOLDSFORTEGNELSE.html', tocHtml.join('\n'))
 
       // Generér ZIP
       const blob = await zip.generateAsync({ type: 'blob' })
@@ -33278,24 +34067,88 @@ function FDVPage() {
         y += infoH + 8
       }
 
-      // ── NS 3456-struktur ──
+      // ── KLIKKBAR INNHOLDSFORTEGNELSE (Patch 26) ──
+      checkSpace(20)
+      setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
+      doc.text('INNHOLDSFORTEGNELSE', ml, y); y += 8
+
+      // Først lager vi en oversikt med side-numre — registrer hver kapittel-posisjon
+      // for å lage klikkbare lenker etterpå
+      const tocStartY = y
+      const kapPositioner = []  // { kap, side, y }
+
+      setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+      doc.text('Klikk på en kapittel-overskrift for å hoppe direkte dit.', ml, y); y += 6
+
+      // Beregn estimat for hver kapittel-side
+      // Vi vet ikke nøyaktig før vi har skrevet ut, så vi bruker en to-pass approach:
+      // Pass 1: skriv TOC med plassholder-side, ta vare på posisjoner
+      const tocEntries = []
+      for (const kap of NS3456_KAPITLER) {
+        const kapDocs = projDocs.filter(d => d.ns3456_kapittel === kap.id)
+        if (kapDocs.length === 0) continue
+        checkSpace(7)
+        const tocY = y
+        const tocSide = doc.internal.getCurrentPageInfo().pageNumber
+        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+        const tocLabel = `${kap.id} ${kap.navn} (${kapDocs.length})`
+        doc.text(tocLabel, ml + 4, y)
+        // Plassholder for sidenummer — fylles inn senere
+        tocEntries.push({ kap, tocY, tocSide, label: tocLabel })
+        y += 6
+      }
+
+      // ── NS 3456-INNHOLD ──
+      y += 6
       checkSpace(20)
       setC(hex('#0f172a')); doc.setFontSize(13); doc.setFont('helvetica', 'bold')
       doc.text('NS 3456-STRUKTUR', ml, y); y += 8
 
+      const kapStarter = {}  // { kapId: { side, y } }
       for (const kap of NS3456_KAPITLER) {
         const kapDocs = projDocs.filter(d => d.ns3456_kapittel === kap.id)
         if (kapDocs.length === 0) continue
         checkSpace(15)
-        setC(hex('#0f172a')); doc.setFontSize(11); doc.setFont('helvetica', 'bold')
-        doc.text(`${kap.id} ${kap.navn} (${kapDocs.length})`, ml, y); y += 6
-        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+        // Registrer hvor kapittelet starter for å kunne lenke til det
+        kapStarter[kap.id] = {
+          side: doc.internal.getCurrentPageInfo().pageNumber,
+          y: y,
+        }
+        setC(hex('#0f172a')); doc.setFontSize(12); doc.setFont('helvetica', 'bold')
+        doc.text(`${kap.id} ${kap.navn}`, ml, y); y += 5
+        setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'italic')
+        doc.text(kap.beskrivelse.length > 100 ? kap.beskrivelse.substring(0, 100) + '...' : kap.beskrivelse, ml, y); y += 5
+        doc.setFont('helvetica', 'normal')
         kapDocs.forEach(d => {
           checkSpace(5)
           doc.text(`  · ${d.title}${d._virtual ? ' (auto-fanget)' : ''}`, ml, y); y += 4.5
         })
-        y += 3
+        y += 5
+
+        // PDF Outline / Bookmark (vises i sidemargen)
+        if (typeof doc.outline?.add === 'function') {
+          try { doc.outline.add(null, `${kap.id} ${kap.navn}`, { pageNumber: kapStarter[kap.id].side }) } catch {}
+        }
       }
+
+      // Pass 2: gå tilbake til TOC og oppdater med faktiske sidenumre + klikkbare lenker
+      for (const e of tocEntries) {
+        const start = kapStarter[e.kap.id]
+        if (!start) continue
+        doc.setPage(e.tocSide)
+        // Sidenummer (høyrejustert)
+        setC(hex('#64748b')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
+        const sidetekst = `s. ${start.side}`
+        const sideX = ml + cw - 4 - doc.getTextWidth(sidetekst)
+        doc.text(sidetekst, sideX, e.tocY)
+        // Klikkbar lenke
+        try {
+          doc.link(ml, e.tocY - 4, cw, 6, { pageNumber: start.side })
+        } catch {}
+      }
+
+      // Gå tilbake til siste side for resten av innholdet
+      doc.setPage(doc.internal.getNumberOfPages())
 
       // ── Komponenter ──
       if (projComps.length > 0) {
@@ -33407,7 +34260,7 @@ function FDVPage() {
 
         <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
           <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['kapitler','📚 NS 3456'],['komponenter','🔩 Komponenter'],['dokumenter','📄 Alle dokumenter']].map(([v,l])=>(
+            {[['kapitler','📚 NS 3456'],['ue','👷 UE-leveranser'],['komponenter','🔩 Komponenter'],['dokumenter','📄 Alle dokumenter']].map(([v,l])=>(
               <button key={v} onClick={()=>{setView(v); setAktivtKapittel(null)}} style={{ padding:'8px 16px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
             ))}
           </div>
@@ -33508,6 +34361,11 @@ function FDVPage() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* PATCH 26: UE-LEVERANSER */}
+        {view === 'ue' && (
+          <FdvUeAdminTab projectId={filterProject !== 'alle' ? filterProject : null} onLevertGodkjent={load} />
         )}
 
         {/* EKSISTERENDE: KOMPONENTER */}
@@ -58387,6 +59245,7 @@ function AppContent() {
   if (window.location.pathname === '/ue-svar') return <UESvarPage />
   if (window.location.pathname === '/befaring-view') return <BefaringViewPage />
   if (window.location.pathname === '/em-view') return <EMViewPage />
+  if (window.location.hash.startsWith('#fdv_ue_levering')) return <FdvUePortalPage />
   if (window.location.pathname === '/ordre-view') return <OrdreViewPage />
 
   if (loading) {
