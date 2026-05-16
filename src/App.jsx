@@ -8839,7 +8839,7 @@ function NotifBell({ onNavigate }) {
               {notifs.length === 0 ? (
                 <div style={{ padding: '32px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>Ingen varsler ennå</div>
               ) : notifs.map(n => (
-                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page) }}
+                <div key={n.id} onClick={() => { markRead(n.id); setOpen(false); if (n.link_page && onNavigate) onNavigate(n.link_page, n.link_id) }}
                   style={{ padding: '12px 18px', borderBottom: '1px solid #f8fafc', background: n.read ? 'white' : '#f0fdf4', cursor: 'pointer', display: 'flex', gap: '10px', alignItems: 'flex-start' }}
                   onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'} onMouseLeave={e => e.currentTarget.style.background = n.read ? 'white' : '#f0fdf4'}>
                   <span style={{ fontSize: '18px', flexShrink: 0 }}>{typeIcon(n.type)}</span>
@@ -33893,6 +33893,17 @@ function FDVPage() {
     finally { setLoading(false) }
   }
   useEffect(()=>{ load() },[])
+
+  // Patch 27 fix v2: Hvis vi kom hit fra et varsel, forhåndsvelg prosjektet
+  // og bytt til UE-leveranser-fanen
+  useEffect(() => {
+    const pendingId = window.__pendingLinkId
+    if (pendingId) {
+      setFilterProject(pendingId)
+      setView('ue')
+      window.__pendingLinkId = null
+    }
+  }, [])
 
   // Patch 25: Auto-fang når prosjekt velges
   useEffect(() => {
@@ -59477,7 +59488,7 @@ function AppContent() {
   }
   window.__enterDetailView = enterDetailView
 
-  const navigate = (p) => {
+  const navigate = (p, linkId) => {
     if (p === page && !subPage) { setMobileMenuOpen(false); return }
     window.history.pushState({ page: p }, '', '#' + p)
     setPage(p)
@@ -59486,6 +59497,8 @@ function AppContent() {
     detailCleanupRef.current = null // rydd opp fra eventuell detaljvisning
     setMobileMenuOpen(false)
     window.scrollTo(0, 0)
+    // Patch 27: Lagre link_id globalt slik at mål-modulen kan lese den
+    window.__pendingLinkId = linkId || null
     // Patch 22: Spor modulbruk for smart feedback-prompt
     sporModulbruk(p)
   }
