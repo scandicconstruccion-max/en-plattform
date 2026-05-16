@@ -33533,6 +33533,7 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
 
 // ─── ENTREPRENØR-SIDE: UE-ADMINISTRASJON ────────────────────────────────────
 function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
+  const { user } = useAuth()
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const [requests, setRequests] = useState([])
@@ -33541,6 +33542,22 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
   const [sendingFor, setSendingFor] = useState(null)
   const [expanded, setExpanded] = useState(null)
   const [docsFor, setDocsFor] = useState({})  // { requestId: [docs] }
+  // Patch 27 fix v3: Detalj-modal og avvis-modal
+  const [docDetalj, setDocDetalj] = useState(null)  // { doc, req }
+  const [avvisModal, setAvvisModal] = useState(null)  // { doc, req }
+  const [avvisGrunn, setAvvisGrunn] = useState('')
+
+  // Helper: Legg til oppføring i activity_log på en UE-forespørsel
+  const loggAktivitet = async (reqId, action, meta = {}) => {
+    try {
+      const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
+      const entry = { at: new Date().toISOString(), by: user?.id || null, by_name: userName, action, meta }
+      // Hent eksisterende logg
+      const { data: req } = await supabase.from('fdv_ue_requests').select('activity_log').eq('id', reqId).single()
+      const existing = Array.isArray(req?.activity_log) ? req.activity_log : []
+      await supabase.from('fdv_ue_requests').update({ activity_log: [...existing, entry], updated_at: new Date().toISOString() }).eq('id', reqId)
+    } catch (e) { console.warn('Kunne ikke logge aktivitet:', e) }
+  }
 
   const load = async () => {
     if (!projectId || projectId === 'alle') { setRequests([]); setLoading(false); return }
@@ -33587,14 +33604,18 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
     try {
       const { error } = await supabase.functions.invoke('send-ue-fdv-invitation', { body: { requestId: req.id, type } })
       if (error) throw error
-      await appAlert({
+      // Logg i activity_log
+      await loggAktivitet(req.id,
+        type === 'reminder' ? `Påminnelse sendt til ${req.ue_contact_email}` : `Invitasjon sendt til ${req.ue_contact_email}`,
+        { type, email: req.ue_contact_email })
+      appAlert({
         message: type === 'reminder' ? '✓ Påminnelse sendt' : '✓ Invitasjon sendt',
         subMessage: `E-post sendt til ${req.ue_contact_email}`,
         kind: 'success',
       })
       await load()
     } catch (e) {
-      await appAlert({
+      appAlert({
         message: 'E-post feilet — bruk manuell kopier-lenke',
         subMessage: 'Edge Function må deployes og Resend må være satt opp. Inntil da, bruk "Kopier lenke"-knappen.',
         kind: 'warning',
@@ -33621,7 +33642,10 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
         file_name: doc.file_name,
         folder_path: NS3456_KAPITLER.find(k => k.id === doc.ns3456_kapittel)?.navn || '',
       })
+      // Logg aktivitet
+      await loggAktivitet(req.id, `Godkjent: ${doc.title}`, { doc_id: doc.id, title: doc.title })
       await loadDocsFor(req.id)
+      setDocDetalj(null)
       if (onLevertGodkjent) onLevertGodkjent()
       appAlert({ message: '✓ Dokument godkjent', subMessage: 'Lagt til i FDV-pakken.', kind: 'success' })
     } catch (e) {
@@ -33629,13 +33653,26 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
     }
   }
 
-  const avvis = async (doc, req) => {
-    const grunn = prompt('Avvisingsgrunn (sendes til UE):')
-    if (!grunn) return
+  // Åpne avvis-modal (i stedet for browser prompt)
+  const apneAvvis = (doc, req) => {
+    setAvvisModal({ doc, req })
+    setAvvisGrunn('')
+  }
+
+  const bekreftAvvis = async () => {
+    if (!avvisModal || !avvisGrunn.trim()) {
+      appAlert({ message: 'Skriv inn en avvisingsgrunn', kind: 'warning' })
+      return
+    }
+    const { doc, req } = avvisModal
     try {
-      await supabase.from('fdv_ue_documents').update({ status: 'rejected', rejected_reason: grunn, reviewed_at: new Date().toISOString() }).eq('id', doc.id)
+      await supabase.from('fdv_ue_documents').update({ status: 'rejected', rejected_reason: avvisGrunn.trim(), reviewed_at: new Date().toISOString() }).eq('id', doc.id)
+      await loggAktivitet(req.id, `Avvist: ${doc.title}`, { doc_id: doc.id, title: doc.title, grunn: avvisGrunn.trim() })
       await loadDocsFor(req.id)
-      appAlert({ message: '✓ Dokument avvist', kind: 'info' })
+      setAvvisModal(null)
+      setAvvisGrunn('')
+      setDocDetalj(null)
+      appAlert({ message: '✓ Dokument avvist', subMessage: 'UE kan se grunnen og laste opp nytt dokument.', kind: 'info' })
     } catch (e) {
       appAlert({ message: 'Feilet', subMessage: e.message, kind: 'error' })
     }
@@ -33800,6 +33837,33 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
                       </div>
                     )}
 
+                    {/* Patch 27 fix v3: Aktivitetslogg-sammendrag */}
+                    {Array.isArray(req.activity_log) && req.activity_log.length > 0 && (
+                      <div style={{ marginBottom:'12px' }}>
+                        <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'6px' }}>
+                          📋 AKTIVITETSLOGG ({req.activity_log.length})
+                        </div>
+                        <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'4px 12px' }}>
+                          {[...req.activity_log].slice(-3).reverse().map((entry, i, arr) => (
+                            <div key={i} style={{ display:'flex', gap:'8px', padding:'8px 0', borderBottom: i < arr.length - 1 ? '1px solid #f1f5f9' : 'none', fontSize:'12px' }}>
+                              <div style={{ width:'20px', height:'20px', borderRadius:'50%', background:'#dbeafe', color:'#1e40af', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'10px', fontWeight:'700', flexShrink:0 }}>
+                                {(entry.by_name || '?').charAt(0).toUpperCase()}
+                              </div>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ color:'#0f172a' }}>{entry.action}</div>
+                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>{entry.by_name || 'System'} · {new Date(entry.at).toLocaleString('nb-NO', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</div>
+                              </div>
+                            </div>
+                          ))}
+                          {req.activity_log.length > 3 && (
+                            <div style={{ padding:'6px 0', fontSize:'11px', color:'#94a3b8', textAlign:'center', borderTop:'1px solid #f1f5f9' }}>
+                              + {req.activity_log.length - 3} eldre hendelser (klikk på et dokument for full logg)
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Leverte dokumenter */}
                     <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'6px' }}>
                       LEVERTE DOKUMENTER ({(docsFor[req.id] || []).length})
@@ -33811,7 +33875,10 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
                     ) : (
                       <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
                         {(docsFor[req.id] || []).map(doc => (
-                          <div key={doc.id} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'10px 12px', display:'flex', alignItems:'center', gap:'10px' }}>
+                          <div key={doc.id} onClick={() => setDocDetalj({ doc, req })}
+                            style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'10px 12px', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', transition:'all 0.15s' }}
+                            onMouseEnter={e => { e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.04)' }}
+                            onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = 'none' }}>
                             <span style={{ fontSize:'16px' }}>📄</span>
                             <div style={{ flex:1, minWidth:0 }}>
                               <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{doc.title}</div>
@@ -33820,16 +33887,16 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
                               </div>
                             </div>
                             {doc.file_url && (
-                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                                style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none' }}>↗ Åpne</a>
+                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
+                                style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', padding:'4px 8px' }}>↗ Åpne fil</a>
                             )}
-                            {doc.status === 'submitted' && (
+                            {doc.status === 'pending' && (
                               <>
-                                <button onClick={() => godkjennDoc(doc, req)}
+                                <button onClick={e => { e.stopPropagation(); godkjennDoc(doc, req) }}
                                   style={{ padding:'4px 10px', background:'#059669', color:'white', border:'none', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'700' }}>
                                   ✓ Godkjenn
                                 </button>
-                                <button onClick={() => avvis(doc, req)}
+                                <button onClick={e => { e.stopPropagation(); apneAvvis(doc, req) }}
                                   style={{ padding:'4px 10px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600' }}>
                                   ✕ Avvis
                                 </button>
@@ -33850,6 +33917,177 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
       )}
 
       {showNy && <FdvNyUeRequestModal projectId={projectId} onClose={() => setShowNy(false)} onSaved={() => { setShowNy(false); load() }} />}
+
+      {/* Patch 27 fix v3: Dokument-detalj-modal */}
+      {docDetalj && (
+        <FdvUeDocDetaljModal
+          doc={docDetalj.doc}
+          req={docDetalj.req}
+          onClose={() => setDocDetalj(null)}
+          onGodkjenn={() => godkjennDoc(docDetalj.doc, docDetalj.req)}
+          onAvvis={() => apneAvvis(docDetalj.doc, docDetalj.req)}
+        />
+      )}
+
+      {/* Patch 27 fix v3: Avvis-modal med begrunnelse */}
+      {avvisModal && (
+        <div style={{ position:'fixed', inset:0, zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.5)' }} onClick={() => setAvvisModal(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'16px', maxWidth:'480px', width:'100%', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+            <div style={{ padding:'20px 24px 16px' }}>
+              <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>✕ Avvis dokument</h3>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>
+                <strong>{avvisModal.doc.title}</strong><br />
+                Begrunnelsen sendes til UE slik at de kan rette opp og levere på nytt.
+              </p>
+              <textarea
+                value={avvisGrunn}
+                onChange={e => setAvvisGrunn(e.target.value)}
+                placeholder="F.eks. Mangler signaturer, feil revisjon, lavt oppløselig skanning..."
+                rows={4}
+                autoFocus
+                style={{ width:'100%', padding:'10px 12px', border:'1px solid #cbd5e1', borderRadius:'10px', fontSize:'14px', fontFamily:'inherit', resize:'vertical', boxSizing:'border-box' }} />
+            </div>
+            <div style={{ padding:'14px 20px', background:'#f8fafc', borderTop:'1px solid #e2e8f0', display:'flex', justifyContent:'flex-end', gap:'8px' }}>
+              <button onClick={() => setAvvisModal(null)}
+                style={{ padding:'10px 18px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>
+                Avbryt
+              </button>
+              <button onClick={bekreftAvvis}
+                style={{ padding:'10px 18px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+                Avvis dokument
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Patch 27 fix v3: Dokument-detalj-modal med forhåndsvisning
+function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
+  const isImage = doc.file_url && /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(doc.file_name || doc.file_url)
+  const isPdf = doc.file_url && /\.pdf$/i.test(doc.file_name || doc.file_url)
+  const docTypeLabel = FDV_DOC_TYPES[doc.doc_type]?.label || 'Annet'
+  const kapittelNavn = NS3456_KAPITLER.find(k => k.id === doc.ns3456_kapittel)?.navn || `Kapittel ${doc.ns3456_kapittel}`
+
+  return (
+    <div className="fdv-modal-overlay" style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.5)' }} onClick={onClose} />
+      <div className="fdv-modal-content" style={{ position:'relative', background:'white', borderRadius:'16px', maxWidth:'720px', width:'100%', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', overflow:'hidden' }}>
+        <div style={{ padding:'18px 22px', borderBottom:'1px solid #e2e8f0', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div style={{ minWidth:0, flex:1 }}>
+            <h3 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>📄 {doc.title}</h3>
+            <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
+              Levert av <strong>{req.ue_name}</strong> · {new Date(doc.uploaded_at).toLocaleString('nb-NO')}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px 10px', minWidth:'40px', minHeight:'40px' }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'18px 22px' }}>
+          {/* Forhåndsvisning */}
+          {isImage ? (
+            <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'8px', textAlign:'center' }}>
+              <img src={doc.file_url} alt={doc.title} style={{ maxWidth:'100%', maxHeight:'380px', borderRadius:'6px' }} />
+            </div>
+          ) : isPdf ? (
+            <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'24px', textAlign:'center' }}>
+              <div style={{ fontSize:'48px', marginBottom:'8px' }}>📕</div>
+              <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                style={{ display:'inline-block', padding:'10px 18px', background:'#2563eb', color:'white', borderRadius:'10px', textDecoration:'none', fontSize:'13px', fontWeight:'600' }}>
+                Åpne PDF i ny fane ↗
+              </a>
+            </div>
+          ) : (
+            <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'24px', textAlign:'center' }}>
+              <div style={{ fontSize:'48px', marginBottom:'8px' }}>📎</div>
+              <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'10px' }}>{doc.file_name || 'Fil'}</div>
+              {doc.file_url && (
+                <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                  style={{ display:'inline-block', padding:'10px 18px', background:'#2563eb', color:'white', borderRadius:'10px', textDecoration:'none', fontSize:'13px', fontWeight:'600' }}>
+                  Last ned ↗
+                </a>
+              )}
+            </div>
+          )}
+
+          {/* Metadata */}
+          <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', marginBottom:'16px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'12px', fontSize:'13px' }}>
+              <div>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>NS 3456</div>
+                <div style={{ fontWeight:'600', color:'#0f172a' }}>{doc.ns3456_kapittel} {kapittelNavn}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>Type</div>
+                <div style={{ fontWeight:'600', color:'#0f172a' }}>{docTypeLabel}</div>
+              </div>
+              <div>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>Status</div>
+                <div style={{ fontWeight:'700', color: doc.status === 'approved' ? '#15803d' : doc.status === 'rejected' ? '#dc2626' : '#92400e' }}>
+                  {doc.status === 'approved' ? '✓ Godkjent' : doc.status === 'rejected' ? '✕ Avvist' : '⏳ Venter på godkjenning'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px' }}>Filnavn</div>
+                <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis' }}>{doc.file_name || '—'}</div>
+              </div>
+            </div>
+            {doc.notes && (
+              <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid #e2e8f0' }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'4px' }}>Kommentar fra UE</div>
+                <div style={{ fontSize:'13px', color:'#475569', whiteSpace:'pre-wrap' }}>{doc.notes}</div>
+              </div>
+            )}
+            {doc.status === 'rejected' && doc.rejected_reason && (
+              <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid #fecaca', background:'#fef2f2', margin:'12px -16px -14px', padding:'12px 16px', borderRadius:'0 0 10px 10px' }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#991b1b', textTransform:'uppercase', letterSpacing:'0.5px', marginBottom:'4px' }}>Avvisningsgrunn</div>
+                <div style={{ fontSize:'13px', color:'#7f1d1d', whiteSpace:'pre-wrap' }}>{doc.rejected_reason}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Aktivitetslogg for hele forespørselen */}
+          {Array.isArray(req.activity_log) && req.activity_log.length > 0 && (
+            <div>
+              <h4 style={{ margin:'0 0 10px', fontSize:'13px', fontWeight:'700', color:'#475569', textTransform:'uppercase', letterSpacing:'0.5px' }}>
+                📋 Aktivitetslogg ({req.activity_log.length})
+              </h4>
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'4px 14px' }}>
+                {[...req.activity_log].reverse().map((entry, i) => (
+                  <div key={i} style={{ display:'flex', gap:'10px', padding:'10px 0', borderBottom: i < req.activity_log.length - 1 ? '1px solid #e2e8f0' : 'none' }}>
+                    <div style={{ width:'24px', height:'24px', borderRadius:'50%', background:'#dbeafe', color:'#1e40af', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:'700', flexShrink:0 }}>
+                      {(entry.by_name || '?').charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:'13px', color:'#0f172a' }}>{entry.action}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>
+                        {entry.by_name || 'System'} · {new Date(entry.at).toLocaleString('nb-NO')}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        {doc.status === 'pending' && (
+          <div className="fdv-modal-actions" style={{ padding:'14px 22px', borderTop:'1px solid #e2e8f0', background:'#f8fafc', display:'flex', justifyContent:'flex-end', gap:'8px', flexShrink:0 }}>
+            <button onClick={onAvvis}
+              style={{ padding:'10px 18px', background:'white', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>
+              ✕ Avvis
+            </button>
+            <button onClick={onGodkjenn}
+              style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+              ✓ Godkjenn
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
