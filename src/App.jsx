@@ -2206,6 +2206,7 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
 
 function ProsjekterPage({ onNavigateDetail }) {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -2273,7 +2274,7 @@ function ProsjekterPage({ onNavigateDetail }) {
       await db.createProject(sanitizeUuidFields({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
       setShowCreate(false)
       load()
-    } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
 
   return (
@@ -2393,6 +2394,7 @@ function ProsjekterPage({ onNavigateDetail }) {
 
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
@@ -2437,22 +2439,22 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       }
       await db.updateProject(projectId, sanitizeUuidFields({ ...form, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', ') || form.address, budget: form.budget ? parseFloat(form.budget) : null }))
       setShowEdit(false); load()
-    } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
 
   const handleDelete = async () => {
     try {
       const { error } = await supabase.from('projects').delete().eq('id', projectId)
-      if (error) { alert('Feil ved sletting: ' + error.message); return }
+      if (error) { await appAlert({ message: 'Feil ved sletting', subMessage: error.message, kind: 'error' }); return }
       onBack()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   const handleArchive = async () => {
     try {
       await db.updateProject(projectId, { status: 'arkivert' })
       onBack()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
@@ -2498,7 +2500,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       }
       await db.createProject(sanitizeUuidFields({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
       setShowCreateSub(false); load()
-    } catch(e) { alert('Feil: ' + e.message) } finally { setSaving(false) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
 
   return (
@@ -2846,6 +2848,7 @@ function nextRevision(existingRevisions) {
 
 function ProsjektfilerPage() {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const [files, setFiles] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
@@ -2973,8 +2976,8 @@ function ProsjektfilerPage() {
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleUpload = async (e) => {
     e.preventDefault()
-    if (uploadFiles.length === 0) return alert('Velg minst én fil')
-    if (!uploadForm.project_id) return alert('Velg et prosjekt')
+    if (uploadFiles.length === 0) { await appAlert({ message: 'Velg minst én fil', kind: 'warn' }); return }
+    if (!uploadForm.project_id) { await appAlert({ message: 'Velg et prosjekt', kind: 'warn' }); return }
     setUploading(true)
     try {
       for (const file of uploadFiles) {
@@ -3002,7 +3005,7 @@ function ProsjektfilerPage() {
       setUploadFiles([])
       setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
       await loadData()
-    } catch(e) { alert('Feil ved opplasting: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Feil ved opplasting', subMessage: e.message, kind: 'error' }) }
     finally { setUploading(false) }
   }
 
@@ -3032,7 +3035,11 @@ function ProsjektfilerPage() {
         .update({ archived: true, document_group: docGroup })
         .eq('id', baseFile.id)
       if (archErr) {
-        alert('Feil: Kunne ikke arkivere gammel revisjon.\n\nKjør denne SQL-en i Supabase:\n\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS document_group text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_label text DEFAULT \'Rev01\';\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS sub_folder text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_note text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_log jsonb DEFAULT \'[]\'::jsonb;')
+        await appAlert({
+          message: 'Kunne ikke arkivere gammel revisjon',
+          subMessage: 'Kjør denne SQL-en i Supabase:\n\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS document_group text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_label text DEFAULT \'Rev01\';\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS sub_folder text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_note text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_log jsonb DEFAULT \'[]\'::jsonb;',
+          kind: 'error',
+        })
         return
       }
 
@@ -3080,7 +3087,7 @@ function ProsjektfilerPage() {
       setRevisionTarget(null)
       setRevisionNote('')
       await loadData()
-    } catch(e) { alert(e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setUploading(false) }
   }
 
@@ -3092,7 +3099,7 @@ function ProsjektfilerPage() {
       const a = document.createElement('a')
       a.href = url; a.download = file.name; a.click()
       URL.revokeObjectURL(url)
-    } catch(e) { alert('Feil ved nedlasting: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Feil ved nedlasting', subMessage: e.message, kind: 'error' }) }
   }
 
   // Show local confirm dialog then delete
@@ -3104,9 +3111,9 @@ function ProsjektfilerPage() {
     try {
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
       const { error } = await supabase.from('project_files').delete().eq('id', file.id)
-      if (error) { alert('Feil ved sletting: ' + error.message); return }
+      if (error) { await appAlert({ message: 'Feil ved sletting', subMessage: error.message, kind: 'error' }); return }
       await loadData()
-    } catch(e) { alert('Feil ved sletting: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Feil ved sletting', subMessage: e.message, kind: 'error' }) }
   }
 
   const toggleCat = (catId) => setExpandedCats(p => ({ ...p, [catId]: !p[catId] }))
@@ -9070,6 +9077,7 @@ function TilbudPage() {
 
 function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [q, setQ] = useState(init)
   const [editing, setEditing] = useState(false)
   const [sendingEmail, setSendingEmail] = useState(false)
@@ -9270,7 +9278,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 
       const safeName = (q.quote_number || q.title || 'Tilbud').replace(/[^a-zA-Z0-9_-]/g, '_')
       doc.save(`Tilbud - ${safeName}.pdf`)
-    } catch(e) { console.error(e); alert('Feil ved PDF: ' + e.message) }
+    } catch(e) { console.error(e); await appAlert({ message: 'Feil ved PDF', subMessage: e.message, kind: 'error' }) }
     finally { setExportingPdf(false) }
   }
 
@@ -9355,7 +9363,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
       // Naviger til ny revisjon
       setQ(data)
       loadRevisions()
-    } catch(e) { alert('Feil ved opprettelse av revisjon: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Feil ved opprettelse av revisjon', subMessage: e.message, kind: 'error' }) }
   }
 
   const isMobTD = typeof window !== 'undefined' && window.innerWidth < 768
@@ -9626,6 +9634,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
 }
 
 function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const isEdit = !!initial
   const [step, setStep] = useState(1) // 1=info, 2=kapitler
   const [form, setForm] = useState({
@@ -9667,7 +9676,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
   const updatePost = (chId, pId, f, v) => setChapters(c => c.map(x => x.id === chId ? { ...x, posts: x.posts.map(p => p.id === pId ? { ...p, [f]: v } : p) } : x))
 
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
       // Felles kunde-oppløsning: finner eller oppretter kunde i customers-tabellen
@@ -9687,7 +9696,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
         if (error) throw error
       }
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -10742,6 +10751,7 @@ function AnbudsPage() {
 
 function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const isMobAD = typeof window !== 'undefined' && window.innerWidth < 768
   const [t, setT] = useState(init)
   const [ues, setUes] = useState([])
@@ -10814,8 +10824,8 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
       }).select().single()
       if (error) throw error
       await supabase.from('tenders').update({ generated_quote_id: data.id }).eq('id', t.id)
-      alert('✅ Tilbud opprettet! Gå til Tilbud-modulen for å se det.')
-    } catch(e) { alert('Feil: '+e.message) }
+      await appAlert({ message: 'Tilbud opprettet', subMessage: 'Gå til Tilbud-modulen for å se det.', kind: 'success' })
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
@@ -10986,6 +10996,7 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
 }
 
 function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const isEdit = !!initial
   const isIncoming = type === 'incoming'
   const [step, setStep] = useState(1)
@@ -11019,7 +11030,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
 
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
       // Kundeoppløsning: for innkommende anbud er "kunde" egentlig byggherre/oppdragsgiver
@@ -11034,7 +11045,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
       if (isEdit) { const {error}=await supabase.from('tenders').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('tenders').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -11158,6 +11169,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 
 function InviterUEModal({ tender, user, onClose, onSaved }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null, customer_id: null }])
   const [existingUes, setExistingUes] = useState([])
   const [ueKunder, setUeKunder] = useState([])
@@ -11199,7 +11211,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
 
   const handleSend = async () => {
     const valid = ues.filter(u=>u.company_name.trim()&&u.email.trim())
-    if (valid.length===0) return alert('Legg til minst en UE med navn og e-post.')
+    if (valid.length===0) { await appAlert({ message: 'Mangler informasjon', subMessage: 'Legg til minst én UE med navn og e-post.', kind: 'warn' }); return }
     const dups = valid.filter(u => existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
     if (dups.length > 0) {
       const sendDuplikater = await confirm({
@@ -11256,7 +11268,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
       }
       if (createdAny) invalidateCustomerCache()
       setSent(true); setTimeout(()=>onSaved(), 1500)
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSending(false) }
   }
 
@@ -14329,6 +14341,7 @@ function FakturaUpsellModal({ onClose }) {
 // ─── END FAKTURA UPSELL MODAL ────────────────────────────────────────────────
 
 function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const isEdit = !!initial
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
@@ -14362,7 +14375,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
   const updatePost = (chId,pId,f,v) => setChapters(c=>c.map(x=>x.id===chId?{...x,posts:x.posts.map(p=>p.id===pId?{...p,[f]:v}:p)}:x))
 
   const handleSave = async (alsoSend = false) => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
       const { customerId } = await resolveCustomerFromForm({
@@ -14392,7 +14405,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
         savedOrder = data
       }
       onSaved(savedOrder, alsoSend)
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -15293,6 +15306,7 @@ function isOverdue(inv) {
 function FakturaPage() {
   const { user } = useAuth()
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [invoices, setInvoices] = useState([])
   const [orders, setOrders] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -15475,7 +15489,7 @@ function FakturaPage() {
                     </div>
                     <button onClick={async (e) => {
                       e.stopPropagation()
-                      if (!oi.customer_email) { alert('Ingen e-post registrert'); return }
+                      if (!oi.customer_email) { await appAlert({ message: 'Ingen e-post registrert', subMessage: 'Kunden mangler e-postadresse på fakturaen.', kind: 'warn' }); return }
                       const ok = await confirm({
                         message: 'Send purring',
                         subMessage: `Til: ${oi.customer_email}`,
@@ -15493,7 +15507,7 @@ function FakturaPage() {
                         })
                         await supabase.from('invoices').update({ status:'Purret', reminder_count:reminderNum, last_reminder_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', oi.id)
                         load()
-                      } catch(err) { alert('Feil: '+err.message) }
+                      } catch(err) { await appAlert({ message: 'En feil oppstod', subMessage: err.message, kind: 'error' }) }
                     }} style={{ padding:'6px 14px', background:'#dc2626', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', whiteSpace:'nowrap' }}>
                       📧 Purring {(oi.reminder_count||0)+1}
                     </button>
@@ -16900,7 +16914,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
         }))
       }
 
-      if (creditLines.length === 0) return alert('Ingen linjer valgt for kreditering')
+      if (creditLines.length === 0) { await appAlert({ message: 'Ingen linjer valgt', subMessage: 'Velg minst én linje du vil kreditere.', kind: 'warn' }); return }
 
       const { error } = await supabase.from('invoices').insert({
         title: `Kreditnota – ${inv.title}`,
@@ -16930,9 +16944,9 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
       await supabase.from('invoices').update({ status: 'Kreditert', updated_at: new Date().toISOString() }).eq('id', inv.id)
       setInv(v => ({ ...v, status: 'Kreditert' }))
       setShowKreditnota(false)
-      alert('Kreditnota opprettet og original faktura kreditert.')
+      await appAlert({ message: 'Kreditnota opprettet', subMessage: 'Original faktura er kreditert.', kind: 'success' })
       onBack()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   // Group lines by mva rate for summary
@@ -17213,6 +17227,7 @@ function nextInvoiceNumber(invoices) {
 }
 
 function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title||'',
@@ -17239,7 +17254,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   const updateLine = (id,f,v) => setLines(l=>l.map(x=>x.id===id?{...x,[f]:v}:x))
 
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
       const { customerId } = await resolveCustomerFromForm({
@@ -17252,7 +17267,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
       if (isEdit) { const {error}=await supabase.from('invoices').update(payload).eq('id',initial.id); if(error) throw error }
       else { const {error}=await supabase.from('invoices').insert({...payload,status:'Utkast',created_by:user?.id}); if(error) throw error }
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -17372,6 +17387,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
 }
 
 function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const [selectedOrder, setSelectedOrder] = useState('')
   const [partialPct, setPartialPct] = useState(50)
   const [saving, setSaving] = useState(false)
@@ -17381,7 +17397,7 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
   const invoiceAmount = mode==='partial' ? grandTotal * (partialPct/100) : grandTotal
 
   const handleCreate = async () => {
-    if (!ord) return alert('Velg en ordre')
+    if (!ord) { await appAlert({ message: 'Velg en ordre', kind: 'warn' }); return }
     setSaving(true)
     try {
       const lines = mode==='partial'
@@ -17408,7 +17424,7 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
       })
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -17460,12 +17476,13 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
 }
 
 function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const [selectedQuote, setSelectedQuote] = useState('')
   const [saving, setSaving] = useState(false)
 
   const handleCreate = async () => {
     const q = quotes.find(x=>x.id===selectedQuote)
-    if (!q) return alert('Velg et tilbud')
+    if (!q) { await appAlert({ message: 'Velg et tilbud', kind: 'warn' }); return }
     setSaving(true)
     try {
       const lines = (q.chapters||[]).flatMap(ch=>(ch.posts||[]).map(p=>({
@@ -17488,7 +17505,7 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
       })
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -17528,6 +17545,7 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
 }
 
 function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const [selectedOrder, setSelectedOrder] = useState('')
   const [changes, setChanges] = useState([])
   const [selectedChanges, setSelectedChanges] = useState([])
@@ -17543,7 +17561,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
 
   const handleCreate = async () => {
     const ord = orders.find(o=>o.id===selectedOrder)
-    if (!ord||selectedChanges.length===0) return alert('Velg ordre og minst én endringsmelding')
+    if (!ord||selectedChanges.length===0) { await appAlert({ message: 'Mangler informasjon', subMessage: 'Velg ordre og minst én endringsmelding.', kind: 'warn' }); return }
     setSaving(true)
     try {
       const selChanges = changes.filter(c=>selectedChanges.includes(c.id))
@@ -17561,7 +17579,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
       })
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -17610,6 +17628,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
 }
 
 function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const [step, setStep] = useState(1) // 1=velg kalk, 2=velg poster
   const [selectedKalk, setSelectedKalk] = useState(null)
   const [selectedBds, setSelectedBds] = useState({}) // { bdId: { checked, pct } }
@@ -17637,7 +17656,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
 
   const handleCreate = async () => {
     const entries = Object.entries(selectedBds).filter(([_, v]) => v.checked && v.pct > 0)
-    if (entries.length === 0) return alert('Velg minst en post')
+    if (entries.length === 0) { await appAlert({ message: 'Velg minst én post', kind: 'warn' }); return }
     setSaving(true)
     try {
       const k = selectedKalk
@@ -17678,7 +17697,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
       })
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -26593,6 +26612,7 @@ const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0',
 function KunderPage() {
   const { user } = useAuth()
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [kunder, setKunder] = useState([])
   const [prosjekter, setProsjekter] = useState([])
   const [tilbud, setTilbud] = useState([])
@@ -26622,14 +26642,14 @@ function KunderPage() {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target.result
       const sep = text.includes(';') ? ';' : ','
       const lines = text.split('\n').map(l => l.split(sep).map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"').trim()))
-      if (lines.length < 2) { alert('Filen er tom eller har feil format'); return }
+      if (lines.length < 2) { await appAlert({ message: 'Tom eller ugyldig fil', subMessage: 'Filen er tom eller har feil format.', kind: 'warn' }); return }
       const headers = lines[0].map(h => h.toLowerCase())
       const nameIdx = headers.findIndex(h => h.includes('navn') || h === 'name')
-      if (nameIdx === -1) { alert('Fant ikke Navn-kolonne i CSV-filen'); return }
+      if (nameIdx === -1) { await appAlert({ message: 'Mangler Navn-kolonne', subMessage: 'CSV-filen må ha en kolonne kalt "Navn".', kind: 'warn' }); return }
       const fieldMap = {
         name: nameIdx, type: headers.findIndex(h => h.includes('type')),
         orgnr: headers.findIndex(h => h.includes('org')),
@@ -26660,7 +26680,7 @@ function KunderPage() {
       const clean = importData.filter(r => r.name?.trim()).map(r => ({ name: r.name?.trim(), type: r.type || 'bedrift', orgnr: r.orgnr || null, email: r.email || null, phone: r.phone || null, invoice_email: r.invoice_email || null, address: r.address || null, postal_code: r.postal_code || null, city: r.city || null, notes: r.notes || null, created_by: user?.id }))
       const { error } = await supabase.from('customers').insert(clean)
       if (error) throw error; setShowImport(false); setImportData(null); setImportErrors([]); load()
-    } catch(e) { alert('Feil ved import: ' + e.message) } finally { setImporting(false) }
+    } catch(e) { await appAlert({ message: 'Feil ved import', subMessage: e.message, kind: 'error' }) } finally { setImporting(false) }
   }
 
   const load = async () => {
@@ -26692,7 +26712,7 @@ function KunderPage() {
       await supabase.from('customers').delete().eq('id', kunde.id)
       invalidateCustomerCache()
       await load()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
@@ -26910,6 +26930,7 @@ function KunderPage() {
 
 function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [editing, setEditing] = useState(false)
   const [kontakter, setKontakter] = useState([])
   const [notater, setNotater] = useState([])
@@ -26945,7 +26966,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
       await supabase.from('customer_notes').insert({ customer_id:kunde.id, content:nyttNotat.trim(), created_by:user?.id })
       setNyttNotat('')
       loadDetails()
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   const slettKontakt = async (id) => {
@@ -27350,6 +27371,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
 }
 
 function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
+  const appAlert = useAppAlert()
   const isEdit = !!initial
   // Autogenerer kundenummer for nye kunder (K-0001, K-0002, ...)
   const autoCustomerNumber = React.useMemo(() => {
@@ -27437,11 +27459,11 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
 
   const handleSave = async (e) => {
     e.preventDefault()
-    if (!form.name.trim()) return alert('Navn er påkrevd')
+    if (!form.name.trim()) { await appAlert({ message: 'Navn er påkrevd', kind: 'warn' }); return }
     // Valider kontaktpersoner for ikke-privat kunder
     const validContacts = contacts.filter(c => c.name.trim())
     if (requiresContact && validContacts.length === 0) {
-      return alert('Minst én kontaktperson med navn er påkrevd for denne kundetypen')
+      { await appAlert({ message: 'Kontaktperson mangler', subMessage: 'Minst én kontaktperson med navn er påkrevd for denne kundetypen.', kind: 'warn' }); return }
     }
     setSaving(true)
     try {
@@ -27503,7 +27525,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
       invalidateCustomerCache()
       // Send med customerId og hele kundedata slik at inline-flows (f.eks. fra CustomerSelect) kan auto-velge
       onSaved(customerId, { ...form, id: customerId })
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -35250,13 +35272,14 @@ function QRSkannerModal({ onClose, onScanned }) {
 }
 
 function FDVDocModal({ projects, components, user, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const [form, setForm] = useState({ title:'', doc_type:'manual', project_id:'', component_id:'', folder_path:'/' })
   const [file, setFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
 
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
       let fileUrl=null, fileName=null, fileType=null
@@ -35270,7 +35293,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
       const {error}=await supabase.from('fdv_documents').insert({ ...form, project_id:form.project_id||null, component_id:form.component_id||null, file_url:fileUrl, file_name:fileName, file_type:fileType, created_by:user?.id })
       if(error) throw error
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
 
   const filteredComponents = form.project_id ? components.filter(c=>c.project_id===form.project_id) : components
@@ -50722,7 +50745,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
       setShowTemplatePicker(false)
       await load()
       if (data) setViewKalk(data)
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   const deleteTemplate = async (tmpl) => {
@@ -54052,6 +54075,7 @@ function KalkFaktorerPage({ onBack }) {
 
 function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) {
   const { user } = useAuth()
+  const appAlert = useAppAlert()
   const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title || '',
@@ -54084,8 +54108,8 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
   }
 
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Prosjektnavn er påkrevd')
-    if (!isEdit && selectedFag.length === 0) return alert('Velg minst én faggruppe')
+    if (!form.title.trim()) { await appAlert({ message: 'Prosjektnavn er påkrevd', kind: 'warn' }); return }
+    if (!isEdit && selectedFag.length === 0) { await appAlert({ message: 'Velg minst én faggruppe', kind: 'warn' }); return }
     setSaving(true)
     try {
       // Load bedrift faktorer
@@ -54143,7 +54167,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
       onSaved()
     } catch(e) {
       console.error('Kalkyle-lagring feilet:', e)
-      alert('Feil ved lagring: ' + (e.message || 'Ukjent feil. Sjekk konsoll for detaljer.'))
+      await appAlert({ message: 'Feil ved lagring', subMessage: e.message || 'Ukjent feil. Sjekk konsoll for detaljer.', kind: 'error' })
     }
     finally { setSaving(false) }
   }
@@ -54227,6 +54251,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
 
 function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const { user } = useAuth()
   const [k, setK] = useState(init)
   const [activeKalkId, setActiveKalkId] = useState(null)
@@ -54463,7 +54488,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       })
       await loadVersions()
       setToastMsg({ title: 'Versjon lagret', message: `v${maxV + 1}: ${label.trim()}`, type: 'success' })
-    } catch(e) { alert('Feil ved versjonering: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Feil ved versjonering', subMessage: e.message, kind: 'error' }) }
   }
 
   const restoreVersion = async (version) => {
@@ -54521,8 +54546,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
-    if (!ue.email) return alert('E-postadresse til UE er påkrevd')
-    if (!ue.navn) return alert('UE-navn er påkrevd')
+    if (!ue.email) { await appAlert({ message: 'E-postadresse mangler', subMessage: 'UE-en må ha en e-postadresse.', kind: 'warn' }); return }
+    if (!ue.navn) { await appAlert({ message: 'UE-navn er påkrevd', kind: 'warn' }); return }
     try {
       const kl = kalkyler.find(x => x.id === kalId)
       const bd = kl?.bygningsdeler?.find(b => b.id === bdId)
@@ -54570,7 +54595,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       updateUE(kalId, bdId, ue.id, 'status', 'sendt')
       updateUE(kalId, bdId, ue.id, 'foresporsel_id', foresp.id)
       setShowUESuccess({ navn: ue.navn, nr })
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   // Godkjenn UE-tilbud — oppdater kostnad i kalkylen
@@ -54710,8 +54735,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const newK = { ...k, kalk_number: newKalkNr, title: k.title + ' (kopi)', status: 'Utkast', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     delete newK.id
     const { error } = await supabase.from('calculations').insert(newK)
-    if (error) alert('Feil: ' + error.message)
-    else { alert('✅ Kalkulasjon duplisert!'); onBack() }
+    if (error) await appAlert({ message: 'En feil oppstod', subMessage: error.message, kind: 'error' })
+    else { await appAlert({ message: 'Kalkulasjon duplisert', kind: 'success' }); onBack() }
   }
 
   // ── Lagre som mal ──
@@ -54722,7 +54747,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [templateProsjektType, setTemplateProsjektType] = useState(k.prosjekt_type || 'nybygg')
 
   const handleSaveAsTemplate = async () => {
-    if (!templateName.trim()) return alert('Malnavn er påkrevd')
+    if (!templateName.trim()) { await appAlert({ message: 'Malnavn er påkrevd', kind: 'warn' }); return }
     try {
       const templatePayload = {
         title: templateName.trim(),
@@ -54743,7 +54768,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       if (error) throw error
       setShowSaveTemplate(false); setTemplateName(''); setTemplateDesc('')
       setToastMsg({ title: 'Mal lagret', message: `"${templateName.trim()}" er lagret som mal og kan gjenbrukes`, type: 'success' })
-    } catch(e) { alert('Feil: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
   // Generer tilbud fra kalkulasjon → Tilbudsmodulen
@@ -54763,7 +54788,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const quoteNr = nextSequenceNumber(existingQ || [], 'TB', 'quote_number')
     const quotePayload = { title: k.title, quote_number: quoteNr, project_id: null, customer_name: k.customer_name || '', customer_email: '', customer_address: k.customer_address || '', global_markup: 0, chapters: quoteChapters, status: 'Utkast', created_by: user?.id, source_calculation_id: k.id, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }
     const { error } = await supabase.from('quotes').insert(quotePayload)
-    if (error) { alert('Feil: ' + error.message) }
+    if (error) { await appAlert({ message: 'En feil oppstod', subMessage: error.message, kind: 'error' }) }
     else { await updateStatus('Tilbud sendt'); setShowTilbudPopup('created') }
   }
 
@@ -55782,7 +55807,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   const file = e.target.files?.[0]; if (!file) return
                                   const path = `ue-vedlegg/${Date.now()}_${file.name}`
                                   const { error } = await supabase.storage.from('project-files').upload(path, file)
-                                  if (error) { alert('Feil: ' + error.message); return }
+                                  if (error) { await appAlert({ message: 'En feil oppstod', subMessage: error.message, kind: 'error' }); return }
                                   const { data: { publicUrl } } = supabase.storage.from('project-files').getPublicUrl(path)
                                   updateUF('vedlegg', [...(uf.vedlegg||[]), { name: file.name, url: publicUrl }])
                                   e.target.value = ''
@@ -55837,7 +55862,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                   if (uf.navn && uf.email) {
                                     try { await supabase.from('ue_register').upsert({ user_id: user?.id, navn: uf.navn, email: uf.email, telefon: uf.telefon || '', fag: fag.name }, { onConflict: 'user_id,email' }) } catch(e) {}
                                   }
-                                } catch(e) { alert('Feil: ' + e.message) }
+                                } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
                               }} style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'6px', padding:'6px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', width:'100%' }}>📧 Send forespørsel til {uf.navn || 'UE'}</button>
                             )}
                             {uf.status === 'sendt' && (
@@ -56836,7 +56861,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 if (error) throw error
               }
               setSent({ type: 'ressurs', count: plans.length, mode: useEmployees ? 'ansatte' : 'placeholder' })
-            } catch (e) { alert('Feil: ' + e.message) }
+            } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
             finally { setSending(false) }
           }
 
@@ -56868,12 +56893,12 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                 }))
               }
 
-              if (matPlans.length === 0) { alert('Ingen bygningsdeler med materialer'); setSending(false); return }
+              if (matPlans.length === 0) { await appAlert({ message: 'Ingen materialer å sende', subMessage: 'Det finnes ingen bygningsdeler med materialer.', kind: 'warn' }); setSending(false); return }
 
               const { error } = await supabase.from('resource_plans').insert(matPlans)
               if (error) throw error
               setSent({ type: 'levering', count: matPlans.length })
-            } catch (e) { alert('Feil: ' + e.message) }
+            } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
             finally { setSending(false) }
           }
 
@@ -57782,6 +57807,7 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
 // ─── SEND KALKULASJON TIL KUNDE MODAL ────────────────────────────────────────
 
 function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, onSent }) {
+  const appAlert = useAppAlert()
   const [email, setEmail] = useState('')
   const [message, setMessage] = useState(kalk.tilbud_innledning || 'Vi tillater oss herved å fremme følgende tilbud for ovennevnte prosjekt.')
   const [forbehold, setForbehold] = useState(kalk.forbehold || '')
@@ -57829,7 +57855,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       template_type: type,
       user_id: user?.id,
     }).select().single()
-    if (error) { alert('Feil: ' + error.message); return }
+    if (error) { await appAlert({ message: 'En feil oppstod', subMessage: error.message, kind: 'error' }); return }
     setStdMeldinger(m => [...m, data])
     setNewMeldingName('')
     setShowNewMelding(null)
@@ -58330,7 +58356,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
   const openPreview = async () => {
     if (!visning) {
-      alert('Velg visningsmodus først (Per fag / Detaljert / Kun totalsum)')
+      await appAlert({ message: 'Velg visningsmodus', subMessage: 'Velg Per fag, Detaljert eller Kun totalsum først.', kind: 'warn' })
       return
     }
     try {
@@ -58340,12 +58366,12 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
       window.open(url, '_blank')
     } catch (e) {
       console.error('PDF-forhåndsvisning feilet:', e)
-      alert('Forhåndsvisning feilet: ' + e.message)
+      await appAlert({ message: 'Forhåndsvisning feilet', subMessage: e.message, kind: 'error' })
     }
   }
 
   const handleSend = async () => {
-    if (!email) return alert('E-postadresse er påkrevd')
+    if (!email) { await appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' }); return }
     setSending(true)
     try {
       // Lagre tilbuds-innstillinger på kalkylen så de huskes til neste gang
@@ -58449,7 +58475,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
       setSent(true)
       setTimeout(() => onSent(), 1500)
-    } catch(e) { alert('Kunne ikke sende: ' + e.message) }
+    } catch(e) { await appAlert({ message: 'Kunne ikke sende', subMessage: e.message, kind: 'error' }) }
     finally { setSending(false) }
   }
 
