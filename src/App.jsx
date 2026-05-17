@@ -29027,12 +29027,16 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
     setUes([])
     if (!projectId) { setLoading(false); return }
     supabase.from('projects')
-      .select('subcontractors')
+      .select('subcontractors, architects, consultants')
       .eq('id', projectId)
       .single()
       .then(r => {
         if (!mounted) return
-        const list = (r.data?.subcontractors || []).filter(s => s.email)
+        // Patch 27 fix v11: Hent UE-er, arkitekter og rådgivere — alle med e-post
+        const subs = (r.data?.subcontractors || []).map(s => ({ ...s, _kategori: 'UE' }))
+        const arks = (r.data?.architects || []).map(s => ({ ...s, _kategori: 'Arkitekt' }))
+        const cons = (r.data?.consultants || []).map(s => ({ ...s, _kategori: 'Rådgiver' }))
+        const list = [...subs, ...arks, ...cons].filter(s => s.email)
         setUes(list)
         setLoading(false)
       })
@@ -29091,7 +29095,7 @@ function ProjectUESelect({ projectId, value, onChange, onSelectFull = null, plac
         <option value="">{loading ? 'Laster UE-er...' : ues.length === 0 ? '— Ingen UE-er på prosjektet —' : `— ${placeholder} —`}</option>
         {ues.map((ue, i) => (
           <option key={i} value={ue.email}>
-            {ue.company || ue.contact_person || ue.email}{ue.trade ? ` · ${ue.trade}` : ''}{ue.contact_person && ue.company ? ` (${ue.contact_person})` : ''}
+            [{ue._kategori || 'UE'}] {ue.company || ue.contact_person || ue.email}{ue.trade ? ` · ${ue.trade}` : ''}{ue.contact_person && ue.company ? ` (${ue.contact_person})` : ''}
           </option>
         ))}
       </select>
