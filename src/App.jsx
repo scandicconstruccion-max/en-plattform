@@ -33658,6 +33658,7 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
       // Logg aktivitet
       await loggAktivitet(req.id, `Godkjent: ${doc.title}`, { doc_id: doc.id, title: doc.title })
       await loadDocsFor(req.id)
+      await load()  // Patch 27 fix v5: Last requests på nytt for å vise oppdatert activity_log
       setDocDetalj(null)
       if (onLevertGodkjent) onLevertGodkjent()
       appAlert({ message: '✓ Dokument godkjent', subMessage: 'Lagt til i FDV-pakken.', kind: 'success' })
@@ -33699,6 +33700,7 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
       }
 
       await loadDocsFor(req.id)
+      await load()  // Patch 27 fix v5: Last requests på nytt for å vise oppdatert activity_log
       setAvvisModal(null)
       setAvvisGrunn('')
       setDocDetalj(null)
