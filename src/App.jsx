@@ -34121,11 +34121,17 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
             </div>
           ) : isPdf ? (
             <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'6px' }}>
-              <iframe
-                src={visningsUrl + '#toolbar=1&navpanes=0&scrollbar=1'}
-                title={doc.title}
-                style={{ width:'100%', height:'500px', border:'none', borderRadius:'6px', background:'white' }}
-              />
+              <object
+                data={visningsUrl}
+                type="application/pdf"
+                style={{ width:'100%', height:'500px', borderRadius:'6px', background:'white', display:'block' }}
+              >
+                <iframe
+                  src={`https://docs.google.com/gview?url=${encodeURIComponent(visningsUrl)}&embedded=true`}
+                  title={doc.title}
+                  style={{ width:'100%', height:'500px', border:'none', borderRadius:'6px', background:'white' }}
+                />
+              </object>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 4px 0' }}>
                 <div style={{ fontSize:'11px', color:'#64748b' }}>Forhåndsvisning av PDF</div>
                 <a href={visningsUrl} target="_blank" rel="noopener noreferrer"
