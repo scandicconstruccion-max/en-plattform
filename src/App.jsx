@@ -34012,6 +34012,45 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
   const docTypeLabel = FDV_DOC_TYPES[doc.doc_type]?.label || 'Annet'
   const kapittelNavn = NS3456_KAPITLER.find(k => k.id === doc.ns3456_kapittel)?.navn || `Kapittel ${doc.ns3456_kapittel}`
 
+  // Patch 27 fix v5: Hent signed URL for privat Supabase Storage bucket
+  // Filer i fdv-ue-files er ikke offentlige; vi må be om en midlertidig URL
+  const [signedUrl, setSignedUrl] = useState(null)
+  const [signedUrlLoading, setSignedUrlLoading] = useState(false)
+
+  useEffect(() => {
+    if (!doc.file_url) return
+    let cancelled = false
+    setSignedUrlLoading(true)
+    ;(async () => {
+      try {
+        // Trekk ut storage-pathen fra public URL eller bruk file_url direkte
+        // Supabase public URLs ser ut som: https://<id>.supabase.co/storage/v1/object/public/<bucket>/<path>
+        // Hvis bucket er privat: .../object/<bucket>/<path>
+        const m = doc.file_url.match(/\/storage\/v1\/object\/(?:public\/)?([^/]+)\/(.+)$/)
+        if (m) {
+          const bucket = m[1]
+          const path = decodeURIComponent(m[2])
+          const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600) // 1 time
+          if (!cancelled && !error && data?.signedUrl) {
+            setSignedUrl(data.signedUrl)
+          } else if (!cancelled) {
+            // Fallback til original URL hvis signed URL feiler
+            setSignedUrl(doc.file_url)
+          }
+        } else if (!cancelled) {
+          setSignedUrl(doc.file_url)
+        }
+      } catch {
+        if (!cancelled) setSignedUrl(doc.file_url)
+      } finally {
+        if (!cancelled) setSignedUrlLoading(false)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [doc.file_url])
+
+  const visningsUrl = signedUrl || doc.file_url
+
   return (
     <div className="fdv-modal-overlay" style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.5)' }} onClick={onClose} />
@@ -34028,20 +34067,25 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
 
         <div style={{ overflowY:'auto', flex:1, padding:'18px 22px' }}>
           {/* Forhåndsvisning */}
-          {isImage ? (
+          {signedUrlLoading ? (
+            <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'40px 24px', textAlign:'center' }}>
+              <div style={{ width:'32px', height:'32px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }} />
+              <div style={{ fontSize:'12px', color:'#64748b' }}>Henter forhåndsvisning...</div>
+            </div>
+          ) : isImage ? (
             <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'8px', textAlign:'center' }}>
-              <img src={doc.file_url} alt={doc.title} style={{ maxWidth:'100%', maxHeight:'380px', borderRadius:'6px' }} />
+              <img src={visningsUrl} alt={doc.title} style={{ maxWidth:'100%', maxHeight:'380px', borderRadius:'6px' }} />
             </div>
           ) : isPdf ? (
             <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'6px' }}>
               <iframe
-                src={doc.file_url + '#toolbar=1&navpanes=0&scrollbar=1'}
+                src={visningsUrl + '#toolbar=1&navpanes=0&scrollbar=1'}
                 title={doc.title}
                 style={{ width:'100%', height:'500px', border:'none', borderRadius:'6px', background:'white' }}
               />
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 4px 0' }}>
                 <div style={{ fontSize:'11px', color:'#64748b' }}>Forhåndsvisning av PDF</div>
-                <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                <a href={visningsUrl} target="_blank" rel="noopener noreferrer"
                   style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', fontWeight:'600' }}>
                   Åpne i ny fane ↗
                 </a>
@@ -34051,8 +34095,8 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
             <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'24px', textAlign:'center' }}>
               <div style={{ fontSize:'48px', marginBottom:'8px' }}>📎</div>
               <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'10px' }}>{doc.file_name || 'Fil'}</div>
-              {doc.file_url && (
-                <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+              {visningsUrl && (
+                <a href={visningsUrl} target="_blank" rel="noopener noreferrer"
                   style={{ display:'inline-block', padding:'10px 18px', background:'#2563eb', color:'white', borderRadius:'10px', textDecoration:'none', fontSize:'13px', fontWeight:'600' }}>
                   Last ned ↗
                 </a>
