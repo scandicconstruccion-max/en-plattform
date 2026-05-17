@@ -26479,9 +26479,11 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
         .in('id', selectedMembers)
       for (const emp of (empData || [])) {
         if (!emp.user_id) {
-          console.warn(`[Chat] Ansatt ${emp.first_name} ${emp.last_name} mangler user_id — hopper over`)
+          console.warn(`[Chat] Ansatt ${emp.first_name} ${emp.last_name} mangler user_id — hopper over (må logge inn først)`)
           continue
         }
+        // Patch v3: Ikke legg til admin (opprettende bruker) som member også
+        if (emp.user_id === user?.id) continue
         inserts.push({ channel_id:ch.id, user_id:emp.user_id, employee_id:emp.id, role:'member' })
         // Send varsel
         await supabase.from('notifications').insert({ user_id:emp.user_id, title:`Du ble lagt til i #${ch.name}`, message:form.description||form.name, type:'info', link_page:'chat' })
