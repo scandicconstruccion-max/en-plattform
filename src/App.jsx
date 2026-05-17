@@ -34013,11 +34013,19 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
 
 // Patch 27 fix v3: Dokument-detalj-modal med forhåndsvisning
 function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
-  // Patch 27 fix v6: Strip query string før vi tester filendelse
-  // Supabase signed URLs ender på ?token=... ikke .pdf, så regex må ignorere query
-  const fileNameOrPath = (doc.file_name || doc.file_url || '').split('?')[0]
-  const isImage = doc.file_url && /\.(jpg|jpeg|png|webp|heic|heif|gif|svg)$/i.test(fileNameOrPath)
-  const isPdf = doc.file_url && /\.pdf$/i.test(fileNameOrPath)
+  // Patch 27 fix v7: Mer robust PDF/bilde-deteksjon
+  // Sjekk BÅDE file_name OG file_url (med ?-stripping), så vi alltid får riktig type
+  const checkExt = (regex) => {
+    if (doc.file_name && regex.test(doc.file_name)) return true
+    if (doc.file_url) {
+      const url = doc.file_url.split('?')[0]
+      if (regex.test(url)) return true
+    }
+    return false
+  }
+  const isImage = !!doc.file_url && checkExt(/\.(jpg|jpeg|png|webp|heic|heif|gif|svg)$/i)
+  const isPdf = !!doc.file_url && checkExt(/\.pdf$/i)
+  console.log('[FDV-debug] File type detection:', { isPdf, isImage, file_name: doc.file_name, file_url: doc.file_url })
   const docTypeLabel = FDV_DOC_TYPES[doc.doc_type]?.label || 'Annet'
   const kapittelNavn = NS3456_KAPITLER.find(k => k.id === doc.ns3456_kapittel)?.navn || `Kapittel ${doc.ns3456_kapittel}`
 
