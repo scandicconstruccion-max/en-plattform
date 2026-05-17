@@ -33144,16 +33144,17 @@ function FdvUePortalPage() {
         .upload(fileName, form.file, { cacheControl: '3600', upsert: false })
       if (uploadErr) throw uploadErr
 
-      // Hent signed URL (gjelder 10 år for FDV)
-      const { data: urlData } = await supabase.storage
-        .from('fdv-ue-files')
-        .createSignedUrl(fileName, 60 * 60 * 24 * 365 * 10)
+      // Patch 27 fix v8: Lagre Supabase storage-path som file_url.
+      // Anon kan ikke lage signed URLs (RLS-begrensning), så vi lagrer path-en
+      // i et standard format og lar admin-siden lage signed URL ved visning.
+      // Format: storage:<bucket>/<path>
+      const storagePath = `storage:fdv-ue-files/${fileName}`
 
       // Registrer i database via RPC
       const { error: rpcErr } = await supabase.rpc('upload_ue_document', {
         p_token: token,
         p_title: form.title,
-        p_file_url: urlData?.signedUrl || '',
+        p_file_url: storagePath,
         p_file_name: form.file.name,
         p_doc_type: form.doc_type,
         p_ns3456_kapittel: form.ns3456_kapittel,
@@ -34038,17 +34039,37 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
     if (!doc.file_url) return
     let cancelled = false
     setSignedUrlLoading(true)
-    console.log('[FDV-debug] Doc:', { file_url: doc.file_url, file_name: doc.file_name, hasToken: doc.file_url.includes('?token=') })
+    console.log('[FDV-debug] Doc:', { file_url: doc.file_url, file_name: doc.file_name })
     ;(async () => {
       try {
+        // Patch 27 fix v8: Støtt vårt nye format "storage:<bucket>/<path>"
+        if (doc.file_url.startsWith('storage:')) {
+          const withoutPrefix = doc.file_url.substring('storage:'.length)
+          const slashIdx = withoutPrefix.indexOf('/')
+          if (slashIdx > 0) {
+            const bucket = withoutPrefix.substring(0, slashIdx)
+            const path = withoutPrefix.substring(slashIdx + 1)
+            console.log('[FDV-debug] Storage-format, lager signed URL:', { bucket, path })
+            const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
+            console.log('[FDV-debug] Signed URL resultat:', { data, error })
+            if (!cancelled && !error && data?.signedUrl) {
+              setSignedUrl(data.signedUrl)
+            } else if (!cancelled) {
+              console.warn('[FDV] Signed URL feilet:', error)
+              setSignedUrl(null)
+            }
+          }
+          return
+        }
+        // Hvis URL-en allerede er en signed URL (inneholder ?token=), bruk den som er
         if (doc.file_url.includes('?token=')) {
           if (!cancelled) {
             setSignedUrl(doc.file_url)
-            setSignedUrlLoading(false)
             console.log('[FDV-debug] Bruker eksisterende signed URL')
           }
           return
         }
+        // Trekk ut storage-pathen — støtter public, private og sign-paths
         const m = doc.file_url.match(/\/storage\/v1\/object\/(?:public\/|sign\/)?([^/]+)\/(.+?)(?:\?|$)/)
         console.log('[FDV-debug] Regex match:', m)
         if (m) {
