@@ -34013,8 +34013,11 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
 
 // Patch 27 fix v3: Dokument-detalj-modal med forhåndsvisning
 function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
-  const isImage = doc.file_url && /\.(jpg|jpeg|png|webp|heic|heif)$/i.test(doc.file_name || doc.file_url)
-  const isPdf = doc.file_url && /\.pdf$/i.test(doc.file_name || doc.file_url)
+  // Patch 27 fix v6: Strip query string før vi tester filendelse
+  // Supabase signed URLs ender på ?token=... ikke .pdf, så regex må ignorere query
+  const fileNameOrPath = (doc.file_name || doc.file_url || '').split('?')[0]
+  const isImage = doc.file_url && /\.(jpg|jpeg|png|webp|heic|heif|gif|svg)$/i.test(fileNameOrPath)
+  const isPdf = doc.file_url && /\.pdf$/i.test(fileNameOrPath)
   const docTypeLabel = FDV_DOC_TYPES[doc.doc_type]?.label || 'Annet'
   const kapittelNavn = NS3456_KAPITLER.find(k => k.id === doc.ns3456_kapittel)?.navn || `Kapittel ${doc.ns3456_kapittel}`
 
@@ -34027,23 +34030,25 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
     if (!doc.file_url) return
     let cancelled = false
     setSignedUrlLoading(true)
+    console.log('[FDV-debug] Doc:', { file_url: doc.file_url, file_name: doc.file_name, hasToken: doc.file_url.includes('?token=') })
     ;(async () => {
       try {
-        // Hvis URL-en allerede er en signed URL (inneholder ?token=), bruk den som er
         if (doc.file_url.includes('?token=')) {
           if (!cancelled) {
             setSignedUrl(doc.file_url)
             setSignedUrlLoading(false)
+            console.log('[FDV-debug] Bruker eksisterende signed URL')
           }
           return
         }
-        // Trekk ut storage-pathen — støtter public, private og sign-paths
-        // Supabase URLs: /storage/v1/object/{public|sign}/<bucket>/<path>  eller  /storage/v1/object/<bucket>/<path>
         const m = doc.file_url.match(/\/storage\/v1\/object\/(?:public\/|sign\/)?([^/]+)\/(.+?)(?:\?|$)/)
+        console.log('[FDV-debug] Regex match:', m)
         if (m) {
           const bucket = m[1]
           const path = decodeURIComponent(m[2])
+          console.log('[FDV-debug] Lager signed URL for:', { bucket, path })
           const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
+          console.log('[FDV-debug] Signed URL resultat:', { data, error })
           if (!cancelled && !error && data?.signedUrl) {
             setSignedUrl(data.signedUrl)
           } else if (!cancelled) {
@@ -34051,6 +34056,7 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
             setSignedUrl(doc.file_url)
           }
         } else if (!cancelled) {
+          console.warn('[FDV-debug] Regex matchet ikke, bruker original URL')
           setSignedUrl(doc.file_url)
         }
       } catch (e) {
