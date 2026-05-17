@@ -34031,12 +34031,19 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
               <img src={doc.file_url} alt={doc.title} style={{ maxWidth:'100%', maxHeight:'380px', borderRadius:'6px' }} />
             </div>
           ) : isPdf ? (
-            <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'24px', textAlign:'center' }}>
-              <div style={{ fontSize:'48px', marginBottom:'8px' }}>📕</div>
-              <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
-                style={{ display:'inline-block', padding:'10px 18px', background:'#2563eb', color:'white', borderRadius:'10px', textDecoration:'none', fontSize:'13px', fontWeight:'600' }}>
-                Åpne PDF i ny fane ↗
-              </a>
+            <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'6px' }}>
+              <iframe
+                src={doc.file_url + '#toolbar=1&navpanes=0&scrollbar=1'}
+                title={doc.title}
+                style={{ width:'100%', height:'500px', border:'none', borderRadius:'6px', background:'white' }}
+              />
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 4px 0' }}>
+                <div style={{ fontSize:'11px', color:'#64748b' }}>Forhåndsvisning av PDF</div>
+                <a href={doc.file_url} target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', fontWeight:'600' }}>
+                  Åpne i ny fane ↗
+                </a>
+              </div>
             </div>
           ) : (
             <div style={{ marginBottom:'16px', background:'#f1f5f9', borderRadius:'10px', padding:'24px', textAlign:'center' }}>
