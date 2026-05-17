@@ -26221,12 +26221,26 @@ function ChatWindow({ channel, user, employees, members, projects, onRefresh, on
     try {
       const mentionNames=[...input.matchAll(/@([A-ZÆØÅ][a-zæøå]+ [A-ZÆØÅ][a-zæøå]+)/g)].map(m=>m[1])
       const mentionIds=employees.filter(e=>mentionNames.includes(`${e.first_name} ${e.last_name}`)).map(e=>e.id)
-      await supabase.from('chat_messages').insert({ channel_id:channel.id, sender_id:user?.id, content:input.trim(), mentions:mentionIds })
+      const content = input.trim()
+      // Patch v2: Optimistic update — vis meldingen umiddelbart
+      const tempId = 'temp-' + Date.now()
+      setMessages(m => [...m, {
+        id: tempId, channel_id: channel.id, sender_id: user?.id,
+        content, mentions: mentionIds, created_at: new Date().toISOString(), _optimistic: true
+      }])
+      setInput('')
+      const { error } = await supabase.from('chat_messages').insert({ channel_id:channel.id, sender_id:user?.id, content, mentions:mentionIds })
+      if (error) {
+        // Rull tilbake optimistic update ved feil
+        setMessages(m => m.filter(msg => msg.id !== tempId))
+        throw error
+      }
       await supabase.from('chat_channels').update({updated_at:new Date().toISOString()}).eq('id',channel.id)
       for (const empId of mentionIds) {
-        await supabase.from('notifications').insert({ user_id:empId, title:`Du ble nevnt i #${channel.name}`, message:input.trim().slice(0,80), type:'info', link_page:'chat' })
+        await supabase.from('notifications').insert({ user_id:empId, title:`Du ble nevnt i #${channel.name}`, message:content.slice(0,80), type:'info', link_page:'chat' })
       }
-      setInput('')
+      // Last meldinger på nytt for å erstatte temp-meldingen med ekte data
+      await loadMessages()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSending(false) }
   }
@@ -26241,6 +26255,7 @@ function ChatWindow({ channel, user, employees, members, projects, onRefresh, on
       const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
       await supabase.from('chat_messages').insert({ channel_id:channel.id, sender_id:user?.id, content:'', file_url:publicUrl, file_name:file.name, file_type:file.type })
       await supabase.from('chat_channels').update({updated_at:new Date().toISOString()}).eq('id',channel.id)
+      await loadMessages()
     } catch(e) { alert('Opplasting feilet: '+e.message) }
     finally { setSending(false); e.target.value='' }
   }
@@ -26457,11 +26472,22 @@ function NewChannelModal({ user, employees, projects, defaultProjectId, onClose,
       }).select().single()
       if (error) throw error
       const inserts=[{ channel_id:ch.id, user_id:user?.id, role:'admin' }]
-      for (const empId of selectedMembers) {
-        inserts.push({ channel_id:ch.id, user_id:empId, employee_id:empId, role:'member' })
-        await supabase.from('notifications').insert({ user_id:empId, title:`Du ble lagt til i #${ch.name}`, message:form.description||form.name, type:'info', link_page:'chat' })
+      // Hent user_id for hver ansatt i selectedMembers
+      // employees-tabellen har user_id-kolonne som peker til auth.users
+      const { data: empData } = await supabase.from('employees')
+        .select('id, user_id, first_name, last_name')
+        .in('id', selectedMembers)
+      for (const emp of (empData || [])) {
+        if (!emp.user_id) {
+          console.warn(`[Chat] Ansatt ${emp.first_name} ${emp.last_name} mangler user_id — hopper over`)
+          continue
+        }
+        inserts.push({ channel_id:ch.id, user_id:emp.user_id, employee_id:emp.id, role:'member' })
+        // Send varsel
+        await supabase.from('notifications').insert({ user_id:emp.user_id, title:`Du ble lagt til i #${ch.name}`, message:form.description||form.name, type:'info', link_page:'chat' })
       }
-      await supabase.from('chat_members').insert(inserts)
+      const { error: memberErr } = await supabase.from('chat_members').insert(inserts)
+      if (memberErr) console.error('[Chat] Kunne ikke legge til medlemmer:', memberErr)
       onSaved(ch)
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
