@@ -11157,6 +11157,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
 }
 
 function InviterUEModal({ tender, user, onClose, onSaved }) {
+  const confirm = useConfirm()
   const [ues, setUes] = useState([{ id: Date.now(), company_name:'', contact_name:'', email:'', dupWarning: null, customer_id: null }])
   const [existingUes, setExistingUes] = useState([])
   const [ueKunder, setUeKunder] = useState([])
@@ -11200,10 +11201,17 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
     const valid = ues.filter(u=>u.company_name.trim()&&u.email.trim())
     if (valid.length===0) return alert('Legg til minst en UE med navn og e-post.')
     const dups = valid.filter(u => existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
-    if (dups.length > 0 && !window.confirm(`${dups.length} UE er allerede invitert. Sende pa nytt?`)) {
-      const nonDups = valid.filter(u => !existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
-      if (nonDups.length === 0) return
-      return sendInvitations(nonDups)
+    if (dups.length > 0) {
+      const sendDuplikater = await confirm({
+        message: `${dups.length} UE er allerede invitert`,
+        subMessage: 'Vil du sende invitasjonen på nytt til disse?',
+        confirmLabel: 'Send på nytt',
+      })
+      if (!sendDuplikater) {
+        const nonDups = valid.filter(u => !existingUes.some(e => e.email?.toLowerCase() === u.email.trim().toLowerCase()))
+        if (nonDups.length === 0) return
+        return sendInvitations(nonDups)
+      }
     }
     await sendInvitations(valid)
   }
@@ -15284,6 +15292,7 @@ function isOverdue(inv) {
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function FakturaPage() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const [invoices, setInvoices] = useState([])
   const [orders, setOrders] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -15467,7 +15476,13 @@ function FakturaPage() {
                     <button onClick={async (e) => {
                       e.stopPropagation()
                       if (!oi.customer_email) { alert('Ingen e-post registrert'); return }
-                      if (!window.confirm(`Send purring til ${oi.customer_email}?`)) return
+                      const ok = await confirm({
+                        message: 'Send purring',
+                        subMessage: `Til: ${oi.customer_email}`,
+                        confirmLabel: 'Send purring',
+                        danger: true,
+                      })
+                      if (!ok) return
                       try {
                         const { gross: g } = calcLines(oi.lines)
                         const reminderNum = (oi.reminder_count || 0) + 1
@@ -50708,7 +50723,13 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   }
 
   const deleteTemplate = async (tmpl) => {
-    if (!window.confirm(`Slett malen "${tmpl.title}"?`)) return
+    const ok = await confirm({
+      message: 'Slett mal',
+      subMessage: `"${tmpl.title}" blir slettet permanent.`,
+      confirmLabel: 'Slett',
+      danger: true,
+    })
+    if (!ok) return
     await supabase.from('calculations').delete().eq('id', tmpl.id)
     load()
   }
@@ -53436,6 +53457,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
 
 function PrisbokPage({ onBack }) {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const [prislister, setPrislister] = useState([])
   const [aktivPrisliste, setAktivPrisliste] = useState(null)
   const [prisbok, setPrisbok] = useState([])
@@ -53647,7 +53669,13 @@ function PrisbokPage({ onBack }) {
   }
 
   const deletePrisliste = async (pl) => {
-    if (!window.confirm(`Slette "${pl.navn}" med ${pl.antall_varer} varer?`)) return
+    const ok = await confirm({
+      message: `Slett prisliste "${pl.navn}"`,
+      subMessage: `${pl.antall_varer} varer blir slettet permanent. Dette kan ikke angres.`,
+      confirmLabel: 'Slett prisliste',
+      danger: true,
+    })
+    if (!ok) return
     await supabase.from('prisbok').delete().eq('prisliste_id', pl.id)
     await supabase.from('prislister').delete().eq('id', pl.id)
     await loadData()
@@ -54436,7 +54464,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   }
 
   const restoreVersion = async (version) => {
-    if (!window.confirm(`Gjenopprett versjon v${version.version_number} "${version.label}"?\n\nNåværende kalkyle lagres automatisk som en ny versjon før gjenoppretting.`)) return
+    const ok = await confirm({
+      message: `Gjenopprett versjon v${version.version_number}`,
+      subMessage: `"${version.label}" blir aktiv. Nåværende kalkyle lagres automatisk som ny versjon før gjenoppretting.`,
+      confirmLabel: 'Gjenopprett',
+    })
+    if (!ok) return
     // Lagre nåværende som versjon først
     const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
     const curTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
