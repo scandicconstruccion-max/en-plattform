@@ -33473,7 +33473,42 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
         <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'12px' }}>
           <div>
             <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>UE-bedrift *</label>
-            <input value={form.ue_name} onChange={e => setForm({...form, ue_name: e.target.value})} placeholder="F.eks. El-installasjon Bergen AS" style={{ ...fInp }} />
+            {/* Patch 27 fix v10: Bruk ProjectUESelect for å vise registrerte UE-er fra prosjektet */}
+            <ProjectUESelect
+              projectId={projectId}
+              value={form.ue_contact_email}
+              onChange={(email) => setForm(f => ({ ...f, ue_contact_email: email }))}
+              onSelectFull={(ue) => {
+                // Auto-fyll alle felter når UE velges fra prosjektets liste
+                const newFag = []
+                if (ue.trade && Array.isArray(form.fag) && !form.fag.includes(ue.trade)) {
+                  // Forsøk å matche trade-strengen til en fag-id
+                  const matchet = FAGGRUPPER.find(f => f.id === ue.trade || f.label?.toLowerCase() === ue.trade.toLowerCase())
+                  if (matchet) newFag.push(matchet.id)
+                }
+                setForm(f => ({
+                  ...f,
+                  ue_name: ue.company || ue.contact_person || '',
+                  ue_contact_name: ue.contact_person || '',
+                  ue_contact_email: ue.email || '',
+                  ue_contact_phone: ue.phone || ue.mobile || '',
+                  fag: newFag.length > 0 ? [...new Set([...f.fag, ...newFag])] : f.fag,
+                  ns3456_kapitler: newFag.length > 0
+                    ? [...new Set([...f.ns3456_kapitler, ...newFag.map(fagTilNS3456Kapittel)])]
+                    : f.ns3456_kapitler,
+                }))
+              }}
+              placeholder="Velg UE registrert på prosjektet"
+            />
+            {/* Manuell bedriftsnavn-input om brukeren skriver e-post manuelt */}
+            {form.ue_contact_email && !form.ue_name && (
+              <input
+                value={form.ue_name}
+                onChange={e => setForm({...form, ue_name: e.target.value})}
+                placeholder="F.eks. El-installasjon Bergen AS"
+                style={{ ...fInp, marginTop:'6px' }}
+              />
+            )}
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
@@ -33482,8 +33517,8 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
               <input value={form.ue_contact_name} onChange={e => setForm({...form, ue_contact_name: e.target.value})} style={{ ...fInp }} />
             </div>
             <div>
-              <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>E-post</label>
-              <input type="email" value={form.ue_contact_email} onChange={e => setForm({...form, ue_contact_email: e.target.value})} style={{ ...fInp }} />
+              <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Bedriftsnavn</label>
+              <input value={form.ue_name} onChange={e => setForm({...form, ue_name: e.target.value})} placeholder="F.eks. El-installasjon Bergen AS" style={{ ...fInp }} />
             </div>
           </div>
 
