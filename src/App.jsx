@@ -16842,7 +16842,10 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   }
 
   const sendPurring = async () => {
-    if (!inv.customer_email) return alert('Ingen e-postadresse på fakturaen')
+    if (!inv.customer_email) {
+      await appAlert({ message: 'Ingen e-postadresse', subMessage: 'Fakturaen mangler kundens e-postadresse. Legg den til først.', kind: 'warn' })
+      return
+    }
     if (!(await confirm({ message: `Send purring til ${inv.customer_email}?`, subMessage: 'Kunden mottar en purring på e-post.', confirmLabel: 'Send purring', danger: false }))) return
     try {
       const html = `
@@ -16870,8 +16873,8 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
       if (!fnRes.ok) throw new Error('Sending feilet')
       await supabase.from('invoices').update({status:'Purret',updated_at:new Date().toISOString()}).eq('id',inv.id)
       setInv(v=>({...v,status:'Purret'}))
-      alert('Purring sendt!')
-    } catch(e) { alert('Feil: '+e.message) }
+      await appAlert({ message: 'Purring sendt', subMessage: `Sendt til ${inv.customer_email}`, kind: 'success' })
+    } catch(e) { await appAlert({ message: 'Feil ved sending', subMessage: e.message, kind: 'error' }) }
   }
 
   // ── Kreditnota ──
