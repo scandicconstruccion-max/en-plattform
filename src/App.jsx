@@ -33422,7 +33422,7 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
     console.log('[FDV-UE] handleSave START', { form, projectId, userId: user?.id })
     if (!form.ue_name) { appAlert({ message: 'UE-navn er påkrevd', kind: 'warning' }); return }
     if (!projectId) {
-      appAlert({ message: 'Velg prosjekt først', subMessage: 'Du må velge et prosjekt fra dropdown-en før du kan opprette UE-forespørsel.', kind: 'warning' })
+      appAlert({ message: 'Velg prosjekt først', subMessage: 'Du må velge et prosjekt fra dropdown-en før du kan opprette FDV-forespørsel.', kind: 'warning' })
       return
     }
     setSaving(true)
@@ -33456,7 +33456,7 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
       if (error) throw error
       // Patch 26 fix: Lukk modalen først, så vis suksess (uten å vente)
       onSaved()
-      appAlert({ message: '✓ UE-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
+      appAlert({ message: '✓ FDV-forespørsel opprettet', subMessage: 'Du kan nå sende invitasjon eller kopiere lenken.', kind: 'success' })
     } catch (e) {
       console.error('[FDV-UE] FEIL:', e)
       appAlert({ message: 'Kunne ikke opprette', subMessage: e.message || JSON.stringify(e), kind: 'error' })
@@ -33470,14 +33470,14 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
       style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ background:'white', borderRadius:'16px', width:'100%', maxWidth:'560px', maxHeight:'90vh', overflow:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700' }}>👷 Ny UE-forespørsel</h2>
+          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700' }}>📋 Ny FDV-forespørsel</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'22px', color:'#94a3b8' }}>×</button>
         </div>
 
         <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'12px' }}>
           <div>
-            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>UE-bedrift *</label>
-            {/* Patch 27 fix v10: Bruk ProjectUESelect for å vise registrerte UE-er fra prosjektet */}
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px' }}>Leverandør *</label>
+            {/* Patch 27 fix v10: Bruk ProjectUESelect for å vise registrerte aktører fra prosjektet */}
             <ProjectUESelect
               projectId={projectId}
               value={form.ue_contact_email}
@@ -33502,7 +33502,7 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
                     : f.ns3456_kapitler,
                 }))
               }}
-              placeholder="Velg UE registrert på prosjektet"
+              placeholder="Velg aktør registrert på prosjektet"
             />
             {/* Manuell bedriftsnavn-input om brukeren skriver e-post manuelt */}
             {form.ue_contact_email && !form.ue_name && (
@@ -33581,7 +33581,7 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
           </button>
           <button onClick={handleSave} disabled={saving}
             style={{ padding:'10px 18px', background: saving ? '#9ca3af' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
-            {saving ? 'Lagrer...' : 'Opprett UE-forespørsel'}
+            {saving ? 'Lagrer...' : 'Opprett FDV-forespørsel'}
           </button>
         </div>
       </div>
@@ -33590,7 +33590,7 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
   )
 }
 
-// ─── ENTREPRENØR-SIDE: UE-ADMINISTRASJON ────────────────────────────────────
+// ─── ENTREPRENØR-SIDE: FDV-FORESPØRSEL-ADMINISTRASJON ───────────────────────
 function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
   const { user } = useAuth()
   const appAlert = useAppAlert()
@@ -33606,7 +33606,7 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
   const [avvisModal, setAvvisModal] = useState(null)  // { doc, req }
   const [avvisGrunn, setAvvisGrunn] = useState('')
 
-  // Helper: Legg til oppføring i activity_log på en UE-forespørsel
+  // Helper: Legg til oppføring i activity_log på en FDV-forespørsel
   const loggAktivitet = async (reqId, action, meta = {}) => {
     try {
       const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
@@ -33766,7 +33766,7 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
 
   const slettRequest = async (req) => {
     const ok = await confirm({
-      message: `Slett UE-forespørsel til ${req.ue_name}?`,
+      message: `Slett FDV-forespørsel til ${req.ue_name}?`,
       subMessage: 'Lenken blir ugyldig og UE kan ikke lenger laste opp dokumenter. Allerede leverte dokumenter blir slettet.',
       danger: true,
     })
@@ -33828,13 +33828,13 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
       <div style={{ display:'flex', gap:'8px', marginBottom:'14px', flexWrap:'wrap' }}>
         <button onClick={() => setShowNy(true)}
           style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>
-          + Ny UE-forespørsel
+          + Ny FDV-forespørsel
         </button>
         {requests.filter(r => r.status !== 'completed' && r.ue_contact_email).length > 0 && (
           <button onClick={async () => {
             const ok = await confirm({
               message: 'Send påminnelse til alle som ikke er ferdige?',
-              subMessage: `Det sendes e-post til ${requests.filter(r => r.status !== 'completed' && r.ue_contact_email).length} UE-er.`,
+              subMessage: `Det sendes e-post til ${requests.filter(r => r.status !== 'completed' && r.ue_contact_email).length} mottakere.`,
             })
             if (!ok) return
             for (const r of requests.filter(r => r.status !== 'completed' && r.ue_contact_email)) {
@@ -33847,7 +33847,7 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
         )}
       </div>
 
-      {/* Liste over UE-er */}
+      {/* Liste over FDV-forespørsler */}
       {requests.length === 0 ? (
         <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8', background:'white', borderRadius:'12px', border:'1px solid #e2e8f0' }}>
           Ingen UE-forespørsler ennå. Klikk "+ Ny UE-forespørsel" for å starte.
@@ -34312,7 +34312,7 @@ function FDVPage() {
   useEffect(()=>{ load() },[])
 
   // Patch 27 fix v2: Hvis vi kom hit fra et varsel, forhåndsvelg prosjektet
-  // og bytt til UE-leveranser-fanen
+  // og bytt til FDV-forespørsler-fanen
   useEffect(() => {
     const pendingId = window.__pendingLinkId
     if (pendingId) {
@@ -34790,7 +34790,7 @@ function FDVPage() {
 
         <div className="fdv-filter-row" style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
           <div className="fdv-tabs" style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-            {[['kapitler','📚 NS 3456'],['ue','👷 UE-leveranser'],['komponenter','🔩 Komponenter'],['dokumenter','📄 Alle dokumenter']].map(([v,l])=>(
+            {[['kapitler','📚 NS 3456'],['ue','📋 FDV-forespørsler'],['komponenter','🔩 Komponenter'],['dokumenter','📄 Alle dokumenter']].map(([v,l])=>(
               <button key={v} onClick={()=>{setView(v); setAktivtKapittel(null)}} style={{ padding:'8px 16px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
             ))}
           </div>
