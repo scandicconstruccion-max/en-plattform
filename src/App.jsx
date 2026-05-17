@@ -32942,15 +32942,15 @@ async function hentAutoFangedeDokumenter(projectId) {
   if (!projectId || projectId === 'alle') return []
   const resultat = []
 
+  // 1) Sjekklister med status 'fullført'
   try {
-    // 1) Sjekklister med status 'fullført'
-    const { data: sjekklister } = await supabase
+    const { data: sjekklister, error } = await supabase
       .from('checklists')
       .select('id, title, status, template_id, created_at, updated_at')
       .eq('project_id', projectId)
       .in('status', ['fullført', 'ferdig'])
+    if (error) console.warn('[FDV auto-fang] checklists feilet:', error.message)
     for (const sl of (sjekklister || [])) {
-      // Forsøk å hente kategori fra template
       let kapittel = '1'
       if (sl.template_id) {
         try {
@@ -32974,18 +32974,21 @@ async function hentAutoFangedeDokumenter(projectId) {
         _virtual: true,
       })
     }
+  } catch (e) { console.warn('[FDV auto-fang] sjekklister krasjet:', e) }
 
-    // 2) Befaringer (alle typer)
-    const { data: befaringer } = await supabase
+  // 2) Befaringer (alle typer) — bruker bare ID for å unngå kolonnefeil
+  try {
+    const { data: befaringer, error } = await supabase
       .from('inspections')
-      .select('id, date, type, status, purpose, created_at')
+      .select('*')
       .eq('project_id', projectId)
+    if (error) console.warn('[FDV auto-fang] inspections feilet:', error.message)
     for (const b of (befaringer || [])) {
-      const tittel = b.purpose || b.type || 'Befaring'
+      const tittel = b.purpose || b.type || b.title || 'Befaring'
       resultat.push({
         id: `auto-bef-${b.id}`,
-        title: `${tittel} (${b.date || ''})`.trim(),
-        ns3456_kapittel: '1',  // Befaringer hører til Generell FDVU
+        title: `${tittel}${b.date ? ' (' + b.date + ')' : ''}`.trim(),
+        ns3456_kapittel: '1',
         auto_source: 'befaring',
         auto_source_id: b.id,
         doc_type: 'rapport',
@@ -32994,18 +32997,21 @@ async function hentAutoFangedeDokumenter(projectId) {
         _virtual: true,
       })
     }
+  } catch (e) { console.warn('[FDV auto-fang] befaringer krasjet:', e) }
 
-    // 3) Avvik med status 'lukket'
-    const { data: avvik } = await supabase
+  // 3) Avvik med status 'lukket' — bruker * for å unngå kolonnefeil
+  try {
+    const { data: avvik, error } = await supabase
       .from('deviations')
-      .select('id, title, deviation_number, status, category, created_at, closed_at')
+      .select('*')
       .eq('project_id', projectId)
       .in('status', ['lukket', 'closed', 'lost'])
+    if (error) console.warn('[FDV auto-fang] deviations feilet:', error.message)
     for (const a of (avvik || [])) {
       resultat.push({
         id: `auto-avvik-${a.id}`,
         title: `Avvik ${a.deviation_number || ''}: ${a.title || ''}`.trim(),
-        ns3456_kapittel: '1',  // Avvikslogg hører til Generell
+        ns3456_kapittel: '1',
         auto_source: 'avvik',
         auto_source_id: a.id,
         doc_type: 'rapport',
@@ -33014,14 +33020,16 @@ async function hentAutoFangedeDokumenter(projectId) {
         _virtual: true,
       })
     }
+  } catch (e) { console.warn('[FDV auto-fang] avvik krasjet:', e) }
 
-    // 4) Prosjektfiler — særlig tegninger
-    const { data: filer } = await supabase
+  // 4) Prosjektfiler — særlig tegninger
+  try {
+    const { data: filer, error } = await supabase
       .from('project_files')
-      .select('id, file_name, file_url, folder_path, created_at')
+      .select('*')
       .eq('project_id', projectId)
+    if (error) console.warn('[FDV auto-fang] project_files feilet:', error.message)
     for (const f of (filer || [])) {
-      // Klassifiser basert på filnavn/mappe
       const navn = (f.file_name || '').toLowerCase()
       const mappe = (f.folder_path || '').toLowerCase()
       let kapittel = '1'
@@ -33043,9 +33051,7 @@ async function hentAutoFangedeDokumenter(projectId) {
         _virtual: true,
       })
     }
-  } catch (e) {
-    console.warn('Auto-fang feilet:', e)
-  }
+  } catch (e) { console.warn('[FDV auto-fang] project_files krasjet:', e) }
 
   return resultat
 }
@@ -34025,7 +34031,10 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
       try {
         // Hvis URL-en allerede er en signed URL (inneholder ?token=), bruk den som er
         if (doc.file_url.includes('?token=')) {
-          if (!cancelled) setSignedUrl(doc.file_url)
+          if (!cancelled) {
+            setSignedUrl(doc.file_url)
+            setSignedUrlLoading(false)
+          }
           return
         }
         // Trekk ut storage-pathen — støtter public, private og sign-paths
