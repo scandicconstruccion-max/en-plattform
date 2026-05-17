@@ -34042,54 +34042,48 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
     console.log('[FDV-debug] Doc:', { file_url: doc.file_url, file_name: doc.file_name })
     ;(async () => {
       try {
-        // Patch 27 fix v8: Støtt vårt nye format "storage:<bucket>/<path>"
+        // Patch 27 fix v9: Bruk public URL siden bucketen er public.
+        // Format: "storage:<bucket>/<path>"
         if (doc.file_url.startsWith('storage:')) {
           const withoutPrefix = doc.file_url.substring('storage:'.length)
           const slashIdx = withoutPrefix.indexOf('/')
           if (slashIdx > 0) {
             const bucket = withoutPrefix.substring(0, slashIdx)
             const path = withoutPrefix.substring(slashIdx + 1)
-            console.log('[FDV-debug] Storage-format, lager signed URL:', { bucket, path })
-            const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
-            console.log('[FDV-debug] Signed URL resultat:', { data, error })
-            if (!cancelled && !error && data?.signedUrl) {
-              setSignedUrl(data.signedUrl)
+            const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+            console.log('[FDV-debug] Public URL:', data?.publicUrl)
+            if (!cancelled && data?.publicUrl) {
+              setSignedUrl(data.publicUrl)
             } else if (!cancelled) {
-              console.warn('[FDV] Signed URL feilet:', error)
               setSignedUrl(null)
             }
           }
           return
         }
-        // Hvis URL-en allerede er en signed URL (inneholder ?token=), bruk den som er
-        if (doc.file_url.includes('?token=')) {
+        // Hvis URL-en allerede er en signed URL eller full URL
+        if (doc.file_url.includes('?token=') || doc.file_url.startsWith('http')) {
           if (!cancelled) {
             setSignedUrl(doc.file_url)
-            console.log('[FDV-debug] Bruker eksisterende signed URL')
+            console.log('[FDV-debug] Bruker eksisterende URL')
           }
           return
         }
         // Trekk ut storage-pathen — støtter public, private og sign-paths
         const m = doc.file_url.match(/\/storage\/v1\/object\/(?:public\/|sign\/)?([^/]+)\/(.+?)(?:\?|$)/)
-        console.log('[FDV-debug] Regex match:', m)
         if (m) {
           const bucket = m[1]
           const path = decodeURIComponent(m[2])
-          console.log('[FDV-debug] Lager signed URL for:', { bucket, path })
-          const { data, error } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
-          console.log('[FDV-debug] Signed URL resultat:', { data, error })
-          if (!cancelled && !error && data?.signedUrl) {
-            setSignedUrl(data.signedUrl)
+          const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+          if (!cancelled && data?.publicUrl) {
+            setSignedUrl(data.publicUrl)
           } else if (!cancelled) {
-            console.warn('[FDV] Kunne ikke lage signed URL:', error)
             setSignedUrl(doc.file_url)
           }
         } else if (!cancelled) {
-          console.warn('[FDV-debug] Regex matchet ikke, bruker original URL')
           setSignedUrl(doc.file_url)
         }
       } catch (e) {
-        console.warn('[FDV] Signed URL feilet:', e)
+        console.warn('[FDV] Public URL feilet:', e)
         if (!cancelled) setSignedUrl(doc.file_url)
       } finally {
         if (!cancelled) setSignedUrlLoading(false)
