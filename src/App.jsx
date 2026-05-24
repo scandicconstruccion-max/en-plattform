@@ -33150,8 +33150,8 @@ async function hentAutoFangedeDokumenter(projectId) {
       .eq('project_id', projectId)
     if (error) console.warn('[FDV auto-fang] project_files feilet:', error.message)
     for (const f of (filer || [])) {
-      const navn = (f.file_name || '').toLowerCase()
-      const mappe = (f.folder_path || '').toLowerCase()
+      const navn = (f.name || '').toLowerCase()
+      const mappe = (f.sub_folder || '').toLowerCase()
       let kapittel = '1'
       if (/tegning|drawing|plan|snitt|fasade|dwg/i.test(navn) || /tegning|drawing/i.test(mappe)) kapittel = '1'
       else if (/elektro|el-|elektrisk/i.test(navn + mappe)) kapittel = '4'
@@ -33160,7 +33160,7 @@ async function hentAutoFangedeDokumenter(projectId) {
 
       resultat.push({
         id: `auto-fil-${f.id}`,
-        title: f.file_name || 'Prosjektfil',
+        title: f.name || 'Prosjektfil',
         ns3456_kapittel: kapittel,
         auto_source: 'prosjektfil',
         auto_source_id: f.id,
