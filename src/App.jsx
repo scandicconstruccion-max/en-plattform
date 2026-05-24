@@ -33722,7 +33722,37 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
   const [avvisModal, setAvvisModal] = useState(null)  // { doc, req }
   const [avvisGrunn, setAvvisGrunn] = useState('')
 
+  // Åpne et UE-levert dokument. file_url er en storage-path i
+  // fdv-ue-files-bucketen (ikke plattform-files). Robust strategi:
+  // full URL → getPublicUrl → signert URL → blob-nedlasting.
+  const åpneUeDokument = async (doc) => {
+    if (!doc?.file_url) {
+      await appAlert({ message: 'Ingen fil', subMessage: 'Dette dokumentet har ingen tilknyttet fil.', kind: 'warn' })
+      return
+    }
+    if (/^https?:\/\//i.test(doc.file_url)) {
+      window.open(doc.file_url, '_blank', 'noopener,noreferrer'); return
+    }
+    try {
+      const { data: pub } = supabase.storage.from('fdv-ue-files').getPublicUrl(doc.file_url)
+      if (pub?.publicUrl) {
+        // Public URL kan feile stille hvis bucket er privat — test med signert som backup
+        const { data: signed } = await supabase.storage.from('fdv-ue-files').createSignedUrl(doc.file_url, 3600)
+        window.open((signed?.signedUrl || pub.publicUrl), '_blank', 'noopener,noreferrer')
+        return
+      }
+      const { data: signed, error: signErr } = await supabase.storage.from('fdv-ue-files').createSignedUrl(doc.file_url, 3600)
+      if (!signErr && signed?.signedUrl) { window.open(signed.signedUrl, '_blank', 'noopener,noreferrer'); return }
+      const { data: blob, error: dlErr } = await supabase.storage.from('fdv-ue-files').download(doc.file_url)
+      if (!dlErr && blob) { window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer'); return }
+      throw new Error(signErr?.message || dlErr?.message || 'Kunne ikke hente filen.')
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke åpne filen', subMessage: e.message, kind: 'error' })
+    }
+  }
+
   // Helper: Legg til oppføring i activity_log på en FDV-forespørsel
+
   const loggAktivitet = async (reqId, action, meta = {}) => {
     try {
       const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
@@ -34089,8 +34119,8 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
                               </div>
                             </div>
                             {doc.file_url && (
-                              <a href={doc.file_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                                style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', padding:'4px 8px' }}>↗ Åpne fil</a>
+                              <button onClick={e => { e.stopPropagation(); åpneUeDokument(doc) }}
+                                style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', padding:'4px 8px', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit' }}>↗ Åpne fil</button>
                             )}
                             {doc.status === 'pending' && (
                               <>
@@ -34234,8 +34264,16 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
           } else if (!cancelled) {
             setSignedUrl(doc.file_url)
           }
-        } else if (!cancelled) {
-          setSignedUrl(doc.file_url)
+        } else {
+          // Bar storage-path uten kjent format (UE-portalen lagrer slik).
+          // Filene ligger i fdv-ue-files (privat bucket) → lag signert URL.
+          const { data: signed, error: signErr } = await supabase.storage
+            .from('fdv-ue-files').createSignedUrl(doc.file_url, 3600)
+          if (!cancelled && !signErr && signed?.signedUrl) {
+            setSignedUrl(signed.signedUrl)
+          } else if (!cancelled) {
+            setSignedUrl(doc.file_url)
+          }
         }
       } catch (e) {
         console.warn('[FDV] Public URL feilet:', e)
