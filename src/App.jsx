@@ -34427,6 +34427,34 @@ function FDVPage() {
   }
   useEffect(()=>{ load() },[])
 
+  // Åpne et FDV-dokument. file_url kan være enten en full https-URL
+  // (ekte FDV-dokumenter via getPublicUrl) eller en lagringssti i
+  // plattform-files-bucketen (auto-fangede prosjektfiler lagrer kun path).
+  // For sti-varianten må vi generere en signert URL før åpning.
+  const åpneDokument = async (d) => {
+    if (!d?.file_url) {
+      await appAlert({ message: 'Ingen fil', subMessage: 'Dette dokumentet har ingen tilknyttet fil.', kind: 'warn' })
+      return
+    }
+    if (/^https?:\/\//i.test(d.file_url)) {
+      window.open(d.file_url, '_blank', 'noopener,noreferrer')
+      return
+    }
+    try {
+      const { data, error } = await supabase.storage
+        .from('plattform-files')
+        .createSignedUrl(d.file_url, 3600)
+      if (error) throw error
+      if (data?.signedUrl) {
+        window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+      } else {
+        throw new Error('Kunne ikke generere lenke til filen.')
+      }
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke åpne filen', subMessage: e.message, kind: 'error' })
+    }
+  }
+
   // Patch 27 fix v2: Hvis vi kom hit fra et varsel, forhåndsvelg prosjektet
   // og bytt til FDV-forespørsler-fanen
   useEffect(() => {
@@ -34994,8 +35022,8 @@ function FDVPage() {
                       <span style={{ fontSize:'10px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'3px 8px', borderRadius:'4px' }}>AUTO</span>
                     )}
                     {d.file_url && (
-                      <a href={d.file_url} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none' }}>↗ Åpne</a>
+                      <button onClick={() => åpneDokument(d)}
+                        style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>↗ Åpne</button>
                     )}
                   </div>
                 ))}
@@ -35056,8 +35084,8 @@ function FDVPage() {
                   <span style={{ fontSize:'10px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'3px 8px', borderRadius:'4px' }}>AUTO</span>
                 )}
                 {d.file_url && (
-                  <a href={d.file_url} target="_blank" rel="noopener noreferrer"
-                    style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none' }}>↗ Åpne</a>
+                  <button onClick={() => åpneDokument(d)}
+                    style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>↗ Åpne</button>
                 )}
               </div>
             ))}
@@ -35391,11 +35419,27 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
 
 function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefresh }) {
   const confirm = useConfirm()
+  const appAlert = useAppAlert()
   const [editing, setEditing] = useState(false)
   const [showUploadDoc, setShowUploadDoc] = useState(false)
   const proj = projects.find(p=>p.id===comp.project_id)
   const today = new Date().toISOString().split('T')[0]
   const overdue = comp.next_service_date&&comp.next_service_date<today
+
+  // Åpne dokument robust: full URL åpnes direkte, lagringssti får signert URL
+  const åpneDokument = async (d) => {
+    if (!d?.file_url) return
+    if (/^https?:\/\//i.test(d.file_url)) {
+      window.open(d.file_url, '_blank', 'noopener,noreferrer'); return
+    }
+    try {
+      const { data, error } = await supabase.storage.from('plattform-files').createSignedUrl(d.file_url, 3600)
+      if (error) throw error
+      if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke åpne filen', subMessage: e.message, kind: 'error' })
+    }
+  }
 
   const handleDelete = async () => {
     if (!(await confirm({ message: 'Slett denne komponenten?', subMessage: 'Komponenten og tilhørende dokumenter slettes permanent.', danger: true }))) return
@@ -35434,7 +35478,7 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
               <div key={d.id} style={{ display:'flex',alignItems:'center',gap:'10px',padding:'10px 14px',background:'#f8fafc',borderRadius:'10px',border:'1px solid #f1f5f9',marginBottom:'6px' }}>
                 <span style={{ fontSize:'18px' }}>{FDV_DOC_TYPES[d.doc_type]?.emoji||'📄'}</span>
                 <div style={{ flex:1 }}><div style={{ fontWeight:'600',fontSize:'13px',color:'#0f172a' }}>{d.title}</div><div style={{ fontSize:'11px',color:'#64748b' }}>{FDV_DOC_TYPES[d.doc_type]?.label}</div></div>
-                {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{ padding:'5px 10px',background:'#f0fdf4',color:'#059669',borderRadius:'7px',fontSize:'12px',fontWeight:'600',textDecoration:'none' }}>↓</a>}
+                {d.file_url&&<button onClick={()=>åpneDokument(d)} style={{ padding:'5px 10px',background:'#f0fdf4',color:'#059669',borderRadius:'7px',fontSize:'12px',fontWeight:'600',textDecoration:'none',border:'none',cursor:'pointer',fontFamily:'inherit' }}>↓</button>}
               </div>
             ))}
             {documents.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen dokumenter knyttet til denne komponenten</p>}
