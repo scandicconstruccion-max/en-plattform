@@ -34022,7 +34022,15 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
             const fagDisplay = (req.fag || []).map(f => FAGGRUPPER.find(g => g.id === f)?.name).filter(Boolean).join(', ')
 
             return (
-              <div key={req.id} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', overflow:'hidden' }}>
+              <div key={req.id} style={{
+                background:'white',
+                border: expanded === req.id ? '1px solid #93c5fd' : '1px solid #e2e8f0',
+                borderLeft: expanded === req.id ? '4px solid #2563eb' : '1px solid #e2e8f0',
+                borderRadius:'12px',
+                overflow:'hidden',
+                boxShadow: expanded === req.id ? '0 1px 4px rgba(37,99,235,0.10)' : 'none',
+                transition: 'border-color 0.12s, box-shadow 0.12s',
+              }}>
                 <div style={{ padding:'12px 16px', display:'flex', alignItems:'center', gap:'12px', cursor:'pointer' }} onClick={() => toggleExpand(req)}>
                   <div style={{ width:'40px', height:'40px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:'700', fontSize:'13px', color:'#475569', flexShrink:0 }}>
                     {initialer}
