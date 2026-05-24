@@ -34427,29 +34427,43 @@ function FDVPage() {
   }
   useEffect(()=>{ load() },[])
 
-  // Åpne et FDV-dokument. file_url kan være enten en full https-URL
-  // (ekte FDV-dokumenter via getPublicUrl) eller en lagringssti i
-  // plattform-files-bucketen (auto-fangede prosjektfiler lagrer kun path).
-  // For sti-varianten må vi generere en signert URL før åpning.
+  // Åpne et FDV-dokument. file_url kan være full https-URL (ekte FDV-dok)
+  // eller lagringssti i plattform-files (auto-fangede prosjektfiler).
+  // Robust strategi som speiler ProsjektfilerPage: full URL → getPublicUrl
+  // → signert URL → blob-nedlasting.
   const åpneDokument = async (d) => {
     if (!d?.file_url) {
       await appAlert({ message: 'Ingen fil', subMessage: 'Dette dokumentet har ingen tilknyttet fil.', kind: 'warn' })
       return
     }
+    // Strategi 1: allerede full URL
     if (/^https?:\/\//i.test(d.file_url)) {
       window.open(d.file_url, '_blank', 'noopener,noreferrer')
       return
     }
     try {
-      const { data, error } = await supabase.storage
-        .from('plattform-files')
-        .createSignedUrl(d.file_url, 3600)
-      if (error) throw error
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
-      } else {
-        throw new Error('Kunne ikke generere lenke til filen.')
+      // Strategi 2: public URL (feiler aldri på RLS — bygger bare streng)
+      const { data: pub } = supabase.storage.from('plattform-files').getPublicUrl(d.file_url)
+      if (pub?.publicUrl) {
+        window.open(pub.publicUrl, '_blank', 'noopener,noreferrer')
+        return
       }
+      // Strategi 3: signert URL
+      const { data: signed, error: signErr } = await supabase.storage
+        .from('plattform-files').createSignedUrl(d.file_url, 3600)
+      if (!signErr && signed?.signedUrl) {
+        window.open(signed.signedUrl, '_blank', 'noopener,noreferrer')
+        return
+      }
+      // Strategi 4: blob-nedlasting
+      const { data: blob, error: dlErr } = await supabase.storage
+        .from('plattform-files').download(d.file_url)
+      if (!dlErr && blob) {
+        const url = URL.createObjectURL(blob)
+        window.open(url, '_blank', 'noopener,noreferrer')
+        return
+      }
+      throw new Error(signErr?.message || dlErr?.message || 'Kunne ikke hente filen.')
     } catch (e) {
       await appAlert({ message: 'Kunne ikke åpne filen', subMessage: e.message, kind: 'error' })
     }
@@ -35426,16 +35440,20 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
   const today = new Date().toISOString().split('T')[0]
   const overdue = comp.next_service_date&&comp.next_service_date<today
 
-  // Åpne dokument robust: full URL åpnes direkte, lagringssti får signert URL
+  // Åpne dokument robust: full URL → getPublicUrl → signert URL → blob
   const åpneDokument = async (d) => {
     if (!d?.file_url) return
     if (/^https?:\/\//i.test(d.file_url)) {
       window.open(d.file_url, '_blank', 'noopener,noreferrer'); return
     }
     try {
-      const { data, error } = await supabase.storage.from('plattform-files').createSignedUrl(d.file_url, 3600)
-      if (error) throw error
-      if (data?.signedUrl) window.open(data.signedUrl, '_blank', 'noopener,noreferrer')
+      const { data: pub } = supabase.storage.from('plattform-files').getPublicUrl(d.file_url)
+      if (pub?.publicUrl) { window.open(pub.publicUrl, '_blank', 'noopener,noreferrer'); return }
+      const { data: signed, error: signErr } = await supabase.storage.from('plattform-files').createSignedUrl(d.file_url, 3600)
+      if (!signErr && signed?.signedUrl) { window.open(signed.signedUrl, '_blank', 'noopener,noreferrer'); return }
+      const { data: blob, error: dlErr } = await supabase.storage.from('plattform-files').download(d.file_url)
+      if (!dlErr && blob) { window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer'); return }
+      throw new Error(signErr?.message || dlErr?.message || 'Kunne ikke hente filen.')
     } catch (e) {
       await appAlert({ message: 'Kunne ikke åpne filen', subMessage: e.message, kind: 'error' })
     }
