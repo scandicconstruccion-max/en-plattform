@@ -705,6 +705,59 @@ function InfoTip({ label, info, align }) {
   )
 }
 
+// ── Gjenbrukbar CSV-knapp (eksport + import) med konsistent stil ──
+// Bruk:
+//   <CsvButton kind="export" size="sm" onClick={exportCSV} />
+//   <CsvButton kind="import" size="sm" onChange={handleImportFile} inputRef={csvInputRef} />
+// Props:
+//   kind:    'export' (button) | 'import' (label med skjult file-input)
+//   size:    'sm' (8/14, 12px) | 'md' (9/16, 13px) | 'lg' (13/24, 14px)
+//   label:   overstyr standardtekst ('Eksporter CSV' / 'Importer CSV')
+//   emoji:   vis emoji foran teksten (default true)
+//   accept:  file-accept for import (default '.csv,.txt')
+//   onClick: handler for export
+//   onChange: handler for import (file-input)
+//   inputRef: ref til file-input (import)
+const CSV_BTN_SIZES = {
+  sm: { padding: '8px 14px',  fontSize: '12px' },
+  md: { padding: '9px 16px',  fontSize: '13px' },
+  lg: { padding: '13px 24px', fontSize: '14px' },
+}
+function CsvButton({ kind = 'export', size = 'sm', label, emoji = true, accept = '.csv,.txt', onClick, onChange, inputRef, style }) {
+  const sz = CSV_BTN_SIZES[size] || CSV_BTN_SIZES.sm
+  const isExport = kind === 'export'
+  const text = label || (isExport ? 'Eksporter CSV' : 'Importer CSV')
+  const ic = emoji ? (isExport ? '📥 ' : '📤 ') : ''
+  const baseStyle = {
+    padding: sz.padding,
+    fontSize: sz.fontSize,
+    border: '1px solid #e2e8f0',
+    borderRadius: '10px',
+    background: 'white',
+    cursor: 'pointer',
+    fontWeight: '600',
+    color: '#374151',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    boxSizing: 'border-box',
+    lineHeight: '1',
+    fontFamily: 'inherit',
+    whiteSpace: 'nowrap',
+    ...style,
+  }
+  if (isExport) {
+    return <button onClick={onClick} style={baseStyle}>{ic}{text}</button>
+  }
+  return (
+    <label style={baseStyle}>
+      {ic}{text}
+      <input ref={inputRef} type="file" accept={accept} style={{ display: 'none' }} onChange={onChange} />
+    </label>
+  )
+}
+
 // ── Gjenbrukbar ansattvelger med dropdown ──
 function EmployeeSelect({ value, onChange, placeholder, style, required, allowClear }) {
   const [emps, setEmps] = useState([])
@@ -19760,9 +19813,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 
       {/* Eksport-knapper */}
       <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-        <button onClick={exportCSV} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer', color:'#374151', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
-          📥 Eksporter timelister (CSV)
-        </button>
+        <CsvButton kind="export" size="lg" label="Eksporter timelister (CSV)" onClick={exportCSV} style={{ width:'100%', borderRadius:'12px', gap:'8px' }} />
         <button onClick={exportPayroll} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
           💰 Eksporter lønnsgrunnlag
         </button>
@@ -26754,11 +26805,8 @@ function KunderPage() {
         </div>
         {!isMobK && (
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={exportCSV} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'inline-flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box', lineHeight:'1', fontFamily:'inherit' }}>Eksporter CSV</button>
-            <label style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'inline-flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box', lineHeight:'1', fontFamily:'inherit' }}>
-              Importer CSV
-              <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
-            </label>
+            <CsvButton kind="export" size="sm" emoji={false} onClick={exportCSV} />
+            <CsvButton kind="import" size="sm" emoji={false} onChange={handleImportFile} inputRef={csvInputRef} />
           </div>
         )}
       </div>
@@ -27826,7 +27874,7 @@ function CRMPage() {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Kunder, leads og salgspipeline</p>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={exportCSV} style={{ padding:'9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#475569' }}>📥 Eksporter CSV</button>
+            <CsvButton kind="export" size="md" onClick={exportCSV} />
             <button onClick={()=>setShowNew(true)} style={{ padding:'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde / lead</button>
               {quotes.length > 0 ? <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>📋 Fra tilbud ({quotes.length})</button> : <span style={{ fontSize:'11px',color:'#94a3b8',padding:'10px' }}>({quotes.length} tilbud)</span>}
           </div>
@@ -36284,7 +36332,7 @@ function SuperAdminPage() {
                 <option value="active">Aktive ({activeCompanies.length})</option>
                 <option value="expired">Utløpt ({expiredCompanies.length})</option>
               </select>
-              <button onClick={exportCSV} style={{ padding: isMobSA ? '11px 14px' : '9px 14px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', display:'flex', alignItems:'center', gap:'6px', minHeight: isMobSA ? '44px' : 'auto', whiteSpace:'nowrap' }}>📥 {isMobSA ? 'CSV' : 'Eksporter CSV'}</button>
+              <CsvButton kind="export" size="sm" label={isMobSA ? 'CSV' : 'Eksporter CSV'} onClick={exportCSV} style={{ background:'#f8fafc', padding: isMobSA ? '11px 14px' : '8px 14px', minHeight: isMobSA ? '44px' : 'auto' }} />
               <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft: isMobSA ? '0' : 'auto', width: isMobSA ? '100%' : 'auto', textAlign: isMobSA ? 'center' : 'right' }}>
                 {companies.filter(c=>{
                   if (saFilter!=='alle'&&c.subscription_status!==saFilter) return false
