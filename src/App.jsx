@@ -33722,28 +33722,38 @@ function FdvUeAdminTab({ projectId, onLevertGodkjent }) {
   const [avvisModal, setAvvisModal] = useState(null)  // { doc, req }
   const [avvisGrunn, setAvvisGrunn] = useState('')
 
-  // Åpne et UE-levert dokument. file_url er en storage-path i
-  // fdv-ue-files-bucketen (ikke plattform-files). Robust strategi:
-  // full URL → getPublicUrl → signert URL → blob-nedlasting.
+  // Åpne et UE-levert dokument. file_url lagres typisk som
+  // "storage:<bucket>/<path>" (UE-portalens format), men kan også være
+  // full URL eller bar path. Vi resolver til en signert URL.
   const åpneUeDokument = async (doc) => {
     if (!doc?.file_url) {
       await appAlert({ message: 'Ingen fil', subMessage: 'Dette dokumentet har ingen tilknyttet fil.', kind: 'warn' })
       return
     }
-    if (/^https?:\/\//i.test(doc.file_url)) {
+    // Allerede full URL eller signert URL
+    if (doc.file_url.includes('?token=') || /^https?:\/\//i.test(doc.file_url)) {
       window.open(doc.file_url, '_blank', 'noopener,noreferrer'); return
     }
     try {
-      const { data: pub } = supabase.storage.from('fdv-ue-files').getPublicUrl(doc.file_url)
-      if (pub?.publicUrl) {
-        // Public URL kan feile stille hvis bucket er privat — test med signert som backup
-        const { data: signed } = await supabase.storage.from('fdv-ue-files').createSignedUrl(doc.file_url, 3600)
-        window.open((signed?.signedUrl || pub.publicUrl), '_blank', 'noopener,noreferrer')
-        return
+      let bucket = 'fdv-ue-files'
+      let path = doc.file_url
+      // Format "storage:<bucket>/<path>" → strip prefiks, hent bucket + path
+      if (doc.file_url.startsWith('storage:')) {
+        const utenPrefiks = doc.file_url.substring('storage:'.length)
+        const slashIdx = utenPrefiks.indexOf('/')
+        if (slashIdx > 0) {
+          bucket = utenPrefiks.substring(0, slashIdx)
+          path = utenPrefiks.substring(slashIdx + 1)
+        }
       }
-      const { data: signed, error: signErr } = await supabase.storage.from('fdv-ue-files').createSignedUrl(doc.file_url, 3600)
-      if (!signErr && signed?.signedUrl) { window.open(signed.signedUrl, '_blank', 'noopener,noreferrer'); return }
-      const { data: blob, error: dlErr } = await supabase.storage.from('fdv-ue-files').download(doc.file_url)
+      // Privat bucket → signert URL
+      const { data: signed, error: signErr } = await supabase.storage
+        .from(bucket).createSignedUrl(path, 3600)
+      if (!signErr && signed?.signedUrl) {
+        window.open(signed.signedUrl, '_blank', 'noopener,noreferrer'); return
+      }
+      // Fallback: blob-nedlasting
+      const { data: blob, error: dlErr } = await supabase.storage.from(bucket).download(path)
       if (!dlErr && blob) { window.open(URL.createObjectURL(blob), '_blank', 'noopener,noreferrer'); return }
       throw new Error(signErr?.message || dlErr?.message || 'Kunne ikke hente filen.')
     } catch (e) {
@@ -34227,7 +34237,7 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
     console.log('[FDV-debug] Doc:', { file_url: doc.file_url, file_name: doc.file_name })
     ;(async () => {
       try {
-        // Patch 27 fix v9: Bruk public URL siden bucketen er public.
+        // Patch 27 fix v10: fdv-ue-files er privat → bruk signert URL.
         // Format: "storage:<bucket>/<path>"
         if (doc.file_url.startsWith('storage:')) {
           const withoutPrefix = doc.file_url.substring('storage:'.length)
@@ -34235,12 +34245,13 @@ function FdvUeDocDetaljModal({ doc, req, onClose, onGodkjenn, onAvvis }) {
           if (slashIdx > 0) {
             const bucket = withoutPrefix.substring(0, slashIdx)
             const path = withoutPrefix.substring(slashIdx + 1)
-            const { data } = supabase.storage.from(bucket).getPublicUrl(path)
-            console.log('[FDV-debug] Public URL:', data?.publicUrl)
-            if (!cancelled && data?.publicUrl) {
-              setSignedUrl(data.publicUrl)
+            const { data: signed, error: signErr } = await supabase.storage.from(bucket).createSignedUrl(path, 3600)
+            if (!cancelled && !signErr && signed?.signedUrl) {
+              setSignedUrl(signed.signedUrl)
             } else if (!cancelled) {
-              setSignedUrl(null)
+              // Fallback til public URL hvis signering feiler
+              const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+              setSignedUrl(data?.publicUrl || null)
             }
           }
           return
