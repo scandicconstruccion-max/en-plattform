@@ -34411,6 +34411,7 @@ function FDVPage() {
   const [aktivtKapittel, setAktivtKapittel] = useState(null)  // For NS 3456-drill-down
   const [showNewComp, setShowNewComp] = useState(false)
   const [showUploadDoc, setShowUploadDoc] = useState(false)
+  const [editDoc, setEditDoc] = useState(null)
   const [selectedComp, setSelectedComp] = useState(null)
   const [search, setSearch] = useState('')
 
@@ -35035,6 +35036,10 @@ function FDVPage() {
                     {d._virtual && (
                       <span style={{ fontSize:'10px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'3px 8px', borderRadius:'4px' }}>AUTO</span>
                     )}
+                    {!d._virtual && (
+                      <button onClick={() => setEditDoc(d)}
+                        style={{ fontSize:'12px', color:'#64748b', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>✏️ Rediger</button>
+                    )}
                     {d.file_url && (
                       <button onClick={() => åpneDokument(d)}
                         style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>↗ Åpne</button>
@@ -35097,6 +35102,10 @@ function FDVPage() {
                 {d._virtual && (
                   <span style={{ fontSize:'10px', fontWeight:'700', color:'#2563eb', background:'#dbeafe', padding:'3px 8px', borderRadius:'4px' }}>AUTO</span>
                 )}
+                {!d._virtual && (
+                  <button onClick={() => setEditDoc(d)}
+                    style={{ fontSize:'12px', color:'#64748b', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>✏️ Rediger</button>
+                )}
                 {d.file_url && (
                   <button onClick={() => åpneDokument(d)}
                     style={{ fontSize:'12px', color:'#2563eb', textDecoration:'none', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit' }}>↗ Åpne</button>
@@ -35114,6 +35123,7 @@ function FDVPage() {
 
       {showNewComp&&<FDVComponentModal projects={projects} user={user} onClose={()=>setShowNewComp(false)} onSaved={()=>{setShowNewComp(false);load()}} />}
       {showUploadDoc&&<FDVDocModal projects={projects} components={components} user={user} onClose={()=>setShowUploadDoc(false)} onSaved={()=>{setShowUploadDoc(false);load()}} />}
+      {editDoc&&<FDVDocModal projects={projects} components={components} user={user} initial={editDoc} onClose={()=>setEditDoc(null)} onSaved={()=>{setEditDoc(null);load()}} />}
       {selectedComp&&<FDVComponentDetaljer comp={selectedComp} documents={documents.filter(d=>d.component_id===selectedComp.id)} projects={projects} user={user} onClose={()=>{setSelectedComp(null);load()}} onRefresh={load} />}
     </div>
   )
@@ -35361,9 +35371,17 @@ function QRSkannerModal({ onClose, onScanned }) {
   )
 }
 
-function FDVDocModal({ projects, components, user, onClose, onSaved }) {
+function FDVDocModal({ projects, components, user, onClose, onSaved, initial }) {
   const appAlert = useAppAlert()
-  const [form, setForm] = useState({ title:'', doc_type:'manual', project_id:'', component_id:'', folder_path:'/' })
+  const isEdit = !!initial
+  const [form, setForm] = useState(initial ? {
+    title: initial.title || '',
+    doc_type: initial.doc_type || 'manual',
+    project_id: initial.project_id || '',
+    component_id: initial.component_id || '',
+    folder_path: initial.folder_path || '/',
+    ns3456_kapittel: initial.ns3456_kapittel || '1',
+  } : { title:'', doc_type:'manual', project_id:'', component_id:'', folder_path:'/', ns3456_kapittel:'1' })
   const [file, setFile] = useState(null)
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -35372,7 +35390,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
     if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
-      let fileUrl=null, fileName=null, fileType=null
+      let fileUrl=initial?.file_url||null, fileName=initial?.file_name||null, fileType=initial?.file_type||null
       if (file) {
         const path=`fdv/${Date.now()}_${file.name}`
         const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
@@ -35380,8 +35398,14 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
         const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
         fileUrl=publicUrl; fileName=file.name; fileType=file.type
       }
-      const {error}=await supabase.from('fdv_documents').insert({ ...form, project_id:form.project_id||null, component_id:form.component_id||null, file_url:fileUrl, file_name:fileName, file_type:fileType, created_by:user?.id })
-      if(error) throw error
+      const payload={ ...form, project_id:form.project_id||null, component_id:form.component_id||null, file_url:fileUrl, file_name:fileName, file_type:fileType }
+      if (isEdit) {
+        const {error}=await supabase.from('fdv_documents').update(payload).eq('id', initial.id)
+        if(error) throw error
+      } else {
+        const {error}=await supabase.from('fdv_documents').insert({ ...payload, created_by:user?.id })
+        if(error) throw error
+      }
       onSaved()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
@@ -35393,10 +35417,10 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div className="fdv-modal-content" style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'520px',maxHeight:'90vh',display:'flex',flexDirection:'column',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0 }}>
-          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>📎 Last opp FDV-dokument</h2>
+          <h2 style={{ margin:0,fontSize:'18px',fontWeight:'700',color:'#0f172a' }}>{isEdit ? '✏️ Rediger FDV-dokument' : '📎 Last opp FDV-dokument'}</h2>
           <div className="fdv-modal-actions" style={{ display:'flex', alignItems:'center', gap:'8px' }}>
             <button type="button" onClick={onClose} style={{ padding:'8px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Laster opp...':'Last opp'}</button>
+            <button onClick={handleSave} disabled={saving} style={{ padding:'8px 20px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?(isEdit?'Lagrer...':'Laster opp...'):(isEdit?'Lagre endringer':'Last opp')}</button>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', marginLeft:'4px' }}>×</button>
           </div>
         </div>
@@ -35411,6 +35435,12 @@ function FDVDocModal({ projects, components, user, onClose, onSaved }) {
                 <button key={k} onClick={()=>set('doc_type',k)} style={{ padding:'10px 7px',borderRadius:'8px',border:`2px solid ${form.doc_type===k?'#059669':'#e2e8f0'}`,background:form.doc_type===k?'#f0fdf4':'white',cursor:'pointer',fontSize:'12px',fontWeight:'700',color:form.doc_type===k?'#059669':'#64748b',minHeight:'44px' }}>{v.emoji} {v.label}</button>
               ))}
             </div>
+          </div>
+          <div>
+            <label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>NS 3456-kapittel *</label>
+            <select value={form.ns3456_kapittel} onChange={e=>set('ns3456_kapittel',e.target.value)} style={fInp}>
+              {NS3456_KAPITLER.map(k => <option key={k.id} value={k.id}>{k.emoji} {k.id} {k.navn}</option>)}
+            </select>
           </div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Prosjekt</label><SearchableProjectSelect value={form.project_id} onChange={v => set('project_id', v)} projects={projects} style={fInp} placeholder="Ingen" /></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'5px' }}>Koble til komponent (valgfritt)</label><select value={form.component_id} onChange={e=>set('component_id',e.target.value)} style={fInp}><option value="">Ingen</option>{filteredComponents.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
