@@ -26754,8 +26754,8 @@ function KunderPage() {
         </div>
         {!isMobK && (
           <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={exportCSV} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151' }}>Eksporter CSV</button>
-            <label style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'flex', alignItems:'center' }}>
+            <button onClick={exportCSV} style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'inline-flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box', lineHeight:'1', fontFamily:'inherit' }}>Eksporter CSV</button>
+            <label style={{ padding:'8px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#374151', display:'inline-flex', alignItems:'center', justifyContent:'center', boxSizing:'border-box', lineHeight:'1', fontFamily:'inherit' }}>
               Importer CSV
               <input ref={csvInputRef} type="file" accept=".csv,.txt" style={{ display:'none' }} onChange={handleImportFile} />
             </label>
