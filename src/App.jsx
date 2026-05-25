@@ -45089,37 +45089,50 @@ function BimTverrsnittModal({ lagsett, onClose }) {
 
   if (!lagsett) return null
 
-  // Tilpasning: hvis brukeren har justert konstruksjonen, skal tverrsnittet
-  // gjenspeile den tilpassede totaltykkelsen (lagene skaleres proporsjonalt).
-  const tilpasning = lagsett.tilpassetKonstruksjon
-  const erTilpasset = !!(tilpasning && tilpasning._erTilpasset)
-  const tilpassetTotalMm = erTilpasset && tilpasning._tilpassetTykkelse > 0
-    ? tilpasning._tilpassetTykkelse
-    : 0
+  // ─── Velg riktig lag-kilde for tverrsnittet ───
+  // Kalkulatøren skal se lagene fra den KONSTRUKSJONEN de har valgt/tilpasset,
+  // ikke nødvendigvis IFC-geometrien (som ofte er ett massivt objekt uten lag).
+  // Prioritet:
+  //   1. Tilpasset konstruksjon (det kalkulatøren justerte) — hvis den har lag
+  //   2. Matchet bibliotek-konstruksjon — hvis den har lag
+  //   3. IFC-ens egne layers/lag — fallback (original geometri)
+  const tilpassetKonst = lagsett.tilpassetKonstruksjon
+  const matchetKonst = lagsett.matchedKonstruksjon
+  const tilpassetLag = (tilpassetKonst?.lag || []).filter(l => l && (l.navn || l.tykkelse))
+  const matchetLag = (matchetKonst?.lag || []).filter(l => l && (l.navn || l.tykkelse))
 
-  // Lag-data — støtt både IFC (material/thickness) og bibliotek (navn/tykkelse)
-  const lagListe = (lagsett.layers || lagsett.lag || []).filter(l => {
+  let lagKilde, viserKonstruksjonsLag = false, konstruksjonsNavn = null
+  if (tilpassetLag.length > 0) {
+    lagKilde = tilpassetKonst.lag
+    viserKonstruksjonsLag = true
+    konstruksjonsNavn = tilpassetKonst.name || tilpassetKonst.navn
+  } else if (matchetLag.length > 0) {
+    lagKilde = matchetKonst.lag
+    viserKonstruksjonsLag = true
+    konstruksjonsNavn = matchetKonst.name || matchetKonst.navn
+  } else {
+    lagKilde = lagsett.layers || lagsett.lag || []
+  }
+
+  // Lag-data — støtt både IFC (material/thickness i meter) og
+  // konstruksjon/bibliotek (navn/tykkelse i mm)
+  const lagListe = lagKilde.filter(l => {
     if (!l) return false
     const harMaterial = l.material || l.navn
     const harTykkelse = (l.thickness && l.thickness > 0) || (l.tykkelse && l.tykkelse > 0)
     return harMaterial || harTykkelse
   })
-  const lagTykkelseRaaMm = (l) => {
-    if (l.thickness && l.thickness > 0) return l.thickness * 1000
-    if (l.tykkelse && l.tykkelse > 0) return l.tykkelse
+  const lagTykkelseMm = (l) => {
+    if (l.thickness && l.thickness > 0) return l.thickness * 1000  // IFC: meter
+    if (l.tykkelse && l.tykkelse > 0) return l.tykkelse            // konstruksjon: mm
     return 0
   }
-  // Skaleringsfaktor: hvis tilpasset total avviker fra original sum, skaler lagene
-  const sumRaaMm = lagListe.reduce((s, l) => s + lagTykkelseRaaMm(l), 0)
-  const skalaFaktor = (tilpassetTotalMm > 0 && sumRaaMm > 0)
-    ? tilpassetTotalMm / sumRaaMm
-    : 1
-  const lagTykkelseMm = (l) => lagTykkelseRaaMm(l) * skalaFaktor
   const lagMaterial = (l) => l.material || l.navn || 'Ukjent material'
 
   const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
-  const totalTykkelseMm = tilpassetTotalMm > 0
-    ? tilpassetTotalMm
+  // Total: bruk konstruksjonens sum hvis vi viser konstruksjonslag, ellers lagsett-total
+  const totalTykkelseMm = viserKonstruksjonsLag
+    ? (sumLagMm > 0 ? sumLagMm : (lagsett.totalTykkelse || 0))
     : (lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm)
   const kategori = lagsett.brukerKategori || 'ukjent'
 
@@ -45519,13 +45532,17 @@ function BimTverrsnittModal({ lagsett, onClose }) {
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display:'flex', alignItems:'center', gap:'8px' }}>
               📐 Konstruksjonsdetaljer
-              {erTilpasset && (
-                <span style={{ background:'#fef3c7', color:'#854d0e', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', letterSpacing:'0.3px' }}>✏️ TILPASSET</span>
+              {viserKonstruksjonsLag && (
+                <span style={{ background:'#fef3c7', color:'#854d0e', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', letterSpacing:'0.3px' }}>✏️ VALGT KONSTRUKSJON</span>
               )}
             </div>
             <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', marginTop: '2px', lineHeight: 1.35 }}>
               {(() => {
-                // Rens hvert material-segment i lagsett-navnet
+                // Når vi viser den valgte konstruksjonens lag, vis konstruksjonsnavnet
+                if (viserKonstruksjonsLag && konstruksjonsNavn) {
+                  return renseMaterialnavn(konstruksjonsNavn).rent
+                }
+                // Ellers: rens hvert material-segment i lagsett-navnet
                 // (typisk format: "Gipsplate 335402423 + Isolasjon 285619191 + ...")
                 const navn = lagsett.navn || 'Lagsett'
                 if (!navn.includes('+')) {
@@ -45534,6 +45551,11 @@ function BimTverrsnittModal({ lagsett, onClose }) {
                 return navn.split('+').map(s => renseMaterialnavn(s.trim()).rent).join(' + ')
               })()}
             </div>
+            {viserKonstruksjonsLag && (
+              <div style={{ fontSize: '11px', color: '#64748b', marginTop: '3px' }}>
+                IFC-element: {renseMaterialnavn(lagsett.navn || 'Lagsett').rent}
+              </div>
+            )}
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
             <button onClick={lastNedSvg}
@@ -47905,18 +47927,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
             </div>
           )
         })}
-      </div>
-
-      {/* Info om neste steg */}
-      <div style={{ marginTop:'14px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'10px 14px' }}>
-        <div style={{ fontSize:'11px', fontWeight:'700', color:'#1e40af', marginBottom:'3px' }}>📌 Sesjon C.2 — hva som fungerer nå</div>
-        <p style={{ margin:0, fontSize:'10px', color:'#1e3a8a', lineHeight:1.5 }}>
-          Konstruksjoner du lager lagres permanent i ditt eget bibliotek. Materialer fylles automatisk via prisbok-søk. Lagsett du har bekreftet tidligere blir auto-gjenkjent ved neste IFC-import (gul "Husket fra forrige prosjekt"-banner).
-          {brukerBibliotek.length > 0 && (
-            <span> Du har <strong>{brukerBibliotek.length} egne konstruksjon{brukerBibliotek.length > 1 ? 'er' : ''}</strong> i biblioteket.</span>
-          )}
-          <br/>Neste opp: brukerklassifisering for proxy-elementer + sammendragsskjerm før kalkyle-generering (Sesjon C.3).
-        </p>
       </div>
 
       {/* Dialog for å lage ny konstruksjon */}
