@@ -45089,6 +45089,14 @@ function BimTverrsnittModal({ lagsett, onClose }) {
 
   if (!lagsett) return null
 
+  // Tilpasning: hvis brukeren har justert konstruksjonen, skal tverrsnittet
+  // gjenspeile den tilpassede totaltykkelsen (lagene skaleres proporsjonalt).
+  const tilpasning = lagsett.tilpassetKonstruksjon
+  const erTilpasset = !!(tilpasning && tilpasning._erTilpasset)
+  const tilpassetTotalMm = erTilpasset && tilpasning._tilpassetTykkelse > 0
+    ? tilpasning._tilpassetTykkelse
+    : 0
+
   // Lag-data — støtt både IFC (material/thickness) og bibliotek (navn/tykkelse)
   const lagListe = (lagsett.layers || lagsett.lag || []).filter(l => {
     if (!l) return false
@@ -45096,15 +45104,23 @@ function BimTverrsnittModal({ lagsett, onClose }) {
     const harTykkelse = (l.thickness && l.thickness > 0) || (l.tykkelse && l.tykkelse > 0)
     return harMaterial || harTykkelse
   })
-  const lagTykkelseMm = (l) => {
+  const lagTykkelseRaaMm = (l) => {
     if (l.thickness && l.thickness > 0) return l.thickness * 1000
     if (l.tykkelse && l.tykkelse > 0) return l.tykkelse
     return 0
   }
+  // Skaleringsfaktor: hvis tilpasset total avviker fra original sum, skaler lagene
+  const sumRaaMm = lagListe.reduce((s, l) => s + lagTykkelseRaaMm(l), 0)
+  const skalaFaktor = (tilpassetTotalMm > 0 && sumRaaMm > 0)
+    ? tilpassetTotalMm / sumRaaMm
+    : 1
+  const lagTykkelseMm = (l) => lagTykkelseRaaMm(l) * skalaFaktor
   const lagMaterial = (l) => l.material || l.navn || 'Ukjent material'
 
   const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
-  const totalTykkelseMm = lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm
+  const totalTykkelseMm = tilpassetTotalMm > 0
+    ? tilpassetTotalMm
+    : (lagsett.totalTykkelse > 0 ? lagsett.totalTykkelse : sumLagMm)
   const kategori = lagsett.brukerKategori || 'ukjent'
 
   // ─── Data-kvalitet-flagg ───
@@ -45501,8 +45517,11 @@ function BimTverrsnittModal({ lagsett, onClose }) {
           display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
         }}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+            <div style={{ fontSize: '11px', color: '#15803d', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.6px', display:'flex', alignItems:'center', gap:'8px' }}>
               📐 Konstruksjonsdetaljer
+              {erTilpasset && (
+                <span style={{ background:'#fef3c7', color:'#854d0e', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', letterSpacing:'0.3px' }}>✏️ TILPASSET</span>
+              )}
             </div>
             <div style={{ fontSize: '17px', fontWeight: '700', color: '#0f172a', marginTop: '2px', lineHeight: 1.35 }}>
               {(() => {
