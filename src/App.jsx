@@ -47124,7 +47124,7 @@ function BimSuppleringPanel({ lagsett, onLagre, onAvbryt }) {
   )
 }
 
-function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false, aktivLagsett = null, onAktiver = null }) {
+function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false, aktivLagsett = null, onAktiver = null, kalkyleProsjektType = null }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
   const { user } = useAuth()
@@ -48034,7 +48034,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           lagsett={bibliotekSokLagsett}
           brukerKategori={bibliotekSokLagsett.brukerKategori}
           bibliotek={utvidetBibliotek}
-          kalkyleProsjektType={redigeringAvKalkyle?.prosjekt_type || null}
+          kalkyleProsjektType={kalkyleProsjektType}
           onClose={() => setBibliotekSokLagsett(null)}
           onVelg={async (valgtKonstruksjon) => {
             await settMatch(bibliotekSokLagsett, valgtKonstruksjon, 'bibliotek')
@@ -50442,6 +50442,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   onChange={() => setMatchVersjon(v => v + 1)}
                   aktivLagsett={aktivLagsett}
                   onAktiver={(id) => setAktivLagsett({ id, kilde: 'match' })}
+                  kalkyleProsjektType={redigeringAvKalkyle?.prosjekt_type || null}
                 />
               </div>
               </div>
