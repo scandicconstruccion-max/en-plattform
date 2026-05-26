@@ -42920,6 +42920,13 @@ function lagsettTotalTykkelse(lagsett) {
   return layers.reduce((sum, l) => sum + (l.tykkelse || 0), 0)
 }
 
+// Stabil ID for et lagsett — brukes til å koble samme post på tvers av
+// Klassifiser-kolonnen og Match-kolonnen (fingeravtrykk: navn+tykkelse+antall)
+function bimLagsettId(ls) {
+  if (!ls) return ''
+  return `${ls.navn}__${ls.tykkelse || ls.totalTykkelse || 0}__${ls.antall || 0}`
+}
+
 // Forsøk å hente tykkelse fra konstruksjons-navn (f.eks. "Plasstøpt betongvegg 250mm" → 250)
 function ekstrakerTykkelseFraNavn(konstruksjon) {
   const navn = konstruksjon.name || konstruksjon.navn || ''
@@ -43088,8 +43095,19 @@ function beskrivForskjeller(ifcLag, biblioLag) {
 // Mottar mengder-objektet og en callback som kalles når brukeren har endret
 // klassifisering. Lagsettene mutres direkte (brukerKategori-feltet).
 
-function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false }) {
+function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false, aktivLagsett = null, onAktiver = null }) {
   const [oppdater, setOppdater] = useState(0)
+  // Refs til hvert kort, nøklet på bimLagsettId — for auto-scroll fra koblet kolonne
+  const kortRefs = React.useRef({})
+  // Scroll til aktiv post NÅR valget kom fra den ANDRE kolonnen (match).
+  // Hvis kilde === 'klassifiser' var det vårt eget klikk → ikke scroll (unngår loop).
+  React.useEffect(() => {
+    if (!aktivLagsett || aktivLagsett.kilde === 'klassifiser') return
+    const el = kortRefs.current[aktivLagsett.id]
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [aktivLagsett])
 
   // Samle alle lagsett fra alle vegg-kategorier — flat liste
   const alleVeggLagsett = React.useMemo(() => {
@@ -43205,8 +43223,24 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
   const LagsettRad = ({ lagsett, kategorier, kategoriPlaceholder }) => {
     const aktivKat = lagsett.brukerKategori || kategoriPlaceholder || 'usikker'
     const erEndret = lagsett.brukerKategori !== lagsett.foreslattKategori
+    const id = bimLagsettId(lagsett)
+    const erAktiv = aktivLagsett && aktivLagsett.id === id
     return (
-      <div style={{ ...card, padding: isMob ? '10px' : '12px 14px', borderColor: kategoriFarge(aktivKat) + '40' }}>
+      <div
+        ref={el => { if (el) kortRefs.current[id] = el }}
+        onClick={(e) => {
+          if (e.target.closest('button, a, input, select, textarea')) return
+          if (onAktiver) onAktiver(id)
+        }}
+        style={{
+          ...card,
+          padding: isMob ? '10px' : '12px 14px',
+          borderColor: erAktiv ? '#2563eb' : kategoriFarge(aktivKat) + '40',
+          borderLeft: erAktiv ? '4px solid #2563eb' : card.border,
+          boxShadow: erAktiv ? '0 0 0 3px rgba(37,99,235,0.12)' : 'none',
+          cursor: onAktiver ? 'pointer' : 'default',
+          transition: 'border-color 0.12s, box-shadow 0.12s',
+        }}>
         {/* Topprad: navn + nåværende kategori */}
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'8px' }}>
           <div style={{ flex:1, minWidth:0 }}>
@@ -43258,7 +43292,7 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false })
           {kategorier.map(kat => {
             const erValgt = aktivKat === kat
             return (
-              <button key={kat} onClick={() => settBrukerKategori(lagsett, kat)} style={knappStil(kat, erValgt)}>
+              <button key={kat} onClick={(e) => { e.stopPropagation(); settBrukerKategori(lagsett, kat) }} style={knappStil(kat, erValgt)}>
                 {kategoriLabel(kat)}
               </button>
             )
@@ -47087,10 +47121,21 @@ function BimSuppleringPanel({ lagsett, onLagre, onAvbryt }) {
   )
 }
 
-function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false }) {
+function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, kompakt = false, aktivLagsett = null, onAktiver = null }) {
   const [oppdater, setOppdater] = useState(0)
   const appAlert = useAppAlert()
   const { user } = useAuth()
+  // Refs til hvert match-kort for auto-scroll fra koblet kolonne (klassifiser)
+  const kortRefs = React.useRef({})
+  // Scroll til aktiv post NÅR valget kom fra den ANDRE kolonnen (klassifiser).
+  // Hvis kilde === 'match' var det vårt eget klikk → ikke scroll (unngår loop).
+  React.useEffect(() => {
+    if (!aktivLagsett || aktivLagsett.kilde === 'match') return
+    const el = kortRefs.current[aktivLagsett.id]
+    if (el && el.scrollIntoView) {
+      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [aktivLagsett])
 
   // Patch 16: Lagsett som vises i 3D-modell (null = lukket)
   const [meshLagsett, setMeshLagsett] = useState(null)
@@ -47598,9 +47643,27 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
           const erBibliotek = erBekreftet && lagsett.matchKilde === 'bibliotek'
           const aktivStatus = erAuto ? 'auto' : erBibliotek ? 'bibliotek' : (erBekreftet ? 'bekreftet' : (erHoppet ? 'hoppet' : status))
           const aktivFarge = erAuto ? '#ca8a04' : erBibliotek ? '#7c3aed' : (farger[aktivStatus] || '#94a3b8')
+          const kortId = bimLagsettId(lagsett)
+          const erAktivKort = aktivLagsett && aktivLagsett.id === kortId
 
           return (
-            <div key={i} style={{ ...card, padding: isMob ? '10px' : '12px 14px', borderLeft: `3px solid ${aktivFarge}` }}>
+            <div
+              key={i}
+              ref={el => { if (el) kortRefs.current[kortId] = el }}
+              onClick={(e) => {
+                // Ikke aktiver hvis klikket traff en knapp, lenke, input eller select inni kortet
+                if (e.target.closest('button, a, input, select, textarea')) return
+                if (onAktiver) onAktiver(kortId)
+              }}
+              style={{
+                ...card,
+                padding: isMob ? '10px' : '12px 14px',
+                borderLeft: `${erAktivKort ? '4px' : '3px'} solid ${erAktivKort ? '#2563eb' : aktivFarge}`,
+                borderColor: erAktivKort ? '#2563eb' : (card.borderColor || '#e2e8f0'),
+                boxShadow: erAktivKort ? '0 0 0 3px rgba(37,99,235,0.12)' : 'none',
+                cursor: onAktiver ? 'pointer' : 'default',
+                transition: 'border-color 0.12s, box-shadow 0.12s',
+              }}>
               {/* Topprad */}
               <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'8px' }}>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -49799,6 +49862,10 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   // Patch 18 polish: Tilsvarende for matching i Steg 2.
   // Begge brukes også for å re-beregne fremdrifts-stripe-tellinger.
   const [matchVersjon, setMatchVersjon] = useState(0)
+  // Koblede kolonner: den aktive posten fremheves i BEGGE seksjoner, og den
+  // motsatte kolonnen auto-scroller til samme post. { id, kilde } der kilde
+  // forteller hvilken kolonne som utløste valget (for å unngå scroll-loop).
+  const [aktivLagsett, setAktivLagsett] = useState(null)
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -50348,6 +50415,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   isMob={isMob}
                   kompakt={true}
                   onChange={() => setKlassifiseringVersjon(v => v + 1)}
+                  aktivLagsett={aktivLagsett}
+                  onAktiver={(id) => setAktivLagsett({ id, kilde: 'klassifiser' })}
                 />
               </div>
 
@@ -50367,6 +50436,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                   kompakt={true}
                   klassifiseringVersjon={klassifiseringVersjon}
                   onChange={() => setMatchVersjon(v => v + 1)}
+                  aktivLagsett={aktivLagsett}
+                  onAktiver={(id) => setAktivLagsett({ id, kilde: 'match' })}
                 />
               </div>
               </div>
