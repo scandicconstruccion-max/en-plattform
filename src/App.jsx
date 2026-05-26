@@ -43101,11 +43101,14 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false, a
   const kortRefs = React.useRef({})
   // Scroll til aktiv post NÅR valget kom fra den ANDRE kolonnen (match).
   // Hvis kilde === 'klassifiser' var det vårt eget klikk → ikke scroll (unngår loop).
+  // Sentrer det aktive kortet uansett hvilken kolonne som utløste valget,
+  // slik at begge kolonner viser posten på samme høyde. scrollIntoView
+  // trigger ingen state-endring, så dette gir ingen loop.
   React.useEffect(() => {
-    if (!aktivLagsett || aktivLagsett.kilde === 'klassifiser') return
+    if (!aktivLagsett) return
     const el = kortRefs.current[aktivLagsett.id]
     if (el && el.scrollIntoView) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
   }, [aktivLagsett])
 
@@ -47129,11 +47132,12 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const kortRefs = React.useRef({})
   // Scroll til aktiv post NÅR valget kom fra den ANDRE kolonnen (klassifiser).
   // Hvis kilde === 'match' var det vårt eget klikk → ikke scroll (unngår loop).
+  // Sentrer det aktive kortet uansett kilde — gir lik høyde i begge kolonner.
   React.useEffect(() => {
-    if (!aktivLagsett || aktivLagsett.kilde === 'match') return
+    if (!aktivLagsett) return
     const el = kortRefs.current[aktivLagsett.id]
     if (el && el.scrollIntoView) {
-      el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
     }
   }, [aktivLagsett])
 
