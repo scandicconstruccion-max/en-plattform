@@ -48616,6 +48616,10 @@ function PlansnittPoCModal({ mengder, onClose, isMob }) {
 function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, onVelgLagsett }) {
   const containerRef = React.useRef(null)
   const sceneRef = React.useRef(null)  // Three.js scene+renderer+camera state
+  // Patch: telleren økes når scenen er ferdig bygget, så highlight-effekten
+  // kjører på nytt og markerer initial-lagsettet (ellers vises ikke markering
+  // før noe annet trigger en re-render).
+  const [sceneKlar, setSceneKlar] = useState(0)
   // Patch 16 Fase 2: Ref til pick-callback (stabil mellom renders, ingen re-init av scene)
   const onPickRef = React.useRef(null)
   const [valgtEtasjeId, setValgtEtasjeId] = useState(null)  // null = "alle"
@@ -49219,6 +49223,10 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       onResize,
     }
 
+    // Patch: Signaliser at scenen er klar, så highlight-effekten kjører og
+    // markerer initial-lagsettet umiddelbart (ikke først etter manuell klikking)
+    setSceneKlar(k => k + 1)
+
     // Cleanup ved unmount
     return () => {
       cancelAnimationFrame(frameId)
@@ -49285,16 +49293,17 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
     onPickRef.current = velgElement
   }, [elementInfoMap, idTilLagsett, activeLagsett])
 
-  // Oppdater materialer når lagsett, etasje eller klikket element endres
-  useEffect(() => {
+  // Patch: Felles highlight-funksjon — anvender riktig materiale på alle mesh
+  // basert på gjeldende aktiveIDer/etasje/klikket. Kalles både fra effekten
+  // under OG rett etter at scenen er bygget (ellers vises ikke initial-markering
+  // før noe annet trigger en re-render).
+  const anvendHighlight = React.useCallback(() => {
     if (!sceneRef.current) return
     const { idTilMesh, matGray, matHighlight, matHidden, matKlikket } = sceneRef.current
     idTilMesh.forEach((mesh, id) => {
       const erAktiv = aktiveIDer.has(id)
       const erKlikket = klikketID === id
-      // Patch 18: I Plan-modus viser vi ALLE elementer — klippeplan håndterer synlighet
       const erIValgtEtasje = planAktiv || !valgtEtasjeId || mesh.userData.etasjeId === valgtEtasjeId
-      // Patch 16 Fase 2: Klikket element har høyeste prioritet
       if (erKlikket) {
         mesh.material = matKlikket
       } else if (!erIValgtEtasje && !erAktiv) {
@@ -49306,6 +49315,12 @@ function BimMeshViewer({ mengder, valgtLagsett, lagsettListe, onClose, isMob, on
       }
     })
   }, [aktiveIDer, valgtEtasjeId, klikketID, planAktiv])
+
+  // Oppdater materialer når lagsett, etasje eller klikket element endres,
+  // OG når scenen nettopp ble bygget (sceneKlar)
+  useEffect(() => {
+    anvendHighlight()
+  }, [anvendHighlight, sceneKlar])
 
   // Patch 18: Reager på etasje-endringer i Plan-modus — kun oppdater klippeplan
   // (ikke kamera) slik at brukerens zoom bevares ved etasje-bytte
