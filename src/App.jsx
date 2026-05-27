@@ -43863,6 +43863,7 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
           gruppe: l.gruppe || materialGruppe(l.navn || ''),
           tykkelse: l.tykkelse || 0,
           kilde: l.kilde || 'mal',
+          iSammeRom: !!l.iSammeRom,
         }))
       }
       // Ellers: bygg lag-struktur fra mal sine materialer (parse tykkelser)
@@ -43935,7 +43936,7 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
     setLag(prev => prev.map((l, i) => i === idx ? { ...l, [felt]: verdi } : l))
   }
   const slettLag = (idx) => setLag(prev => prev.filter((_, i) => i !== idx))
-  const leggTilLag = () => setLag(prev => [...prev, { navn: '', gruppe: 'annet', tykkelse: 0, kilde: 'manuell' }])
+  const leggTilLag = () => setLag(prev => [...prev, { navn: '', gruppe: 'annet', tykkelse: 0, kilde: 'manuell', iSammeRom: false }])
 
   const oppdaterMaterial = (idx, felt, verdi) => {
     setMaterialer(prev => prev.map((m, i) => i === idx ? { ...m, [felt]: verdi } : m))
@@ -44270,6 +44271,19 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
                         <button onClick={() => slettLag(idx)} style={slettKnappStil} title="Slett lag">×</button>
                       </div>
                     </div>
+                    {idx > 0 && (
+                      <div style={{ marginTop: '6px', paddingLeft: '32px', fontSize: '11px' }}>
+                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: l.iSammeRom ? '#0c4a6e' : '#64748b' }}>
+                          <input
+                            type="checkbox"
+                            checked={!!l.iSammeRom}
+                            onChange={e => oppdaterLag(idx, 'iSammeRom', e.target.checked)}
+                            style={{ cursor: 'pointer' }}
+                          />
+                          <span>I samme rom som forrige lag (telles ikke i totaltykkelsen)</span>
+                        </label>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -45252,7 +45266,10 @@ function BimTverrsnittModal({ lagsett, onClose }) {
   }
   const lagMaterial = (l) => l.material || l.navn || 'Ukjent material'
 
-  const sumLagMm = lagListe.reduce((s, l) => s + lagTykkelseMm(l), 0)
+  // Tykkelses-sum: hopp over lag merket "i samme rom som forrige"
+  // (de fyller fysisk samme tykkelses-rom som forrige lag, f.eks. isolasjon
+  // mellom stendere — skal telles én gang, ikke to)
+  const sumLagMm = lagListe.reduce((s, l) => s + (l.iSammeRom ? 0 : lagTykkelseMm(l)), 0)
   // Total: bruk konstruksjonens sum hvis vi viser konstruksjonslag, ellers lagsett-total
   const totalTykkelseMm = viserKonstruksjonsLag
     ? (sumLagMm > 0 ? sumLagMm : (lagsett.totalTykkelse || 0))
