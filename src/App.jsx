@@ -43940,6 +43940,36 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
   const slettArbeidsart = (idx) => setArbeidsarter(prev => prev.filter((_, i) => i !== idx))
   const leggTilArbeidsart = () => setArbeidsarter(prev => [...prev, { beskrivelse: '', grunntid: 0.1 }])
 
+  // Kopier-handlere: dupliser en eksisterende rad rett under originalen (med alt innhold)
+  const kopierLag = (idx) => setLag(prev => {
+    const kopi = { ...prev[idx], kilde: 'manuell' }
+    const ny = [...prev]
+    ny.splice(idx + 1, 0, kopi)
+    return ny
+  })
+  const kopierMaterial = (idx) => setMaterialer(prev => {
+    const kopi = { ...prev[idx] }
+    const ny = [...prev]
+    ny.splice(idx + 1, 0, kopi)
+    return ny
+  })
+  const kopierArbeidsart = (idx) => setArbeidsarter(prev => {
+    const kopi = { ...prev[idx] }
+    const ny = [...prev]
+    ny.splice(idx + 1, 0, kopi)
+    return ny
+  })
+
+  // Flytt lag opp/ned så rekkefølgen stemmer med fysisk oppbygging (utenfra → innover).
+  // retning: -1 = opp, +1 = ned
+  const flyttLag = (idx, retning) => setLag(prev => {
+    const ny = idx + retning
+    if (ny < 0 || ny >= prev.length) return prev
+    const kopi = [...prev]
+    ;[kopi[idx], kopi[ny]] = [kopi[ny], kopi[idx]]
+    return kopi
+  })
+
   // Bruke IFC-tykkelse for et lag (rask justering)
   const brukIfcTykkelse = (lagIdx) => {
     if (!ifcLagsett?.layers) return
@@ -44179,6 +44209,12 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
                         <input type="number" value={l.tykkelse} onChange={e => oppdaterLag(idx, 'tykkelse', Number(e.target.value))} style={inputStil} min="0" max="500" />
                       </div>
                       <div style={{ display: 'flex', gap: '4px', paddingBottom: '2px' }}>
+                        <button onClick={() => flyttLag(idx, -1)} disabled={idx === 0} title="Flytt opp"
+                          style={{ ...litenKnappStil, padding: '5px 8px', opacity: idx === 0 ? 0.35 : 1, cursor: idx === 0 ? 'default' : 'pointer' }}>↑</button>
+                        <button onClick={() => flyttLag(idx, 1)} disabled={idx === lag.length - 1} title="Flytt ned"
+                          style={{ ...litenKnappStil, padding: '5px 8px', opacity: idx === lag.length - 1 ? 0.35 : 1, cursor: idx === lag.length - 1 ? 'default' : 'pointer' }}>↓</button>
+                        <button onClick={() => kopierLag(idx)} title="Kopier lag"
+                          style={{ ...litenKnappStil, padding: '5px 8px' }}>⧉</button>
                         {ifcLagsett?.layers && (
                           <button onClick={() => brukIfcTykkelse(idx)} title="Bruk tykkelse fra IFC for samme materialgruppe"
                             style={{ ...litenKnappStil, padding: '5px 8px', whiteSpace: 'nowrap' }}>📐 IFC</button>
@@ -44260,8 +44296,9 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
                           <label style={labelStil}>Pris/enh</label>
                           <input type="number" value={m.enhetspris} onChange={e => oppdaterMaterial(idx, 'enhetspris', Number(e.target.value))} style={inputStil} />
                         </div>
-                        <div style={{ paddingBottom: '2px' }}>
-                          <button onClick={() => slettMaterial(idx)} style={slettKnappStil}>×</button>
+                        <div style={{ paddingBottom: '2px', display: 'flex', gap: '4px' }}>
+                          <button onClick={() => kopierMaterial(idx)} style={{ ...litenKnappStil, padding: '5px 8px' }} title="Kopier material">⧉</button>
+                          <button onClick={() => slettMaterial(idx)} style={slettKnappStil} title="Slett material">×</button>
                         </div>
                       </div>
                     </div>
@@ -44294,8 +44331,9 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
                         <label style={labelStil}>Timer/enh</label>
                         <input type="number" value={a.grunntid} onChange={e => oppdaterArbeidsart(idx, 'grunntid', Number(e.target.value))} style={inputStil} step="0.01" />
                       </div>
-                      <div style={{ paddingBottom: '2px' }}>
-                        <button onClick={() => slettArbeidsart(idx)} style={slettKnappStil}>×</button>
+                      <div style={{ paddingBottom: '2px', display: 'flex', gap: '4px' }}>
+                        <button onClick={() => kopierArbeidsart(idx)} style={{ ...litenKnappStil, padding: '5px 8px' }} title="Kopier arbeidsart">⧉</button>
+                        <button onClick={() => slettArbeidsart(idx)} style={slettKnappStil} title="Slett arbeidsart">×</button>
                       </div>
                     </div>
                   </div>
