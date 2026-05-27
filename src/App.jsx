@@ -45323,22 +45323,30 @@ function BimTverrsnittModal({ lagsett, onClose }) {
     return 'midten'
   }
 
-  // Detekter stender + isolasjon-par for vertikale interrupts
+  // Detekter stender + isolasjon-par for vertikale interrupts.
+  // VIKTIG: foretrekk en isolasjon som ikke allerede er paret, ellers vil
+  // f.eks. "Stender Iso Stender Iso" gi bare ETT par i stedet for to.
   const stenderInterrupts = new Set()
+  const brukteIsolasjoner = new Set()
   for (let i = 0; i < lagListe.length; i++) {
     const type = detekterLagtype(lagMaterial(lagListe[i]))
     if (type !== 'stender') continue
     const tykk = lagTykkelseMm(lagListe[i])
+    // Bygg kandidatliste først, så velg den som ikke er paret allerede
+    const kandidater = []
     for (const j of [i - 1, i + 1]) {
       if (j < 0 || j >= lagListe.length) continue
       const naboType = detekterLagtype(lagMaterial(lagListe[j]))
       if (naboType !== 'isolasjon' && naboType !== 'eps') continue
       const naboTykk = lagTykkelseMm(lagListe[j])
-      if (Math.abs(tykk - naboTykk) < 5) {
-        stenderInterrupts.add(i)
-        stenderInterrupts.add(j)
-        break
-      }
+      if (Math.abs(tykk - naboTykk) < 5) kandidater.push(j)
+    }
+    const ledig = kandidater.find(j => !brukteIsolasjoner.has(j))
+    const valgt = ledig !== undefined ? ledig : kandidater[0]
+    if (valgt !== undefined) {
+      stenderInterrupts.add(i)
+      stenderInterrupts.add(valgt)
+      brukteIsolasjoner.add(valgt)
     }
   }
   const kombinertePar = []
@@ -45347,6 +45355,8 @@ function BimTverrsnittModal({ lagsett, onClose }) {
     if (allerede.has(i)) continue
     const type = detekterLagtype(lagMaterial(lagListe[i]))
     if (type !== 'stender' || !stenderInterrupts.has(i)) continue
+    // Bygg kandidater først, så velg den som ikke er brukt allerede
+    const kandidater = []
     for (const j of [i - 1, i + 1]) {
       if (j < 0 || j >= lagListe.length) continue
       if (allerede.has(j)) continue
@@ -45354,10 +45364,14 @@ function BimTverrsnittModal({ lagsett, onClose }) {
       if (naboType !== 'isolasjon' && naboType !== 'eps') continue
       if (!stenderInterrupts.has(j)) continue
       if (Math.abs(lagTykkelseMm(lagListe[i]) - lagTykkelseMm(lagListe[j])) < 5) {
-        kombinertePar.push({ stenderIdx: i, isolasjonIdx: j })
-        allerede.add(i); allerede.add(j)
-        break
+        kandidater.push(j)
       }
+    }
+    if (kandidater.length > 0) {
+      // Foretrekk høyre nabo (i+1) hvis begge er kandidater, men ta hva som er ledig
+      const valgt = kandidater.includes(i + 1) ? i + 1 : kandidater[0]
+      kombinertePar.push({ stenderIdx: i, isolasjonIdx: valgt })
+      allerede.add(i); allerede.add(valgt)
     }
   }
 
