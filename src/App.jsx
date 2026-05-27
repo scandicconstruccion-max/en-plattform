@@ -44025,8 +44025,8 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
   const dialogStil = {
     background: 'white',
     borderRadius: isMob ? '0' : '14px',
-    width: '100%', maxWidth: '900px',
-    maxHeight: isMob ? '100vh' : '90vh',
+    width: '100%', maxWidth: isMob ? '100%' : '1200px',
+    maxHeight: isMob ? '100vh' : '94vh',
     display: 'flex', flexDirection: 'column',
     overflow: 'hidden',
   }
@@ -47826,14 +47826,18 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                                fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
                       {lagsett.matchKilde === 'auto' ? 'Endre valg' : 'Fjern valg'}
                     </button>
-                    {/* Patch 18 polish: Tilpass-knapp */}
-                    <button onClick={() => toggleTilpasning(lagsett)}
+                    {/* Tilpass-knapp — åpner popup-dialogen (BimNyKonstruksjonDialog)
+                        forhåndsutfylt med den valgte konstruksjonen, så redigering
+                        skjer i samme grensesnitt som ved opprettelse. */}
+                    <button onClick={() => {
+                      const basis = lagsett.tilpassetKonstruksjon || lagsett.matchedKonstruksjon
+                      if (!basis) return
+                      aapneNyDialog(lagsett, basis, lagsett.brukerKategori)
+                    }}
                       style={{ background:'transparent', border:'none',
                                color: '#854d0e', fontWeight: '700',
                                fontSize:'10px', cursor:'pointer', textDecoration:'underline', padding:0 }}>
-                      {lagsett.tilpassetKonstruksjon
-                        ? (tilpasningAapneIds.has(lagsettId(lagsett)) ? 'Lukk tilpasning' : 'Endre tilpasning')
-                        : (tilpasningAapneIds.has(lagsettId(lagsett)) ? 'Lukk' : '✏️ Tilpass')}
+                      {lagsett.tilpassetKonstruksjon ? '✏️ Endre tilpasning' : '✏️ Tilpass'}
                     </button>
                     {lagsett.tilpassetKonstruksjon && (
                       <button onClick={() => fjernTilpasning(lagsett)}
@@ -47845,15 +47849,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
                     )}
                   </div>
                 </div>
-              )}
-
-              {/* Patch 18 polish: Tilpasnings-panel — vises når brukeren har klikket Tilpass */}
-              {erBekreftet && tilpasningAapneIds.has(lagsettId(lagsett)) && (
-                <BimTilpasningsPanel
-                  lagsett={lagsett}
-                  onLagre={(tilpassetKonst) => lagreTilpasning(lagsett, tilpassetKonst)}
-                  onAvbryt={() => toggleTilpasning(lagsett)}
-                />
               )}
 
               {/* Hoppet over — info */}
