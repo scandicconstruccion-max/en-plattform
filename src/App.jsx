@@ -50012,6 +50012,189 @@ function visGeometriDiagnose(metadata, onAlert) {
   })
 }
 
+// ============================================================
+// Steg 2: Prosjekt-velger-modal
+// ============================================================
+// Vises etter at IFC-parsing er ferdig. Tre valg:
+// 1. Velg eksisterende prosjekt
+// 2. Opprett nytt prosjekt direkte herfra
+// 3. "Senere" — sesjonen forblir uten prosjekt-tilknytning
+// Modalen viser også status på IFC-opplasting (bakgrunn) så brukeren ser at det jobbes.
+// ============================================================
+function BimProsjektVelgerModal({ prosjekter, opplastingStatus, isMob, onVelgEksisterende, onOpprettNytt, onSenere }) {
+  const [modus, setModus] = useState('velg')  // 'velg' | 'nytt'
+  const [valgtId, setValgtId] = useState('')
+  const [nyttNavn, setNyttNavn] = useState('')
+  const [nyAdresse, setNyAdresse] = useState('')
+  const [lagrer, setLagrer] = useState(false)
+
+  const overlayStil = {
+    position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    zIndex: 1000, padding: isMob ? '12px' : '24px',
+  }
+  const dialogStil = {
+    background: 'white', borderRadius: isMob ? '12px' : '16px',
+    width: '100%', maxWidth: '640px', maxHeight: '92vh',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
+  }
+  const headerStil = {
+    padding: isMob ? '18px 18px 10px' : '22px 24px 14px',
+    borderBottom: '1px solid #e2e8f0',
+  }
+  const innholdStil = {
+    padding: isMob ? '16px 18px' : '20px 24px',
+    overflowY: 'auto', flex: 1,
+  }
+  const footerStil = {
+    padding: isMob ? '14px 18px' : '16px 24px',
+    borderTop: '1px solid #e2e8f0',
+    display: 'flex', gap: '10px', justifyContent: 'flex-end', flexWrap: 'wrap',
+  }
+  const primaryBtnStil = {
+    background: '#2563eb', color: 'white', border: 'none',
+    borderRadius: '8px', padding: '10px 18px', fontSize: '13px',
+    fontWeight: '700', cursor: 'pointer',
+  }
+  const secondaryBtnStil = {
+    background: 'white', color: '#475569', border: '1px solid #cbd5e1',
+    borderRadius: '8px', padding: '10px 18px', fontSize: '13px',
+    fontWeight: '600', cursor: 'pointer',
+  }
+  const inputStil = {
+    width: '100%', padding: '10px 12px', fontSize: '13px',
+    border: '1px solid #cbd5e1', borderRadius: '8px', outline: 'none',
+  }
+
+  const opplastingMelding = {
+    'idle': null,
+    'opplaster': '📤 Lagrer IFC-filen i bakgrunnen...',
+    'fullfort': '✅ IFC-filen er lagret',
+    'feilet': '⚠️ IFC-filen kunne ikke lagres — du kan fortsette, men sesjonen vil ikke kunne gjenåpnes senere',
+  }[opplastingStatus]
+
+  const handleEksisterendeKlikk = async () => {
+    if (!valgtId) return
+    setLagrer(true)
+    await onVelgEksisterende(valgtId)
+    setLagrer(false)
+  }
+  const handleOpprettKlikk = async () => {
+    if (!nyttNavn.trim()) return
+    setLagrer(true)
+    await onOpprettNytt({ name: nyttNavn.trim(), address: nyAdresse.trim() })
+    setLagrer(false)
+  }
+
+  return (
+    <div style={overlayStil}>
+      <div style={dialogStil}>
+        <div style={headerStil}>
+          <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '800', color: '#0f172a' }}>
+            📐 Knytt BIM-import til prosjekt
+          </h3>
+          <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#64748b' }}>
+            Velg om denne BIM-importen skal kobles til et eksisterende eller nytt prosjekt.
+            Du kan også vente og knytte den senere.
+          </p>
+          {opplastingMelding && (
+            <div style={{ marginTop: '10px', fontSize: '11px', color: opplastingStatus === 'feilet' ? '#b91c1c' : '#475569' }}>
+              {opplastingMelding}
+            </div>
+          )}
+        </div>
+
+        <div style={innholdStil}>
+          {/* Modus-velger */}
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '14px' }}>
+            <button onClick={() => setModus('velg')}
+              style={{
+                flex: 1, padding: '10px 14px', fontSize: '13px', fontWeight: '600',
+                borderRadius: '8px', cursor: 'pointer',
+                background: modus === 'velg' ? '#eff6ff' : 'white',
+                color: modus === 'velg' ? '#1e40af' : '#64748b',
+                border: `1px solid ${modus === 'velg' ? '#93c5fd' : '#e2e8f0'}`,
+              }}>
+              Velg eksisterende
+            </button>
+            <button onClick={() => setModus('nytt')}
+              style={{
+                flex: 1, padding: '10px 14px', fontSize: '13px', fontWeight: '600',
+                borderRadius: '8px', cursor: 'pointer',
+                background: modus === 'nytt' ? '#eff6ff' : 'white',
+                color: modus === 'nytt' ? '#1e40af' : '#64748b',
+                border: `1px solid ${modus === 'nytt' ? '#93c5fd' : '#e2e8f0'}`,
+              }}>
+              Opprett nytt
+            </button>
+          </div>
+
+          {modus === 'velg' && (
+            <div>
+              {prosjekter.length === 0 ? (
+                <div style={{ padding: '20px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                  Du har ingen prosjekter ennå. Velg "Opprett nytt" for å lage et.
+                </div>
+              ) : (
+                <select value={valgtId} onChange={(e) => setValgtId(e.target.value)} style={inputStil}>
+                  <option value="">— Velg prosjekt —</option>
+                  {prosjekter.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.project_number ? `${p.project_number} — ` : ''}{p.name}
+                      {p.address ? ` (${p.address})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          )}
+
+          {modus === 'nytt' && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Prosjektnavn *
+                </label>
+                <input type="text" value={nyttNavn} onChange={(e) => setNyttNavn(e.target.value)}
+                  placeholder="f.eks. Fagerliveien 27 — Tilbygg" style={inputStil} autoFocus />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: '11px', fontWeight: '700', color: '#475569', textTransform: 'uppercase', marginBottom: '4px' }}>
+                  Adresse (valgfritt)
+                </label>
+                <input type="text" value={nyAdresse} onChange={(e) => setNyAdresse(e.target.value)}
+                  placeholder="Gateadresse, postnummer, sted" style={inputStil} />
+              </div>
+              <div style={{ fontSize: '11px', color: '#64748b', fontStyle: 'italic' }}>
+                Prosjektnummer genereres automatisk. Du kan fylle inn flere detaljer senere fra Prosjekter-modulen.
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={footerStil}>
+          <button onClick={onSenere} style={secondaryBtnStil} disabled={lagrer}>
+            Senere
+          </button>
+          {modus === 'velg' ? (
+            <button onClick={handleEksisterendeKlikk}
+              style={{ ...primaryBtnStil, opacity: !valgtId || lagrer ? 0.5 : 1, cursor: !valgtId || lagrer ? 'default' : 'pointer' }}
+              disabled={!valgtId || lagrer}>
+              {lagrer ? 'Knytter...' : 'Knytt til prosjekt'}
+            </button>
+          ) : (
+            <button onClick={handleOpprettKlikk}
+              style={{ ...primaryBtnStil, opacity: !nyttNavn.trim() || lagrer ? 0.5 : 1, cursor: !nyttNavn.trim() || lagrer ? 'default' : 'pointer' }}
+              disabled={!nyttNavn.trim() || lagrer}>
+              {lagrer ? 'Oppretter...' : 'Opprett prosjekt'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksisterendeSesjon = null, redigeringAvKalkyle = null }) {
   // Sideflyt-fase: 'upload' (vis upload-area) | 'analysing' (parsing pågår) | 'analyzed' (vis resultat) | 'error'
   // Patch 14.D: Hvis vi har eksisterendeSesjon, hopp rett til 'analyzed' med data forhåndsutfylt
@@ -50044,6 +50227,18 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   const fileInputRef = React.useRef(null)
   const [isMob, setIsMob] = useState(typeof window !== 'undefined' && window.innerWidth < 768)
   const erRedigering = !!eksisterendeSesjon
+
+  // Steg 2: BIM-sesjon-lagring
+  // ID på sesjonen i bim_sesjoner-tabellen. Settes når brukeren begynner opplasting.
+  const [bimSesjonId, setBimSesjonId] = useState(null)
+  // Tilstand for opplasting av IFC-filen til Storage (bakgrunn, ikke-blokkerende)
+  // 'idle' | 'opplaster' | 'fullfort' | 'feilet'
+  const [ifcOpplastingStatus, setIfcOpplastingStatus] = useState('idle')
+  // Modal: vises etter parsing er ferdig, spør hvilket prosjekt sesjonen skal knyttes til
+  const [visProsjektVelger, setVisProsjektVelger] = useState(false)
+  // Cache av brukerens prosjekter — hentes en gang ved opplasting
+  const [tilgjengeligeProsjekter, setTilgjengeligeProsjekter] = useState([])
+
   useEffect(() => {
     const handler = () => setIsMob(window.innerWidth < 768)
     window.addEventListener('resize', handler)
@@ -50106,8 +50301,44 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     }
     setFile(f)
     setErrorMsg('')
-    // Start parsing automatisk
+    // Start parsing OG sesjons-opprettelse/opplasting parallelt
     parseFil(f)
+    if (!erRedigering) startSesjonOgOpplasting(f)
+  }
+
+  // Steg 2: Opprett sesjon i databasen + last opp IFC-fil til Storage parallelt med parsing.
+  // Dette gjør at brukeren ikke trenger å vente — opplasting skjer i bakgrunnen mens parsing kjører.
+  // Hvis noe feiler her, fortsetter parsing/UI som normalt, og vi viser bare en advarsel.
+  const startSesjonOgOpplasting = async (f) => {
+    if (!user?.id) {
+      console.warn('[bim-sesjon] Ingen user.id — hopper over sesjons-lagring')
+      return
+    }
+    setIfcOpplastingStatus('opplaster')
+    // 1. Opprett sesjon i databasen
+    const { sesjon, error: oppFeil } = await bimOpprettSesjon({
+      userId: user.id,
+      fileName: f.name,
+      fileSize: f.size,
+      schema: null,  // settes senere når parsing har funnet ut schema
+    })
+    if (oppFeil || !sesjon) {
+      console.warn('[bim-sesjon] Kunne ikke opprette sesjon:', oppFeil)
+      setIfcOpplastingStatus('feilet')
+      return
+    }
+    setBimSesjonId(sesjon.id)
+    // 2. Last opp IFC-filen til Storage
+    const { path, error: uploadFeil } = await bimLastOppIfcTilStorage(f, user.id, sesjon.id)
+    if (uploadFeil) {
+      console.warn('[bim-sesjon] IFC-opplasting feilet:', uploadFeil)
+      setIfcOpplastingStatus('feilet')
+      return
+    }
+    setStoredFilePath(path)
+    // 3. Oppdater sesjonen med Storage-path
+    await bimOppdaterSesjon(sesjon.id, { ifc_file_path: path })
+    setIfcOpplastingStatus('fullfort')
   }
 
   // Parser IFC-fil: laster web-ifc, åpner modell, henter metadata + mengder, lukker modell
@@ -50144,12 +50375,99 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       // Lukk modell for å frigjøre minne (vi gjenåpner ved Patch 12+ for matching)
       closeIfcModel(api, modelID)
       modelID = -1
+      // Steg 2: Oppdater sesjon med schema når vi vet det, og vis prosjekt-velger
+      if (!erRedigering && bimSesjonId) {
+        bimOppdaterSesjon(bimSesjonId, { ifc_schema: meta.schema || null })
+          .catch(e => console.warn('[bim-sesjon] schema-oppdatering feilet:', e))
+      }
+      if (!erRedigering) {
+        // Hent brukerens prosjekter og vis velger-modal
+        hentProsjekterForVelger()
+        setVisProsjektVelger(true)
+      }
     } catch(e) {
       console.error('[ifc] parsing feilet:', e)
       setErrorMsg(e.message || 'Ukjent feil under parsing av IFC-filen.')
       setFase('error')
       if (modelID >= 0 && api) closeIfcModel(api, modelID)
     }
+  }
+
+  // Steg 2: Hent brukerens prosjekter for prosjekt-velger-modalen
+  const hentProsjekterForVelger = async () => {
+    if (!user?.id) return
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, project_number, name, address, status')
+        .order('created_at', { ascending: false })
+      if (error) {
+        console.warn('[bim-sesjon] kunne ikke hente prosjekter:', error)
+        return
+      }
+      setTilgjengeligeProsjekter(data || [])
+    } catch (e) {
+      console.warn('[bim-sesjon] prosjekt-henting feilet:', e)
+    }
+  }
+
+  // Steg 2: Velg eksisterende prosjekt → oppdater sesjon med project_id
+  const velgEksisterendeProsjekt = async (projectId) => {
+    if (!bimSesjonId || !projectId) {
+      setVisProsjektVelger(false)
+      return
+    }
+    const { error } = await bimOppdaterSesjon(bimSesjonId, { project_id: projectId })
+    if (error) {
+      console.warn('[bim-sesjon] kunne ikke knytte til prosjekt:', error)
+      if (onAlert) await onAlert('Kunne ikke knytte sesjonen til prosjektet: ' + (error.message || 'ukjent feil'))
+    }
+    setVisProsjektVelger(false)
+  }
+
+  // Steg 2: Opprett nytt prosjekt direkte fra BIM-import, og knytt sesjon til det
+  const opprettNyttProsjektOgKnytt = async ({ name, address }) => {
+    if (!bimSesjonId || !user?.id) {
+      setVisProsjektVelger(false)
+      return null
+    }
+    try {
+      // Generer prosjekt-nummer (samme mønster som i resten av appen: P-NNNNN)
+      const { data: existing } = await supabase
+        .from('projects')
+        .select('project_number')
+        .order('created_at', { ascending: false })
+        .limit(50)
+      let nesteNr = 1
+      for (const r of (existing || [])) {
+        const m = String(r.project_number || '').match(/P-(\d+)/)
+        if (m) { nesteNr = Math.max(nesteNr, parseInt(m[1], 10) + 1) }
+      }
+      const projectNumber = `P-${String(nesteNr).padStart(5, '0')}`
+      const { data: nyttProsjekt, error: opprFeil } = await supabase
+        .from('projects')
+        .insert({
+          project_number: projectNumber,
+          name: name || 'BIM-prosjekt',
+          address: address || null,
+          status: 'planlegging',
+        })
+        .select()
+        .single()
+      if (opprFeil || !nyttProsjekt) throw opprFeil || new Error('Ingen data tilbake')
+      await bimOppdaterSesjon(bimSesjonId, { project_id: nyttProsjekt.id })
+      setVisProsjektVelger(false)
+      return nyttProsjekt
+    } catch (e) {
+      console.warn('[bim-sesjon] opprett nytt prosjekt feilet:', e)
+      if (onAlert) await onAlert('Kunne ikke opprette nytt prosjekt: ' + (e.message || 'ukjent feil'))
+      return null
+    }
+  }
+
+  // Steg 2: "Senere" — bare lukk modalen, sesjonen forblir uten project_id
+  const hoppOverProsjektValg = () => {
+    setVisProsjektVelger(false)
   }
 
   const handleDrop = (e) => {
@@ -50167,6 +50485,18 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   return (
     <div style={{ maxWidth:'1100px', margin:'0 auto', padding: isMob ? '16px' : '24px' }}>
+
+      {/* Steg 2: Prosjekt-velger-modal — vises etter parsing er ferdig */}
+      {visProsjektVelger && (
+        <BimProsjektVelgerModal
+          prosjekter={tilgjengeligeProsjekter}
+          opplastingStatus={ifcOpplastingStatus}
+          isMob={isMob}
+          onVelgEksisterende={velgEksisterendeProsjekt}
+          onOpprettNytt={opprettNyttProsjektOgKnytt}
+          onSenere={hoppOverProsjektValg}
+        />
+      )}
 
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'18px' }}>
