@@ -43854,7 +43854,18 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
   // Lag-struktur — fra mal hvis valgt, ellers fra IFC
   const [lag, setLag] = useState(() => {
     if (mal) {
-      // Bygg lag-struktur fra mal sine materialer (parse tykkelser)
+      // Hvis malen allerede har en ferdig lag-struktur (f.eks. en tidligere
+      // lagret/redigert konstruksjon), bruk den direkte — så redigeringer
+      // (kopierte lag, endret rekkefølge) bevares ved gjenåpning.
+      if (Array.isArray(mal.lag) && mal.lag.length > 0) {
+        return mal.lag.map(l => ({
+          navn: l.navn || '',
+          gruppe: l.gruppe || materialGruppe(l.navn || ''),
+          tykkelse: l.tykkelse || 0,
+          kilde: l.kilde || 'mal',
+        }))
+      }
+      // Ellers: bygg lag-struktur fra mal sine materialer (parse tykkelser)
       const lagListe = []
       for (const m of (mal.materialer || [])) {
         const grp = materialGruppe(m.varenavn)
