@@ -53323,6 +53323,167 @@ function krympMengderForLagring(mengder) {
   return krympet
 }
 
+// ============================================================
+// BIM-SESJON-LAGRING — Helpers (Steg 1)
+// ============================================================
+// Disse hjelperne lagrer/leser BIM-sesjoner til/fra Supabase.
+// Mesh-data fjernes ALLTID før lagring (krympMengderForLagring).
+// IFC-filen lagres i Storage-bucketen 'bim-ifc-files'.
+// ============================================================
+
+// Bygg Storage-sti for en IFC-fil: <user_id>/<sesjon_id>/<filnavn>
+// (matcher RLS-policy som krever at første mappenivå = user_id)
+function bimIfcStoragePath(userId, sesjonId, filnavn) {
+  // Saniter filnavn — fjern path-separatorer og kontroll-tegn
+  const trygtNavn = String(filnavn || 'ifc-fil.ifc').replace(/[\/\\:?*"<>|\u0000-\u001f]/g, '_')
+  return `${userId}/${sesjonId}/${trygtNavn}`
+}
+
+// Last opp IFC-fil til Storage. Returnerer { path, error }
+async function bimLastOppIfcTilStorage(file, userId, sesjonId) {
+  if (!file || !userId || !sesjonId) {
+    return { path: null, error: new Error('Mangler file, userId eller sesjonId') }
+  }
+  const path = bimIfcStoragePath(userId, sesjonId, file.name)
+  try {
+    const { error } = await supabase.storage
+      .from('bim-ifc-files')
+      .upload(path, file, {
+        cacheControl: '3600',
+        upsert: true,           // overskrive hvis samme sti finnes (sjelden, men trygt)
+        contentType: 'application/octet-stream',
+      })
+    if (error) return { path: null, error }
+    return { path, error: null }
+  } catch (e) {
+    return { path: null, error: e }
+  }
+}
+
+// Hent en signert URL til en IFC-fil (gyldig i N sekunder, default 1 time)
+async function bimHentIfcSignertUrl(storagePath, gyldigSekunder = 3600) {
+  if (!storagePath) return { url: null, error: new Error('Mangler storagePath') }
+  try {
+    const { data, error } = await supabase.storage
+      .from('bim-ifc-files')
+      .createSignedUrl(storagePath, gyldigSekunder)
+    if (error) return { url: null, error }
+    return { url: data?.signedUrl || null, error: null }
+  } catch (e) {
+    return { url: null, error: e }
+  }
+}
+
+// Slett en IFC-fil fra Storage
+async function bimSlettIfcFraStorage(storagePath) {
+  if (!storagePath) return { error: null }
+  try {
+    const { error } = await supabase.storage
+      .from('bim-ifc-files')
+      .remove([storagePath])
+    return { error }
+  } catch (e) {
+    return { error: e }
+  }
+}
+
+// Opprett en ny BIM-sesjon i databasen.
+// Returnerer { sesjon, error } — sesjon har feltet 'id' du trenger for Storage-path
+async function bimOpprettSesjon({ userId, projectId = null, fileName = null, fileSize = null, schema = null }) {
+  if (!userId) return { sesjon: null, error: new Error('Mangler userId') }
+  try {
+    const { data, error } = await supabase
+      .from('bim_sesjoner')
+      .insert({
+        user_id: userId,
+        project_id: projectId,
+        ifc_file_name: fileName,
+        ifc_file_size: fileSize,
+        ifc_schema: schema,
+        sesjon_data: {},
+        status: 'aktiv',
+      })
+      .select()
+      .single()
+    if (error) return { sesjon: null, error }
+    return { sesjon: data, error: null }
+  } catch (e) {
+    return { sesjon: null, error: e }
+  }
+}
+
+// Oppdater en eksisterende sesjon. Patch-objektet kan inneholde:
+// { sesjon_data, ifc_file_path, project_id, status }
+async function bimOppdaterSesjon(sesjonId, patch) {
+  if (!sesjonId || !patch) return { error: new Error('Mangler sesjonId eller patch') }
+  try {
+    const { error } = await supabase
+      .from('bim_sesjoner')
+      .update({ ...patch, last_accessed_at: new Date().toISOString() })
+      .eq('id', sesjonId)
+    return { error }
+  } catch (e) {
+    return { error: e }
+  }
+}
+
+// Hent en sesjon med ID (sjekker RLS — kun egen)
+async function bimHentSesjon(sesjonId) {
+  if (!sesjonId) return { sesjon: null, error: new Error('Mangler sesjonId') }
+  try {
+    const { data, error } = await supabase
+      .from('bim_sesjoner')
+      .select('*')
+      .eq('id', sesjonId)
+      .single()
+    if (error) return { sesjon: null, error }
+    return { sesjon: data, error: null }
+  } catch (e) {
+    return { sesjon: null, error: e }
+  }
+}
+
+// Hent alle aktive sesjoner for en bruker (eller for et spesifikt prosjekt)
+async function bimHentSesjoner({ userId, projectId = undefined, status = 'aktiv' } = {}) {
+  if (!userId) return { sesjoner: [], error: new Error('Mangler userId') }
+  try {
+    let q = supabase
+      .from('bim_sesjoner')
+      .select('*')
+      .eq('user_id', userId)
+      .order('last_accessed_at', { ascending: false })
+    if (status) q = q.eq('status', status)
+    if (projectId !== undefined) {
+      if (projectId === null) q = q.is('project_id', null)
+      else q = q.eq('project_id', projectId)
+    }
+    const { data, error } = await q
+    if (error) return { sesjoner: [], error }
+    return { sesjoner: data || [], error: null }
+  } catch (e) {
+    return { sesjoner: [], error: e }
+  }
+}
+
+// Slett en sesjon (og dens IFC-fil i Storage hvis den finnes)
+async function bimSlettSesjon(sesjonId) {
+  if (!sesjonId) return { error: new Error('Mangler sesjonId') }
+  // Hent sesjonen først for å vite om vi må slette IFC-filen
+  const { sesjon, error: hentFeil } = await bimHentSesjon(sesjonId)
+  if (hentFeil) return { error: hentFeil }
+  // Slett IFC-fil i Storage hvis den finnes
+  if (sesjon?.ifc_file_path) {
+    await bimSlettIfcFraStorage(sesjon.ifc_file_path)
+  }
+  // Slett sesjons-raden
+  try {
+    const { error } = await supabase.from('bim_sesjoner').delete().eq('id', sesjonId)
+    return { error }
+  } catch (e) {
+    return { error: e }
+  }
+}
+
 function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
   if (!mengder) return { kalkyler: [], faktorer: {}, meta: { bekreftedeAntall: 0, hoppedeAntall: 0, standardBruktFor: [] } }
 
