@@ -43981,6 +43981,24 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
     return kopi
   })
 
+  // Dra-og-slipp for lag: enklere flytting når det er mange lag.
+  // dragLagIdx = indeksen til laget som dras (null = ingen)
+  const [dragLagIdx, setDragLagIdx] = useState(null)
+  const [dragOverIdx, setDragOverIdx] = useState(null)
+  const slippLag = (tilIdx) => {
+    setLag(prev => {
+      if (dragLagIdx === null || dragLagIdx === tilIdx) return prev
+      const kopi = [...prev]
+      const [flyttet] = kopi.splice(dragLagIdx, 1)
+      // Juster mål-indeks hvis vi fjernet et element før målet
+      const justertTil = dragLagIdx < tilIdx ? tilIdx - 1 : tilIdx
+      kopi.splice(justertTil, 0, flyttet)
+      return kopi
+    })
+    setDragLagIdx(null)
+    setDragOverIdx(null)
+  }
+
   // Bruke IFC-tykkelse for et lag (rask justering)
   const brukIfcTykkelse = (lagIdx) => {
     if (!ifcLagsett?.layers) return
@@ -44189,8 +44207,27 @@ function BimNyKonstruksjonDialog({ ifcLagsett, mal, kategori, isMob, onAvbryt, o
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                 {lag.map((l, idx) => (
-                  <div key={idx} style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? '1fr' : '3fr 1.5fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                  <div
+                    key={idx}
+                    onDragOver={(e) => { if (dragLagIdx !== null) { e.preventDefault(); if (dragOverIdx !== idx) setDragOverIdx(idx) } }}
+                    onDragLeave={() => { if (dragOverIdx === idx) setDragOverIdx(null) }}
+                    onDrop={(e) => { e.preventDefault(); slippLag(idx) }}
+                    style={{
+                      background: 'white',
+                      border: '1px solid #e2e8f0',
+                      borderTop: dragOverIdx === idx && dragLagIdx !== null && dragLagIdx !== idx ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                      borderRadius: '6px',
+                      padding: '8px',
+                      opacity: dragLagIdx === idx ? 0.4 : 1,
+                      transition: 'opacity 0.12s',
+                    }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMob ? 'auto 1fr' : 'auto 3fr 1.5fr 1fr auto', gap: '8px', alignItems: 'flex-end' }}>
+                      <div
+                        draggable
+                        onDragStart={(e) => { setDragLagIdx(idx); e.dataTransfer.effectAllowed = 'move' }}
+                        onDragEnd={() => { setDragLagIdx(null); setDragOverIdx(null) }}
+                        style={{ display: 'flex', alignItems: 'center', paddingBottom: '8px', cursor: 'grab', color: '#94a3b8', fontSize: '16px', userSelect: 'none' }}
+                        title="Dra for å flytte">⠿</div>
                       <div>
                         <label style={labelStil}>Lag-navn</label>
                         <input type="text" value={l.navn} onChange={e => oppdaterLag(idx, 'navn', e.target.value)} style={inputStil} placeholder="f.eks. Bindingsverk - Isolert" />
@@ -47332,31 +47369,63 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     if (!aapenDialog?.lagsett) return
     const lagsett = aapenDialog.lagsett
 
+    // Avgjør om dette er REDIGERING av en eksisterende bedrift-konstruksjon
+    // (åpnet via "Endre tilpasning") eller en NY konstruksjon (via "Bruk som mal").
+    // En ekte lagret konstruksjon har _bedrift=true OG en database-id (UUID),
+    // ikke en lokal "bedrift_...."-id.
+    const mal = aapenDialog.mal
+    const erRedigering = !!(mal && mal._bedrift && mal.id &&
+      !String(mal.id).startsWith('bedrift_'))
+    const eksisterendeId = erRedigering ? mal.id : null
+
     // 1. Lagre konstruksjon til bruker_bibliotek (Supabase)
     let lagretId = konstruksjon.id  // fallback til lokal id
     if (user?.id) {
       try {
-        const { data, error } = await supabase.from('bruker_bibliotek').insert({
-          user_id: user.id,
-          fag: konstruksjon.fag,
-          kategori: konstruksjon.kategori,
-          name: konstruksjon.name,
-          data: {
-            enhet: konstruksjon.enhet,
-            beskrivelse: konstruksjon.beskrivelse,
-            lag: konstruksjon.lag || [],
-            materialer: konstruksjon.materialer || [],
-            arbeidsarter: konstruksjon.arbeidsarter || [],
-            underleverandorer: konstruksjon.underleverandorer || [],
-          },
-        }).select().single()
-        if (error) throw error
-        if (data) {
-          lagretId = data.id
-          konstruksjon.id = data.id
-          konstruksjon._bedrift = true
-          // Legg den nye til i utvidet bibliotek
-          setBrukerBibliotek(prev => [brukerMalToKonstruksjon(data), ...prev])
+        const dataPayload = {
+          enhet: konstruksjon.enhet,
+          beskrivelse: konstruksjon.beskrivelse,
+          lag: konstruksjon.lag || [],
+          materialer: konstruksjon.materialer || [],
+          arbeidsarter: konstruksjon.arbeidsarter || [],
+          underleverandorer: konstruksjon.underleverandorer || [],
+        }
+        if (erRedigering) {
+          // UPDATE — oppdater den eksisterende konstruksjonen (ingen ny kopi)
+          const { data, error } = await supabase.from('bruker_bibliotek')
+            .update({
+              fag: konstruksjon.fag,
+              kategori: konstruksjon.kategori,
+              name: konstruksjon.name,
+              data: dataPayload,
+            })
+            .eq('id', eksisterendeId)
+            .select().single()
+          if (error) throw error
+          if (data) {
+            lagretId = data.id
+            konstruksjon.id = data.id
+            konstruksjon._bedrift = true
+            // Erstatt i utvidet bibliotek (samme id) i stedet for å legge til ny
+            setBrukerBibliotek(prev => prev.map(k =>
+              String(k.id) === String(data.id) ? brukerMalToKonstruksjon(data) : k))
+          }
+        } else {
+          // INSERT — ny konstruksjon
+          const { data, error } = await supabase.from('bruker_bibliotek').insert({
+            user_id: user.id,
+            fag: konstruksjon.fag,
+            kategori: konstruksjon.kategori,
+            name: konstruksjon.name,
+            data: dataPayload,
+          }).select().single()
+          if (error) throw error
+          if (data) {
+            lagretId = data.id
+            konstruksjon.id = data.id
+            konstruksjon._bedrift = true
+            setBrukerBibliotek(prev => [brukerMalToKonstruksjon(data), ...prev])
+          }
         }
       } catch(e) {
         console.warn('[bim] kunne ikke lagre konstruksjon til bruker_bibliotek:', e)
@@ -47366,7 +47435,7 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
 
     // 2. Bekreft match for lagsett
     lagsett.matchedKonstruksjon = konstruksjon
-    lagsett.matchKilde = aapenDialog.mal ? 'mal' : 'ny'
+    lagsett.matchKilde = erRedigering ? 'mal' : (aapenDialog.mal ? 'mal' : 'ny')
 
     // 3. Lagre matching-signatur
     await lagreMatchingSignatur(lagsett, konstruksjon, lagsett.matchKilde)
