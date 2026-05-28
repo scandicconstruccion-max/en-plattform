@@ -54067,9 +54067,15 @@ async function bimSlettSesjon(sesjonId) {
   // Hent sesjonen først for å vite om vi må slette IFC-filen
   const { sesjon, error: hentFeil } = await bimHentSesjon(sesjonId)
   if (hentFeil) return { error: hentFeil }
-  // Slett IFC-fil i Storage hvis den finnes
+  // Slett IFC-fil i Storage hvis den finnes — og logg/rapporter hvis det feiler
   if (sesjon?.ifc_file_path) {
-    await bimSlettIfcFraStorage(sesjon.ifc_file_path)
+    const { error: storageFeil } = await bimSlettIfcFraStorage(sesjon.ifc_file_path)
+    if (storageFeil) {
+      console.warn('[bim-sesjon] kunne ikke slette IFC-fil fra Storage:', sesjon.ifc_file_path, storageFeil)
+      // Vi fortsetter likevel med å slette databaseraden — men logger advarselen
+    } else {
+      console.log('[bim-sesjon] IFC-fil slettet fra Storage:', sesjon.ifc_file_path)
+    }
   }
   // Slett sesjons-raden
   try {
