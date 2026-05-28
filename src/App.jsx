@@ -50607,6 +50607,11 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   // etter gjenoppretting. Mesh strippes ved auto-lagring (~1,1 MB / sesjon), så
   // for å se 3D igjen må fila parses på nytt. Brukerens klassifisering/tilpasninger
   // i metadata.mengder beholdes — vi fletter kun mesh inn via globalId-match.
+  //
+  // VIKTIG: mengder-strukturen er { kategori: { elementer: [...], lagsett: [...], ... } }
+  // — IKKE en flat array. Mesh må flettes inn i både `.elementer[*]` og `.lagsett[*].elementer[*]`.
+  // Felter som starter med "_" (f.eks. _geometri, _ifcTyperDiagnose) er metadata,
+  // ikke kategorier, og må beholdes uendret.
   const lastInn3DManuelt = async (valgtFil) => {
     if (!valgtFil) return
     if (!/\.ifc$/i.test(valgtFil.name)) {
@@ -50631,26 +50636,66 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
       const nyeMengderMedMesh = await extractIfcQuantities(api, mod, modelID, () => {})
 
-      // Flett mesh inn i eksisterende mengder, behold all brukerklassifisering
-      let antallMesh = 0
-      setMetadata(prevMeta => {
-        if (!prevMeta?.mengder || !nyeMengderMedMesh) return prevMeta
-        const flettet = {}
-        for (const kategori of Object.keys(prevMeta.mengder)) {
-          const eksisterende = prevMeta.mengder[kategori] || []
-          const nye = nyeMengderMedMesh[kategori] || []
-          const nyePåGlobalId = {}
-          for (const ne of nye) {
-            if (ne.globalId) nyePåGlobalId[ne.globalId] = ne
+      // Bygg globalId → mesh-oppslag på tvers av ALLE kategorier i den nye fila
+      const meshPåGlobalId = {}
+      for (const kat of Object.keys(nyeMengderMedMesh || {})) {
+        if (kat.startsWith('_')) continue
+        const katData = nyeMengderMedMesh[kat]
+        if (!katData || typeof katData !== 'object') continue
+        const elementer = Array.isArray(katData.elementer) ? katData.elementer : []
+        for (const el of elementer) {
+          if (el?.globalId && el?.mesh) {
+            meshPåGlobalId[el.globalId] = el.mesh
           }
-          flettet[kategori] = eksisterende.map(el => {
-            const nyMatch = el.globalId ? nyePåGlobalId[el.globalId] : null
-            if (nyMatch?.mesh) {
-              antallMesh++
-              return { ...el, mesh: nyMatch.mesh, _haddeMesh: true }
-            }
-            return el
-          })
+        }
+      }
+
+      const flettMeshIElement = (el) => {
+        if (!el || typeof el !== 'object') return el
+        const m = el.globalId ? meshPåGlobalId[el.globalId] : null
+        if (m) {
+          return { ...el, mesh: m, _haddeMesh: true }
+        }
+        return el
+      }
+
+      // Flett mesh inn i eksisterende mengder. Behold ALL annen klassifisering,
+      // _geometri, _ifcTyperDiagnose og andre felter uendret.
+      let antallMesh = 0
+      let antallTotalt = 0
+      setMetadata(prevMeta => {
+        if (!prevMeta?.mengder || typeof prevMeta.mengder !== 'object') return prevMeta
+        const flettet = {}
+        for (const [kat, katData] of Object.entries(prevMeta.mengder)) {
+          // Bevar metadata-felter (_geometri, _ifcTyperDiagnose, osv.) og ikke-objekter uendret
+          if (kat.startsWith('_') || !katData || typeof katData !== 'object') {
+            flettet[kat] = katData
+            continue
+          }
+          const nyElementer = Array.isArray(katData.elementer)
+            ? katData.elementer.map(el => {
+                antallTotalt++
+                const flettetEl = flettMeshIElement(el)
+                if (flettetEl !== el) antallMesh++
+                return flettetEl
+              })
+            : katData.elementer
+          const nyLagsett = Array.isArray(katData.lagsett)
+            ? katData.lagsett.map(ls => {
+                if (!ls || typeof ls !== 'object') return ls
+                return {
+                  ...ls,
+                  elementer: Array.isArray(ls.elementer)
+                    ? ls.elementer.map(flettMeshIElement)
+                    : ls.elementer,
+                }
+              })
+            : katData.lagsett
+          flettet[kat] = {
+            ...katData,
+            elementer: nyElementer,
+            lagsett: nyLagsett,
+          }
         }
         return { ...prevMeta, mengder: flettet }
       })
@@ -50658,6 +50703,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       closeIfcModel(api, modelID)
       modelID = -1
 
+      console.log(`[3d-manuell] flettet mesh på ${antallMesh} av ${antallTotalt} elementer`)
       if (antallMesh === 0) {
         setLast3DStatus('feilet')
         setLast3DFeilmelding('Ingen elementer matchet — er dette samme IFC-fil som ble lastet opp opprinnelig?')
