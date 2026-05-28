@@ -50664,7 +50664,28 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       let antallMesh = 0
       let antallTotalt = 0
       setMetadata(prevMeta => {
-        if (!prevMeta?.mengder || typeof prevMeta.mengder !== 'object') return prevMeta
+        if (!prevMeta?.mengder || typeof prevMeta.mengder !== 'object') {
+          console.warn('[3d-manuell] prevMeta.mengder mangler eller er ikke et objekt:', prevMeta?.mengder)
+          return prevMeta
+        }
+        // Diagnose: logg hva som faktisk er i mengder-strukturen
+        const diag = {}
+        for (const [k, v] of Object.entries(prevMeta.mengder)) {
+          if (k.startsWith('_')) { diag[k] = '(metadata)'; continue }
+          if (v && typeof v === 'object') {
+            diag[k] = {
+              harElementer: Array.isArray(v.elementer),
+              antallElementer: Array.isArray(v.elementer) ? v.elementer.length : null,
+              harLagsett: Array.isArray(v.lagsett),
+              antallLagsett: Array.isArray(v.lagsett) ? v.lagsett.length : null,
+              nokler: Object.keys(v).slice(0, 10),
+            }
+          } else {
+            diag[k] = `(${typeof v})`
+          }
+        }
+        console.log('[3d-manuell] struktur av prevMeta.mengder:', diag)
+        console.log('[3d-manuell] antall globalId med mesh i ny fil:', Object.keys(meshPåGlobalId).length)
         const flettet = {}
         for (const [kat, katData] of Object.entries(prevMeta.mengder)) {
           // Bevar metadata-felter (_geometri, _ifcTyperDiagnose, osv.) og ikke-objekter uendret
