@@ -50332,6 +50332,13 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     const { path, error: uploadFeil } = await bimLastOppIfcTilStorage(f, user.id, sesjon.id)
     if (uploadFeil) {
       console.warn('[bim-sesjon] IFC-opplasting feilet:', uploadFeil)
+      console.warn('[bim-sesjon] Feildetaljer:', JSON.stringify({
+        message: uploadFeil.message,
+        name: uploadFeil.name,
+        status: uploadFeil.status,
+        statusCode: uploadFeil.statusCode,
+        error: uploadFeil.error,
+      }))
       setIfcOpplastingStatus('feilet')
       return
     }
@@ -53690,13 +53697,15 @@ async function bimLastOppIfcTilStorage(file, userId, sesjonId) {
   }
   const path = bimIfcStoragePath(userId, sesjonId, file.name)
   try {
+    // Konverter til en ren Blob med eksplisitt type — noen nettlesere sender
+    // File-objektet med tom/rar MIME-type som storage-klienten snubler på.
+    const blob = new Blob([file], { type: 'application/octet-stream' })
     const { error } = await supabase.storage
       .from('bim-ifc-files')
-      .upload(path, file, {
+      .upload(path, blob, {
         cacheControl: '3600',
-        upsert: true,           // overskrive hvis samme sti finnes (sjelden, men trygt)
-        // Ikke sett contentType — la nettleseren bestemme.
-        // (Vi har fjernet MIME-restriksjonen på bucketen, så alle typer er OK.)
+        contentType: 'application/octet-stream',
+        // Ingen upsert — hver sesjon har unik UUID, så stien er alltid ny
       })
     if (error) return { path: null, error }
     return { path, error: null }
