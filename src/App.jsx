@@ -50593,13 +50593,32 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
-    const { error } = await bimSlettSesjon(sesjonId)
-    if (error) {
-      console.warn('[bim-sesjon] sletting feilet:', error)
-      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
-      return
+    try {
+      // Steg 5: Bruk Edge Function (service_role) som omgår RLS-quirken på Storage
+      const { data, error } = await supabase.functions.invoke('bim-sesjon-rydd', {
+        body: { action: 'slett', sesjonId },
+      })
+      if (error) {
+        console.warn('[bim-sesjon] sletting via edge function feilet:', error)
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
+        return
+      }
+      if (data && !data.ok) {
+        console.warn('[bim-sesjon] edge function returnerte feil:', data.error)
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (data.error || 'ukjent feil'))
+        return
+      }
+      // Logg om Storage-fil ble slettet (informasjon, ikke feil)
+      if (data?.storageSlettet === false) {
+        console.log('[bim-sesjon] sesjon slettet (Storage-fil var allerede borte eller manglet)')
+      } else if (data?.storageSlettet === true) {
+        console.log('[bim-sesjon] sesjon og Storage-fil slettet')
+      }
+      setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
+    } catch (e) {
+      console.warn('[bim-sesjon] sletting kastet:', e)
+      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (e.message || 'ukjent feil'))
     }
-    setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
   }
 
   // Marker "ulagrede endringer" når klassifisering eller matching endres.
