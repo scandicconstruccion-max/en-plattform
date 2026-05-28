@@ -54102,11 +54102,13 @@ async function bimLastOppIfcTilStorage(file, userId, sesjonId) {
 async function bimHentIfcSignertUrl(storagePath, gyldigSekunder = 3600) {
   if (!storagePath) return { url: null, error: new Error('Mangler storagePath') }
   try {
-    const { data, error } = await supabase.storage
-      .from('bim-ifc-files')
-      .createSignedUrl(storagePath, gyldigSekunder)
+    // Steg 5: Gå via Edge Function (service_role) — omgår RLS-quirken
+    const { data, error } = await supabase.functions.invoke('bim-sesjon-rydd', {
+      body: { action: 'hent-signert-url', storagePath, gyldigSekunder },
+    })
     if (error) return { url: null, error }
-    return { url: data?.signedUrl || null, error: null }
+    if (data && !data.ok) return { url: null, error: new Error(data.error || 'ukjent feil') }
+    return { url: data?.url || null, error: null }
   } catch (e) {
     return { url: null, error: e }
   }
