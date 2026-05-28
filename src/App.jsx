@@ -53974,10 +53974,16 @@ async function bimHentIfcSignertUrl(storagePath, gyldigSekunder = 3600) {
 async function bimSlettIfcFraStorage(storagePath) {
   if (!storagePath) return { error: null }
   try {
-    const { error } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from('bim-ifc-files')
       .remove([storagePath])
-    return { error }
+    if (error) return { error }
+    // VIKTIG: .remove() kan returnere tom data UTEN error hvis RLS blokkerer
+    // eller filen ikke finnes. Tom data = ingenting ble faktisk slettet.
+    if (!data || data.length === 0) {
+      return { error: new Error('Storage-sletting returnerte ingen slettede filer (RLS eller fil mangler): ' + storagePath) }
+    }
+    return { error: null }
   } catch (e) {
     return { error: e }
   }
