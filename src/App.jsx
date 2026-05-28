@@ -54084,23 +54084,25 @@ async function bimHentSesjoner({ userId, projectId = undefined, status = 'aktiv'
   }
 }
 
-// Slett en sesjon (og dens IFC-fil i Storage hvis den finnes)
+// Slett en sesjon. Databaseraden slettes alltid (det er det brukeren ser).
+// Storage-filen forsøkes slettet, men hvis det feiler (kjent Supabase RLS-quirk
+// på .remove() for noen oppsett), fortsetter vi likevel. Foreldreløse Storage-filer
+// fanges opp av auto-opprydningen (Steg 5 / Edge Function med service_role).
 async function bimSlettSesjon(sesjonId) {
   if (!sesjonId) return { error: new Error('Mangler sesjonId') }
-  // Hent sesjonen først for å vite om vi må slette IFC-filen
+  // Hent sesjonen først for å vite om vi må forsøke å slette IFC-filen
   const { sesjon, error: hentFeil } = await bimHentSesjon(sesjonId)
   if (hentFeil) return { error: hentFeil }
-  // Slett IFC-fil i Storage hvis den finnes — og logg/rapporter hvis det feiler
+  // Best-effort Storage-sletting — feil her stopper IKKE databaseslettingen
   if (sesjon?.ifc_file_path) {
     const { error: storageFeil } = await bimSlettIfcFraStorage(sesjon.ifc_file_path)
     if (storageFeil) {
-      console.warn('[bim-sesjon] kunne ikke slette IFC-fil fra Storage:', sesjon.ifc_file_path, storageFeil)
-      // Vi fortsetter likevel med å slette databaseraden — men logger advarselen
+      console.warn('[bim-sesjon] Storage-sletting feilet (forventet på noen RLS-oppsett); fortsetter med database-sletting. Filen blir foreldreløs og ryddes av auto-opprydning:', storageFeil.message)
     } else {
       console.log('[bim-sesjon] IFC-fil slettet fra Storage:', sesjon.ifc_file_path)
     }
   }
-  // Slett sesjons-raden
+  // Slett sesjons-raden — dette er det brukeren ser at fungerer
   try {
     const { error } = await supabase.from('bim_sesjoner').delete().eq('id', sesjonId)
     return { error }
