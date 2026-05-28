@@ -53664,9 +53664,23 @@ function krympMengderForLagring(mengder) {
 // Bygg Storage-sti for en IFC-fil: <user_id>/<sesjon_id>/<filnavn>
 // (matcher RLS-policy som krever at første mappenivå = user_id)
 function bimIfcStoragePath(userId, sesjonId, filnavn) {
-  // Saniter filnavn — fjern path-separatorer og kontroll-tegn
-  const trygtNavn = String(filnavn || 'ifc-fil.ifc').replace(/[\/\\:?*"<>|\u0000-\u001f]/g, '_')
-  return `${userId}/${sesjonId}/${trygtNavn}`
+  // Supabase Storage er streng på filnavn: mellomrom, norske tegn (æøå),
+  // og spesialtegn gir 400-feil. Vi saniterer hardt — beholder kun
+  // ASCII-bokstaver, tall, bindestrek, punktum og understrek.
+  let navn = String(filnavn || 'fil.ifc')
+  // Norske tegn → ASCII
+  navn = navn
+    .replace(/[æÆ]/g, 'ae').replace(/[øØ]/g, 'oe').replace(/[åÅ]/g, 'aa')
+    .replace(/[éèêë]/gi, 'e').replace(/[áàâä]/gi, 'a').replace(/[óòôö]/gi, 'o')
+    .replace(/[úùûü]/gi, 'u').replace(/[íìîï]/gi, 'i')
+  // Alt annet enn trygge tegn → understrek
+  navn = navn.replace(/[^a-zA-Z0-9._-]/g, '_')
+  // Unngå flere understreker på rad og ledende/avsluttende understrek
+  navn = navn.replace(/_+/g, '_').replace(/^_+|_+$/g, '')
+  // Sikre at vi har et filnavn med .ifc-endelse
+  if (!navn || navn === '.ifc') navn = 'fil.ifc'
+  if (!/\.ifc$/i.test(navn)) navn = navn + '.ifc'
+  return `${userId}/${sesjonId}/${navn}`
 }
 
 // Last opp IFC-fil til Storage. Returnerer { path, error }
