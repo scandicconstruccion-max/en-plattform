@@ -50450,7 +50450,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
           project_number: projectNumber,
           name: name || 'BIM-prosjekt',
           address: address || null,
-          status: 'planlegging',
+          status: 'planlagt',
         })
         .select()
         .single()
@@ -53681,7 +53681,8 @@ async function bimLastOppIfcTilStorage(file, userId, sesjonId) {
       .upload(path, file, {
         cacheControl: '3600',
         upsert: true,           // overskrive hvis samme sti finnes (sjelden, men trygt)
-        contentType: 'application/octet-stream',
+        // Ikke sett contentType — la nettleseren bestemme.
+        // (Vi har fjernet MIME-restriksjonen på bucketen, så alle typer er OK.)
       })
     if (error) return { path: null, error }
     return { path, error: null }
