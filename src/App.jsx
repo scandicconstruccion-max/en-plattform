@@ -53974,16 +53974,33 @@ async function bimHentIfcSignertUrl(storagePath, gyldigSekunder = 3600) {
 async function bimSlettIfcFraStorage(storagePath) {
   if (!storagePath) return { error: null }
   try {
+    // Forsøk 1: direkte sletting av full sti
     const { data, error } = await supabase.storage
       .from('bim-ifc-files')
       .remove([storagePath])
-    if (error) return { error }
-    // VIKTIG: .remove() kan returnere tom data UTEN error hvis RLS blokkerer
-    // eller filen ikke finnes. Tom data = ingenting ble faktisk slettet.
-    if (!data || data.length === 0) {
-      return { error: new Error('Storage-sletting returnerte ingen slettede filer (RLS eller fil mangler): ' + storagePath) }
+    if (!error && data && data.length > 0) {
+      return { error: null }  // suksess
     }
-    return { error: null }
+    // Forsøk 2 (fallback): noen Supabase-versjoner feiler på direkte sti
+    // pga. RLS-quirk. List mappen og slett funnet fil i stedet.
+    // storagePath = "<user>/<sesjon>/<filnavn>" → mappe = "<user>/<sesjon>"
+    const mappe = storagePath.split('/').slice(0, -1).join('/')
+    const { data: filer, error: listFeil } = await supabase.storage
+      .from('bim-ifc-files')
+      .list(mappe)
+    if (listFeil) {
+      return { error: error || listFeil }  // returner opprinnelig feil hvis listing også feiler
+    }
+    if (filer && filer.length > 0) {
+      const fulleStier = filer.map(f => `${mappe}/${f.name}`)
+      const { data: data2, error: error2 } = await supabase.storage
+        .from('bim-ifc-files')
+        .remove(fulleStier)
+      if (error2) return { error: error2 }
+      if (data2 && data2.length > 0) return { error: null }  // suksess via fallback
+    }
+    // Begge forsøk ga ingen slettede filer
+    return { error: error || new Error('Storage-sletting slettet ingen filer: ' + storagePath) }
   } catch (e) {
     return { error: e }
   }
