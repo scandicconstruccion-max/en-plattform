@@ -50219,6 +50219,11 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   const [sistLagret, setSistLagret] = useState(null)  // Date-objekt for "Lagret kl XX:XX"
   // Ref-flagg: settes true når noe endres, leses av auto-lagre-intervallet
   const harUlagredeEndringer = React.useRef(false)
+
+  // Steg 4: Lagrede sesjoner brukeren kan gjenåpne
+  const [lagredeSesjoner, setLagredeSesjoner] = useState([])
+  const [lasterSesjoner, setLasterSesjoner] = useState(false)
+  const [gjenoppretterSesjon, setGjenoppretterSesjon] = useState(false)
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -50519,6 +50524,84 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     }
   }, [bimSesjonId, metadata])
 
+  // Steg 4: Hent lagrede sesjoner (kun de med faktisk arbeid lagret)
+  const hentLagredeSesjoner = React.useCallback(async () => {
+    if (!user?.id) return
+    setLasterSesjoner(true)
+    try {
+      const { sesjoner, error } = await bimHentSesjoner({ userId: user.id, status: 'aktiv' })
+      if (error) {
+        console.warn('[bim-sesjon] kunne ikke hente sesjoner:', error)
+        setLagredeSesjoner([])
+        return
+      }
+      // Vis kun sesjoner som har faktisk arbeid lagret (sesjon_data ikke tom)
+      const medArbeid = (sesjoner || []).filter(s =>
+        s.sesjon_data && Object.keys(s.sesjon_data).length > 0 && s.sesjon_data.mengder)
+      setLagredeSesjoner(medArbeid)
+    } catch (e) {
+      console.warn('[bim-sesjon] henting kastet:', e)
+      setLagredeSesjoner([])
+    } finally {
+      setLasterSesjoner(false)
+    }
+  }, [user])
+
+  // Hent lagrede sesjoner når vi er i upload-fasen (ikke ved redigering av kalkyle)
+  useEffect(() => {
+    if (fase === 'upload' && !erRedigering) {
+      hentLagredeSesjoner()
+    }
+  }, [fase, erRedigering, hentLagredeSesjoner])
+
+  // Steg 4: Gjenopprett en lagret sesjon — bygg metadata fra sesjon_data,
+  // sett bimSesjonId så auto-lagring fortsetter på samme rad, og hopp til analysert fase.
+  const gjenopprettSesjon = async (sesjon) => {
+    if (!sesjon?.sesjon_data?.mengder) {
+      if (onAlert) await onAlert('Denne sesjonen mangler lagret arbeid og kan ikke gjenopprettes.')
+      return
+    }
+    setGjenoppretterSesjon(true)
+    try {
+      const d = sesjon.sesjon_data
+      // Bygg metadata fra lagret sesjon_data (mesh er strippet — 3D krever re-import)
+      setMetadata({
+        fileName: d.fileName || sesjon.ifc_file_name || 'Ukjent fil',
+        fileSize: d.fileSize || sesjon.ifc_file_size || 0,
+        schema: d.schema || sesjon.ifc_schema || null,
+        project: d.project || {},
+        building: d.building || {},
+        elementCounts: d.elementCounts || {},
+        totalElements: d.totalElements || 0,
+        mengder: d.mengder,
+      })
+      // Knytt til samme sesjon-rad så videre auto-lagring oppdaterer den (ikke ny)
+      setBimSesjonId(sesjon.id)
+      setStoredFilePath(sesjon.ifc_file_path || null)
+      // Oppdater last_accessed_at så opprydning ikke sletter en aktiv sesjon
+      bimOppdaterSesjon(sesjon.id, {}).catch(() => {})
+      setFase('analyzed')
+      setAutoLagreStatus('lagret')
+      setSistLagret(new Date(sesjon.updated_at || Date.now()))
+    } catch (e) {
+      console.warn('[bim-sesjon] gjenoppretting feilet:', e)
+      if (onAlert) await onAlert('Kunne ikke gjenopprette sesjonen: ' + (e.message || 'ukjent feil'))
+    } finally {
+      setGjenoppretterSesjon(false)
+    }
+  }
+
+  // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
+  const slettLagretSesjon = async (sesjonId) => {
+    const { error } = await bimSlettSesjon(sesjonId)
+    if (error) {
+      console.warn('[bim-sesjon] sletting feilet:', error)
+      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
+      return
+    }
+    setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
+  }
+
   // Marker "ulagrede endringer" når klassifisering eller matching endres.
   // Hopp over første render (versjon 0) så vi ikke markerer før noe faktisk skjer.
   const forsteEndringSkip = React.useRef(true)
@@ -50662,6 +50745,55 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               onChange={(e) => handleFileSelect(e.target.files?.[0])}
               style={{ display:'none' }} />
           </div>
+
+          {/* Steg 4: Fortsett tidligere arbeid */}
+          {!erRedigering && lagredeSesjoner.length > 0 && (
+            <div style={{ marginTop:'18px' }}>
+              <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px' }}>
+                <span>🕓</span><span>Fortsett tidligere arbeid ({lagredeSesjoner.length})</span>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {lagredeSesjoner.map(sesjon => {
+                  const dato = sesjon.updated_at ? new Date(sesjon.updated_at) : null
+                  const datoTekst = dato ? dato.toLocaleString('nb-NO', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : ''
+                  const antallElementer = sesjon.sesjon_data?.totalElements || 0
+                  const harFil = !!sesjon.ifc_file_path
+                  return (
+                    <div key={sesjon.id} style={{
+                      display:'flex', alignItems:'center', gap:'12px',
+                      background:'white', border:'1px solid #e2e8f0', borderRadius:'10px',
+                      padding:'12px 14px',
+                    }}>
+                      <div style={{ fontSize:'22px' }}>📐</div>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          {sesjon.ifc_file_name || 'BIM-sesjon'}
+                        </div>
+                        <div style={{ fontSize:'11px', color:'#64748b' }}>
+                          {antallElementer > 0 ? `${antallElementer} elementer · ` : ''}Sist endret {datoTekst}
+                          {!harFil && ' · ⚠️ IFC-fil mangler (3D utilgjengelig)'}
+                        </div>
+                      </div>
+                      <button onClick={() => gjenopprettSesjon(sesjon)} disabled={gjenoppretterSesjon}
+                        style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'8px', padding:'8px 14px', fontSize:'12px', fontWeight:'700', cursor: gjenoppretterSesjon ? 'default' : 'pointer', opacity: gjenoppretterSesjon ? 0.6 : 1, whiteSpace:'nowrap' }}>
+                        {gjenoppretterSesjon ? 'Åpner...' : 'Fortsett'}
+                      </button>
+                      <button onClick={async () => {
+                          if (onAlert) {
+                            // Bruk systemets bekreftelse hvis tilgjengelig; ellers slett direkte
+                          }
+                          slettLagretSesjon(sesjon.id)
+                        }}
+                        title="Slett sesjon"
+                        style={{ background:'transparent', color:'#94a3b8', border:'none', cursor:'pointer', fontSize:'16px', padding:'4px' }}>
+                        🗑️
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ marginTop:'18px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'14px 16px' }}>
             <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'6px' }}>💡 Slik fungerer BIM-Kalkyle</div>
