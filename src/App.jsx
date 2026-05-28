@@ -50225,6 +50225,14 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   const [lasterSesjoner, setLasterSesjoner] = useState(false)
   const [gjenoppretterSesjon, setGjenoppretterSesjon] = useState(false)
 
+  // Manuell 3D-lasting: brukeren kan velge å laste opp IFC-fil igjen for å få 3D-mesh
+  // tilbake etter gjenoppretting av en lagret sesjon (mesh strippes ved lagring).
+  // Status: 'idle' | 'laster' | 'klar' | 'feilet'
+  const [erGjenopprettetSesjon, setErGjenopprettetSesjon] = useState(!!eksisterendeSesjon)
+  const [last3DStatus, setLast3DStatus] = useState('idle')
+  const [last3DFeilmelding, setLast3DFeilmelding] = useState('')
+  const last3DInputRef = React.useRef(null)
+
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -50584,6 +50592,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       setFase('analyzed')
       setAutoLagreStatus('lagret')
       setSistLagret(new Date(sesjon.updated_at || Date.now()))
+      setErGjenopprettetSesjon(true)
+      setLast3DStatus('idle')
     } catch (e) {
       console.warn('[bim-sesjon] gjenoppretting feilet:', e)
       if (onAlert) await onAlert('Kunne ikke gjenopprette sesjonen: ' + (e.message || 'ukjent feil'))
@@ -50592,6 +50602,75 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     }
   }
 
+
+  // Manuell 3D-lasting: brukeren laster opp samme IFC-fil for å få mesh tilbake
+  // etter gjenoppretting. Mesh strippes ved auto-lagring (~1,1 MB / sesjon), så
+  // for å se 3D igjen må fila parses på nytt. Brukerens klassifisering/tilpasninger
+  // i metadata.mengder beholdes — vi fletter kun mesh inn via globalId-match.
+  const lastInn3DManuelt = async (valgtFil) => {
+    if (!valgtFil) return
+    if (!/\.ifc$/i.test(valgtFil.name)) {
+      setLast3DStatus('feilet')
+      setLast3DFeilmelding('Filen må være en .ifc-fil')
+      return
+    }
+    setLast3DStatus('laster')
+    setLast3DFeilmelding('')
+    let api = null
+    let mod = null
+    let modelID = -1
+    try {
+      const buffer = await valgtFil.arrayBuffer()
+      const data = new Uint8Array(buffer)
+
+      const loaded = await _loadWebIfc()
+      api = loaded.api
+      mod = loaded.mod
+      modelID = api.OpenModel(data, { COORDINATE_TO_ORIGIN: true })
+      if (modelID < 0) throw new Error('IFC-filen kunne ikke åpnes')
+
+      const nyeMengderMedMesh = await extractIfcQuantities(api, mod, modelID, () => {})
+
+      // Flett mesh inn i eksisterende mengder, behold all brukerklassifisering
+      let antallMesh = 0
+      setMetadata(prevMeta => {
+        if (!prevMeta?.mengder || !nyeMengderMedMesh) return prevMeta
+        const flettet = {}
+        for (const kategori of Object.keys(prevMeta.mengder)) {
+          const eksisterende = prevMeta.mengder[kategori] || []
+          const nye = nyeMengderMedMesh[kategori] || []
+          const nyePåGlobalId = {}
+          for (const ne of nye) {
+            if (ne.globalId) nyePåGlobalId[ne.globalId] = ne
+          }
+          flettet[kategori] = eksisterende.map(el => {
+            const nyMatch = el.globalId ? nyePåGlobalId[el.globalId] : null
+            if (nyMatch?.mesh) {
+              antallMesh++
+              return { ...el, mesh: nyMatch.mesh, _haddeMesh: true }
+            }
+            return el
+          })
+        }
+        return { ...prevMeta, mengder: flettet }
+      })
+
+      closeIfcModel(api, modelID)
+      modelID = -1
+
+      if (antallMesh === 0) {
+        setLast3DStatus('feilet')
+        setLast3DFeilmelding('Ingen elementer matchet — er dette samme IFC-fil som ble lastet opp opprinnelig?')
+      } else {
+        setLast3DStatus('klar')
+      }
+    } catch (e) {
+      console.warn('[3d-manuell] feilet:', e)
+      setLast3DStatus('feilet')
+      setLast3DFeilmelding(e.message || 'Ukjent feil ved 3D-lasting')
+      try { if (api && modelID >= 0) closeIfcModel(api, modelID) } catch {}
+    }
+  }
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
@@ -50665,6 +50744,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   const reset = () => {
     setFase('upload'); setFile(null); setMetadata(null); setProgress({ step:'', percent:0 }); setErrorMsg('')
+    setErGjenopprettetSesjon(false); setLast3DStatus('idle'); setLast3DFeilmelding('')
   }
 
   // Stiler
@@ -50871,6 +50951,55 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                 style={{ background:'white', border:'1px solid #a7f3d0', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', color:'#065f46', cursor:'pointer' }}>
                 🔧 Diagnose
               </button>
+            )}
+            {/* Manuell 3D-lasting: vises alltid ved gjenopprettet sesjon */}
+            {erGjenopprettetSesjon && (
+              <>
+                <input
+                  ref={last3DInputRef}
+                  type="file"
+                  accept=".ifc"
+                  style={{ display:'none' }}
+                  onChange={(e) => {
+                    const f = e.target.files?.[0]
+                    if (f) lastInn3DManuelt(f)
+                    e.target.value = ''
+                  }}
+                />
+                <button
+                  onClick={() => last3DInputRef.current?.click()}
+                  disabled={last3DStatus === 'laster'}
+                  title={
+                    last3DStatus === 'klar' ? '3D er lastet — klikk for å laste en annen fil'
+                    : last3DStatus === 'feilet' ? (last3DFeilmelding || 'Prøv igjen')
+                    : 'Last opp samme IFC-fil for å gjenopprette 3D-visning'
+                  }
+                  style={{
+                    background: last3DStatus === 'klar' ? '#f0fdf4'
+                              : last3DStatus === 'feilet' ? '#fef2f2'
+                              : 'white',
+                    border: `1px solid ${
+                      last3DStatus === 'klar' ? '#bbf7d0'
+                      : last3DStatus === 'feilet' ? '#fecaca'
+                      : '#a7f3d0'}`,
+                    borderRadius:'8px',
+                    padding:'6px 12px',
+                    fontSize:'12px',
+                    fontWeight:'600',
+                    color: last3DStatus === 'klar' ? '#15803d'
+                         : last3DStatus === 'feilet' ? '#b91c1c'
+                         : '#065f46',
+                    cursor: last3DStatus === 'laster' ? 'wait' : 'pointer',
+                    opacity: last3DStatus === 'laster' ? 0.7 : 1,
+                    whiteSpace:'nowrap',
+                  }}
+                >
+                  {last3DStatus === 'laster' && '🔄 Laster 3D...'}
+                  {last3DStatus === 'klar' && '✅ 3D lastet'}
+                  {last3DStatus === 'feilet' && '⚠️ Prøv igjen'}
+                  {last3DStatus === 'idle' && '📐 Last 3D'}
+                </button>
+              </>
             )}
             {!erRedigering && (
               <button onClick={reset}
