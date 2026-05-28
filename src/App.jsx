@@ -50212,6 +50212,13 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   // motsatte kolonnen auto-scroller til samme post. { id, kilde } der kilde
   // forteller hvilken kolonne som utløste valget (for å unngå scroll-loop).
   const [aktivLagsett, setAktivLagsett] = useState(null)
+
+  // Steg 3: Auto-lagring av sesjons-arbeid (klassifisering + matching)
+  // Status: 'idle' | 'ulagret' | 'lagrer' | 'lagret' | 'feilet'
+  const [autoLagreStatus, setAutoLagreStatus] = useState('idle')
+  const [sistLagret, setSistLagret] = useState(null)  // Date-objekt for "Lagret kl XX:XX"
+  // Ref-flagg: settes true når noe endres, leses av auto-lagre-intervallet
+  const harUlagredeEndringer = React.useRef(false)
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -50477,6 +50484,75 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     setVisProsjektVelger(false)
   }
 
+  // ============================================================
+  // Steg 3: Auto-lagring av sesjons-arbeid
+  // ============================================================
+
+  // Selve lagre-funksjonen: skriver mengder (mesh-strippet) til bim_sesjoner.
+  const lagreSesjonNaa = React.useCallback(async () => {
+    if (!bimSesjonId || !metadata?.mengder) return
+    setAutoLagreStatus('lagrer')
+    try {
+      const krympet = krympMengderForLagring(metadata.mengder)
+      const sesjonData = {
+        fileName: metadata.fileName,
+        fileSize: metadata.fileSize,
+        schema: metadata.schema,
+        project: metadata.project || {},
+        building: metadata.building || {},
+        elementCounts: metadata.elementCounts || {},
+        totalElements: metadata.totalElements || 0,
+        mengder: krympet,
+      }
+      const { error } = await bimOppdaterSesjon(bimSesjonId, { sesjon_data: sesjonData })
+      if (error) {
+        console.warn('[bim-sesjon] auto-lagring feilet:', error)
+        setAutoLagreStatus('feilet')
+        return
+      }
+      harUlagredeEndringer.current = false
+      setSistLagret(new Date())
+      setAutoLagreStatus('lagret')
+    } catch (e) {
+      console.warn('[bim-sesjon] auto-lagring kastet:', e)
+      setAutoLagreStatus('feilet')
+    }
+  }, [bimSesjonId, metadata])
+
+  // Marker "ulagrede endringer" når klassifisering eller matching endres.
+  // Hopp over første render (versjon 0) så vi ikke markerer før noe faktisk skjer.
+  const forsteEndringSkip = React.useRef(true)
+  useEffect(() => {
+    if (forsteEndringSkip.current) { forsteEndringSkip.current = false; return }
+    if (!bimSesjonId) return
+    harUlagredeEndringer.current = true
+    setAutoLagreStatus('ulagret')
+  }, [klassifiseringVersjon, matchVersjon, bimSesjonId])
+
+  // Periodisk auto-lagring: hvert 30. sekund, lagre HVIS det er ulagrede endringer.
+  useEffect(() => {
+    if (!bimSesjonId) return
+    const interval = setInterval(() => {
+      if (harUlagredeEndringer.current) {
+        lagreSesjonNaa()
+      }
+    }, 30000)  // 30 sekunder
+    return () => clearInterval(interval)
+  }, [bimSesjonId, lagreSesjonNaa])
+
+  // Lagre også når brukeren forlater siden (best effort) hvis ulagrede endringer.
+  useEffect(() => {
+    const handler = (e) => {
+      if (harUlagredeEndringer.current && bimSesjonId) {
+        // Synkron beste-innsats — moderne nettlesere begrenser dette,
+        // men auto-lagre-intervallet dekker de fleste tilfeller.
+        lagreSesjonNaa()
+      }
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [bimSesjonId, lagreSesjonNaa])
+
   const handleDrop = (e) => {
     e.preventDefault(); setDragOver(false)
     const f = e.dataTransfer.files?.[0]
@@ -50519,6 +50595,40 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
             ? 'Juster klassifiseringer eller matching og generer kalkylen på nytt — manuelt lagte bygningsdeler beholdes'
             : 'Last opp en IFC-fil fra ArchiCAD, Revit eller annet BIM-verktøy'}</p>
         </div>
+        {/* Steg 3: Auto-lagre-statusindikator (vises kun når vi har en aktiv sesjon) */}
+        {bimSesjonId && fase === 'analyzed' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '6px',
+            fontSize: '12px', fontWeight: '600',
+            padding: '6px 12px', borderRadius: '8px',
+            background: autoLagreStatus === 'feilet' ? '#fef2f2'
+                      : autoLagreStatus === 'lagrer' ? '#eff6ff'
+                      : autoLagreStatus === 'ulagret' ? '#fffbeb'
+                      : '#f0fdf4',
+            color: autoLagreStatus === 'feilet' ? '#b91c1c'
+                  : autoLagreStatus === 'lagrer' ? '#1e40af'
+                  : autoLagreStatus === 'ulagret' ? '#92400e'
+                  : '#15803d',
+            border: `1px solid ${
+              autoLagreStatus === 'feilet' ? '#fecaca'
+              : autoLagreStatus === 'lagrer' ? '#bfdbfe'
+              : autoLagreStatus === 'ulagret' ? '#fde68a'
+              : '#bbf7d0'}`,
+            whiteSpace: 'nowrap',
+          }}>
+            {autoLagreStatus === 'lagrer' && '💾 Lagrer...'}
+            {autoLagreStatus === 'lagret' && sistLagret && `✅ Lagret kl ${sistLagret.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })}`}
+            {autoLagreStatus === 'ulagret' && '✏️ Endringer ikke lagret'}
+            {autoLagreStatus === 'feilet' && '⚠️ Lagring feilet'}
+            {autoLagreStatus === 'idle' && '💾 Auto-lagring aktiv'}
+            {(autoLagreStatus === 'ulagret' || autoLagreStatus === 'feilet') && (
+              <button onClick={lagreSesjonNaa}
+                style={{ marginLeft: '4px', background: 'transparent', border: 'none', textDecoration: 'underline', cursor: 'pointer', color: 'inherit', fontWeight: '700', fontSize: '11px', padding: 0 }}>
+                Lagre nå
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Fase: Last opp */}
