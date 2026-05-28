@@ -50225,11 +50225,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   const [lasterSesjoner, setLasterSesjoner] = useState(false)
   const [gjenoppretterSesjon, setGjenoppretterSesjon] = useState(false)
 
-  // Steg 4-utvidelse: Re-parse av IFC for 3D-visning ved gjenoppretting
-  // Status: 'ikke-startet' | 'henter-fil' | 'parser' | 'klar' | 'feilet'
-  const [reparseStatus, setReparseStatus] = useState('ikke-startet')
-  const [reparseProgress, setReparseProgress] = useState({ step: '', percent: 0 })
-
   const [metadata, setMetadata] = useState(eksisterendeSesjon ? {
     fileName: eksisterendeSesjon.fileName,
     fileSize: eksisterendeSesjon.fileSize,
@@ -50589,14 +50584,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       setFase('analyzed')
       setAutoLagreStatus('lagret')
       setSistLagret(new Date(sesjon.updated_at || Date.now()))
-      // Start 3D-reparse i bakgrunnen hvis IFC-filen finnes i Storage
-      if (sesjon.ifc_file_path) {
-        // Kjøres async — brukeren kan begynne å jobbe umiddelbart
-        last3DForSesjon(sesjon.ifc_file_path)
-      } else {
-        setReparseStatus('feilet')
-        setReparseProgress({ step: 'IFC-fil mangler — 3D utilgjengelig', percent: 0 })
-      }
     } catch (e) {
       console.warn('[bim-sesjon] gjenoppretting feilet:', e)
       if (onAlert) await onAlert('Kunne ikke gjenopprette sesjonen: ' + (e.message || 'ukjent feil'))
@@ -50605,90 +50592,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
     }
   }
 
-  // Steg 4-utvidelse: Re-parse IFC fra Storage for å få mesh tilbake (3D-visning).
-  // Kjøres i bakgrunnen etter gjenoppretting — brukeren kan fortsette å klassifisere
-  // mens dette pågår. Når ferdig, fletter vi mesh fra parsing inn i de eksisterende
-  // mengdene (som har brukerens klassifisering siden lagring).
-  const last3DForSesjon = React.useCallback(async (storagePath) => {
-    if (!storagePath) {
-      setReparseStatus('feilet')
-      return
-    }
-    setReparseStatus('henter-fil')
-    setReparseProgress({ step: 'Henter IFC-fil fra lagring...', percent: 5 })
-    let api = null
-    let mod = null
-    let modelID = -1
-    try {
-      // 1) Hent signert URL og last ned IFC-filen
-      const { url, error: urlFeil } = await bimHentIfcSignertUrl(storagePath, 3600)
-      if (urlFeil || !url) {
-        console.warn('[3d-reparse] kunne ikke hente signert URL:', urlFeil)
-        setReparseStatus('feilet')
-        return
-      }
-      const respons = await fetch(url)
-      if (!respons.ok) throw new Error('Nedlasting fra Storage feilet: ' + respons.status)
-      const buffer = await respons.arrayBuffer()
-      const data = new Uint8Array(buffer)
-
-      setReparseStatus('parser')
-      setReparseProgress({ step: 'Laster IFC-bibliotek...', percent: 20 })
-
-      // 2) Last web-ifc og parse
-      const loaded = await _loadWebIfc()
-      api = loaded.api
-      mod = loaded.mod
-      setReparseProgress({ step: 'Analyserer 3D-modell — dette kan ta opp til 1 minutt...', percent: 40 })
-      modelID = api.OpenModel(data, { COORDINATE_TO_ORIGIN: true })
-      if (modelID < 0) throw new Error('IFC-filen kunne ikke åpnes ved re-parse')
-
-      // 3) Ekstraher mengder MED mesh (samme funksjon som brukes ved første opplasting)
-      setReparseProgress({ step: 'Beregner geometri per element...', percent: 65 })
-      const nyeMengderMedMesh = await extractIfcQuantities(api, mod, modelID, (msg) => {
-        setReparseProgress(p => ({ ...p, step: msg }))
-      })
-
-      // 4) Flett mesh fra nye mengder inn i eksisterende metadata.mengder.
-      //    Eksisterende mengder har brukerens klassifisering (kategori, lagsett-id, osv).
-      //    Vi vil beholde alt det, men tilføre mesh-data fra reparsing.
-      setReparseProgress({ step: 'Fletter 3D-data med eksisterende klassifisering...', percent: 90 })
-      setMetadata(prevMeta => {
-        if (!prevMeta?.mengder || !nyeMengderMedMesh) return prevMeta
-        const flettet = {}
-        for (const kategori of Object.keys(prevMeta.mengder)) {
-          const eksisterende = prevMeta.mengder[kategori] || []
-          const nye = nyeMengderMedMesh[kategori] || []
-          // Indekser nye elementer på globalId for rask oppslag
-          const nyePåGlobalId = {}
-          for (const ne of nye) {
-            if (ne.globalId) nyePåGlobalId[ne.globalId] = ne
-          }
-          flettet[kategori] = eksisterende.map(el => {
-            const nyMatch = el.globalId ? nyePåGlobalId[el.globalId] : null
-            if (nyMatch?.mesh) {
-              // Behold brukerens klassifisering/metadata, men tilfør mesh
-              return { ...el, mesh: nyMatch.mesh, _haddeMesh: true }
-            }
-            return el
-          })
-        }
-        return { ...prevMeta, mengder: flettet }
-      })
-
-      setReparseProgress({ step: '✅ 3D-visning klar', percent: 100 })
-      setReparseStatus('klar')
-
-      // Lukk modellen for å frigjøre minne
-      closeIfcModel(api, modelID)
-      modelID = -1
-    } catch (e) {
-      console.warn('[3d-reparse] feilet:', e)
-      setReparseStatus('feilet')
-      setReparseProgress({ step: 'Re-parsing feilet: ' + (e.message || 'ukjent feil'), percent: 0 })
-      try { if (api && modelID >= 0) closeIfcModel(api, modelID) } catch {}
-    }
-  }, [])
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
@@ -50828,30 +50731,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                 Lagre nå
               </button>
             )}
-          </div>
-        )}
-        {/* Steg 4-utvidelse: 3D-reparse-statusindikator */}
-        {bimSesjonId && fase === 'analyzed' && reparseStatus !== 'ikke-startet' && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '12px', fontWeight: '600',
-            padding: '6px 12px', borderRadius: '8px',
-            background: reparseStatus === 'feilet' ? '#fef2f2'
-                      : reparseStatus === 'klar' ? '#f0fdf4'
-                      : '#eff6ff',
-            color: reparseStatus === 'feilet' ? '#b91c1c'
-                  : reparseStatus === 'klar' ? '#15803d'
-                  : '#1e40af',
-            border: `1px solid ${
-              reparseStatus === 'feilet' ? '#fecaca'
-              : reparseStatus === 'klar' ? '#bbf7d0'
-              : '#bfdbfe'}`,
-            whiteSpace: 'nowrap',
-          }}>
-            {(reparseStatus === 'henter-fil' || reparseStatus === 'parser') &&
-              `🔄 Laster 3D ${reparseProgress.percent ? `(${reparseProgress.percent}%)` : ''}`}
-            {reparseStatus === 'klar' && '✅ 3D klar'}
-            {reparseStatus === 'feilet' && '⚠️ 3D utilgjengelig'}
           </div>
         )}
       </div>
