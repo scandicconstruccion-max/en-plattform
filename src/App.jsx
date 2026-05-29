@@ -14054,7 +14054,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
 
       const today = new Date().toISOString().split('T')[0]
       const dueDate = new Date()
-      dueDate.setDate(dueDate.getDate() + 14)
+      const dueDays = cs?.invoice_default_due_days ?? 14
+      dueDate.setDate(dueDate.getDate() + dueDays)
 
       // Opprett faktura som Utkast — med kobling til ordren
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
@@ -14072,7 +14073,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         bank_account: cs?.bank_account || '',
         invoice_date: today,
         due_date: dueDate.toISOString().split('T')[0],
-        payment_terms: o.payment_terms || '14 dager netto',
+        payment_terms: o.payment_terms || `${dueDays} dager netto`,
         lines,
         notes: `Faktura basert på ordre ${o.order_number}`,
         status: 'Utkast',
@@ -15365,6 +15366,341 @@ function isOverdue(inv) {
   return inv.due_date && new Date(inv.due_date) < new Date() && inv.status === 'Sendt'
 }
 
+// ── FORSINKELSESRENTE ─────────────────────────────────────────────────────────
+// Statens sats fastsettes av Finanstilsynet hvert halvår (1. januar og 1. juli).
+// Satsen er Norges Banks styringsrente + minst 8 prosentpoeng.
+// Når en ny halvårssats fastsettes, legg den til i tabellen under.
+// Kilde: https://www.finanstilsynet.no/analyser-og-statistikk/forsinkelsesrente-og-standardkompensasjon/forsinkelsesrente/
+const FORSINKELSESRENTE_SATSER = {
+  '2024_H1': 12.50,
+  '2024_H2': 12.50,
+  '2025_H1': 12.50,
+  '2025_H2': 12.25,
+  '2026_H1': 12.00,
+  // Legg til '2026_H2' etter 1. juli 2026 når Finanstilsynet publiserer ny sats
+}
+
+// Standardkompensasjon (inndrivelseskostnader) — B2B-fakturaer, fastsettes
+// halvårsvis sammen med forsinkelsesrenten. Per 1. januar 2026: 460 kr.
+const STANDARDKOMPENSASJON_NOK = 460
+
+function getForsinkelsesrente(dato = new Date()) {
+  const d = dato instanceof Date ? dato : new Date(dato)
+  const year = d.getFullYear()
+  const halvaar = d.getMonth() < 6 ? 'H1' : 'H2'
+  const noekkel = `${year}_${halvaar}`
+  // Hvis vi ikke har sats for denne perioden, fall tilbake til siste kjente
+  if (FORSINKELSESRENTE_SATSER[noekkel] != null) {
+    return { sats: FORSINKELSESRENTE_SATSER[noekkel], periode: noekkel, kjent: true }
+  }
+  // Fallback: finn nyeste kjente sats
+  const kjenteNokler = Object.keys(FORSINKELSESRENTE_SATSER).sort().reverse()
+  const sisteKjente = kjenteNokler[0]
+  return { sats: FORSINKELSESRENTE_SATSER[sisteKjente], periode: sisteKjente, kjent: false }
+}
+
+// ── FAKTURA-INNSTILLINGER MODAL ───────────────────────────────────────────────
+// Konfigurerer bedriftens faktura-defaults: kontonummer, forfallstid,
+// purregebyr, intervall, KID-toggle. Lagres i company_settings.
+function FakturaInnstillingerModal({ onClose, onSaved }) {
+  const appAlert = useAppAlert()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [settingsId, setSettingsId] = useState(null)
+  const [bankAccount, setBankAccount] = useState('')
+  const [defaultDueDays, setDefaultDueDays] = useState(14)
+  const [reminderIntervalDays, setReminderIntervalDays] = useState(14)
+  const [reminderFees, setReminderFees] = useState([
+    { purring: 1, fee: 38 },
+    { purring: 2, fee: 38 },
+  ])
+  const [kidEnabled, setKidEnabled] = useState(false)
+
+  const isMobI = typeof window !== 'undefined' && window.innerWidth < 768
+  const renteInfo = getForsinkelsesrente()
+
+  // Hent eksisterende innstillinger
+  React.useEffect(() => {
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('company_settings').select('*').limit(1).single()
+        if (error) throw error
+        if (data) {
+          setSettingsId(data.id)
+          setBankAccount(data.bank_account || '')
+          setDefaultDueDays(data.invoice_default_due_days ?? 14)
+          setReminderIntervalDays(data.invoice_reminder_interval_days ?? 14)
+          const fees = data.invoice_reminder_fees
+          if (Array.isArray(fees) && fees.length > 0) {
+            setReminderFees(fees)
+          }
+          setKidEnabled(!!data.invoice_kid_enabled)
+        }
+      } catch (e) {
+        console.error('[innstillinger] kunne ikke laste:', e)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  // Valider kontonummer — norsk format: 11 siffer, kan ha punktum/mellomrom
+  const validateKontonummer = (verdi) => {
+    const sifre = (verdi || '').replace(/[^\d]/g, '')
+    if (!sifre) return null  // tom = OK (kan lagres uten)
+    if (sifre.length !== 11) return 'Kontonummer må være 11 siffer'
+    return null
+  }
+
+  // Formater kontonummer for visning: xxxx.xx.xxxxx
+  const formatKontonummer = (verdi) => {
+    const sifre = (verdi || '').replace(/[^\d]/g, '').slice(0, 11)
+    if (sifre.length <= 4) return sifre
+    if (sifre.length <= 6) return `${sifre.slice(0, 4)}.${sifre.slice(4)}`
+    return `${sifre.slice(0, 4)}.${sifre.slice(4, 6)}.${sifre.slice(6)}`
+  }
+
+  const handleAddReminder = () => {
+    if (reminderFees.length >= 4) return
+    setReminderFees([...reminderFees, { purring: reminderFees.length + 1, fee: 38 }])
+  }
+
+  const handleRemoveReminder = (idx) => {
+    if (reminderFees.length <= 1) return
+    const updated = reminderFees.filter((_, i) => i !== idx).map((r, i) => ({ ...r, purring: i + 1 }))
+    setReminderFees(updated)
+  }
+
+  const handleFeeChange = (idx, nyVerdi) => {
+    const updated = [...reminderFees]
+    updated[idx] = { ...updated[idx], fee: parseInt(nyVerdi) || 0 }
+    setReminderFees(updated)
+  }
+
+  const handleSave = async () => {
+    const kontoFeil = validateKontonummer(bankAccount)
+    if (kontoFeil) {
+      await appAlert({ message: 'Ugyldig kontonummer', subMessage: kontoFeil, kind: 'error' })
+      return
+    }
+    if (defaultDueDays < 1 || defaultDueDays > 90) {
+      await appAlert({ message: 'Ugyldig forfallstid', subMessage: 'Må være mellom 1 og 90 dager.', kind: 'error' })
+      return
+    }
+    if (reminderIntervalDays < 1 || reminderIntervalDays > 60) {
+      await appAlert({ message: 'Ugyldig purreintervall', subMessage: 'Må være mellom 1 og 60 dager.', kind: 'error' })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const updates = {
+        bank_account: bankAccount.replace(/[^\d]/g, '') || null,
+        invoice_default_due_days: defaultDueDays,
+        invoice_reminder_interval_days: reminderIntervalDays,
+        invoice_reminder_fees: reminderFees,
+        invoice_kid_enabled: kidEnabled,
+      }
+      const { error } = await supabase.from('company_settings').update(updates).eq('id', settingsId)
+      if (error) throw error
+      await appAlert({ message: 'Innstillinger lagret', kind: 'success' })
+      if (onSaved) onSaved()
+      onClose()
+    } catch (e) {
+      console.error('[innstillinger] lagring feilet:', e)
+      await appAlert({ message: 'Kunne ikke lagre', subMessage: e.message || 'Ukjent feil', kind: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+        <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} />
+        <div style={{ position:'relative', background:'white', borderRadius:'16px', padding:'40px', textAlign:'center' }}>
+          <div style={{ width:'32px', height:'32px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/>
+          <p style={{ color:'#64748b', fontSize:'14px', margin:0 }}>Laster innstillinger...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Seksjons-styling
+  const seksjon = { marginBottom: '20px' }
+  const seksjonTittel = { fontSize: '13px', fontWeight: '700', color: '#0f172a', marginBottom: '10px', letterSpacing: '-0.01em' }
+  const seksjonInfo = { fontSize: '11px', color: '#64748b', marginTop: '6px', lineHeight: 1.5 }
+  const inputLabel = { fontSize: '12px', fontWeight: '600', color: '#475569', marginBottom: '4px', display: 'block' }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'560px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        {/* Header */}
+        <div style={{ position:'sticky', top:0, background:'white', borderBottom:'1px solid #f1f5f9', padding: isMobI ? '16px' : '20px 24px', display:'flex', alignItems:'center', justifyContent:'space-between', borderRadius:'20px 20px 0 0' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'22px' }}>⚙️</span>
+            <h2 style={{ margin:0, fontSize: isMobI ? '16px' : '18px', fontWeight:'800', color:'#0f172a' }}>Fakturainnstillinger</h2>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px', lineHeight:1 }}>×</button>
+        </div>
+
+        {/* Innhold */}
+        <div style={{ padding: isMobI ? '16px' : '24px' }}>
+
+          {/* Betalingsdetaljer */}
+          <div style={seksjon}>
+            <div style={seksjonTittel}>💳 Betalingsdetaljer</div>
+            <div style={{ marginBottom: '12px' }}>
+              <label style={inputLabel}>Bedriftens kontonummer</label>
+              <input
+                type="text"
+                value={formatKontonummer(bankAccount)}
+                onChange={(e) => setBankAccount(e.target.value)}
+                placeholder="xxxx.xx.xxxxx"
+                style={iInp}
+              />
+              <div style={seksjonInfo}>Kundene betaler til dette kontonummeret. Vises på alle utgående fakturaer.</div>
+            </div>
+            <div>
+              <label style={inputLabel}>Standard forfallstid</label>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="90"
+                  value={defaultDueDays}
+                  onChange={(e) => setDefaultDueDays(parseInt(e.target.value) || 14)}
+                  style={{ ...iInp, width: '100px' }}
+                />
+                <span style={{ fontSize:'13px', color:'#475569' }}>dager etter fakturadato</span>
+              </div>
+            </div>
+          </div>
+
+          {/* KID-nummer */}
+          <div style={seksjon}>
+            <div style={seksjonTittel}>🔢 KID-nummer</div>
+            <label style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'12px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #e2e8f0', cursor:'pointer' }}>
+              <input
+                type="checkbox"
+                checked={kidEnabled}
+                onChange={(e) => setKidEnabled(e.target.checked)}
+                style={{ marginTop:'2px', width:'16px', height:'16px', cursor:'pointer' }}
+              />
+              <div>
+                <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>
+                  Aktiver KID-nummer på fakturaer
+                </div>
+                <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.5 }}>
+                  KID-nummer genereres automatisk for hver faktura og vises på faktura-PDF og i e-post.
+                  Krever OCR-/KID-avtale med banken for å motta innbetalinger korrekt.
+                </div>
+              </div>
+            </label>
+            {kidEnabled && (
+              <div style={{ marginTop:'10px', padding:'10px 12px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+                ℹ️ Husk å avtale OCR/KID med din bank. Innbetalinger som mangler korrekt KID vil ikke kobles automatisk til faktura.
+              </div>
+            )}
+          </div>
+
+          {/* Purringer */}
+          <div style={seksjon}>
+            <div style={seksjonTittel}>⏰ Purringer</div>
+            <div style={{ marginBottom:'12px' }}>
+              <label style={inputLabel}>Dager mellom hver purring</label>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                <input
+                  type="number"
+                  min="1"
+                  max="60"
+                  value={reminderIntervalDays}
+                  onChange={(e) => setReminderIntervalDays(parseInt(e.target.value) || 14)}
+                  style={{ ...iInp, width: '100px' }}
+                />
+                <span style={{ fontSize:'13px', color:'#475569' }}>dager</span>
+              </div>
+            </div>
+            <div>
+              <label style={inputLabel}>Purregebyr per purring</label>
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                {reminderFees.map((r, idx) => (
+                  <div key={idx} style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span style={{ fontSize:'13px', color:'#475569', width:'80px', flexShrink:0 }}>
+                      {r.purring}. purring
+                    </span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={r.fee}
+                      onChange={(e) => handleFeeChange(idx, e.target.value)}
+                      style={{ ...iInp, width: '90px' }}
+                    />
+                    <span style={{ fontSize:'13px', color:'#475569' }}>kr</span>
+                    {reminderFees.length > 1 && (
+                      <button
+                        onClick={() => handleRemoveReminder(idx)}
+                        style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px', padding:'2px 6px' }}
+                        title="Fjern denne purringen"
+                      >×</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {reminderFees.length < 4 && (
+                <button
+                  onClick={handleAddReminder}
+                  style={{ marginTop:'8px', background:'#f1f5f9', border:'1px dashed #cbd5e1', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', color:'#475569', cursor:'pointer' }}
+                >
+                  + Legg til purring
+                </button>
+              )}
+              <div style={seksjonInfo}>
+                ℹ️ Maks purregebyr mot forbrukerkunder er <strong>38 kr per purring</strong> i 2026 (halvert fra 70 kr i 2025).
+                For næringskunder (B2B) kan du i tillegg kreve standardkompensasjon på <strong>460 kr</strong>.
+              </div>
+            </div>
+          </div>
+
+          {/* Forsinkelsesrente (informativ) */}
+          <div style={seksjon}>
+            <div style={seksjonTittel}>📈 Forsinkelsesrente</div>
+            <div style={{ padding:'12px 14px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px' }}>
+              <div style={{ display:'flex', alignItems:'baseline', gap:'10px', marginBottom:'4px' }}>
+                <span style={{ fontSize:'22px', fontWeight:'800', color:'#15803d' }}>
+                  {renteInfo.sats.toLocaleString('nb-NO', { minimumFractionDigits: 2 })} %
+                </span>
+                <span style={{ fontSize:'11px', color:'#15803d', fontWeight:'600' }}>p.a.</span>
+              </div>
+              <div style={{ fontSize:'11px', color:'#166534', lineHeight:1.5 }}>
+                Statens sats for {renteInfo.periode.replace('_', ' ').replace('H1', '1. halvår').replace('H2', '2. halvår')}, fastsatt av Finanstilsynet.
+                {!renteInfo.kjent && ' ⚠️ Satsen er ikke oppdatert for denne perioden — sjekk Finanstilsynet for gjeldende sats.'}
+                {' '}Satsen oppdateres halvårsvis (1. januar og 1. juli).
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        {/* Footer med knapper */}
+        <div style={{ position:'sticky', bottom:0, background:'white', borderTop:'1px solid #f1f5f9', padding: isMobI ? '12px 16px' : '16px 24px', display:'flex', gap:'8px', justifyContent:'flex-end', borderRadius:'0 0 20px 20px' }}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'600', color:'#475569', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}
+          >Avbryt</button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'700', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}
+          >{saving ? 'Lagrer...' : 'Lagre innstillinger'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function FakturaPage() {
   const { user } = useAuth()
@@ -15445,6 +15781,8 @@ function FakturaPage() {
 
   // ── MVA-rapport state ──
   const [showMvaReport, setShowMvaReport] = useState(false)
+  // Innstillinger-modal
+  const [showInnstillinger, setShowInnstillinger] = useState(false)
   const [mvaPeriod, setMvaPeriod] = useState(() => {
     const now = new Date()
     const q = Math.floor(now.getMonth() / 2) // Termin (2-mnd)
@@ -15468,6 +15806,7 @@ function FakturaPage() {
             {!isMobF && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Fakturering, oversikt og utestående beløp</p>}
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexShrink:0 }}>
+            <button onClick={() => setShowInnstillinger(true)} title="Fakturainnstillinger" style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobF ? '9px 10px' : '11px 14px', fontSize: isMobF ? '11px' : '14px', fontWeight:'600', cursor:'pointer', color:'#374151', whiteSpace:'nowrap' }}>{isMobF ? '⚙️' : '⚙️ Innstillinger'}</button>
             <button onClick={() => setShowMvaReport(!showMvaReport)} style={{ background: showMvaReport ? '#7c3aed' : 'white', border: showMvaReport ? '1px solid #7c3aed' : '1px solid #e2e8f0', borderRadius:'10px', padding: isMobF ? '9px 10px' : '11px 18px', fontSize: isMobF ? '11px' : '14px', fontWeight:'600', cursor:'pointer', color: showMvaReport ? 'white' : '#374151', whiteSpace:'nowrap' }}>{showMvaReport ? (isMobF ? '📊 Lukk MVA' : '📊 Lukk MVA-rapport') : (isMobF ? '📊 MVA' : '📊 MVA-rapport')}</button>
             <div style={{ position:'relative' }}>
               <button onClick={()=>setShowNew(showNew?null:'menu')} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobF ? '9px 12px' : '11px 20px', fontSize: isMobF ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobF ? '+ Faktura ▾' : '+ Ny faktura ▾'}</button>
@@ -15579,6 +15918,14 @@ function FakturaPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Fakturainnstillinger-modal */}
+        {showInnstillinger && (
+          <FakturaInnstillingerModal
+            onClose={() => setShowInnstillinger(false)}
+            onSaved={() => { /* Innstillinger brukes ved opprettelse av neste faktura */ }}
+          />
         )}
 
         {/* MVA-rapport */}
