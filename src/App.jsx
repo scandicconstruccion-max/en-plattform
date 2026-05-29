@@ -35627,7 +35627,7 @@ const MODULE_CATALOG = [
   {
     id: 'bim_kalkyle',
     name: 'BIM-Kalkyle',
-    desc: 'Tilleggsmodul for proffe aktører — last opp IFC, DWG eller PDF-tegninger og få automatisk mengdeberegning, materialmatching og kalkyle. Krever Kalkulasjon basis. Kommer snart — kontakt oss for tidlig tilgang.',
+    desc: 'Tilleggsmodul for proffe aktører — last opp IFC-fil fra ArchiCAD, Revit eller annet BIM-verktøy og få automatisk mengdeuttak, 3D-visning, lagsett-matching mot ditt bibliotek og ferdig kalkyle. Krever Kalkulasjon basis.',
     emoji: '📐',
     price: 1899,
     perCompany: true,
@@ -38114,20 +38114,20 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
 
         <div style={{ padding:'24px' }}>
           <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
-            BIM-Kalkyle er for proffe aktører som kalkulerer fra arkitekt-tegninger. Last opp IFC, DWG eller PDF og få automatisk mengdeberegning, materialmatching mot prisbok og ferdig kalkyle.
+            BIM-Kalkyle er for proffe aktører som kalkulerer fra BIM-modeller. Last opp en IFC-fil fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy, og få automatisk mengdeuttak, 3D-visning, materialmatching mot ditt bibliotek og ferdig kalkyle.
           </p>
 
           <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', marginBottom:'16px' }}>
             <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.5px', marginBottom:'8px' }}>HVA DU FÅR</div>
             {[
-              { icon:'📂', text:'IFC-import fra ArchiCAD, Revit og andre BIM-verktøy' },
-              { icon:'📐', text:'DWG-import for 2D-tegninger og geometri' },
-              { icon:'📄', text:'PDF-tegninger med AI-analyse' },
-              { icon:'📏', text:'Automatisk mengdeberegning fra 3D-geometri' },
-              { icon:'🔗', text:'Materialmatching mot prisbok via NOBB' },
-              { icon:'✅', text:'Bekreftelsesflyt med grønn/gul markering' },
-              { icon:'🎲', text:'3D-verifisering med klikkbare bygningsdeler' },
-              { icon:'🔍', text:'Automatisk kompletthetssjekk' },
+              { icon:'📂', text:'IFC-import fra ArchiCAD, Revit, Allplan, Tekla og andre BIM-verktøy' },
+              { icon:'📏', text:'Automatisk mengdeuttak fra 3D-geometri (vegger, tak, gulv, vinduer, dører, m.m.)' },
+              { icon:'🧊', text:'Interaktiv 3D-visning — roter, klikk og inspeksjoner bygningsdeler' },
+              { icon:'🔗', text:'Lagsett-matching mot ditt bibliotek av konstruksjoner' },
+              { icon:'🔬', text:'IFC-supplering for brann, lyd, U-verdi og bæring' },
+              { icon:'📊', text:'Diagnose-rapport på kvaliteten av geometri-uttrekk' },
+              { icon:'💾', text:'Auto-lagring av arbeid — fortsett der du slapp' },
+              { icon:'✅', text:'Ferdig kalkyle med ekte mengder, klar for tilbud' },
             ].map((f, i) => (
               <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'4px 0', fontSize:'13px', color:'#0f172a' }}>
                 <span style={{ fontSize:'15px', flexShrink:0 }}>{f.icon}</span>
@@ -48542,11 +48542,8 @@ function BimGenererKalkyleSeksjon({ mengder, isMob, onGenerer, erRedigering = fa
 }
 
 // ─── BIM-IMPORT FULL SIDEFLYT ────────────────────────────────────────────────
-// Erstatter BimImportPlaceholderModal når brukeren har bim_kalkyle-modulen.
-// Vises som full skjermflyt fordi parsing og bekreftelse er for kompleks for modal.
-//
-// Patch 9 implementerer: Last opp → Analyser → vise statistikk
-// Patch 10+ legger på: Mengdeekstraksjon → Bibliotek-matching → Generering
+// Full skjermflyt for IFC-import (parsing, klassifisering, lagsett-matching,
+// 3D-visning, IFC-supplering og kalkyle-generering).
 
 // ─── PATCH 15.A: GEOMETRI-DIAGNOSE-POPUP ─────────────────────────────────────
 // Viser en strukturert rapport om hvor godt geometri-ekstraksjonen gikk.
@@ -50306,7 +50303,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   const validerFil = (f) => {
     if (!f) return 'Ingen fil valgt'
     const navn = f.name.toLowerCase()
-    if (!navn.endsWith('.ifc')) return 'Filen må være .ifc-format. Andre formater (DWG, PDF) kommer senere.'
+    if (!navn.endsWith('.ifc')) return 'Filen må være i .ifc-format. Eksporter en IFC-fil fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy.'
     if (f.size > IFC_SIZE_HARD_LIMIT) {
       return `Filen er for stor (${formatFileSize(f.size)}). Maks ${formatFileSize(IFC_SIZE_HARD_LIMIT)}. Be arkitekten om å eksportere kun synlig etasje, eller kontakt support.`
     }
@@ -51810,58 +51807,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   )
 }
 
-// ─── BIM-IMPORT PLACEHOLDER MODAL ────────────────────────────────────────────
-// Beholdes for nedoverkompatibilitet, men brukes ikke lenger fra Patch 9 og utover.
-// BimImportPage erstatter denne for brukere med bim_kalkyle-modulen.
-
-function BimImportPlaceholderModal({ onClose }) {
-  return (
-    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
-        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'24px', color:'white', position:'relative' }}>
-          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px' }}>×</button>
-          <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
-          <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
-          <p style={{ margin:0, fontSize:'14px', opacity:0.95 }}>IFC, DWG og PDF-import</p>
-        </div>
-
-        <div style={{ padding:'24px' }}>
-          <div style={{ background:'#fef3c7', border:'1px dashed #fcd34d', borderRadius:'12px', padding:'24px', textAlign:'center', color:'#92400e', marginBottom:'18px' }}>
-            <div style={{ fontSize:'40px', marginBottom:'8px' }}>🚧</div>
-            <strong style={{ fontSize:'15px' }}>Under utvikling</strong>
-            <p style={{ margin:'8px 0 0', fontSize:'13px', lineHeight:1.5 }}>
-              Vi jobber med IFC, DWG og PDF-import. Funksjonen aktiveres så snart første versjon er ferdig.
-            </p>
-          </div>
-
-          <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', marginBottom:'18px' }}>
-            <div style={{ fontSize:'12px', fontWeight:'700', color:'#475569', marginBottom:'8px' }}>HVA SOM KOMMER</div>
-            {[
-              { icon:'📂', text:'IFC-import fra ArchiCAD, Revit og andre BIM-verktøy' },
-              { icon:'📐', text:'DWG-import for 2D-tegninger og geometri' },
-              { icon:'📄', text:'PDF-tegninger med AI-analyse' },
-              { icon:'📏', text:'Automatisk mengdeberegning fra 3D-geometri' },
-              { icon:'🔗', text:'Materialmatching mot prisbok via NOBB' },
-              { icon:'✅', text:'Bekreftelsesflyt med grønn/gul markering' },
-            ].map((f, i) => (
-              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'4px 0', fontSize:'12px', color:'#0f172a' }}>
-                <span style={{ fontSize:'14px', flexShrink:0 }}>{f.icon}</span>
-                <span style={{ lineHeight:1.4 }}>{f.text}</span>
-              </div>
-            ))}
-          </div>
-
-          <button onClick={onClose}
-            style={{ width:'100%', padding:'12px', background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-            Lukk
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ─── BEREGNINGSMOTOR ─────────────────────────────────────────────────────────
 // Basert på Proresult-logikk: grunntid × justering = faktisk tid, timekostnad inkl. sosiale/faste
 
@@ -52507,7 +52452,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
             )}
             <button onClick={handleBimKalkyleClick}
               style={{ background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '9px 12px' : '11px 18px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', boxShadow:'0 4px 12px rgba(139,92,246,0.25)', display:'flex', alignItems:'center', gap:'6px' }}
-              title="Last opp IFC, DWG eller PDF-tegning">
+              title="Last opp IFC-fil fra BIM-verktøy">
               📐 {isMobK ? 'BIM' : 'BIM-Kalkyle'}
             </button>
             <button onClick={() => setShowOpprettValg(true)}
