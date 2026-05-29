@@ -500,9 +500,19 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
         fontSize: isMobile ? '11px' : '13px', marginBottom: isMobile ? '0' : '3px' }}>{m.name}</div>
       {!isMobile && <div style={{ color: '#94a3b8', fontSize: '11px' }}>{m.desc}</div>}
       {isLocked && (
-        <div style={{ fontSize: isMobile ? '9px' : '10px', color: '#2563eb',
-          fontStyle: 'italic', marginTop: '4px' }}>
-          bestill her
+        <div style={{
+          display: 'inline-block',
+          background: '#059669',
+          color: 'white',
+          fontSize: isMobile ? '10px' : '11px',
+          fontWeight: '700',
+          padding: isMobile ? '3px 9px' : '4px 11px',
+          borderRadius: '999px',
+          marginTop: '8px',
+          letterSpacing: '0.02em',
+          boxShadow: '0 1px 3px rgba(5, 150, 105, 0.25)',
+        }}>
+          Bestill her
         </div>
       )}
     </button>
