@@ -14058,6 +14058,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       dueDate.setDate(dueDate.getDate() + dueDays)
 
       // Opprett faktura som Utkast — med kobling til ordren
+      // KID genereres automatisk hvis tillegget er aktivt på company_settings
+      const autoKid = kidErAktiv(cs) ? genererKid(newInvoiceNumber) : null
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: o.title || `Faktura for ${o.order_number}`,
         invoice_number: newInvoiceNumber,
@@ -14071,6 +14073,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         our_address: cs?.address || '',
         our_orgnr: cs?.orgnr || '',
         bank_account: cs?.bank_account || '',
+        kid: autoKid || null,
         invoice_date: today,
         due_date: dueDate.toISOString().split('T')[0],
         payment_terms: o.payment_terms || `${dueDays} dager netto`,
@@ -15430,11 +15433,104 @@ const BETALINGSMETODER = {
   other: { label: 'Annet', emoji: '💵' },
 }
 
+// ── KID-NUMMER ────────────────────────────────────────────────────────────────
+// Norsk standard for KID-nummer (kundeidentifikasjon) bruker Modulus-10
+// algoritmen. Sjekksifferet beregnes ved å multiplisere hvert siffer med
+// vekt 2 og 1 vekselvis fra høyre, summere alle sifrene i produktene, og
+// finne det siffer som gjør at totalsum + sjekksiffer er delelig på 10.
+//
+// Eksempel: grunnlag '20260001' (fra fakturanummer F-2026-0001)
+//   Vekter:    2 1 2 1 2 1 2 1 (fra høyre)
+//   Sifre:     2 0 2 6 0 0 0 1
+//   Produkt:   4 0 4 6 0 0 0 1 (siffer-sum av hvert produkt)
+//   Sum:       15
+//   Sjekksiffer: 10 - (15 mod 10) = 5 → KID: 202600015
+
+function mod10Sjekksiffer(sifre) {
+  if (!sifre || typeof sifre !== 'string') return null
+  let sum = 0
+  for (let i = 0; i < sifre.length; i++) {
+    const siffer = parseInt(sifre[sifre.length - 1 - i], 10)
+    if (isNaN(siffer)) return null
+    const vekt = i % 2 === 0 ? 2 : 1
+    const produkt = siffer * vekt
+    // Sifferløs sum av produktet: 14 → 1+4 = 5
+    sum += produkt > 9 ? Math.floor(produkt / 10) + (produkt % 10) : produkt
+  }
+  const sjekksiffer = (10 - (sum % 10)) % 10
+  return sjekksiffer.toString()
+}
+
+function genererKid(invoiceNumber) {
+  // Bygg grunnlag fra fakturanummer ved å fjerne alle ikke-tall-tegn
+  // F-2026-0001 → 20260001
+  if (!invoiceNumber) return null
+  const grunnlag = String(invoiceNumber).replace(/[^\d]/g, '')
+  if (!grunnlag || grunnlag.length < 4) return null
+  const sjekksiffer = mod10Sjekksiffer(grunnlag)
+  if (sjekksiffer === null) return null
+  return grunnlag + sjekksiffer
+}
+
+// Sjekk om KID-abonnement er aktivt:
+// - invoice_kid_enabled = true OG
+// - (ingen avbestilling pågår ELLER vi er fortsatt i samme måned som avbestilling)
+function kidErAktiv(companySettings) {
+  if (!companySettings) return false
+  if (!companySettings.invoice_kid_enabled) return false
+  const cancelledAt = companySettings.invoice_kid_subscription_cancelled_at
+  if (!cancelledAt) return true
+  // Avbestilt — fortsatt aktiv ut samme måned
+  const cancelDate = new Date(cancelledAt)
+  const now = new Date()
+  return cancelDate.getFullYear() === now.getFullYear() && cancelDate.getMonth() === now.getMonth()
+}
+
+// Returnerer dato (Date-objekt) for når abonnementet faktisk slutter
+function kidAvsluttningsDato(cancelledAt) {
+  if (!cancelledAt) return null
+  const d = new Date(cancelledAt)
+  // Siste dag i samme måned
+  return new Date(d.getFullYear(), d.getMonth() + 1, 0)
+}
+
+// Pris for KID-tillegget (eks mva, per måned)
+const KID_PRIS_PER_MND = 59
+
+// Beriker en faktura-payload med KID og bankkonto fra company_settings.
+// Brukes ved opprettelse av nye fakturaer (ikke ved redigering eller hvis allerede satt).
+// Returnerer en NY payload — muterer ikke originalen.
+async function berikFakturaMedInnstillinger(payload) {
+  if (!payload) return payload
+  // Hvis fakturaen allerede har KID og bankkonto, ikke gjør noe
+  const trengerKid = !payload.kid
+  const trengerKonto = !payload.bank_account
+  if (!trengerKid && !trengerKonto) return payload
+  try {
+    const { data: cs } = await supabase.from('company_settings').select('*').limit(1).single()
+    if (!cs) return payload
+    const oppdateringer = {}
+    if (trengerKonto && cs.bank_account) {
+      oppdateringer.bank_account = cs.bank_account
+    }
+    if (trengerKid && kidErAktiv(cs) && payload.invoice_number) {
+      const kid = genererKid(payload.invoice_number)
+      if (kid) oppdateringer.kid = kid
+    }
+    return Object.keys(oppdateringer).length > 0 ? { ...payload, ...oppdateringer } : payload
+  } catch (e) {
+    console.warn('[faktura] kunne ikke berike med innstillinger:', e)
+    return payload
+  }
+}
+
 // ── FAKTURA-INNSTILLINGER MODAL ───────────────────────────────────────────────
 // Konfigurerer bedriftens faktura-defaults: kontonummer, forfallstid,
 // purregebyr, intervall, KID-toggle. Lagres i company_settings.
 function FakturaInnstillingerModal({ onClose, onSaved }) {
   const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [settingsId, setSettingsId] = useState(null)
@@ -15446,20 +15542,34 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
     { purring: 2, fee: 38 },
   ])
   const [kidEnabled, setKidEnabled] = useState(false)
+  const [kidSubStartedAt, setKidSubStartedAt] = useState(null)
+  const [kidSubCancelledAt, setKidSubCancelledAt] = useState(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  // Bekreft-modal-state for KID-aktivering
+  const [showKidBekreft, setShowKidBekreft] = useState(false)
+  const [showKidAvbestill, setShowKidAvbestill] = useState(false)
 
   const isMobI = typeof window !== 'undefined' && window.innerWidth < 768
   const renteInfo = getForsinkelsesrente()
 
-  // Hent eksisterende innstillinger
+  // Avledede verdier
+  const kidEksempel = genererKid('F-2026-0001')  // For visning i UI
+  const kidErAktivStatus = kidErAktiv({
+    invoice_kid_enabled: kidEnabled,
+    invoice_kid_subscription_cancelled_at: kidSubCancelledAt,
+  })
+  const harAvbestilt = kidEnabled && !!kidSubCancelledAt
+  const avsluttDato = kidAvsluttningsDato(kidSubCancelledAt)
+
+  // Hent eksisterende innstillinger + sjekk om bruker er admin
   React.useEffect(() => {
     (async () => {
       try {
+        // 1) Hent company_settings
         const { data, error } = await supabase.from('company_settings').select('*').limit(1).single()
         if (error) throw error
         if (data) {
           setSettingsId(data.id)
-          // Normaliser kontonummer ved load: fjern punktum/mellomrom, beholde kun siffer.
-          // Beskytter mot eventuelle eldre rader som ble lagret med formatering.
           setBankAccount((data.bank_account || '').replace(/[^\d]/g, '').slice(0, 11))
           setDefaultDueDays(data.invoice_default_due_days ?? 14)
           setReminderIntervalDays(data.invoice_reminder_interval_days ?? 14)
@@ -15468,6 +15578,22 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
             setReminderFees(fees)
           }
           setKidEnabled(!!data.invoice_kid_enabled)
+          setKidSubStartedAt(data.invoice_kid_subscription_started_at || null)
+          setKidSubCancelledAt(data.invoice_kid_subscription_cancelled_at || null)
+        }
+
+        // 2) Sjekk om innlogget bruker er admin (første registrerte bruker)
+        try {
+          const { data: forsteUser } = await supabase
+            .from('user_profiles')
+            .select('id')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .maybeSingle()
+          setIsAdmin(forsteUser?.id === user?.id)
+        } catch (e) {
+          console.warn('[innstillinger] kunne ikke sjekke admin:', e)
+          setIsAdmin(false)
         }
       } catch (e) {
         console.error('[innstillinger] kunne ikke laste:', e)
@@ -15476,6 +15602,49 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
       }
     })()
   }, [])
+
+  // KID-aktivering: vis bekreftelse-modal først
+  const handleKidToggle = (e) => {
+    const onskerAktivere = e.target.checked
+    if (onskerAktivere && !kidEnabled) {
+      // Aktivering — vis bekreftelse
+      if (!isAdmin) {
+        appAlert({
+          message: 'Krever administrator-tilgang',
+          subMessage: 'Kun administrator (første registrerte bruker i firmaet) kan aktivere KID-tillegget.',
+          kind: 'warn',
+        })
+        return
+      }
+      setShowKidBekreft(true)
+    } else if (!onskerAktivere && kidEnabled && !kidSubCancelledAt) {
+      // Avbestilling — vis avbestill-modal
+      if (!isAdmin) {
+        appAlert({
+          message: 'Krever administrator-tilgang',
+          subMessage: 'Kun administrator kan avbestille KID-tillegget.',
+          kind: 'warn',
+        })
+        return
+      }
+      setShowKidAvbestill(true)
+    } else if (!onskerAktivere && kidSubCancelledAt) {
+      // Allerede avbestilt — la brukeren angre
+      setKidSubCancelledAt(null)
+    }
+  }
+
+  const bekreftKidBestilling = async () => {
+    setKidEnabled(true)
+    setKidSubStartedAt(new Date().toISOString())
+    setKidSubCancelledAt(null)
+    setShowKidBekreft(false)
+  }
+
+  const bekreftKidAvbestilling = async () => {
+    setKidSubCancelledAt(new Date().toISOString())
+    setShowKidAvbestill(false)
+  }
 
   // Valider kontonummer — norsk format: 11 siffer (state inneholder alltid kun siffer
   // pga normalisering i onChange, så vi sjekker bare lengden)
@@ -15536,6 +15705,8 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
         invoice_reminder_interval_days: reminderIntervalDays,
         invoice_reminder_fees: reminderFees,
         invoice_kid_enabled: kidEnabled,
+        invoice_kid_subscription_started_at: kidSubStartedAt,
+        invoice_kid_subscription_cancelled_at: kidSubCancelledAt,
       }
       const { error } = await supabase.from('company_settings').update(updates).eq('id', settingsId)
       if (error) throw error
@@ -15619,29 +15790,107 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
             </div>
           </div>
 
-          {/* KID-nummer */}
+          {/* KID-nummer — tilleggstjeneste, krever admin */}
           <div style={seksjon}>
-            <div style={seksjonTittel}>🔢 KID-nummer</div>
-            <label style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'12px', background:'#f8fafc', borderRadius:'10px', border:'1px solid #e2e8f0', cursor:'pointer' }}>
-              <input
-                type="checkbox"
-                checked={kidEnabled}
-                onChange={(e) => setKidEnabled(e.target.checked)}
-                style={{ marginTop:'2px', width:'16px', height:'16px', cursor:'pointer' }}
-              />
-              <div>
-                <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'2px' }}>
-                  Aktiver KID-nummer på fakturaer
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px', flexWrap:'wrap', gap:'6px' }}>
+              <div style={seksjonTittel}>🔢 KID-nummer på fakturaer</div>
+              <span style={{ display:'inline-flex', alignItems:'center', gap:'4px', background:'#fef3c7', color:'#92400e', fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>
+                ⭐ TILLEGGSTJENESTE
+              </span>
+            </div>
+
+            {!kidEnabled ? (
+              /* IKKE AKTIV — vis salgsboks */
+              <div style={{ padding:'14px 16px', background:'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', border:'1px solid #bfdbfe', borderRadius:'12px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'12px', marginBottom:'10px', flexWrap:'wrap' }}>
+                  <div style={{ flex:1, minWidth:'200px' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e3a8a', marginBottom:'4px' }}>Aktiver KID-nummer</div>
+                    <div style={{ fontSize:'11px', color:'#1e40af', lineHeight:1.5 }}>
+                      KID-nummer genereres automatisk på alle nye fakturaer (Modulus-10 norsk standard). Vises på faktura-PDF og i e-post. Innbetalinger med korrekt KID kan kobles automatisk til riktig faktura via bankens OCR-tjeneste.
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:'22px', fontWeight:'800', color:'#1e3a8a', lineHeight:1 }}>{KID_PRIS_PER_MND} kr</div>
+                    <div style={{ fontSize:'10px', color:'#1e40af', fontWeight:'600' }}>/mnd eks mva</div>
+                  </div>
                 </div>
-                <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.5 }}>
-                  KID-nummer genereres automatisk for hver faktura og vises på faktura-PDF og i e-post.
-                  Krever OCR-/KID-avtale med banken for å motta innbetalinger korrekt.
+                <div style={{ background:'white', borderRadius:'8px', padding:'8px 10px', marginBottom:'10px', fontSize:'11px', color:'#475569', fontFamily:'monospace' }}>
+                  Eksempel: F-2026-0001 → KID <strong style={{ color:'#1e3a8a' }}>{kidEksempel || '—'}</strong>
                 </div>
+                <label
+                  style={{
+                    display:'flex',
+                    alignItems:'center',
+                    gap:'10px',
+                    padding:'10px 12px',
+                    background: isAdmin ? 'white' : '#f1f5f9',
+                    borderRadius:'8px',
+                    border:`1px solid ${isAdmin ? '#bfdbfe' : '#cbd5e1'}`,
+                    cursor: isAdmin ? 'pointer' : 'not-allowed',
+                    opacity: isAdmin ? 1 : 0.7,
+                  }}
+                  title={isAdmin ? 'Aktiver KID-tillegget' : 'Krever administrator-tilgang'}
+                >
+                  <input
+                    type="checkbox"
+                    checked={false}
+                    onChange={handleKidToggle}
+                    disabled={!isAdmin}
+                    style={{ width:'16px', height:'16px', cursor: isAdmin ? 'pointer' : 'not-allowed' }}
+                  />
+                  <span style={{ fontSize:'12px', fontWeight:'600', color: isAdmin ? '#0f172a' : '#64748b' }}>
+                    {isAdmin ? 'Bestill KID-tillegget' : 'Krever administrator-tilgang for å bestille'}
+                  </span>
+                </label>
               </div>
-            </label>
-            {kidEnabled && (
-              <div style={{ marginTop:'10px', padding:'10px 12px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
-                ℹ️ Husk å avtale OCR/KID med din bank. Innbetalinger som mangler korrekt KID vil ikke kobles automatisk til faktura.
+            ) : (
+              /* AKTIV — vis status + avbestill-knapp */
+              <div>
+                <div style={{ padding:'14px 16px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', marginBottom:'10px' }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'8px', marginBottom:'8px' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                      <span style={{ fontSize:'16px' }}>✅</span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color:'#15803d' }}>KID-tillegget er aktivt</span>
+                    </div>
+                    <span style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600' }}>{KID_PRIS_PER_MND} kr/mnd eks mva</span>
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#166534', lineHeight:1.5 }}>
+                    KID-nummer genereres automatisk på alle nye fakturaer (eks: F-2026-0001 → <strong>{kidEksempel}</strong>).
+                  </div>
+                  {kidSubStartedAt && (
+                    <div style={{ fontSize:'10px', color:'#15803d', marginTop:'6px' }}>
+                      Aktivert: {new Date(kidSubStartedAt).toLocaleDateString('nb-NO')}
+                    </div>
+                  )}
+                </div>
+
+                {harAvbestilt ? (
+                  /* Avbestilt — viser at det fortsatt gjelder ut måneden */
+                  <div style={{ padding:'10px 12px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+                    <strong>⏳ Avbestilling planlagt.</strong> Tillegget gjelder ut måneden — siste aktive dag er <strong>{avsluttDato?.toLocaleDateString('nb-NO')}</strong>. Etter dette stoppes KID-generering på nye fakturaer.
+                    {isAdmin && (
+                      <button
+                        onClick={() => setKidSubCancelledAt(null)}
+                        style={{ display:'block', marginTop:'6px', background:'white', border:'1px solid #fcd34d', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', color:'#92400e', fontWeight:'600', cursor:'pointer' }}
+                      >Angre avbestilling</button>
+                    )}
+                  </div>
+                ) : isAdmin ? (
+                  <button
+                    onClick={() => setShowKidAvbestill(true)}
+                    style={{ background:'white', border:'1px solid #fecaca', borderRadius:'8px', padding:'8px 14px', fontSize:'12px', color:'#b91c1c', fontWeight:'600', cursor:'pointer' }}
+                  >
+                    Avbestill KID-tillegget
+                  </button>
+                ) : (
+                  <div style={{ fontSize:'11px', color:'#64748b', fontStyle:'italic' }}>
+                    Kun administrator kan avbestille tillegget.
+                  </div>
+                )}
+
+                <div style={{ marginTop:'10px', padding:'10px 12px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+                  ℹ️ Husk å avtale OCR/KID med din bank. Innbetalinger som mangler korrekt KID vil ikke kobles automatisk til faktura.
+                </div>
               </div>
             )}
           </div>
@@ -15738,6 +15987,94 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
           >{saving ? 'Lagrer...' : 'Lagre innstillinger'}</button>
         </div>
       </div>
+
+      {/* KID-bekreftelse modal — vises ved aktivering */}
+      {showKidBekreft && (
+        <div style={{ position:'fixed', inset:0, zIndex:220, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)' }} onMouseDown={() => setShowKidBekreft(false)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+            {/* Header */}
+            <div style={{ background:'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)', padding:'20px 24px', color:'white' }}>
+              <div style={{ fontSize:'30px', marginBottom:'6px' }}>🔢</div>
+              <h3 style={{ margin:0, fontSize:'17px', fontWeight:'800' }}>Bestill KID-tillegget</h3>
+              <p style={{ margin:'4px 0 0', fontSize:'12px', opacity:0.95 }}>Automatisk KID-generering på fakturaer</p>
+            </div>
+            {/* Body */}
+            <div style={{ padding:'20px 24px' }}>
+              <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', marginBottom:'14px' }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'4px' }}>
+                  <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600' }}>Pris</span>
+                  <div>
+                    <span style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{KID_PRIS_PER_MND} kr</span>
+                    <span style={{ fontSize:'11px', color:'#64748b', marginLeft:'4px' }}>/mnd</span>
+                  </div>
+                </div>
+                <div style={{ fontSize:'10px', color:'#94a3b8' }}>Eks. mva — faktureres månedlig som tillegg til Faktura-modulen</div>
+              </div>
+
+              <div style={{ marginBottom:'14px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:'#475569', marginBottom:'8px', letterSpacing:'0.04em' }}>DETTE FÅR DU</div>
+                {[
+                  { i:'🔢', t:'Automatisk KID-generering på alle nye fakturaer (Modulus-10)' },
+                  { i:'📧', t:'KID vises på faktura-PDF og i e-post til kunde' },
+                  { i:'🏦', t:'Klar for OCR-/KID-avtale med din bank' },
+                  { i:'⚡', t:'Aktiveres umiddelbart — fungerer på neste faktura du sender' },
+                ].map((f, i) => (
+                  <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'8px', fontSize:'12px', color:'#334155', marginBottom:'6px', lineHeight:1.4 }}>
+                    <span style={{ flexShrink:0 }}>{f.i}</span>
+                    <span>{f.t}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ fontSize:'10px', color:'#94a3b8', lineHeight:1.5, marginBottom:'16px', padding:'8px 10px', background:'#f8fafc', borderRadius:'8px' }}>
+                Ved bestilling aksepterer du månedlig fakturering av tillegget. Du kan avbestille når som helst — tillegget gjelder da ut den måneden avbestillingen ble registrert.
+              </div>
+
+              {/* Knapper */}
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button
+                  onClick={() => setShowKidBekreft(false)}
+                  style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'600', color:'#475569', cursor:'pointer' }}
+                >Avbryt</button>
+                <button
+                  onClick={bekreftKidBestilling}
+                  style={{ background:'#2563eb', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'700', cursor:'pointer' }}
+                >Bekreft bestilling — {KID_PRIS_PER_MND} kr/mnd</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* KID-avbestilling modal */}
+      {showKidAvbestill && (
+        <div style={{ position:'fixed', inset:0, zIndex:220, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.6)' }} onMouseDown={() => setShowKidAvbestill(false)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
+            <div style={{ padding:'20px 24px' }}>
+              <div style={{ fontSize:'34px', marginBottom:'10px' }}>⏳</div>
+              <h3 style={{ margin:'0 0 8px', fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>Avbestill KID-tillegget?</h3>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#475569', lineHeight:1.5 }}>
+                Tillegget gjelder ut <strong>denne måneden</strong>. Du beholder full funksjonalitet til <strong>{kidAvsluttningsDato(new Date().toISOString())?.toLocaleDateString('nb-NO')}</strong>. Deretter stoppes KID-generering på nye fakturaer.
+              </p>
+              <div style={{ padding:'10px 12px', background:'#fef3c7', borderRadius:'8px', fontSize:'11px', color:'#92400e', lineHeight:1.5, marginBottom:'16px' }}>
+                💡 Du kan angre avbestillingen når som helst frem til siste dag i måneden.
+              </div>
+              <div style={{ display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+                <button
+                  onClick={() => setShowKidAvbestill(false)}
+                  style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'600', color:'#475569', cursor:'pointer' }}
+                >Behold tillegget</button>
+                <button
+                  onClick={bekreftKidAvbestilling}
+                  style={{ background:'#dc2626', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'700', cursor:'pointer' }}
+                >Avbestill</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -18083,6 +18420,33 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
+  // Ved opprettelse av NY faktura: auto-fyll KID + bankkonto fra company_settings
+  // hvis ikke allerede satt. KID genereres bare hvis tillegget er aktivt.
+  React.useEffect(() => {
+    if (isEdit) return  // Ikke overstyr ved redigering
+    ;(async () => {
+      try {
+        const { data: cs } = await supabase.from('company_settings').select('*').limit(1).single()
+        if (!cs) return
+        setForm(f => {
+          const oppdateringer = {}
+          // Bankkonto fra innstillinger hvis ikke satt
+          if (!f.bank_account && cs.bank_account) {
+            oppdateringer.bank_account = cs.bank_account
+          }
+          // KID-nummer genereres automatisk hvis tillegget er aktivt
+          if (!f.kid && kidErAktiv(cs)) {
+            const kid = genererKid(f.invoice_number)
+            if (kid) oppdateringer.kid = kid
+          }
+          return Object.keys(oppdateringer).length > 0 ? { ...f, ...oppdateringer } : f
+        })
+      } catch (e) {
+        console.warn('[faktura] kunne ikke laste innstillinger for auto-fyll:', e)
+      }
+    })()
+  }, [])
+
   // Auto-calc due date when payment terms change
   const setPaymentTerms = (v) => { set('payment_terms',v); set('due_date', addDays(form.invoice_date, paymentDays(v))) }
 
@@ -18247,7 +18611,7 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
           })))
       const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr = nextSequenceNumber(existingInv || [], 'F', 'invoice_number')
-      const { error } = await supabase.from('invoices').insert({
+      const beriket = await berikFakturaMedInnstillinger({
         title:`${ord.title}${mode==='partial'?` – ${partialPct}% delfaktura`:''}`,
         invoice_number: nextInvNr,
         order_id:ord.id, project_id:ord.project_id||null,
@@ -18259,6 +18623,7 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
         partial_percent:mode==='partial'?partialPct:null,
         lines, status:'Utkast', created_by:user?.id,
       })
+      const { error } = await supabase.from('invoices').insert(beriket)
       if (error) throw error
       onSaved()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
@@ -18330,7 +18695,7 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
       })))
       const { data: existingInv2 } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr2 = nextSequenceNumber(existingInv2 || [], 'F', 'invoice_number')
-      const { error } = await supabase.from('invoices').insert({
+      const beriket2 = await berikFakturaMedInnstillinger({
         title:q.title, invoice_number: nextInvNr2,
         quote_id:q.id, project_id:q.project_id||null,
         customer_name:q.customer_name, customer_email:q.customer_email,
@@ -18340,6 +18705,7 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
         due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(q.payment_terms)),
         lines, status:'Utkast', created_by:user?.id,
       })
+      const { error } = await supabase.from('invoices').insert(beriket2)
       if (error) throw error
       onSaved()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
@@ -18405,7 +18771,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
       const lines = selChanges.map(c=>({ id:Date.now()+Math.random(), description:`${c.change_number} – ${c.title}`, qty:1, unit:'stk', unitPrice:c.amount||0, mvaRate:0.25 }))
       const { data: existingInv3 } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr3 = nextSequenceNumber(existingInv3 || [], 'F', 'invoice_number')
-      const { error } = await supabase.from('invoices').insert({
+      const beriket3 = await berikFakturaMedInnstillinger({
         title:`Endringsmeldinger – ${ord.title}`, invoice_number: nextInvNr3,
         order_id:ord.id, project_id:ord.project_id||null,
         customer_name:ord.customer_name, customer_email:ord.customer_email,
@@ -18414,6 +18780,7 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
         due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(ord.payment_terms)),
         lines, status:'Utkast', created_by:user?.id,
       })
+      const { error } = await supabase.from('invoices').insert(beriket3)
       if (error) throw error
       onSaved()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
@@ -18520,7 +18887,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
       const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
       const invNr = nextSequenceNumber(existingInv || [], 'F', 'invoice_number')
 
-      const { error } = await supabase.from('invoices').insert({
+      const beriket4 = await berikFakturaMedInnstillinger({
         title: `Delfaktura – ${k.title}`,
         invoice_number: invNr,
         project_id: k.project_id || null,
@@ -18532,6 +18899,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
         status: 'Utkast',
         created_by: user?.id,
       })
+      const { error } = await supabase.from('invoices').insert(beriket4)
       if (error) throw error
       onSaved()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
