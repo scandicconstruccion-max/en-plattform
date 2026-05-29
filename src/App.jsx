@@ -51031,6 +51031,69 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               ))}
             </div>
 
+            {/* 3D-spotlight — fremhever kjernefunksjon */}
+            <div style={{
+              background:'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+              border:'1px solid #ddd6fe',
+              borderRadius:'12px',
+              padding: isMob ? '12px 14px' : '14px 16px',
+              marginBottom:'14px',
+              display:'flex',
+              alignItems:'center',
+              gap: isMob ? '12px' : '16px',
+              flexWrap:'wrap',
+            }}>
+              {/* Venstre: Ikon + tittel */}
+              <div style={{ display:'flex', alignItems:'center', gap:'10px', flexShrink:0 }}>
+                <div style={{
+                  width:'38px', height:'38px',
+                  borderRadius:'10px',
+                  background:'white',
+                  border:'1px solid #ddd6fe',
+                  display:'flex', alignItems:'center', justifyContent:'center',
+                  fontSize:'20px',
+                }}>🧊</div>
+                <div>
+                  <div style={{ fontSize:'13px', fontWeight:'800', color:'#5b21b6', letterSpacing:'-0.01em' }}>
+                    Interaktiv 3D-modell
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#7c3aed', fontWeight:'500' }}>
+                    Roter, klikk og inspeksjoner hele bygget
+                  </div>
+                </div>
+              </div>
+
+              {/* Høyre: Tre funksjons-pills */}
+              <div style={{
+                display:'flex',
+                flexWrap:'wrap',
+                gap:'6px',
+                marginLeft: isMob ? '0' : 'auto',
+                fontSize:'11px',
+              }}>
+                {[
+                  { ikon:'🔄', tekst:'Roter fritt' },
+                  { ikon:'👆', tekst:'Klikk lagsett' },
+                  { ikon:'🏗️', tekst:'Vis bygningsdeler' },
+                ].map((f, idx) => (
+                  <div key={idx} style={{
+                    display:'inline-flex',
+                    alignItems:'center',
+                    gap:'5px',
+                    padding:'5px 10px',
+                    background:'white',
+                    border:'1px solid #ddd6fe',
+                    borderRadius:'999px',
+                    color:'#5b21b6',
+                    fontWeight:'600',
+                  }}>
+                    <span>{f.ikon}</span>
+                    <span>{f.tekst}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             {/* Feature-rad nederst */}
             <div style={{
               display:'flex',
@@ -51041,7 +51104,6 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
               {[
                 { ikon:'🔒', tekst:'Filer forlater aldri maskinen' },
                 { ikon:'💾', tekst:'Auto-lagring av arbeid' },
-                { ikon:'🧊', tekst:'3D-visning med lagsett' },
                 { ikon:'📊', tekst:'Diagnose-rapport' },
                 { ikon:'🔬', tekst:'IFC-supplering (brann/lyd/U-verdi)' },
               ].map((f, idx) => (
