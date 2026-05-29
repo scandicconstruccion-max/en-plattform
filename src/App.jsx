@@ -50650,6 +50650,22 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
           }
         }
       }
+      console.log('[3d-manuell] antall element-id med mesh i ny fil:', Object.keys(meshPaaId).length)
+
+      // Lukk modellen så snart vi har det vi trenger — frigjør minne
+      closeIfcModel(api, modelID)
+      modelID = -1
+
+      // VIKTIG: beregn merge SYNKRONT her, IKKE inni setMetadata-updateren.
+      // React setState-updatere er lazy — kjører når React behandler oppdateringen,
+      // ikke synkront. Hvis vi inkrementerer tellere inni updateren og leser dem
+      // utenfor, leser vi 0 (fordi updateren ikke har kjørt enda).
+      const currentMengder = metadata?.mengder
+      if (!currentMengder || typeof currentMengder !== 'object') {
+        setLast3DStatus('feilet')
+        setLast3DFeilmelding('Sesjonens mengde-data mangler eller er ugyldig')
+        return
+      }
 
       const flettMeshIElement = (el) => {
         if (!el || typeof el !== 'object') return el
@@ -50660,78 +50676,52 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
         return el
       }
 
-      // Flett mesh inn i eksisterende mengder. Behold ALL annen klassifisering,
-      // _geometri, _ifcTyperDiagnose og andre felter uendret.
       let antallMesh = 0
       let antallTotalt = 0
-      setMetadata(prevMeta => {
-        if (!prevMeta?.mengder || typeof prevMeta.mengder !== 'object') {
-          console.warn('[3d-manuell] prevMeta.mengder mangler eller er ikke et objekt:', prevMeta?.mengder)
-          return prevMeta
+      const flettet = {}
+      for (const [kat, katData] of Object.entries(currentMengder)) {
+        // Bevar metadata-felter (_geometri, _ifcTyperDiagnose, osv.) uendret
+        if (kat.startsWith('_') || !katData || typeof katData !== 'object') {
+          flettet[kat] = katData
+          continue
         }
-        // Diagnose: logg hva som faktisk er i mengder-strukturen
-        const diag = {}
-        for (const [k, v] of Object.entries(prevMeta.mengder)) {
-          if (k.startsWith('_')) { diag[k] = '(metadata)'; continue }
-          if (v && typeof v === 'object') {
-            diag[k] = {
-              harElementer: Array.isArray(v.elementer),
-              antallElementer: Array.isArray(v.elementer) ? v.elementer.length : null,
-              harLagsett: Array.isArray(v.lagsett),
-              antallLagsett: Array.isArray(v.lagsett) ? v.lagsett.length : null,
-              nokler: Object.keys(v).slice(0, 10),
-            }
-          } else {
-            diag[k] = `(${typeof v})`
-          }
+        const nyElementer = Array.isArray(katData.elementer)
+          ? katData.elementer.map(el => {
+              antallTotalt++
+              const flettetEl = flettMeshIElement(el)
+              if (flettetEl !== el) antallMesh++
+              return flettetEl
+            })
+          : katData.elementer
+        const nyLagsett = Array.isArray(katData.lagsett)
+          ? katData.lagsett.map(ls => {
+              if (!ls || typeof ls !== 'object') return ls
+              return {
+                ...ls,
+                elementer: Array.isArray(ls.elementer)
+                  ? ls.elementer.map(flettMeshIElement)
+                  : ls.elementer,
+              }
+            })
+          : katData.lagsett
+        flettet[kat] = {
+          ...katData,
+          elementer: nyElementer,
+          lagsett: nyLagsett,
         }
-        console.log('[3d-manuell] struktur av prevMeta.mengder:', diag)
-        console.log('[3d-manuell] antall element-id med mesh i ny fil:', Object.keys(meshPaaId).length)
-        const flettet = {}
-        for (const [kat, katData] of Object.entries(prevMeta.mengder)) {
-          // Bevar metadata-felter (_geometri, _ifcTyperDiagnose, osv.) og ikke-objekter uendret
-          if (kat.startsWith('_') || !katData || typeof katData !== 'object') {
-            flettet[kat] = katData
-            continue
-          }
-          const nyElementer = Array.isArray(katData.elementer)
-            ? katData.elementer.map(el => {
-                antallTotalt++
-                const flettetEl = flettMeshIElement(el)
-                if (flettetEl !== el) antallMesh++
-                return flettetEl
-              })
-            : katData.elementer
-          const nyLagsett = Array.isArray(katData.lagsett)
-            ? katData.lagsett.map(ls => {
-                if (!ls || typeof ls !== 'object') return ls
-                return {
-                  ...ls,
-                  elementer: Array.isArray(ls.elementer)
-                    ? ls.elementer.map(flettMeshIElement)
-                    : ls.elementer,
-                }
-              })
-            : katData.lagsett
-          flettet[kat] = {
-            ...katData,
-            elementer: nyElementer,
-            lagsett: nyLagsett,
-          }
-        }
-        return { ...prevMeta, mengder: flettet }
-      })
-
-      closeIfcModel(api, modelID)
-      modelID = -1
+      }
 
       console.log(`[3d-manuell] flettet mesh på ${antallMesh} av ${antallTotalt} elementer`)
+
       if (antallMesh === 0) {
         setLast3DStatus('feilet')
         setLast3DFeilmelding('Ingen elementer matchet — er dette samme IFC-fil som ble lastet opp opprinnelig?')
-      } else {
-        setLast3DStatus('klar')
+        return
       }
+
+      // Sett state én gang med ferdig flettet struktur
+      setMetadata(prev => ({ ...prev, mengder: flettet }))
+      setLast3DStatus('klar')
     } catch (e) {
       console.warn('[3d-manuell] feilet:', e)
       setLast3DStatus('feilet')
