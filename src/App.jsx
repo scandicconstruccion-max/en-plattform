@@ -50606,7 +50606,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
   // Manuell 3D-lasting: brukeren laster opp samme IFC-fil for å få mesh tilbake
   // etter gjenoppretting. Mesh strippes ved auto-lagring (~1,1 MB / sesjon), så
   // for å se 3D igjen må fila parses på nytt. Brukerens klassifisering/tilpasninger
-  // i metadata.mengder beholdes — vi fletter kun mesh inn via globalId-match.
+  // i metadata.mengder beholdes — vi fletter kun mesh inn via id-match.
   //
   // VIKTIG: mengder-strukturen er { kategori: { elementer: [...], lagsett: [...], ... } }
   // — IKKE en flat array. Mesh må flettes inn i både `.elementer[*]` og `.lagsett[*].elementer[*]`.
@@ -50636,23 +50636,24 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
       const nyeMengderMedMesh = await extractIfcQuantities(api, mod, modelID, () => {})
 
-      // Bygg globalId → mesh-oppslag på tvers av ALLE kategorier i den nye fila
-      const meshPåGlobalId = {}
+      // Bygg id → mesh-oppslag på tvers av ALLE kategorier i den nye fila.
+      // ID-en er IFC expressID (line-ID fra web-ifc) — stabil mellom parsing av samme fil.
+      const meshPaaId = {}
       for (const kat of Object.keys(nyeMengderMedMesh || {})) {
         if (kat.startsWith('_')) continue
         const katData = nyeMengderMedMesh[kat]
         if (!katData || typeof katData !== 'object') continue
         const elementer = Array.isArray(katData.elementer) ? katData.elementer : []
         for (const el of elementer) {
-          if (el?.globalId && el?.mesh) {
-            meshPåGlobalId[el.globalId] = el.mesh
+          if (el?.id != null && el?.mesh) {
+            meshPaaId[el.id] = el.mesh
           }
         }
       }
 
       const flettMeshIElement = (el) => {
         if (!el || typeof el !== 'object') return el
-        const m = el.globalId ? meshPåGlobalId[el.globalId] : null
+        const m = el.id != null ? meshPaaId[el.id] : null
         if (m) {
           return { ...el, mesh: m, _haddeMesh: true }
         }
@@ -50685,7 +50686,7 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
           }
         }
         console.log('[3d-manuell] struktur av prevMeta.mengder:', diag)
-        console.log('[3d-manuell] antall globalId med mesh i ny fil:', Object.keys(meshPåGlobalId).length)
+        console.log('[3d-manuell] antall element-id med mesh i ny fil:', Object.keys(meshPaaId).length)
         const flettet = {}
         for (const [kat, katData] of Object.entries(prevMeta.mengder)) {
           // Bevar metadata-felter (_geometri, _ifcTyperDiagnose, osv.) og ikke-objekter uendret
