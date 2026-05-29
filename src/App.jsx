@@ -61845,8 +61845,14 @@ function AppContent() {
           {isMobile ? (
             <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
               <button onClick={() => setMobileMenuOpen(true)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'22px', padding:'4px', color:'#374151', lineHeight:1 }}>☰</button>
-              <img src={EP_LOGO} alt="Logo" style={{ width:'24px', height:'24px', borderRadius:'5px' }} />
-              <span style={{ fontWeight:'800', color:'#059669', fontSize:'15px' }}>En Plattform</span>
+              <button
+                onClick={() => navigate('dashboard')}
+                title="Gå til dashboard"
+                style={{ display:'flex', alignItems:'center', gap:'10px', background:'none', border:'none', padding:'4px 6px', margin:0, cursor:'pointer', borderRadius:'8px' }}
+              >
+                <img src={EP_LOGO} alt="Logo" style={{ width:'24px', height:'24px', borderRadius:'5px' }} />
+                <span style={{ fontWeight:'800', color:'#059669', fontSize:'15px' }}>En Plattform</span>
+              </button>
             </div>
           ) : <div />}
           <div style={{ display:'flex', alignItems:'center', gap: isMobile ? '6px' : '10px' }}>
