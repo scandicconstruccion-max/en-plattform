@@ -16028,7 +16028,12 @@ function FakturaPage() {
   const totalSendt = invoices
     .filter(i => i.status === 'Sendt')
     .reduce((acc, i) => acc + beregnBetalingsstatus(i, paymentsByInvoice[i.id] || []).gjenstar, 0)
-  const totalBetalt = invoices.filter(i=>i.status==='Betalt').reduce((acc,i)=>acc+calcLines(i.lines).gross,0)
+  // BETALT summerer ALLE registrerte innbetalinger (også delvise), ikke bare på
+  // fakturaer med status='Betalt'. Slik vises både delvise og fulle innbetalinger.
+  // Vi ekskluderer utkast og kreditnotaer.
+  const totalBetalt = invoices
+    .filter(i => i.status !== 'Utkast' && !i.is_credit_note)
+    .reduce((acc, i) => acc + sumInnbetalinger(paymentsByInvoice[i.id] || []), 0)
   const totalPurret = invoices
     .filter(i => i.status === 'Purret')
     .reduce((acc, i) => acc + beregnBetalingsstatus(i, paymentsByInvoice[i.id] || []).gjenstar, 0)
@@ -16102,8 +16107,8 @@ function FakturaPage() {
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns: isMobF ? 'repeat(2, 1fr)' : 'repeat(3,1fr) 1fr 1fr', gap: isMobF ? '8px' : '12px' }}>
           {[
-            { label:'Utestående', value:fmtI(totalSendt+totalPurret), sub:`${counts['Sendt']||0} sendt, ${counts['Purret']||0} purret`, bg:'#eff6ff', color:'#2563eb', emoji:'📊' },
-            { label:'Betalt', value:fmtI(totalBetalt), sub:`${counts['Betalt']||0} fakturaer`, bg:'#f0fdf4', color:'#16a34a', emoji:'✅' },
+            { label:'Utestående', value:fmtI(totalSendt+totalPurret), sub:`${counts['Sendt']||0} sendt, ${counts['Purret']||0} purret${partiallyPaidCount > 0 ? ` · ${partiallyPaidCount} delvis betalt` : ''}`, bg:'#eff6ff', color:'#2563eb', emoji:'📊' },
+            { label:'Betalt', value:fmtI(totalBetalt), sub:partiallyPaidCount > 0 ? `${counts['Betalt']||0} fullt, ${partiallyPaidCount} delvis` : `${counts['Betalt']||0} fakturaer`, bg:'#f0fdf4', color:'#16a34a', emoji:'✅' },
             { label:'Forfalt', value:overdueCount > 0 ? `${overdueCount} faktura${overdueCount>1?'er':''}` : 'Ingen', sub:overdueCount>0?'Krever oppfølging':'Alle à jour', bg:overdueCount>0?'#fef2f2':'#f8fafc', color:overdueCount>0?'#dc2626':'#64748b', emoji:overdueCount>0?'🚨':'👍' },
           ].map(s=>(
             <div key={s.label} style={{ background:s.bg, borderRadius: isMobF ? '10px' : '14px', padding: isMobF ? '10px' : '16px 20px', border:`1px solid ${s.bg}` }}>
