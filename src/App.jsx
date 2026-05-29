@@ -15427,7 +15427,9 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
         if (error) throw error
         if (data) {
           setSettingsId(data.id)
-          setBankAccount(data.bank_account || '')
+          // Normaliser kontonummer ved load: fjern punktum/mellomrom, beholde kun siffer.
+          // Beskytter mot eventuelle eldre rader som ble lagret med formatering.
+          setBankAccount((data.bank_account || '').replace(/[^\d]/g, '').slice(0, 11))
           setDefaultDueDays(data.invoice_default_due_days ?? 14)
           setReminderIntervalDays(data.invoice_reminder_interval_days ?? 14)
           const fees = data.invoice_reminder_fees
@@ -15444,20 +15446,23 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
     })()
   }, [])
 
-  // Valider kontonummer — norsk format: 11 siffer, kan ha punktum/mellomrom
+  // Valider kontonummer — norsk format: 11 siffer (state inneholder alltid kun siffer
+  // pga normalisering i onChange, så vi sjekker bare lengden)
   const validateKontonummer = (verdi) => {
-    const sifre = (verdi || '').replace(/[^\d]/g, '')
-    if (!sifre) return null  // tom = OK (kan lagres uten)
-    if (sifre.length !== 11) return 'Kontonummer må være 11 siffer'
+    if (!verdi) return null  // tom = OK (kan lagres uten)
+    if (verdi.length !== 11) return 'Kontonummer må være 11 siffer'
     return null
   }
 
-  // Formater kontonummer for visning: xxxx.xx.xxxxx
-  const formatKontonummer = (verdi) => {
-    const sifre = (verdi || '').replace(/[^\d]/g, '').slice(0, 11)
-    if (sifre.length <= 4) return sifre
-    if (sifre.length <= 6) return `${sifre.slice(0, 4)}.${sifre.slice(4)}`
-    return `${sifre.slice(0, 4)}.${sifre.slice(4, 6)}.${sifre.slice(6)}`
+  // Formater siffer-streng for visning: xxxx.xx.xxxxx
+  // State inneholder alltid kun siffer (normalisert i onChange), så vi trenger
+  // ikke rense her — bare gruppere med punktum.
+  const formatKontonummer = (sifre) => {
+    if (!sifre) return ''
+    const s = sifre.toString()
+    if (s.length <= 4) return s
+    if (s.length <= 6) return `${s.slice(0, 4)}.${s.slice(4)}`
+    return `${s.slice(0, 4)}.${s.slice(4, 6)}.${s.slice(6)}`
   }
 
   const handleAddReminder = () => {
@@ -15495,7 +15500,7 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
     setSaving(true)
     try {
       const updates = {
-        bank_account: bankAccount.replace(/[^\d]/g, '') || null,
+        bank_account: bankAccount || null,
         invoice_default_due_days: defaultDueDays,
         invoice_reminder_interval_days: reminderIntervalDays,
         invoice_reminder_fees: reminderFees,
@@ -15555,8 +15560,13 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
               <label style={inputLabel}>Bedriftens kontonummer</label>
               <input
                 type="text"
+                inputMode="numeric"
                 value={formatKontonummer(bankAccount)}
-                onChange={(e) => setBankAccount(e.target.value)}
+                onChange={(e) => {
+                  // Behold kun siffer, maks 11. State er dermed alltid ren.
+                  const sifre = e.target.value.replace(/[^\d]/g, '').slice(0, 11)
+                  setBankAccount(sifre)
+                }}
                 placeholder="xxxx.xx.xxxxx"
                 style={iInp}
               />
