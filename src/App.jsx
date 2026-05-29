@@ -50196,6 +50196,7 @@ function BimProsjektVelgerModal({ prosjekter, opplastingStatus, isMob, onVelgEks
 }
 
 function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksisterendeSesjon = null, redigeringAvKalkyle = null }) {
+  const confirm = useConfirm()
   // Sideflyt-fase: 'upload' (vis upload-area) | 'analysing' (parsing pågår) | 'analyzed' (vis resultat) | 'error'
   // Patch 14.D: Hvis vi har eksisterendeSesjon, hopp rett til 'analyzed' med data forhåndsutfylt
   const [fase, setFase] = useState(eksisterendeSesjon ? 'analyzed' : 'upload')
@@ -50938,9 +50939,15 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
                         {gjenoppretterSesjon ? 'Åpner...' : 'Fortsett'}
                       </button>
                       <button onClick={async () => {
-                          if (onAlert) {
-                            // Bruk systemets bekreftelse hvis tilgjengelig; ellers slett direkte
-                          }
+                          // Bekreftelse før permanent sletting — sesjon kan ikke gjenopprettes
+                          const navn = sesjon.sesjon_data?.fileName || sesjon.ifc_file_name || 'denne lagrede sesjonen'
+                          const ok = await confirm({
+                            message: 'Slett lagret sesjon?',
+                            subMessage: `«${navn}» og alt lagret arbeid slettes permanent. Tilhørende IFC-fil i lagring slettes også. Dette kan ikke angres.`,
+                            danger: true,
+                            confirmLabel: 'Slett sesjon',
+                          })
+                          if (!ok) return
                           slettLagretSesjon(sesjon.id)
                         }}
                         title="Slett sesjon"
