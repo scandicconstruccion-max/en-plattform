@@ -50961,17 +50961,106 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
             </div>
           )}
 
-          <div style={{ marginTop:'18px', background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'14px 16px' }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#1e40af', marginBottom:'6px' }}>💡 Slik fungerer BIM-Kalkyle</div>
-            <ol style={{ margin:0, padding:'0 0 0 18px', fontSize:'12px', color:'#1e3a8a', lineHeight:1.7 }}>
-              <li>Last opp IFC-fil (IFC2X3 eller IFC4) fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy</li>
-              <li>Systemet leser geometri, lagstruktur og materialer lokalt i nettleseren — filen forlater aldri din maskin</li>
-              <li>Automatisk mengdeuttak for vegger, vinduer, dører, tak, gulv, etasjeskiller, søyler, bjelker, trapper og sanitærutstyr</li>
-              <li>Diagnose-rapport viser kvalitet på geometri-uttrekk så du vet hva som kan stoles på</li>
-              <li>3D-visning av hele bygget med lagsett uthevet — klikk på et lagsett for å se det i modellen</li>
-              <li>Visuelt tverrsnitt av lagstrukturen og bibliotek-matching mot dine konstruksjoner med likhets-score</li>
-              <li>Tilpasningspanel med IFC-supplering (brann, lyd, U-verdi, bæring) — kalkyle genereres med ekte mengder, klar for tilbud</li>
-            </ol>
+          <div style={{ marginTop:'18px' }}>
+            {/* Tittel og undertekst */}
+            <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
+              <div style={{
+                width:'32px', height:'32px', borderRadius:'10px',
+                background:'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
+                display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px',
+              }}>💡</div>
+              <div>
+                <div style={{ fontSize:'14px', fontWeight:'800', color:'#0f172a', letterSpacing:'-0.01em' }}>Slik fungerer BIM-Kalkyle</div>
+                <div style={{ fontSize:'12px', color:'#64748b' }}>Fra IFC-fil til ferdig kalkyle på minutter</div>
+              </div>
+            </div>
+
+            {/* 4-stegs prosess */}
+            <div style={{
+              display:'grid',
+              gridTemplateColumns: isMob ? '1fr' : 'repeat(4, 1fr)',
+              gap: isMob ? '10px' : '12px',
+              marginBottom:'14px',
+            }}>
+              {[
+                { nr:'1', ikon:'📤', tittel:'Last opp', tekst:'IFC-fil fra ArchiCAD, Revit, Allplan eller Tekla' },
+                { nr:'2', ikon:'🔍', tittel:'Analyser', tekst:'Automatisk mengdeuttak, lagstruktur og 3D-modell' },
+                { nr:'3', ikon:'🎯', tittel:'Tilpass', tekst:'Match mot ditt bibliotek og suppler tekniske data' },
+                { nr:'4', ikon:'📋', tittel:'Kalkyle', tekst:'Eksakte mengder og priser, klar for tilbud' },
+              ].map((steg, idx) => (
+                <div key={steg.nr} style={{
+                  position:'relative',
+                  background:'white',
+                  border:'1px solid #e2e8f0',
+                  borderRadius:'12px',
+                  padding: isMob ? '12px 14px' : '14px 12px',
+                  display:'flex',
+                  flexDirection: isMob ? 'row' : 'column',
+                  alignItems: isMob ? 'center' : 'flex-start',
+                  gap: isMob ? '12px' : '8px',
+                }}>
+                  {/* Nummer-badge */}
+                  <div style={{
+                    position: isMob ? 'static' : 'absolute',
+                    top: isMob ? 'auto' : '10px',
+                    right: isMob ? 'auto' : '10px',
+                    width:'22px', height:'22px', borderRadius:'50%',
+                    background:'#eff6ff', color:'#2563eb',
+                    fontSize:'11px', fontWeight:'700',
+                    display:'flex', alignItems:'center', justifyContent:'center',
+                    flexShrink:0,
+                  }}>{steg.nr}</div>
+
+                  {/* Ikon */}
+                  <div style={{
+                    fontSize: isMob ? '22px' : '28px',
+                    lineHeight:1,
+                    flexShrink:0,
+                  }}>{steg.ikon}</div>
+
+                  {/* Tekst */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'3px' }}>
+                      {steg.tittel}
+                    </div>
+                    <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.4 }}>
+                      {steg.tekst}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Feature-rad nederst */}
+            <div style={{
+              display:'flex',
+              flexWrap:'wrap',
+              gap:'6px',
+              fontSize:'11px',
+            }}>
+              {[
+                { ikon:'🔒', tekst:'Filer forlater aldri maskinen' },
+                { ikon:'💾', tekst:'Auto-lagring av arbeid' },
+                { ikon:'🧊', tekst:'3D-visning med lagsett' },
+                { ikon:'📊', tekst:'Diagnose-rapport' },
+                { ikon:'🔬', tekst:'IFC-supplering (brann/lyd/U-verdi)' },
+              ].map((f, idx) => (
+                <div key={idx} style={{
+                  display:'inline-flex',
+                  alignItems:'center',
+                  gap:'5px',
+                  padding:'5px 10px',
+                  background:'white',
+                  border:'1px solid #e2e8f0',
+                  borderRadius:'999px',
+                  color:'#475569',
+                  fontWeight:'500',
+                }}>
+                  <span>{f.ikon}</span>
+                  <span>{f.tekst}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
