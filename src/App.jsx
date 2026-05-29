@@ -15399,6 +15399,37 @@ function getForsinkelsesrente(dato = new Date()) {
   return { sats: FORSINKELSESRENTE_SATSER[sisteKjente], periode: sisteKjente, kjent: false }
 }
 
+// ── INNBETALINGER ─────────────────────────────────────────────────────────────
+// Hjelpefunksjoner for å beregne hva som er betalt og hva som gjenstår på en faktura.
+
+// Total innbetalt fra en liste med payment-rader
+function sumInnbetalinger(payments) {
+  return (payments || []).reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0)
+}
+
+// Beregn status på innbetalinger for en faktura.
+// Returnerer: { total, innbetalt, gjenstar, tilgode, erFulltBetalt, erDelvisBetalt }
+function beregnBetalingsstatus(invoice, payments) {
+  const { gross } = calcLines(invoice.lines)
+  const total = Math.round(gross * 100) / 100  // unngå float-rusk
+  const innbetalt = Math.round(sumInnbetalinger(payments) * 100) / 100
+  const differanse = Math.round((total - innbetalt) * 100) / 100
+  return {
+    total,
+    innbetalt,
+    gjenstar: differanse > 0 ? differanse : 0,
+    tilgode: differanse < 0 ? Math.abs(differanse) : 0,
+    erFulltBetalt: innbetalt >= total && total > 0,
+    erDelvisBetalt: innbetalt > 0 && innbetalt < total,
+  }
+}
+
+// Etiketten for betalingsmåte i UI
+const BETALINGSMETODER = {
+  bank: { label: 'Bankoverføring', emoji: '🏦' },
+  other: { label: 'Annet', emoji: '💵' },
+}
+
 // ── FAKTURA-INNSTILLINGER MODAL ───────────────────────────────────────────────
 // Konfigurerer bedriftens faktura-defaults: kontonummer, forfallstid,
 // purregebyr, intervall, KID-toggle. Lagres i company_settings.
@@ -15711,6 +15742,204 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
   )
 }
 
+// ── REGISTRER INNBETALING MODAL ───────────────────────────────────────────────
+// Brukes på faktura-detaljsiden for å registrere en innbetaling fra kunden.
+// Hver innbetaling lagres som egen rad i invoice_payments-tabellen.
+// Ved full betaling oppdateres invoice.status automatisk til 'Betalt'.
+function RegistrerInnbetalingModal({ invoice, payments, user, onClose, onSaved }) {
+  const appAlert = useAppAlert()
+  const [amount, setAmount] = useState('')
+  const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0])
+  const [paymentMethod, setPaymentMethod] = useState('bank')
+  const [reference, setReference] = useState(invoice.kid || '')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const isMobR = typeof window !== 'undefined' && window.innerWidth < 768
+  const status = beregnBetalingsstatus(invoice, payments)
+
+  // Sett forhåndsutfylt beløp = gjenstående beløp ved første opning
+  React.useEffect(() => {
+    if (status.gjenstar > 0) {
+      setAmount(status.gjenstar.toFixed(2))
+    }
+  }, [])
+
+  const handleSave = async () => {
+    const beløp = parseFloat(amount)
+    if (!beløp || beløp <= 0) {
+      await appAlert({ message: 'Ugyldig beløp', subMessage: 'Beløpet må være større enn 0.', kind: 'error' })
+      return
+    }
+    if (!paymentDate) {
+      await appAlert({ message: 'Manglende dato', subMessage: 'Velg betalingsdato.', kind: 'error' })
+      return
+    }
+
+    setSaving(true)
+    try {
+      // Lagre innbetalingen
+      const { error: insertErr } = await supabase.from('invoice_payments').insert({
+        invoice_id: invoice.id,
+        amount: beløp,
+        payment_date: paymentDate,
+        payment_method: paymentMethod,
+        reference: reference || null,
+        notes: notes || null,
+        created_by: user?.id || null,
+      })
+      if (insertErr) throw insertErr
+
+      // Sjekk om faktura nå er fullt betalt — oppdater status om så
+      const nyTotal = status.innbetalt + beløp
+      if (nyTotal >= status.total && invoice.status !== 'Betalt') {
+        const oppdateringer = {
+          status: 'Betalt',
+          paid_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        const { error: updateErr } = await supabase.from('invoices').update(oppdateringer).eq('id', invoice.id)
+        if (updateErr) console.warn('[innbetaling] kunne ikke oppdatere status til Betalt:', updateErr)
+      }
+
+      if (onSaved) await onSaved()
+      onClose()
+    } catch (e) {
+      console.error('[innbetaling] lagring feilet:', e)
+      await appAlert({ message: 'Kunne ikke lagre innbetaling', subMessage: e.message || 'Ukjent feil', kind: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const beløpNum = parseFloat(amount) || 0
+  const blirOverbetalt = beløpNum > status.gjenstar && status.gjenstar > 0
+  const overbetaltMed = blirOverbetalt ? beløpNum - status.gjenstar : 0
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:210, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        {/* Header */}
+        <div style={{ borderBottom:'1px solid #f1f5f9', padding: isMobR ? '16px' : '20px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+            <span style={{ fontSize:'22px' }}>💰</span>
+            <h2 style={{ margin:0, fontSize: isMobR ? '16px' : '18px', fontWeight:'800', color:'#0f172a' }}>Registrer innbetaling</h2>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', padding:'4px', lineHeight:1 }}>×</button>
+        </div>
+
+        {/* Faktura-info */}
+        <div style={{ padding: isMobR ? '12px 16px' : '14px 24px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9' }}>
+          <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'2px' }}>{invoice.invoice_number}</div>
+          <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'8px' }}>{invoice.title}</div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px', fontSize:'11px' }}>
+            <div>
+              <div style={{ color:'#94a3b8', marginBottom:'2px' }}>Totalbeløp</div>
+              <div style={{ fontWeight:'700', color:'#0f172a' }}>{fmtI(status.total)}</div>
+            </div>
+            <div>
+              <div style={{ color:'#94a3b8', marginBottom:'2px' }}>Innbetalt</div>
+              <div style={{ fontWeight:'700', color:'#16a34a' }}>{fmtI(status.innbetalt)}</div>
+            </div>
+            <div>
+              <div style={{ color:'#94a3b8', marginBottom:'2px' }}>Gjenstår</div>
+              <div style={{ fontWeight:'700', color: status.gjenstar > 0 ? '#dc2626' : '#16a34a' }}>{fmtI(status.gjenstar)}</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Innhold */}
+        <div style={{ padding: isMobR ? '16px' : '20px 24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+
+          {/* Beløp */}
+          <div>
+            <label style={{ fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px', display:'block' }}>Beløp (kr) *</label>
+            <input
+              type="number"
+              step="0.01"
+              min="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0,00"
+              style={iInp}
+              autoFocus
+            />
+            {blirOverbetalt && (
+              <div style={{ marginTop:'6px', padding:'8px 10px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', fontSize:'11px', color:'#92400e' }}>
+                ⚠️ Beløpet er {fmtI(overbetaltMed)} mer enn gjenstående. Innbetalingen vil vises som overbetaling (tilgode).
+              </div>
+            )}
+          </div>
+
+          {/* Dato + metode */}
+          <div style={{ display:'grid', gridTemplateColumns: isMobR ? '1fr' : '1fr 1fr', gap:'10px' }}>
+            <div>
+              <label style={{ fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px', display:'block' }}>Betalingsdato *</label>
+              <input
+                type="date"
+                value={paymentDate}
+                onChange={(e) => setPaymentDate(e.target.value)}
+                style={iInp}
+              />
+            </div>
+            <div>
+              <label style={{ fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px', display:'block' }}>Betalingsmåte</label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                style={iInp}
+              >
+                {Object.entries(BETALINGSMETODER).map(([key, cfg]) => (
+                  <option key={key} value={key}>{cfg.emoji} {cfg.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Referanse */}
+          <div>
+            <label style={{ fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px', display:'block' }}>Referanse</label>
+            <input
+              type="text"
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+              placeholder="KID, melding fra bank, e.l."
+              style={iInp}
+            />
+          </div>
+
+          {/* Notat */}
+          <div>
+            <label style={{ fontSize:'12px', fontWeight:'600', color:'#475569', marginBottom:'4px', display:'block' }}>Internt notat</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Valgfritt internt notat om innbetalingen"
+              style={{ ...iInp, minHeight:'60px', resize:'vertical' }}
+            />
+          </div>
+
+        </div>
+
+        {/* Footer */}
+        <div style={{ borderTop:'1px solid #f1f5f9', padding: isMobR ? '12px 16px' : '16px 24px', display:'flex', gap:'8px', justifyContent:'flex-end' }}>
+          <button
+            onClick={onClose}
+            disabled={saving}
+            style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'600', color:'#475569', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}
+          >Avbryt</button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 18px', fontSize:'13px', fontWeight:'700', cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.6 : 1 }}
+          >{saving ? 'Lagrer...' : 'Registrer innbetaling'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function FakturaPage() {
   const { user } = useAuth()
@@ -15758,17 +15987,27 @@ function FakturaPage() {
     return () => window.removeEventListener('openInvoice', onOpenInvoice)
   }, [selected?.id])
   const [calculations, setCalculations] = useState([])
+  // Innbetalinger per faktura (Etappe 2) — oppslag: invoiceId → array av payments
+  const [paymentsByInvoice, setPaymentsByInvoice] = useState({})
 
   const load = async () => {
     try {
-      const [inv, ord, q, p, kalks] = await Promise.all([
+      const [inv, ord, q, p, kalks, allPayments] = await Promise.all([
         supabase.from('invoices').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('orders').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
         supabase.from('quotes').select('*').eq('status','Akseptert').then(r=>r.data||[]),
         supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('calculations').select('id, title, kalk_number, kalkyler, faktorer, total_ex_mva, customer_name, project_id').eq('is_template', false).order('created_at',{ascending:false}).then(r=>r.data||[]),
+        supabase.from('invoice_payments').select('*').then(r=>r.data||[]),
       ])
       setInvoices(inv); setOrders(ord); setQuotes(q); setProjects(p); setCalculations(kalks)
+      // Bygg oppslag: invoiceId → array av innbetalinger
+      const oppslag = {}
+      for (const p of allPayments) {
+        if (!oppslag[p.invoice_id]) oppslag[p.invoice_id] = []
+        oppslag[p.invoice_id].push(p)
+      }
+      setPaymentsByInvoice(oppslag)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -15784,10 +16023,22 @@ function FakturaPage() {
   })
 
   const counts = Object.keys(INV_STATUS).reduce((acc,s)=>{ acc[s]=invoices.filter(i=>i.status===s).length; return acc },{})
-  const totalSendt = invoices.filter(i=>i.status==='Sendt').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
-  const totalBetalt = invoices.filter(i=>i.status==='Betalt').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
-  const totalPurret = invoices.filter(i=>i.status==='Purret').reduce((acc,i)=>acc+calcLines(i.lines).net,0)
+  // Utestående regnes nå etter delvise innbetalinger: vi summerer gjenstående beløp,
+  // ikke fakturaens totalbeløp. Slik gir tallet riktig bilde av hva som faktisk skylder.
+  const totalSendt = invoices
+    .filter(i => i.status === 'Sendt')
+    .reduce((acc, i) => acc + beregnBetalingsstatus(i, paymentsByInvoice[i.id] || []).gjenstar, 0)
+  const totalBetalt = invoices.filter(i=>i.status==='Betalt').reduce((acc,i)=>acc+calcLines(i.lines).gross,0)
+  const totalPurret = invoices
+    .filter(i => i.status === 'Purret')
+    .reduce((acc, i) => acc + beregnBetalingsstatus(i, paymentsByInvoice[i.id] || []).gjenstar, 0)
   const overdueCount = invoices.filter(i=>isOverdue(i)).length
+  // Antall fakturaer med delvis innbetaling (ikke fullt betalt enda)
+  const partiallyPaidCount = invoices.filter(i => {
+    if (i.status === 'Betalt' || i.status === 'Utkast' || i.status === 'Kreditert') return false
+    const st = beregnBetalingsstatus(i, paymentsByInvoice[i.id] || [])
+    return st.erDelvisBetalt
+  }).length
 
   // ── MVA-rapport state ──
   const [showMvaReport, setShowMvaReport] = useState(false)
@@ -16071,6 +16322,10 @@ function FakturaPage() {
               const { net, gross } = calcLines(inv.lines)
               const overdue = isOverdue(inv)
               const proj = projects.find(p=>p.id===inv.project_id)
+              // Innbetalingsstatus — vises som badge hvis delvis betalt
+              const invPayments = paymentsByInvoice[inv.id] || []
+              const betStatus = beregnBetalingsstatus(inv, invPayments)
+              const erDelvisBetalt = betStatus.erDelvisBetalt && inv.status !== 'Utkast' && !inv.is_credit_note
               return (
                 <div key={inv.id} onClick={()=>setSelected(inv)}
                   style={{ background:'white', borderRadius: isMobF ? '12px' : '14px', border:`1px solid ${overdue?'#fecaca':'#f1f5f9'}`, padding: isMobF ? '12px' : '16px 20px', cursor:'pointer', display:'flex', alignItems: isMobF ? 'flex-start' : 'center', gap: isMobF ? '10px' : '16px', transition:'box-shadow 0.15s' }}
@@ -16081,12 +16336,14 @@ function FakturaPage() {
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobF ? '13px' : '15px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', maxWidth: isMobF ? 'calc(100vw - 130px)' : 'none' }}>{inv.title}</span>
                       {!isMobF && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{inv.invoice_number}</span>}
                       <InvStatusBadge status={inv.status} />
+                      {erDelvisBetalt && <span style={{ background:'#fffbeb', color:'#92400e', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>💰 Delvis betalt</span>}
                       {overdue && <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fecaca' }}>FORFALT</span>}
                     </div>
                     <div style={{ display:'flex', gap: isMobF ? '6px' : '12px', flexWrap:'wrap' }}>
                       {inv.customer_name&&<span style={{ fontSize: isMobF ? '11px' : '12px', color:'#64748b' }}>👤 {inv.customer_name}</span>}
                       {!isMobF && proj&&<span style={{ fontSize:'12px', color:'#2563eb', fontWeight:'500' }}>🏗️ {proj.name}</span>}
                       {!isMobF && inv.due_date&&<span style={{ fontSize:'12px', color:overdue?'#dc2626':'#64748b', fontWeight:overdue?'700':'400' }}>📅 {inv.due_date}</span>}
+                      {erDelvisBetalt && <span style={{ fontSize: isMobF ? '11px' : '12px', color:'#92400e', fontWeight:'600' }}>💵 Gjenstår: {fmtI(betStatus.gjenstar)}</span>}
                     </div>
                   </div>
                   <div style={{ textAlign:'right', flexShrink:0 }}>
@@ -17238,11 +17495,67 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const [kreditReason, setKreditReason] = useState('')
   const [kreditLines, setKreditLines] = useState([]) // hvilke linjer å kreditere
   const [kreditMode, setKreditMode] = useState('full') // 'full' | 'partial'
+  // Innbetalinger (Etappe 2)
+  const [payments, setPayments] = useState([])
+  const [showInnbetaling, setShowInnbetaling] = useState(false)
   const cfg = INV_STATUS[inv.status] || INV_STATUS['Utkast']
   const proj = projects.find(p=>p.id===inv.project_id)
   const ord = orders.find(o=>o.id===inv.order_id)
   const { net, mva, gross } = calcLines(inv.lines)
   const overdue = isOverdue(inv)
+  const betalingsStatus = beregnBetalingsstatus(inv, payments)
+
+  // Last innbetalinger ved mount og når faktura endrer seg
+  const loadPayments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('invoice_payments')
+        .select('*')
+        .eq('invoice_id', inv.id)
+        .order('payment_date', { ascending: false })
+      if (error) throw error
+      setPayments(data || [])
+    } catch (e) {
+      console.warn('[innbetalinger] kunne ikke laste:', e)
+      setPayments([])
+    }
+  }
+  React.useEffect(() => { loadPayments() }, [inv.id])
+
+  // Slett en innbetaling (med bekreftelse). Hvis dette gjør at fakturaen
+  // ikke lenger er fullt betalt, settes status tilbake til 'Sendt'.
+  const slettInnbetaling = async (payment) => {
+    const ok = await confirm({
+      message: 'Slett denne innbetalingen?',
+      subMessage: `Innbetaling på ${fmtI(payment.amount)} (${payment.payment_date}) slettes permanent. Hvis dette gjør at fakturaen ikke lenger er fullt betalt, settes status tilbake til Sendt.`,
+      danger: true,
+      confirmLabel: 'Slett innbetaling',
+    })
+    if (!ok) return
+    try {
+      const { error } = await supabase.from('invoice_payments').delete().eq('id', payment.id)
+      if (error) throw error
+      // Hent oppdaterte innbetalinger
+      const { data: nyePayments } = await supabase
+        .from('invoice_payments')
+        .select('*')
+        .eq('invoice_id', inv.id)
+      const nySum = sumInnbetalinger(nyePayments || [])
+      // Hvis fakturaen var Betalt og nå mangler beløp, sett tilbake til Sendt
+      if (inv.status === 'Betalt' && nySum < betalingsStatus.total) {
+        await supabase.from('invoices').update({
+          status: 'Sendt',
+          paid_at: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', inv.id)
+        await refresh()
+      }
+      setPayments(nyePayments || [])
+    } catch (e) {
+      console.error('[innbetaling] slett feilet:', e)
+      await appAlert({ message: 'Kunne ikke slette innbetaling', subMessage: e.message || 'Ukjent feil', kind: 'error' })
+    }
+  }
 
   const refresh = async () => { const {data}=await supabase.from('invoices').select('*').eq('id',inv.id).single(); if(data) setInv(data) }
 
@@ -17506,6 +17819,93 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
             </div>
           </div>
 
+          {/* Innbetalinger (Etappe 2) — vises kun for sendte/purrede/betalte fakturaer */}
+          {inv.status !== 'Utkast' && !inv.is_credit_note && (
+            <div style={iCard}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'14px', flexWrap:'wrap', gap:'8px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <span style={{ fontSize:'20px' }}>💰</span>
+                  <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Innbetalinger</h3>
+                </div>
+                <button
+                  onClick={() => setShowInnbetaling(true)}
+                  className="no-print"
+                  style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobFD ? '7px 12px' : '8px 14px', fontSize: isMobFD ? '11px' : '13px', fontWeight:'700', cursor:'pointer' }}
+                >+ Registrer innbetaling</button>
+              </div>
+
+              {/* Oppsummering: total / innbetalt / gjenstår-eller-tilgode */}
+              <div style={{ display:'grid', gridTemplateColumns: isMobFD ? '1fr' : 'repeat(3, 1fr)', gap:'10px', marginBottom:'14px' }}>
+                <div style={{ padding:'12px 14px', background:'#f8fafc', borderRadius:'10px' }}>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'4px', fontWeight:'600' }}>TOTAL</div>
+                  <div style={{ fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>{fmtI(betalingsStatus.total)}</div>
+                </div>
+                <div style={{ padding:'12px 14px', background: betalingsStatus.innbetalt > 0 ? '#f0fdf4' : '#f8fafc', borderRadius:'10px' }}>
+                  <div style={{ fontSize:'11px', color: betalingsStatus.innbetalt > 0 ? '#15803d' : '#94a3b8', marginBottom:'4px', fontWeight:'600' }}>INNBETALT</div>
+                  <div style={{ fontSize:'17px', fontWeight:'800', color: betalingsStatus.innbetalt > 0 ? '#15803d' : '#0f172a' }}>{fmtI(betalingsStatus.innbetalt)}</div>
+                </div>
+                <div style={{ padding:'12px 14px', background: betalingsStatus.tilgode > 0 ? '#eff6ff' : (betalingsStatus.gjenstar > 0 ? '#fef2f2' : '#f0fdf4'), borderRadius:'10px' }}>
+                  <div style={{ fontSize:'11px', color: betalingsStatus.tilgode > 0 ? '#1e40af' : (betalingsStatus.gjenstar > 0 ? '#b91c1c' : '#15803d'), marginBottom:'4px', fontWeight:'600' }}>
+                    {betalingsStatus.tilgode > 0 ? 'TILGODE' : (betalingsStatus.gjenstar > 0 ? 'GJENSTÅR' : 'STATUS')}
+                  </div>
+                  <div style={{ fontSize:'17px', fontWeight:'800', color: betalingsStatus.tilgode > 0 ? '#1e40af' : (betalingsStatus.gjenstar > 0 ? '#b91c1c' : '#15803d') }}>
+                    {betalingsStatus.tilgode > 0
+                      ? `+${fmtI(betalingsStatus.tilgode)}`
+                      : (betalingsStatus.gjenstar > 0
+                        ? fmtI(betalingsStatus.gjenstar)
+                        : '✓ Fullt betalt')}
+                  </div>
+                </div>
+              </div>
+
+              {/* Tydelig advarsel hvis delvis betalt */}
+              {betalingsStatus.erDelvisBetalt && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 12px', marginBottom:'12px', display:'flex', alignItems:'flex-start', gap:'8px' }}>
+                  <span style={{ fontSize:'16px', flexShrink:0 }}>⚠️</span>
+                  <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.5 }}>
+                    <strong>Delvis betalt:</strong> {fmtI(betalingsStatus.innbetalt)} av {fmtI(betalingsStatus.total)}.
+                    Gjenstående: <strong>{fmtI(betalingsStatus.gjenstar)}</strong>.
+                  </div>
+                </div>
+              )}
+
+              {/* Liste over innbetalinger */}
+              {payments.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'20px 0', color:'#94a3b8', fontSize:'13px' }}>
+                  Ingen innbetalinger registrert ennå.
+                </div>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                  {payments.map(p => {
+                    const metode = BETALINGSMETODER[p.payment_method] || BETALINGSMETODER.other
+                    return (
+                      <div key={p.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#f8fafc', borderRadius:'8px', border:'1px solid #f1f5f9' }}>
+                        <span style={{ fontSize:'18px', flexShrink:0 }}>{metode.emoji}</span>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px' }}>
+                            <span style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{fmtI(p.amount)}</span>
+                            <span style={{ fontSize:'12px', color:'#64748b' }}>{p.payment_date}</span>
+                          </div>
+                          <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>
+                            {metode.label}
+                            {p.reference && <> · Ref: {p.reference}</>}
+                            {p.notes && <> · {p.notes}</>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => slettInnbetaling(p)}
+                          className="no-print"
+                          title="Slett innbetaling"
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'16px', padding:'4px 6px', flexShrink:0 }}
+                        >🗑️</button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
           {inv.notes&&<div style={iCard}><p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6 }}>{inv.notes}</p></div>}
         </div>
 
@@ -17545,6 +17945,18 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
 
       {editing&&<FakturaEditorModal projects={projects} user={user} initial={inv} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
       {showSend&&<SendFakturaModal invoice={inv} user={user} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
+      {showInnbetaling && (
+        <RegistrerInnbetalingModal
+          invoice={inv}
+          payments={payments}
+          user={user}
+          onClose={() => setShowInnbetaling(false)}
+          onSaved={async () => {
+            await loadPayments()
+            await refresh()
+          }}
+        />
+      )}
 
       {/* Kreditnota-modal */}
       {showKreditnota && (
