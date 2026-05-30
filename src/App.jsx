@@ -10253,7 +10253,7 @@ function PurringModal({ quote, user, onClose, onSent }) {
 
 const MODULE_CONFIG = {
   quote:        { label: 'Tilbud',          emoji: '📋', table: 'quotes',           statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
-  calculation:  { label: 'Kalkulasjon',     emoji: '🧮', table: 'calculations',     statusField: 'status', approvedStatus: 'Ferdig',    rejectedStatus: 'Utkast',   notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
+  calculation:  { label: 'Kalkulasjon',     emoji: '🧮', table: 'calculations',     statusField: 'status', approvedStatus: 'Tilbud godkjent',    rejectedStatus: 'Utkast',   notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
   order:        { label: 'Ordre',           emoji: '📦', table: 'orders',           statusField: 'status', approvedStatus: 'Bekreftet', rejectedStatus: 'Avslått',  notifTitle: (r) => `Ordre bekreftet: ${r.title}`, notifTitleReject: (r) => `Ordre avslått: ${r.title}` },
   invoice:      { label: 'Faktura',         emoji: '🧾', table: 'invoices',         statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avvist',   notifTitle: (r) => `Faktura godkjent: ${r.title}`, notifTitleReject: (r) => `Faktura avvist: ${r.title}` },
   change_order: { label: 'Endringsmelding', emoji: '🔄', table: 'change_orders',    statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avslått',  notifTitle: (r) => `Endringsmelding godkjent: ${r.title}`, notifTitleReject: (r) => `Endringsmelding avslått: ${r.title}` },
@@ -53707,7 +53707,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     return true
   })
 
-  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Ferdig': 0 }
+  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0 }
   regularKalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
 
   // Ny fra mal
@@ -53756,10 +53756,10 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   }
 
   const KALK_STATUS_CFG = {
-    'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
-    'Aktiv':       { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
-    'Tilbud sendt':{ bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
-    'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+    'Utkast':           { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+    'Aktiv':            { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
+    'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
+    'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   }
 
   const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
@@ -57501,10 +57501,10 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   })
 
   const KALK_STATUS_CFG = {
-    'Utkast':      { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
-    'Aktiv':       { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
-    'Tilbud sendt':{ bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
-    'Ferdig':      { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+    'Utkast':           { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+    'Aktiv':            { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
+    'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
+    'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
 
