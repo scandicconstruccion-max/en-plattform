@@ -10291,12 +10291,22 @@ function GodkjenningsPage() {
       await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.approvedStatus, accepted_at: now, updated_at: now }).eq('id', tokenData.record_id)
 
       if (tokenData.created_by) {
+        // Map fra MODULE_CONFIG-nøkkel (engelsk) til appens norske side-navn
+        const linkPage = {
+          quote: 'tilbud',
+          calculation: 'kalkulator',
+          order: 'ordre',
+          invoice: 'faktura',
+          change_order: 'endringer',
+          tender: 'anbudsmodul',
+        }[tokenData.module] || tokenData.module
+
         await supabase.from('notifications').insert({
           user_id: tokenData.created_by,
           title: cfg.notifTitle(record),
           message: `Signert av ${signedName.trim()}${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
           type: 'success',
-          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
+          link_page: linkPage,
           link_id: tokenData.record_id,
         })
       }
@@ -10315,12 +10325,22 @@ function GodkjenningsPage() {
       await supabase.from(cfg.table).update({ [cfg.statusField]: cfg.rejectedStatus, updated_at: now }).eq('id', tokenData.record_id)
 
       if (tokenData.created_by) {
+        // Samme mapping som ved godkjenning — module-nøkkel → norsk side-navn
+        const linkPage = {
+          quote: 'tilbud',
+          calculation: 'kalkulator',
+          order: 'ordre',
+          invoice: 'faktura',
+          change_order: 'endringer',
+          tender: 'anbudsmodul',
+        }[tokenData.module] || tokenData.module
+
         await supabase.from('notifications').insert({
           user_id: tokenData.created_by,
           title: cfg.notifTitleReject(record),
           message: rejectComment.trim() || `Avslått av mottaker${tokenData.recipient_email ? ` (${tokenData.recipient_email})` : ''}`,
           type: 'warning',
-          link_page: tokenData.module === 'quote' ? 'tilbud' : tokenData.module,
+          link_page: linkPage,
           link_id: tokenData.record_id,
         })
       }
