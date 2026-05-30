@@ -17899,8 +17899,14 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
     setBestiller(true)
     try {
       // Hent gjeldende settings
+      console.log('[Bestill] Henter company_settings...')
       const { data: settings, error: settingsErr } = await supabase.from('company_settings').select('*').limit(1).single()
-      if (settingsErr || !settings) throw new Error('Kunne ikke hente bedriftsinnstillinger')
+      if (settingsErr) {
+        console.error('[Bestill] Feil ved henting av settings:', settingsErr)
+        throw new Error(`Kunne ikke hente bedriftsinnstillinger: ${settingsErr.message}`)
+      }
+      if (!settings) throw new Error('Ingen bedriftsinnstillinger funnet')
+      console.log('[Bestill] Settings hentet:', { id: settings.id, active_modules: settings.active_modules })
 
       let newModules = [...(settings.active_modules || [])]
       if (newModules.includes(mod.id)) {
@@ -17914,6 +17920,7 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
       for (const reqId of (mod.requires || [])) {
         if (!newModules.includes(reqId)) newModules.push(reqId)
       }
+      console.log('[Bestill] Nye moduler å lagre:', newModules)
 
       const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
       if (settings.subscription_status === 'trial') {
@@ -17921,7 +17928,11 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
       }
 
       const { error: updateErr } = await supabase.from('company_settings').update(updates).eq('id', settings.id)
-      if (updateErr) throw updateErr
+      if (updateErr) {
+        console.error('[Bestill] Feil ved oppdatering:', updateErr)
+        throw new Error(`Kunne ikke oppdatere abonnement: ${updateErr.message}`)
+      }
+      console.log('[Bestill] Oppdatert. Aktiverer modul...')
 
       // Notify platform owner
       try {
@@ -17961,7 +17972,7 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
     <div onClick={(e) => { if (e.target === e.currentTarget && !bestiller) onClose() }}
       style={{
         position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.55)',
-        zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        zIndex: 9000, display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '16px', backdropFilter: 'blur(4px)',
       }}>
       <div style={{
