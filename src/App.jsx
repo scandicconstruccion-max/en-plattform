@@ -311,6 +311,65 @@ function AuthProvider({ children }) {
 
 const useAuth = () => useContext(AuthContext)
 
+// ── E-POST-UTSENDING ─────────────────────────────────────────────────────────
+// Globale hjelpere for å bestemme avsender- og reply-to-adresse på utgående
+// e-post. Følger Tripletex-modellen:
+//   - Avsender vises alltid som "Bedriftsnavn <noreply@enplattform.no>"
+//   - Reply-To bestemmes av bedriftens innstilling i Min Bedrift:
+//       'sender' = svar går til den som sendte (default)
+//       'fixed'  = svar går alltid til en fast e-postadresse
+//
+// Brukes på tvers av alle moduler som sender e-post (faktura, tilbud, ordre,
+// endringsmelding, befaring, purring, UE-forespørsler, m.fl.).
+
+// Henter avsender-e-post for en gitt bruker. Prioritet:
+//   1) employees.sender_email (hvis admin har satt egen avsender-e-post)
+//   2) auth.users.email (innlogging-e-post som fallback)
+async function getAnsattAvsenderEpost(userId, userEmailFallback) {
+  if (!userId) return userEmailFallback || null
+  try {
+    const { data } = await supabase
+      .from('employees')
+      .select('sender_email')
+      .eq('user_id', userId)
+      .maybeSingle()
+    if (data?.sender_email) return data.sender_email
+  } catch (e) {
+    // Stille fallback — vi vil ikke at e-post-utsending feiler hvis vi ikke finner ansatt
+  }
+  return userEmailFallback || null
+}
+
+// Beregner Reply-To-adresse basert på bedriftens innstillinger og hvem som sender.
+// Returnerer en streng eller null hvis ingen Reply-To skal settes.
+function beregnReplyTo(companySettings, senderEpost) {
+  if (!companySettings) return senderEpost || null
+  const mode = companySettings.email_reply_to_mode || 'sender'
+  if (mode === 'fixed') {
+    return companySettings.email_reply_to_fixed || senderEpost || null
+  }
+  // mode === 'sender'
+  return senderEpost || companySettings.email_reply_to_fixed || null
+}
+
+// Sjekker om brukeren er admin. Foreløpig: første registrerte bruker.
+// Senere kan utvides med user_profiles.is_admin eller roller-tabell —
+// kun denne funksjonen trenger oppdatering, ikke 10+ steder i koden.
+async function erAdmin(userId) {
+  if (!userId) return false
+  try {
+    const { data } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle()
+    return data?.id === userId
+  } catch (e) {
+    return false
+  }
+}
+
 function Login() {
   const { supabase } = useAuth()
   const [email, setEmail] = useState('')
@@ -19677,6 +19736,7 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
     employee_number:initial?.employee_number||'', position:initial?.position||'',
     department:initial?.department||'', contract_type:initial?.contract_type||'Fast',
     email:initial?.email||'', phone:initial?.phone||'', address:initial?.address||'',
+    sender_email:initial?.sender_email||'',
     birth_date:initial?.birth_date||'', hired_date:initial?.hired_date||new Date().toISOString().split('T')[0],
     end_date:initial?.end_date||'',
     hourly_rate:initial?.hourly_rate||'', monthly_salary:initial?.monthly_salary||'',
@@ -19729,6 +19789,13 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
           <div>{lbl('Fødselsdato')}<input type="date" value={form.birth_date} onChange={e=>set('birth_date',e.target.value)} style={eInp} /></div>
           <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="epost@firma.no" style={eInp} /></div>
           <div>{lbl('Telefon')}<input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={eInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>
+            {lbl('📧 Avsender-epost')}
+            <input type="email" value={form.sender_email} onChange={e=>set('sender_email',e.target.value)} placeholder="Brukes som Reply-To på utgående e-post (valgfritt)" style={eInp} />
+            <div style={{ fontSize:'11px', color:'#64748b', marginTop:'4px', lineHeight:1.4 }}>
+              Når bedriften sender e-post via En Plattform og innstillingen «svar går til personen som sendte» er aktiv, vil kundens svar gå til denne adressen. Hvis tom, brukes innloggings-eposten.
+            </div>
+          </div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Adresse')}<input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Gateadresse, postnr sted" style={eInp} /></div>
 
           {sec('💼 Ansettelsesinfo')}
@@ -38001,6 +38068,226 @@ function SuperAdminPage() {
   )
 }
 
+// ── E-POST-INNSTILLINGER (i Min Bedrift) ──────────────────────────────────────
+// Globale innstillinger for utgående e-post. Gjelder ALLE moduler som sender
+// e-post (faktura, tilbud, ordre, endringsmelding, befaring, purring, m.fl.)
+function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
+  const appAlert = useAppAlert()
+  const [mode, setMode] = useState('sender')
+  const [fixedEmail, setFixedEmail] = useState('')
+  const [erBrukerAdmin, setErBrukerAdmin] = useState(false)
+  const [sjekkerAdmin, setSjekkerAdmin] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  React.useEffect(() => {
+    if (settings) {
+      setMode(settings.email_reply_to_mode || 'sender')
+      setFixedEmail(settings.email_reply_to_fixed || '')
+    }
+  }, [settings])
+
+  React.useEffect(() => {
+    (async () => {
+      const admin = await erAdmin(user?.id)
+      setErBrukerAdmin(admin)
+      setSjekkerAdmin(false)
+    })()
+  }, [user?.id])
+
+  const validerEpost = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e || '')
+
+  const handleSave = async () => {
+    if (mode === 'fixed' && !validerEpost(fixedEmail)) {
+      await appAlert({
+        message: 'Ugyldig e-postadresse',
+        subMessage: 'Skriv inn en gyldig e-postadresse for fast Reply-To.',
+        kind: 'error',
+      })
+      return
+    }
+    setSaving(true)
+    try {
+      const updates = {
+        email_reply_to_mode: mode,
+        email_reply_to_fixed: mode === 'fixed' ? fixedEmail.trim() : null,
+      }
+      const { error } = await supabase.from('company_settings').update(updates).eq('id', settings.id)
+      if (error) throw error
+      await appAlert({ message: 'E-post-innstillinger lagret', kind: 'success' })
+      if (onSaved) onSaved()
+    } catch (e) {
+      console.error('[epost-innstillinger] lagring feilet:', e)
+      await appAlert({ message: 'Kunne ikke lagre', subMessage: e.message || 'Ukjent feil', kind: 'error' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (sjekkerAdmin) {
+    return (
+      <div style={{ padding:'40px', textAlign:'center', color:'#94a3b8' }}>
+        Laster...
+      </div>
+    )
+  }
+
+  return (
+    <>
+      {/* Forklarings-boks */}
+      <div style={{ background:'white', borderRadius:'14px', padding: isMob ? '16px' : '20px 24px', border:'1px solid #f1f5f9' }}>
+        <h2 style={{ margin:'0 0 8px', fontSize: isMob ? '15px' : '17px', fontWeight:'800', color:'#0f172a' }}>📧 E-post-utsending</h2>
+        <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#475569', lineHeight:1.5 }}>
+          Innstillinger for hvordan utgående e-post fra En Plattform håndteres. Gjelder for alle moduler som sender e-post til kunder, samarbeidspartnere og underleverandører — fakturaer, tilbud, ordrer, endringsmeldinger, befaringer, purringer m.fl.
+        </p>
+        <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', fontSize:'12px', color:'#475569', lineHeight:1.6 }}>
+          <div style={{ marginBottom:'6px' }}>
+            <strong style={{ color:'#0f172a' }}>Avsender:</strong> Alle e-poster sendes fra <code style={{ background:'white', padding:'2px 6px', borderRadius:'4px', fontFamily:'monospace', fontSize:'11px' }}>noreply@enplattform.no</code> men vises i innboksen som <em>«{settings?.company_name || '[Bedriftsnavn]'} via En Plattform»</em>.
+          </div>
+          <div>
+            <strong style={{ color:'#0f172a' }}>Reply-To:</strong> Når kunden trykker «svar» på e-posten, går svaret til adressen du velger nedenfor.
+          </div>
+        </div>
+      </div>
+
+      {/* Hovedvalg: Reply-To-mode */}
+      <div style={{ background:'white', borderRadius:'14px', padding: isMob ? '16px' : '20px 24px', border:'1px solid #f1f5f9' }}>
+        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Hvem skal motta svar fra kundene?</h3>
+
+        {/* Option 1: Sender */}
+        <label
+          style={{
+            display:'flex',
+            alignItems:'flex-start',
+            gap:'12px',
+            padding:'14px 16px',
+            background: mode === 'sender' ? '#f0fdf4' : '#f8fafc',
+            border: `2px solid ${mode === 'sender' ? '#059669' : '#e2e8f0'}`,
+            borderRadius:'12px',
+            cursor: erBrukerAdmin ? 'pointer' : 'not-allowed',
+            opacity: erBrukerAdmin ? 1 : 0.6,
+            marginBottom:'10px',
+            transition:'all 0.15s',
+          }}
+        >
+          <input
+            type="radio"
+            name="reply-to-mode"
+            value="sender"
+            checked={mode === 'sender'}
+            onChange={() => setMode('sender')}
+            disabled={!erBrukerAdmin}
+            style={{ marginTop:'2px', width:'18px', height:'18px', cursor: erBrukerAdmin ? 'pointer' : 'not-allowed', accentColor:'#059669' }}
+          />
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
+              👤 Svar går til personen som sendte (anbefalt)
+            </div>
+            <div style={{ fontSize:'11px', color:'#475569', lineHeight:1.5 }}>
+              Hvis Ola sender et tilbud, går kundens svar direkte til Ola — ikke til Petter eller andre ansatte. Mest fleksibelt for bedrifter der ulike ansatte håndterer hver sine kunder.
+            </div>
+            <div style={{ marginTop:'8px', fontSize:'11px', color:'#15803d', background:'white', borderRadius:'6px', padding:'6px 10px', display:'inline-block' }}>
+              💡 Adressen hentes fra ansattes <strong>Avsender-epost</strong> i Ansatte-modulen.
+            </div>
+          </div>
+        </label>
+
+        {/* Option 2: Fixed */}
+        <label
+          style={{
+            display:'flex',
+            alignItems:'flex-start',
+            gap:'12px',
+            padding:'14px 16px',
+            background: mode === 'fixed' ? '#eff6ff' : '#f8fafc',
+            border: `2px solid ${mode === 'fixed' ? '#2563eb' : '#e2e8f0'}`,
+            borderRadius:'12px',
+            cursor: erBrukerAdmin ? 'pointer' : 'not-allowed',
+            opacity: erBrukerAdmin ? 1 : 0.6,
+            transition:'all 0.15s',
+          }}
+        >
+          <input
+            type="radio"
+            name="reply-to-mode"
+            value="fixed"
+            checked={mode === 'fixed'}
+            onChange={() => setMode('fixed')}
+            disabled={!erBrukerAdmin}
+            style={{ marginTop:'2px', width:'18px', height:'18px', cursor: erBrukerAdmin ? 'pointer' : 'not-allowed', accentColor:'#2563eb' }}
+          />
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
+              📬 Svar går alltid til en fast adresse
+            </div>
+            <div style={{ fontSize:'11px', color:'#475569', lineHeight:1.5, marginBottom: mode === 'fixed' ? '10px' : 0 }}>
+              Alle svar samles på én adresse uansett hvem som sendte. Egnet for bedrifter med felles e-postpostkasse (f.eks. post@bedrift.no).
+            </div>
+            {mode === 'fixed' && (
+              <input
+                type="email"
+                value={fixedEmail}
+                onChange={(e) => setFixedEmail(e.target.value)}
+                placeholder="post@dinbedrift.no"
+                disabled={!erBrukerAdmin}
+                style={{
+                  width:'100%',
+                  padding:'9px 12px',
+                  border:'1px solid #bfdbfe',
+                  borderRadius:'8px',
+                  fontSize:'13px',
+                  boxSizing:'border-box',
+                  background: erBrukerAdmin ? 'white' : '#f1f5f9',
+                  cursor: erBrukerAdmin ? 'text' : 'not-allowed',
+                }}
+              />
+            )}
+          </div>
+        </label>
+
+        {/* Admin-info */}
+        {!erBrukerAdmin && (
+          <div style={{ marginTop:'14px', padding:'10px 12px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+            🔒 Kun administrator kan endre disse innstillingene. Kontakt din administrator hvis du trenger å endre noe.
+          </div>
+        )}
+
+        {/* Lagre-knapp */}
+        {erBrukerAdmin && (
+          <div style={{ marginTop:'18px', display:'flex', justifyContent:'flex-end' }}>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              style={{
+                background:'#059669',
+                color:'white',
+                border:'none',
+                borderRadius:'10px',
+                padding:'10px 22px',
+                fontSize:'13px',
+                fontWeight:'700',
+                cursor: saving ? 'default' : 'pointer',
+                opacity: saving ? 0.6 : 1,
+              }}
+            >
+              {saving ? 'Lagrer...' : 'Lagre innstillinger'}
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Info-boks om Avsender-epost i Ansatte */}
+      <div style={{ background:'#f8fafc', borderRadius:'12px', padding: isMob ? '14px' : '16px 20px', border:'1px solid #e2e8f0' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
+          <span style={{ fontSize:'20px', flexShrink:0 }}>💡</span>
+          <div style={{ fontSize:'12px', color:'#475569', lineHeight:1.6 }}>
+            <strong style={{ color:'#0f172a' }}>Tips:</strong> Når «svar går til personen som sendte» er aktiv, brukes ansattes <strong>Avsender-epost</strong> som du finner i <strong>Ansatte-modulen</strong>. Hvis ikke satt, brukes innloggings-eposten som fallback. Gå til Ansatte for å konfigurere avsender-e-post per ansatt.
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function MinBedriftPage() {
   const { user } = useAuth()
   const appAlert = useAppAlert()
@@ -38155,8 +38442,12 @@ function MinBedriftPage() {
             <div style={{ fontSize: isMobMB ? '10px' : '11px', color:'#94a3b8' }}>{isMobMB ? '/mnd' : 'eks. mva · '+numUsers+' bruker'+(numUsers>1?'e':'')}</div>
           </div>
         </div>
-        <div style={{ display:'flex', gap:'4px' }}>
-          {[['info', isMobMB ? '🏢 Info' : '🏢 Bedriftsinformasjon'],['moduler', isMobMB ? '📦 Moduler' : '📦 Moduler og priser']].map(([id, label]) => (
+        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+          {[
+            ['info', isMobMB ? '🏢 Info' : '🏢 Bedriftsinformasjon'],
+            ['epost', isMobMB ? '📧 E-post' : '📧 E-post-utsending'],
+            ['moduler', isMobMB ? '📦 Moduler' : '📦 Moduler og priser'],
+          ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
               style={{ padding: isMobMB ? '7px 12px' : '8px 18px', borderRadius:'10px', border:'none', background:tab===id?'#059669':'#f8fafc', color:tab===id?'white':'#64748b', fontWeight:tab===id?'700':'500', fontSize: isMobMB ? '12px' : '13px', cursor:'pointer' }}>{label}</button>
           ))}
@@ -38242,6 +38533,16 @@ function MinBedriftPage() {
             </div>
 
           </>
+        )}
+
+        {/* TAB: E-POST-UTSENDING */}
+        {tab === 'epost' && (
+          <EpostInnstillingerSeksjon
+            settings={settings}
+            user={user}
+            isMob={isMobMB}
+            onSaved={load}
+          />
         )}
 
         {/* TAB: MODULER OG PRISER */}
