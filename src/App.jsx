@@ -386,10 +386,10 @@ async function hentEpostKontekst(user) {
     // Hent company_settings én gang
     const { data: cs } = await supabase
       .from('company_settings')
-      .select('company_name, email_reply_to_mode, email_reply_to_fixed')
+      .select('name, email_reply_to_mode, email_reply_to_fixed')
       .limit(1)
       .maybeSingle()
-    if (cs?.company_name) ctx.fromName = cs.company_name
+    if (cs?.name) ctx.fromName = cs.name
 
     // Beregn Reply-To basert på modus
     const mode = cs?.email_reply_to_mode || 'sender'
@@ -38194,7 +38194,7 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
         </p>
         <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', fontSize:'13px', color:'#475569', lineHeight:1.6 }}>
           <div style={{ marginBottom:'8px' }}>
-            <strong style={{ color:'#0f172a' }}>Avsender:</strong> Alle e-poster sendes fra <code style={{ background:'white', padding:'2px 6px', borderRadius:'4px', fontFamily:'monospace', fontSize:'12px' }}>noreply@enplattform.no</code> men vises i innboksen som <em>«{settings?.company_name || '[Bedriftsnavn]'} via En Plattform»</em>.
+            <strong style={{ color:'#0f172a' }}>Avsender:</strong> Alle e-poster sendes fra <code style={{ background:'white', padding:'2px 6px', borderRadius:'4px', fontFamily:'monospace', fontSize:'12px' }}>noreply@enplattform.no</code> men vises i innboksen som <em>«{settings?.name || '[Bedriftsnavn]'} via En Plattform»</em>.
           </div>
           <div>
             <strong style={{ color:'#0f172a' }}>Reply-To:</strong> Når kunden trykker «svar» på e-posten, går svaret til adressen du velger nedenfor.
