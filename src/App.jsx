@@ -9090,17 +9090,23 @@ function TilbudPage() {
   }
   useEffect(() => { load() }, [])
 
-  // Auto-åpne tilbud fra varsel-klikk
+  // Auto-åpne tilbud fra varsel-klikk — henter fersk status fra databasen
   useEffect(() => {
-    if (quotes.length === 0) return
     const pendingId = window.__pendingLinkId
     if (!pendingId) return
-    const treff = quotes.find(q => q.id === pendingId)
-    if (treff) {
-      setSelected(treff)
-      window.__pendingLinkId = null
-    }
-  }, [quotes])
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('quotes').select('*').eq('id', pendingId).single()
+        if (data) {
+          setSelected(data)
+          setQuotes(prev => prev.map(q => q.id === data.id ? data : q))
+        }
+      } catch(e) { console.error('Kunne ikke åpne tilbud fra varsel:', e) }
+      finally {
+        window.__pendingLinkId = null
+      }
+    })()
+  }, [])
 
   // Finn utløpte tilbud uten svar
   const expiredQuotes = quotes.filter(q => q.status === 'Sendt' && q.valid_until && new Date(q.valid_until) < new Date())
@@ -13915,17 +13921,23 @@ function OrdrePage() {
   }
   useEffect(() => { load() }, [])
 
-  // Auto-åpne ordre fra varsel-klikk
+  // Auto-åpne ordre fra varsel-klikk — henter fersk status fra databasen
   useEffect(() => {
-    if (orders.length === 0) return
     const pendingId = window.__pendingLinkId
     if (!pendingId) return
-    const treff = orders.find(o => o.id === pendingId)
-    if (treff) {
-      setSelected(treff)
-      window.__pendingLinkId = null
-    }
-  }, [orders])
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('orders').select('*').eq('id', pendingId).single()
+        if (data) {
+          setSelected(data)
+          setOrders(prev => prev.map(o => o.id === data.id ? data : o))
+        }
+      } catch(e) { console.error('Kunne ikke åpne ordre fra varsel:', e) }
+      finally {
+        window.__pendingLinkId = null
+      }
+    })()
+  }, [])
 
   const filtered = orders.filter(o => {
     if (filterStatus !== 'alle' && o.status !== filterStatus) return false
@@ -53645,16 +53657,26 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   // Når brukeren kommer hit fra et varsel (bjellen), åpner vi den spesifikke
   // kalkylen som varselet gjelder. window.__pendingLinkId settes av navigate()
   // når et varsel klikkes.
+  // VIKTIG: vi henter ALLTID fersk data fra databasen for den spesifikke
+  // kalken — slik at status-oppdatering etter godkjenning vises korrekt.
   useEffect(() => {
-    if (kalks.length === 0) return
     const pendingId = window.__pendingLinkId
     if (!pendingId) return
-    const treff = kalks.find(k => k.id === pendingId)
-    if (treff) {
-      setViewKalk(treff)
-      window.__pendingLinkId = null
-    }
-  }, [kalks])
+    ;(async () => {
+      try {
+        // Hent ferskt fra databasen — kan ha endret status (f.eks. godkjent)
+        const { data } = await supabase.from('calculations').select('*').eq('id', pendingId).single()
+        if (data) {
+          setViewKalk(data)
+          // Oppdater også listen så badge i oversikten reflekterer ny status
+          setKalks(prev => prev.map(k => k.id === data.id ? data : k))
+        }
+      } catch(e) { console.error('Kunne ikke åpne kalkyle fra varsel:', e) }
+      finally {
+        window.__pendingLinkId = null
+      }
+    })()
+  }, [])
 
   // Slett kalkulasjon fra liste-visningen — bruker system-confirm (ikke browser-popup)
   const handleDeleteKalk = async (k) => {
