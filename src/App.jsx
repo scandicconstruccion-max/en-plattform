@@ -370,6 +370,44 @@ async function erAdmin(userId) {
   }
 }
 
+// Henter komplett e-post-kontekst for å sende e-post via send-quote Edge Function.
+// Returnerer { fromName, replyTo } basert på:
+//   - companySettings.company_name → fromName ("Scandic Construcción")
+//   - companySettings.email_reply_to_mode + employees.sender_email + user.email → replyTo
+//
+// Brukes som spread: const ctx = await hentEpostKontekst(user); body: { ..., ...ctx }
+//
+// Trygt fallback: hvis noe feiler, returneres tomme verdier slik at e-posten
+// fortsatt sendes (med default avsender og uten Reply-To).
+async function hentEpostKontekst(user) {
+  const ctx = { fromName: null, replyTo: null }
+  if (!user) return ctx
+  try {
+    // Hent company_settings én gang
+    const { data: cs } = await supabase
+      .from('company_settings')
+      .select('company_name, email_reply_to_mode, email_reply_to_fixed')
+      .limit(1)
+      .maybeSingle()
+    if (cs?.company_name) ctx.fromName = cs.company_name
+
+    // Beregn Reply-To basert på modus
+    const mode = cs?.email_reply_to_mode || 'sender'
+    if (mode === 'fixed' && cs?.email_reply_to_fixed) {
+      ctx.replyTo = cs.email_reply_to_fixed
+    } else {
+      // mode === 'sender': hent ansattes avsender-e-post med fallback til user.email
+      const senderEpost = await getAnsattAvsenderEpost(user.id, user.email)
+      if (senderEpost) ctx.replyTo = senderEpost
+      else if (cs?.email_reply_to_fixed) ctx.replyTo = cs.email_reply_to_fixed
+    }
+  } catch (e) {
+    // Stille fallback — e-post skal ikke feile av denne grunn
+    console.warn('[epost-kontekst] kunne ikke hente:', e?.message)
+  }
+  return ctx
+}
+
 function Login() {
   const { supabase } = useAuth()
   const [email, setEmail] = useState('')
@@ -6747,7 +6785,7 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
           '<p style="color:#94a3b8;font-size:12px;text-align:center;margin-top:32px;padding-top:20px;border-top:1px solid #f1f5f9">Sendt via En Plattform</p>' +
         '</div>'
 
-        // Bygg Resend-payload med vedlegg (hvis PDF lyktes)
+        // Bygg Resend-payload med vedlegg (hvis PDF lyktes) + Tripletex-modell
         const payload = {
           to: email,
           subject: `Avvik ${avvikNr}: ${dev.title || 'Uten tittel'}`,
@@ -6761,10 +6799,11 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
           }]
         }
 
+        const epostCtx_auto = await hentEpostKontekst(user)
         const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-          body: JSON.stringify(payload)
+          body: JSON.stringify({ ...payload, ...epostCtx_auto })
         })
         if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
       }
@@ -10004,10 +10043,11 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
           <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
         </div>
       `
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: email, subject: `Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml })
+        body: JSON.stringify({ to: email, subject: `Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml , ...epostCtx_auto })
       })
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
@@ -10094,10 +10134,11 @@ function PurringModal({ quote, user, onClose, onSent }) {
           <p style="color:#94a3b8;font-size:12px">Purring ${reminderCount} — sendt via En Plattform</p>
         </div>
       `
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: email, subject: `Purring: Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml })
+        body: JSON.stringify({ to: email, subject: `Purring: Tilbud ${quote.quote_number} – ${quote.title}`, html: emailHtml , ...epostCtx_auto })
       })
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
@@ -10531,10 +10572,11 @@ function UESvarPage() {
             </div>
             <p style="color:#475569;font-size:14px">Logg inn i En Plattform for å godkjenne eller avslå tilbudet.</p>
           </div>`
+          const epostCtx_auto = await hentEpostKontekst(user)
           await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-            body: JSON.stringify({ to: teUser.email, subject: `Nytt UE-tilbud fra ${foresp.ue_navn} – ${foresp.prosjekt_navn}`, html: emailHtml })
+            body: JSON.stringify({ to: teUser.email, subject: `Nytt UE-tilbud fra ${foresp.ue_navn} – ${foresp.prosjekt_navn}`, html: emailHtml , ...epostCtx_auto })
           })
         }
       } catch(ee) {}
@@ -11385,7 +11427,8 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
         if (error) throw error
         const pricingUrl = `${window.location.origin}/anbud-pris?token=${data.token}`
         const html = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px"><h1 style="color:#0f172a;font-size:22px;margin-bottom:8px">Anbudsforespørsel: ${tender.title}</h1><p style="color:#64748b;font-size:14px">Anbudsnummer: <strong>${tender.tender_number}</strong></p>${tender.description?'<div style="background:#f8fafc;border-radius:12px;padding:16px;margin:16px 0"><p style="margin:0;color:#475569;line-height:1.6">'+tender.description+'</p></div>':''}${tender.deadline?'<p style="color:#dc2626;font-weight:600;font-size:14px">Anbudsfrist: '+tender.deadline+'</p>':''}<p style="color:#64748b;font-size:14px">Vi ber om at du fyller inn dine priser for folggende poster.</p><div style="text-align:center;margin:32px 0"><a href="${pricingUrl}" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Fyll inn priser</a></div><hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0"><p style="color:#94a3b8;font-size:12px">Sendt via En Plattform</p></div>`
-        const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY }, body: JSON.stringify({ to: ue.email.trim(), subject:'Anbudsforespørsel: '+tender.title+' ('+tender.tender_number+')', html }) })
+        const epostCtx_auto = await hentEpostKontekst(user)
+        const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method:'POST', headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY }, body: JSON.stringify({ to: ue.email.trim(), subject:'Anbudsforespørsel: '+tender.title+' ('+tender.tender_number+')', html, ...epostCtx_auto }) })
         if (!fnRes.ok) { const d=await fnRes.json(); throw new Error(d.error||'E-post feilet') }
       }
       if (createdAny) invalidateCustomerCache()
@@ -12616,9 +12659,10 @@ function EndringsmeldingPage() {
         payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
       }
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, ...epostCtx_auto })
       })
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
@@ -12706,10 +12750,11 @@ function EndringsmeldingPage() {
         payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
       }
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, ...epostCtx_auto })
       })
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
@@ -12870,9 +12915,10 @@ function EndringsmeldingPage() {
         payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
       }
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const resp = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, ...epostCtx_auto })
       })
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
@@ -14894,10 +14940,11 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
         payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
       }
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, ...epostCtx_auto })
       })
       if (!fnRes.ok) { const d = await fnRes.json().catch(() => ({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
 
@@ -15116,10 +15163,11 @@ function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) 
       }
       if (pdfBase64) payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, ...epostCtx_auto })
       })
       if (!fnRes.ok) { const d = await fnRes.json().catch(()=>({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
 
@@ -15272,10 +15320,11 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
       }
       if (pdfBase64) payload.attachments = [{ filename: pdfFilename, content: pdfBase64, type: 'application/pdf' }]
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method:'POST',
         headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, ...epostCtx_auto })
       })
       if (!fnRes.ok) { const d = await fnRes.json().catch(()=>({})); throw new Error(d?.error || `Sending feilet (${fnRes.status})`) }
 
@@ -16619,9 +16668,10 @@ function FakturaPage() {
                         const { gross: g } = calcLines(oi.lines)
                         const reminderNum = (oi.reminder_count || 0) + 1
                         const html = `<div style="font-family:system-ui,sans-serif;max-width:600px;margin:0 auto;padding:32px 20px"><div style="background:#fef2f2;border-radius:12px;padding:16px;border:1px solid #fecaca;margin-bottom:20px"><h2 style="margin:0;color:#dc2626;font-size:18px">Purring ${reminderNum} – Ubetalt faktura</h2><p style="margin:4px 0 0;color:#dc2626;font-size:13px">Forfallsdato: <strong>${oi.due_date}</strong></p></div><h1 style="color:#0f172a;font-size:20px">${oi.title}</h1><p style="color:#64748b">Fakturanummer: <strong>${oi.invoice_number}</strong></p><div style="background:#f8fafc;border-radius:12px;padding:20px;margin:16px 0"><div style="font-size:28px;font-weight:800;color:#0f172a">${fmtI(g)}</div></div>${oi.bank_account?'<p style="color:#374151">Kontonr: <strong>'+oi.bank_account+'</strong></p>':''}${oi.kid?'<p style="color:#374151">KID: <strong>'+oi.kid+'</strong></p>':''}<p style="color:#64748b;font-size:13px">Vennligst betal snarest.</p><hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0"><p style="color:#94a3b8;font-size:12px">Purring ${reminderNum} — En Plattform</p></div>`
+                        const epostCtx_auto = await hentEpostKontekst(user)
                         await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
                           method:'POST', headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':'Bearer '+import.meta.env.VITE_SUPABASE_ANON_KEY},
-                          body: JSON.stringify({ to:oi.customer_email, subject:`PURRING ${reminderNum} – Faktura ${oi.invoice_number}`, html })
+                          body: JSON.stringify({ to:oi.customer_email, subject:`PURRING ${reminderNum} – Faktura ${oi.invoice_number}`, html , ...epostCtx_auto })
                         })
                         await supabase.from('invoices').update({ status:'Purret', reminder_count:reminderNum, last_reminder_at:new Date().toISOString(), updated_at:new Date().toISOString() }).eq('id', oi.id)
                         load()
@@ -18068,9 +18118,10 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
           <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
           <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system</p>
         </div>`
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`,{
         method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
-        body:JSON.stringify({to:inv.customer_email,subject:`PURRING – Faktura ${inv.invoice_number} – ${inv.title}`,html})
+        body:JSON.stringify({to:inv.customer_email,subject:`PURRING – Faktura ${inv.invoice_number} – ${inv.title}`,html, ...epostCtx_auto })
       })
       if (!fnRes.ok) throw new Error('Sending feilet')
       await supabase.from('invoices').update({status:'Purret',updated_at:new Date().toISOString()}).eq('id',inv.id)
@@ -19149,9 +19200,10 @@ function SendFakturaModal({ invoice, user, onClose, onSent }) {
           <hr style="border:none;border-top:1px solid #f1f5f9;margin:24px 0">
           <p style="color:#94a3b8;font-size:12px">Sendt via En Plattform KS-system · enplattform.no</p>
         </div>`
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`,{
         method:'POST',headers:{'Content-Type':'application/json','apikey':import.meta.env.VITE_SUPABASE_ANON_KEY,'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`},
-        body:JSON.stringify({to:email,subject:`Faktura ${invoice.invoice_number} – ${invoice.title}`,html})
+        body:JSON.stringify({to:email,subject:`Faktura ${invoice.invoice_number} – ${invoice.title}`,html, ...epostCtx_auto })
       })
       const d = await fnRes.json()
       if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
@@ -32954,10 +33006,11 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
       const html = buildEmailHtml(viewLink, name)
       const subject = `Befaring: ${inspection.title} — ${observations.length} punkt${observations.length!==1?'er':''}`
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: email, subject, html })
+        body: JSON.stringify({ to: email, subject, html , ...epostCtx_auto })
       })
       if (!fnRes.ok) throw new Error('Sending feilet (' + fnRes.status + ')')
 
@@ -39183,10 +39236,11 @@ function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
           <p style="color:#94a3b8;font-size:12px;text-align:center">Lenken er gyldig i 7 dager · Sendt via En Plattform KS-system</p>
         </div>`
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method:'POST',
         headers:{ 'Content-Type':'application/json', 'apikey':import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization':`Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to:form.email.trim(), subject:'Du er invitert til En Plattform KS-system', html })
+        body: JSON.stringify({ to:form.email.trim(), subject:'Du er invitert til En Plattform KS-system', html , ...epostCtx_auto })
       })
 
       setSent(true)
@@ -57651,10 +57705,11 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
         <p style="color:#94a3b8;font-size:12px">Svarfrist: 7 dager</p>
       </div>`
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-        body: JSON.stringify({ to: ue.email, subject: `Tilbudsforespørsel ${nr} – ${k.title}`, html: emailHtml })
+        body: JSON.stringify({ to: ue.email, subject: `Tilbudsforespørsel ${nr} – ${k.title}`, html: emailHtml , ...epostCtx_auto })
       })
 
       updateUE(kalId, bdId, ue.id, 'status', 'sendt')
@@ -57729,7 +57784,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
         '<p style="color:#475569;font-size:14px">Vi ber vennligst om at tilbudet leveres snarest.</p>' +
         '<div style="text-align:center;margin:28px 0"><a href="' + svarUrl + '" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Legg inn tilbud</a></div>' +
         '</div>'
-      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: uf.email, subject: `Påminnelse — Tilbudsforespørsel ${uf.nr || ''} – ${k.title}`, html: emailHtml }) })
+      const epostCtx_auto = await hentEpostKontekst(user)
+      await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: uf.email, subject: `Påminnelse — Tilbudsforespørsel ${uf.nr || ''} – ${k.title}`, html: emailHtml, ...epostCtx_auto }) })
       setToastMsg({ title: 'Påminnelse sendt', message: `Påminnelse sendt til ${uf.navn} (${uf.email})`, type: 'success' })
     } catch(e) { setToastMsg({ title: 'Feil', message: 'Kunne ikke sende påminnelse: ' + e.message, type: 'error' }) }
   }
@@ -58918,7 +58974,8 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
                                     '<p style="color:#475569;font-size:14px">Vennligst pris hver post via knappen nedenfor.</p>' +
                                     '<div style="text-align:center;margin:28px 0"><a href="' + svarUrl + '" style="background:#2563eb;color:white;padding:16px 32px;border-radius:12px;text-decoration:none;font-weight:700;font-size:16px;display:inline-block">Legg inn tilbud</a></div>' +
                                     '<p style="color:#94a3b8;font-size:12px">Svarfrist: 7 dager</p></div>'
-                                  const sendRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: uf.email, subject: `Tilbudsforespørsel ${nr} – ${fag.name} – ${k.title}`, html: emailHtml }) })
+                                  const epostCtx_auto = await hentEpostKontekst(user)
+                                  const sendRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` }, body: JSON.stringify({ to: uf.email, subject: `Tilbudsforespørsel ${nr} – ${fag.name} – ${k.title}`, html: emailHtml, ...epostCtx_auto }) })
                                   if (!sendRes.ok) { const errData = await sendRes.json().catch(() => ({})); console.error('E-post feil:', errData); }
                                   // Single combined update to avoid race condition
                                   updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, ue_foresporsler: (kl.ue_foresporsler||[]).map(u => u.id === uf.id ? { ...u, status: 'sendt', foresporsel_id: foresp.id, nr } : u) } : kl))
@@ -61525,6 +61582,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
         // Fortsett uten vedlegg — e-posten skal uansett sendes
       }
 
+      const epostCtx_auto = await hentEpostKontekst(user)
       const fnRes = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-quote`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY, 'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
@@ -61532,7 +61590,8 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
           to: email,
           subject: `Tilbud ${kalk.kalk_number} – ${kalk.title}`,
           html: emailHtml,
-          attachments: pdfAttachment ? [pdfAttachment] : []
+          attachments: pdfAttachment ? [pdfAttachment] : [],
+          ...epostCtx_auto
         })
       })
       const fnData = await fnRes.json()
