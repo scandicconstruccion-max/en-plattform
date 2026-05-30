@@ -9090,6 +9090,18 @@ function TilbudPage() {
   }
   useEffect(() => { load() }, [])
 
+  // Auto-åpne tilbud fra varsel-klikk
+  useEffect(() => {
+    if (quotes.length === 0) return
+    const pendingId = window.__pendingLinkId
+    if (!pendingId) return
+    const treff = quotes.find(q => q.id === pendingId)
+    if (treff) {
+      setSelected(treff)
+      window.__pendingLinkId = null
+    }
+  }, [quotes])
+
   // Finn utløpte tilbud uten svar
   const expiredQuotes = quotes.filter(q => q.status === 'Sendt' && q.valid_until && new Date(q.valid_until) < new Date())
 
@@ -10297,7 +10309,7 @@ function GodkjenningsPage() {
           calculation: 'kalkulator',
           order: 'ordre',
           invoice: 'faktura',
-          change_order: 'endringer',
+          change_order: 'endringsmelding',
           tender: 'anbudsmodul',
         }[tokenData.module] || tokenData.module
 
@@ -10331,7 +10343,7 @@ function GodkjenningsPage() {
           calculation: 'kalkulator',
           order: 'ordre',
           invoice: 'faktura',
-          change_order: 'endringer',
+          change_order: 'endringsmelding',
           tender: 'anbudsmodul',
         }[tokenData.module] || tokenData.module
 
@@ -13903,6 +13915,18 @@ function OrdrePage() {
   }
   useEffect(() => { load() }, [])
 
+  // Auto-åpne ordre fra varsel-klikk
+  useEffect(() => {
+    if (orders.length === 0) return
+    const pendingId = window.__pendingLinkId
+    if (!pendingId) return
+    const treff = orders.find(o => o.id === pendingId)
+    if (treff) {
+      setSelected(treff)
+      window.__pendingLinkId = null
+    }
+  }, [orders])
+
   const filtered = orders.filter(o => {
     if (filterStatus !== 'alle' && o.status !== filterStatus) return false
     if (search && ![o.title,o.order_number,o.customer_name].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
@@ -16496,6 +16520,13 @@ function FakturaPage() {
     if (pendingInvoiceId) {
       sessionStorage.removeItem('openInvoiceId') // fjern etter bruk
       openInvoiceById(pendingInvoiceId)
+    }
+
+    // Sjekk __pendingLinkId — dette fanger opp varsel-klikk fra bjellen
+    const pendingFromVarsel = window.__pendingLinkId
+    if (pendingFromVarsel && !pendingInvoiceId) {
+      window.__pendingLinkId = null
+      openInvoiceById(pendingFromVarsel)
     }
 
     const onOpenInvoice = async (e) => {
@@ -53610,6 +53641,20 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
+
+  // Når brukeren kommer hit fra et varsel (bjellen), åpner vi den spesifikke
+  // kalkylen som varselet gjelder. window.__pendingLinkId settes av navigate()
+  // når et varsel klikkes.
+  useEffect(() => {
+    if (kalks.length === 0) return
+    const pendingId = window.__pendingLinkId
+    if (!pendingId) return
+    const treff = kalks.find(k => k.id === pendingId)
+    if (treff) {
+      setViewKalk(treff)
+      window.__pendingLinkId = null
+    }
+  }, [kalks])
 
   // Slett kalkulasjon fra liste-visningen — bruker system-confirm (ikke browser-popup)
   const handleDeleteKalk = async (k) => {
