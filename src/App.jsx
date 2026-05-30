@@ -38134,14 +38134,14 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
   return (
     <>
       {/* Forklarings-boks */}
-      <div style={{ background:'white', borderRadius:'14px', padding: isMob ? '16px' : '20px 24px', border:'1px solid #f1f5f9' }}>
-        <h2 style={{ margin:'0 0 8px', fontSize: isMob ? '15px' : '17px', fontWeight:'800', color:'#0f172a' }}>📧 E-post-utsending</h2>
-        <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#475569', lineHeight:1.5 }}>
+      <div style={mbCard}>
+        <h2 style={{ margin:'0 0 10px', fontSize: isMob ? '17px' : '19px', fontWeight:'800', color:'#0f172a' }}>📧 E-post-utsending</h2>
+        <p style={{ margin:'0 0 14px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
           Innstillinger for hvordan utgående e-post fra En Plattform håndteres. Gjelder for alle moduler som sender e-post til kunder, samarbeidspartnere og underleverandører — fakturaer, tilbud, ordrer, endringsmeldinger, befaringer, purringer m.fl.
         </p>
-        <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', fontSize:'12px', color:'#475569', lineHeight:1.6 }}>
-          <div style={{ marginBottom:'6px' }}>
-            <strong style={{ color:'#0f172a' }}>Avsender:</strong> Alle e-poster sendes fra <code style={{ background:'white', padding:'2px 6px', borderRadius:'4px', fontFamily:'monospace', fontSize:'11px' }}>noreply@enplattform.no</code> men vises i innboksen som <em>«{settings?.company_name || '[Bedriftsnavn]'} via En Plattform»</em>.
+        <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'14px 16px', fontSize:'13px', color:'#475569', lineHeight:1.6 }}>
+          <div style={{ marginBottom:'8px' }}>
+            <strong style={{ color:'#0f172a' }}>Avsender:</strong> Alle e-poster sendes fra <code style={{ background:'white', padding:'2px 6px', borderRadius:'4px', fontFamily:'monospace', fontSize:'12px' }}>noreply@enplattform.no</code> men vises i innboksen som <em>«{settings?.company_name || '[Bedriftsnavn]'} via En Plattform»</em>.
           </div>
           <div>
             <strong style={{ color:'#0f172a' }}>Reply-To:</strong> Når kunden trykker «svar» på e-posten, går svaret til adressen du velger nedenfor.
@@ -38150,8 +38150,8 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
       </div>
 
       {/* Hovedvalg: Reply-To-mode */}
-      <div style={{ background:'white', borderRadius:'14px', padding: isMob ? '16px' : '20px 24px', border:'1px solid #f1f5f9' }}>
-        <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Hvem skal motta svar fra kundene?</h3>
+      <div style={mbCard}>
+        <h3 style={{ margin:'0 0 16px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Hvem skal motta svar fra kundene?</h3>
 
         {/* Option 1: Sender */}
         <label
@@ -38159,13 +38159,13 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
             display:'flex',
             alignItems:'flex-start',
             gap:'12px',
-            padding:'14px 16px',
+            padding:'16px 18px',
             background: mode === 'sender' ? '#f0fdf4' : '#f8fafc',
             border: `2px solid ${mode === 'sender' ? '#059669' : '#e2e8f0'}`,
             borderRadius:'12px',
             cursor: erBrukerAdmin ? 'pointer' : 'not-allowed',
             opacity: erBrukerAdmin ? 1 : 0.6,
-            marginBottom:'10px',
+            marginBottom:'12px',
             transition:'all 0.15s',
           }}
         >
@@ -38176,16 +38176,16 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
             checked={mode === 'sender'}
             onChange={() => setMode('sender')}
             disabled={!erBrukerAdmin}
-            style={{ marginTop:'2px', width:'18px', height:'18px', cursor: erBrukerAdmin ? 'pointer' : 'not-allowed', accentColor:'#059669' }}
+            style={{ marginTop:'2px', width:'18px', height:'18px', cursor: erBrukerAdmin ? 'pointer' : 'not-allowed', accentColor:'#059669', flexShrink:0 }}
           />
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>
               👤 Svar går til personen som sendte (anbefalt)
             </div>
-            <div style={{ fontSize:'11px', color:'#475569', lineHeight:1.5 }}>
+            <div style={{ fontSize:'13px', color:'#475569', lineHeight:1.5 }}>
               Hvis Ola sender et tilbud, går kundens svar direkte til Ola — ikke til Petter eller andre ansatte. Mest fleksibelt for bedrifter der ulike ansatte håndterer hver sine kunder.
             </div>
-            <div style={{ marginTop:'8px', fontSize:'11px', color:'#15803d', background:'white', borderRadius:'6px', padding:'6px 10px', display:'inline-block' }}>
+            <div style={{ marginTop:'10px', fontSize:'12px', color:'#15803d', background:'white', borderRadius:'6px', padding:'8px 12px', display:'inline-block' }}>
               💡 Adressen hentes fra ansattes <strong>Avsender-epost</strong> i Ansatte-modulen.
             </div>
           </div>
@@ -38197,7 +38197,7 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
             display:'flex',
             alignItems:'flex-start',
             gap:'12px',
-            padding:'14px 16px',
+            padding:'16px 18px',
             background: mode === 'fixed' ? '#eff6ff' : '#f8fafc',
             border: `2px solid ${mode === 'fixed' ? '#2563eb' : '#e2e8f0'}`,
             borderRadius:'12px',
@@ -38213,13 +38213,13 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
             checked={mode === 'fixed'}
             onChange={() => setMode('fixed')}
             disabled={!erBrukerAdmin}
-            style={{ marginTop:'2px', width:'18px', height:'18px', cursor: erBrukerAdmin ? 'pointer' : 'not-allowed', accentColor:'#2563eb' }}
+            style={{ marginTop:'2px', width:'18px', height:'18px', cursor: erBrukerAdmin ? 'pointer' : 'not-allowed', accentColor:'#2563eb', flexShrink:0 }}
           />
           <div style={{ flex:1 }}>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'2px' }}>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>
               📬 Svar går alltid til en fast adresse
             </div>
-            <div style={{ fontSize:'11px', color:'#475569', lineHeight:1.5, marginBottom: mode === 'fixed' ? '10px' : 0 }}>
+            <div style={{ fontSize:'13px', color:'#475569', lineHeight:1.5, marginBottom: mode === 'fixed' ? '12px' : 0 }}>
               Alle svar samles på én adresse uansett hvem som sendte. Egnet for bedrifter med felles e-postpostkasse (f.eks. post@bedrift.no).
             </div>
             {mode === 'fixed' && (
@@ -38230,12 +38230,8 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
                 placeholder="post@dinbedrift.no"
                 disabled={!erBrukerAdmin}
                 style={{
-                  width:'100%',
-                  padding:'9px 12px',
+                  ...mbInp,
                   border:'1px solid #bfdbfe',
-                  borderRadius:'8px',
-                  fontSize:'13px',
-                  boxSizing:'border-box',
                   background: erBrukerAdmin ? 'white' : '#f1f5f9',
                   cursor: erBrukerAdmin ? 'text' : 'not-allowed',
                 }}
@@ -38246,14 +38242,14 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
 
         {/* Admin-info */}
         {!erBrukerAdmin && (
-          <div style={{ marginTop:'14px', padding:'10px 12px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+          <div style={{ marginTop:'16px', padding:'12px 14px', background:'#fef3c7', border:'1px solid #fde68a', borderRadius:'10px', fontSize:'13px', color:'#92400e', lineHeight:1.5 }}>
             🔒 Kun administrator kan endre disse innstillingene. Kontakt din administrator hvis du trenger å endre noe.
           </div>
         )}
 
         {/* Lagre-knapp */}
         {erBrukerAdmin && (
-          <div style={{ marginTop:'18px', display:'flex', justifyContent:'flex-end' }}>
+          <div style={{ marginTop:'20px', display:'flex', justifyContent:'flex-end' }}>
             <button
               onClick={handleSave}
               disabled={saving}
@@ -38262,8 +38258,8 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
                 color:'white',
                 border:'none',
                 borderRadius:'10px',
-                padding:'10px 22px',
-                fontSize:'13px',
+                padding:'11px 24px',
+                fontSize:'14px',
                 fontWeight:'700',
                 cursor: saving ? 'default' : 'pointer',
                 opacity: saving ? 0.6 : 1,
@@ -38276,10 +38272,10 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
       </div>
 
       {/* Info-boks om Avsender-epost i Ansatte */}
-      <div style={{ background:'#f8fafc', borderRadius:'12px', padding: isMob ? '14px' : '16px 20px', border:'1px solid #e2e8f0' }}>
-        <div style={{ display:'flex', alignItems:'flex-start', gap:'10px' }}>
-          <span style={{ fontSize:'20px', flexShrink:0 }}>💡</span>
-          <div style={{ fontSize:'12px', color:'#475569', lineHeight:1.6 }}>
+      <div style={{ background:'#f8fafc', borderRadius:'12px', padding: isMob ? '14px 16px' : '16px 20px', border:'1px solid #e2e8f0' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:'12px' }}>
+          <span style={{ fontSize:'22px', flexShrink:0 }}>💡</span>
+          <div style={{ fontSize:'13px', color:'#475569', lineHeight:1.6 }}>
             <strong style={{ color:'#0f172a' }}>Tips:</strong> Når «svar går til personen som sendte» er aktiv, brukes ansattes <strong>Avsender-epost</strong> som du finner i <strong>Ansatte-modulen</strong>. Hvis ikke satt, brukes innloggings-eposten som fallback. Gå til Ansatte for å konfigurere avsender-e-post per ansatt.
           </div>
         </div>
