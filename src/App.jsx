@@ -14059,7 +14059,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
 
       // Opprett faktura som Utkast — med kobling til ordren
       // KID genereres automatisk hvis tillegget er aktivt på company_settings
-      const autoKid = kidErAktiv(cs) ? genererKid(newInvoiceNumber) : null
+      const autoKid = kidErAktiv(cs) ? genererKid(newInvoiceNumber, cs.invoice_kid_client_number) : null
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: o.title || `Faktura for ${o.order_number}`,
         invoice_number: newInvoiceNumber,
@@ -15461,12 +15461,15 @@ function mod10Sjekksiffer(sifre) {
   return sjekksiffer.toString()
 }
 
-function genererKid(invoiceNumber) {
+function genererKid(invoiceNumber, clientNumber = null) {
   // Bygg grunnlag fra fakturanummer ved å fjerne alle ikke-tall-tegn
   // F-2026-0001 → 20260001
   if (!invoiceNumber) return null
-  const grunnlag = String(invoiceNumber).replace(/[^\d]/g, '')
-  if (!grunnlag || grunnlag.length < 4) return null
+  const fakturaSifre = String(invoiceNumber).replace(/[^\d]/g, '')
+  if (!fakturaSifre || fakturaSifre.length < 4) return null
+  // Hvis klientnummer fra bank er satt, prefiseres det. Påkrevd for OCR-avtale.
+  const klientSifre = clientNumber ? String(clientNumber).replace(/[^\d]/g, '') : ''
+  const grunnlag = klientSifre + fakturaSifre
   const sjekksiffer = mod10Sjekksiffer(grunnlag)
   if (sjekksiffer === null) return null
   return grunnlag + sjekksiffer
@@ -15514,7 +15517,7 @@ async function berikFakturaMedInnstillinger(payload) {
       oppdateringer.bank_account = cs.bank_account
     }
     if (trengerKid && kidErAktiv(cs) && payload.invoice_number) {
-      const kid = genererKid(payload.invoice_number)
+      const kid = genererKid(payload.invoice_number, cs.invoice_kid_client_number)
       if (kid) oppdateringer.kid = kid
     }
     return Object.keys(oppdateringer).length > 0 ? { ...payload, ...oppdateringer } : payload
@@ -15544,6 +15547,7 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
   const [kidEnabled, setKidEnabled] = useState(false)
   const [kidSubStartedAt, setKidSubStartedAt] = useState(null)
   const [kidSubCancelledAt, setKidSubCancelledAt] = useState(null)
+  const [kidClientNumber, setKidClientNumber] = useState('')
   const [isAdmin, setIsAdmin] = useState(false)
   // Bekreft-modal-state for KID-aktivering
   const [showKidBekreft, setShowKidBekreft] = useState(false)
@@ -15553,7 +15557,7 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
   const renteInfo = getForsinkelsesrente()
 
   // Avledede verdier
-  const kidEksempel = genererKid('F-2026-0001')  // For visning i UI
+  const kidEksempel = genererKid('F-2026-0001', kidClientNumber)  // For visning i UI
   const kidErAktivStatus = kidErAktiv({
     invoice_kid_enabled: kidEnabled,
     invoice_kid_subscription_cancelled_at: kidSubCancelledAt,
@@ -15580,6 +15584,8 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
           setKidEnabled(!!data.invoice_kid_enabled)
           setKidSubStartedAt(data.invoice_kid_subscription_started_at || null)
           setKidSubCancelledAt(data.invoice_kid_subscription_cancelled_at || null)
+          // Klientnummer fra bank — kun siffer
+          setKidClientNumber((data.invoice_kid_client_number || '').replace(/[^\d]/g, ''))
         }
 
         // 2) Sjekk om innlogget bruker er admin (første registrerte bruker)
@@ -15707,6 +15713,7 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
         invoice_kid_enabled: kidEnabled,
         invoice_kid_subscription_started_at: kidSubStartedAt,
         invoice_kid_subscription_cancelled_at: kidSubCancelledAt,
+        invoice_kid_client_number: kidClientNumber || null,
       }
       const { error } = await supabase.from('company_settings').update(updates).eq('id', settingsId)
       if (error) throw error
@@ -15888,9 +15895,56 @@ function FakturaInnstillingerModal({ onClose, onSaved }) {
                   </div>
                 )}
 
-                <div style={{ marginTop:'10px', padding:'10px 12px', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
-                  ℹ️ Husk å avtale OCR/KID med din bank. Innbetalinger som mangler korrekt KID vil ikke kobles automatisk til faktura.
+                {/* Klientnummer fra bank — påkrevd for OCR-avregning */}
+                <div style={{ marginTop:'14px', padding:'14px 16px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px' }}>
+                    <span style={{ fontSize:'15px' }}>🏦</span>
+                    <span style={{ fontSize:'12px', fontWeight:'700', color:'#92400e' }}>Klientnummer fra bank (OCR-avtale)</span>
+                  </div>
+                  <p style={{ margin:'0 0 10px', fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+                    For at innbetalinger skal kunne kobles <strong>automatisk</strong> til riktig faktura, må du inngå en OCR/KID-avtale med banken din (DNB, Sparebank 1, Nordea, m.fl.). Banken tildeler deg da et <strong>klientnummer</strong> (vanligvis 3–4 siffer) som må stå først i KID-en.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={kidClientNumber}
+                    onChange={(e) => setKidClientNumber(e.target.value.replace(/[^\d]/g, '').slice(0, 6))}
+                    placeholder="F.eks. 001 — tildelt av banken"
+                    disabled={!isAdmin}
+                    style={{ ...iInp, background: isAdmin ? 'white' : '#f1f5f9', cursor: isAdmin ? 'text' : 'not-allowed' }}
+                  />
+                  {kidClientNumber ? (
+                    <div style={{ marginTop:'8px', fontSize:'10px', color:'#92400e', fontFamily:'monospace', padding:'6px 8px', background:'rgba(255,255,255,0.6)', borderRadius:'6px' }}>
+                      Eksempel: F-2026-0001 → KID <strong>{kidEksempel || '—'}</strong>
+                      <span style={{ display:'block', color:'#a16207', marginTop:'2px', fontFamily:'system-ui' }}>
+                        ({kidClientNumber} = klientnr · {String('F-2026-0001').replace(/[^\d]/g, '')} = fakturanr · sjekksiffer)
+                      </span>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop:'8px', fontSize:'10px', color:'#a16207', lineHeight:1.5 }}>
+                      💡 Uten klientnummer fungerer KID-en kun som visning på fakturaen. Innbetalinger må da fortsatt registreres manuelt.
+                    </div>
+                  )}
                 </div>
+
+                {/* Hvordan etablere OCR-avtale */}
+                <details style={{ marginTop:'8px' }}>
+                  <summary style={{ fontSize:'11px', color:'#475569', cursor:'pointer', padding:'6px 0', fontWeight:'600' }}>
+                    ❓ Hvordan etablerer jeg en OCR-avtale?
+                  </summary>
+                  <div style={{ marginTop:'6px', padding:'10px 12px', background:'#f8fafc', borderRadius:'8px', fontSize:'11px', color:'#475569', lineHeight:1.6 }}>
+                    <ol style={{ margin:0, paddingLeft:'18px' }}>
+                      <li>Logg inn i nettbanken din (DNB Bedrift, Sparebank 1 Bedrift, e.l.)</li>
+                      <li>Søk etter <strong>"OCR"</strong>, <strong>"KID-innbetalinger"</strong>, eller <strong>"Innbetalingstjenester"</strong>, eller kontakt bedriftsrådgiveren din</li>
+                      <li>Bestill OCR-tjeneste (typisk 200–400 kr/mnd + transaksjonsgebyr)</li>
+                      <li>Banken tildeler deg et <strong>klientnummer</strong> (3–4 siffer)</li>
+                      <li>Legg inn klientnummeret over og lagre — alle nye fakturaer får da OCR-kompatible KID-nummer</li>
+                    </ol>
+                    <div style={{ marginTop:'8px', fontStyle:'italic', color:'#64748b' }}>
+                      Tips: Banken sender deg en daglig fil (CAMT/CSV-format) med alle KID-innbetalinger som kan importeres til systemet.
+                    </div>
+                  </div>
+                </details>
               </div>
             )}
           </div>
@@ -18436,7 +18490,7 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
           }
           // KID-nummer genereres automatisk hvis tillegget er aktivt
           if (!f.kid && kidErAktiv(cs)) {
-            const kid = genererKid(f.invoice_number)
+            const kid = genererKid(f.invoice_number, cs.invoice_kid_client_number)
             if (kid) oppdateringer.kid = kid
           }
           return Object.keys(oppdateringer).length > 0 ? { ...f, ...oppdateringer } : f
