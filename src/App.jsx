@@ -10253,7 +10253,7 @@ function PurringModal({ quote, user, onClose, onSent }) {
 
 const MODULE_CONFIG = {
   quote:        { label: 'Tilbud',          emoji: '📋', table: 'quotes',           statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
-  calculation:  { label: 'Kalkulasjon',     emoji: '🧮', table: 'calculations',     statusField: 'status', approvedStatus: 'Tilbud godkjent',    rejectedStatus: 'Utkast',   notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
+  calculation:  { label: 'Kalkulasjon',     emoji: '🧮', table: 'calculations',     statusField: 'status', approvedStatus: 'Tilbud godkjent',    rejectedStatus: 'Avslått',   notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
   order:        { label: 'Ordre',           emoji: '📦', table: 'orders',           statusField: 'status', approvedStatus: 'Bekreftet', rejectedStatus: 'Avslått',  notifTitle: (r) => `Ordre bekreftet: ${r.title}`, notifTitleReject: (r) => `Ordre avslått: ${r.title}` },
   invoice:      { label: 'Faktura',         emoji: '🧾', table: 'invoices',         statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avvist',   notifTitle: (r) => `Faktura godkjent: ${r.title}`, notifTitleReject: (r) => `Faktura avvist: ${r.title}` },
   change_order: { label: 'Endringsmelding', emoji: '🔄', table: 'change_orders',    statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avslått',  notifTitle: (r) => `Endringsmelding godkjent: ${r.title}`, notifTitleReject: (r) => `Endringsmelding avslått: ${r.title}` },
@@ -53714,7 +53714,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     return true
   })
 
-  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0 }
+  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0, 'Avslått': 0 }
   regularKalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
 
   // Ny fra mal
@@ -53767,6 +53767,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     'Aktiv':            { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+    'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
   }
 
   const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
@@ -54116,7 +54117,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
 
       <div style={{ padding: isMobK ? '12px' : '24px 32px', display:'flex', flexDirection:'column', gap: isMobK ? '12px' : '20px' }}>
         {/* Status cards */}
-        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap:'12px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap:'12px' }}>
           {Object.entries(KALK_STATUS_CFG).map(([s, cfg]) => (
             <button key={s} onClick={() => setFilterStatus(filterStatus === s ? 'alle' : s)}
               style={{ background: filterStatus===s ? cfg.bg : 'white', border:`1px solid ${filterStatus===s ? cfg.border : '#f1f5f9'}`, borderRadius: isMobK ? '10px' : '14px', padding: isMobK ? '10px' : '16px', cursor:'pointer', textAlign: isMobK ? 'center' : 'left' }}>
@@ -57477,6 +57478,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [saving, setSaving] = useState(false)
   const [ueTilbud, setUeTilbud] = useState([])
   const [expandedUeTilbud, setExpandedUeTilbud] = useState(null)
+  // Approval-historikk fra approval_tokens-tabellen for aktivitetsloggen.
+  // Inneholder signert_name og recipient_email for godkjent/avslag-hendelser.
+  const [approvalData, setApprovalData] = useState({ approved: null, rejected: null })
 
   // Scroll til toppen når kalkyle-visningen åpnes (særlig viktig etter BIM-generering
   // der brukeren har scrollet langt ned i Steg 3 før klikket "Generer kalkyle")
@@ -57492,6 +57496,19 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     // Load all UE-forespørsler for this calculation
     supabase.from('ue_foresporsler').select('*').eq('calculation_id', init.id).order('created_at', { ascending: false })
       .then(({ data }) => setUeTilbud(data || []))
+      .catch(() => {})
+    // Last godkjenning-/avslag-historikk for aktivitetsloggen.
+    // approval_tokens lagrer hvem som signerte (signed_name) og recipient_email.
+    supabase.from('approval_tokens')
+      .select('status, signed_name, recipient_email, approved_at, rejected_at, reject_comment')
+      .eq('record_id', init.id)
+      .in('status', ['approved', 'rejected'])
+      .order('approved_at', { ascending: false, nullsFirst: false })
+      .then(({ data }) => {
+        const approved = (data || []).find(d => d.status === 'approved')
+        const rejected = (data || []).find(d => d.status === 'rejected')
+        setApprovalData({ approved: approved || null, rejected: rejected || null })
+      })
       .catch(() => {})
   }, [])
 
@@ -57512,6 +57529,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     'Aktiv':            { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '🔢' },
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+    'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
 
@@ -59476,101 +59494,102 @@ table{width:100%;border-collapse:collapse;margin:20px 0} th{padding:8px 14px;tex
           </div>
 
           <button onClick={handleDelete} style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>🗑️ Slett kalkulasjon</button>
-          </>}
-        </div>}
-      </div>
 
-      {/* ── AKTIVITETSLOGG ─────────────────────────────────────────────
-          Viser livssyklus-hendelsene for kalkylen: opprettet, sendt,
-          godkjent eller avslått. Bruker timestamps direkte fra calculations-
-          tabellen (created_at, sent_at, accepted_at, rejected_at). */}
-      <div style={{ padding: isMobKV ? '12px' : '0 32px 24px', maxWidth:'100%' }}>
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobKV ? '14px' : '18px 24px' }}>
-          <h3 style={{ margin:'0 0 14px', fontSize: isMobKV ? '14px' : '15px', fontWeight:'700', color:'#0f172a', display:'flex', alignItems:'center', gap:'8px' }}>
-            <span>📋</span>
-            <span>Aktivitetslogg</span>
-          </h3>
-          {(() => {
-            // Bygg hendelse-listen kronologisk fra timestamp-feltene.
-            // Bare hendelser som faktisk har skjedd inkluderes.
-            const hendelser = []
-            if (k.created_at) {
-              hendelser.push({
-                tid: k.created_at,
-                emoji: '📝',
-                tittel: 'Kalkulasjon opprettet',
-                beskrivelse: null,
-                farge: '#64748b',
-                bg: '#f8fafc',
-              })
-            }
-            if (k.sent_at) {
-              hendelser.push({
-                tid: k.sent_at,
-                emoji: '📤',
-                tittel: 'Tilbud sendt',
-                beskrivelse: k.customer_email ? `Til ${k.customer_email}` : (k.customer_name ? `Til ${k.customer_name}` : null),
-                farge: '#ca8a04',
-                bg: '#fefce8',
-              })
-            }
-            if (k.accepted_at) {
-              hendelser.push({
-                tid: k.accepted_at,
-                emoji: '✅',
-                tittel: 'Tilbud godkjent',
-                beskrivelse: 'Signert digitalt av kunde',
-                farge: '#16a34a',
-                bg: '#f0fdf4',
-              })
-            }
-            if (k.rejected_at) {
-              hendelser.push({
-                tid: k.rejected_at,
-                emoji: '❌',
-                tittel: 'Tilbud avslått',
-                beskrivelse: k.rejected_reason || 'Avslått av kunde',
-                farge: '#dc2626',
-                bg: '#fef2f2',
-              })
-            }
-            // Sorter nyeste først
-            hendelser.sort((a, b) => new Date(b.tid) - new Date(a.tid))
-
-            if (hendelser.length === 0) {
-              return <p style={{ margin:0, fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>Ingen aktivitet registrert ennå.</p>
-            }
-
-            const formaterTid = (iso) => {
-              try {
-                const d = new Date(iso)
-                return d.toLocaleString('nb-NO', {
-                  day:'2-digit', month:'2-digit', year:'numeric',
-                  hour:'2-digit', minute:'2-digit',
+          {/* ── AKTIVITETSLOGG (sidebar) ──────────────────────────────
+              Viser livssyklus-hendelsene for kalkylen: opprettet, sendt,
+              godkjent, avslått. Bruker timestamps direkte fra calculations
+              + approval_tokens for signert-av-navn. */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 16px' }}>
+            <div style={{ fontWeight:'700', fontSize:'13px', marginBottom:'12px', display:'flex', alignItems:'center', gap:'6px' }}>
+              <span>📋</span>
+              <span>Aktivitetslogg</span>
+            </div>
+            {(() => {
+              // Bygg hendelse-listen fra timestamps + approval_tokens
+              const hendelser = []
+              if (k.created_at) {
+                hendelser.push({
+                  tid: k.created_at,
+                  emoji: '📝',
+                  tittel: 'Opprettet',
+                  beskrivelse: null,
+                  farge: '#64748b',
+                  bg: '#f8fafc',
                 })
-              } catch { return iso }
-            }
+              }
+              if (k.sent_at) {
+                hendelser.push({
+                  tid: k.sent_at,
+                  emoji: '📤',
+                  tittel: 'Tilbud sendt',
+                  beskrivelse: k.customer_email ? `Til ${k.customer_email}` : (k.customer_name ? `Til ${k.customer_name}` : null),
+                  farge: '#ca8a04',
+                  bg: '#fefce8',
+                })
+              }
+              if (k.accepted_at) {
+                // Bruk signed_name fra approval_tokens hvis tilgjengelig
+                const signedBy = approvalData.approved?.signed_name
+                hendelser.push({
+                  tid: k.accepted_at,
+                  emoji: '✅',
+                  tittel: 'Godkjent',
+                  beskrivelse: signedBy ? `Signert av ${signedBy}` : 'Signert digitalt av kunde',
+                  farge: '#16a34a',
+                  bg: '#f0fdf4',
+                })
+              }
+              if (k.rejected_at) {
+                const rejectedBy = approvalData.rejected?.signed_name
+                const reason = k.rejected_reason || approvalData.rejected?.reject_comment
+                let beskrivelse = rejectedBy ? `Avslått av ${rejectedBy}` : 'Avslått av kunde'
+                if (reason) beskrivelse += ` — ${reason}`
+                hendelser.push({
+                  tid: k.rejected_at,
+                  emoji: '❌',
+                  tittel: 'Avslått',
+                  beskrivelse,
+                  farge: '#dc2626',
+                  bg: '#fef2f2',
+                })
+              }
+              // Sorter nyeste først
+              hendelser.sort((a, b) => new Date(b.tid) - new Date(a.tid))
 
-            return (
-              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                {hendelser.map((h, i) => (
-                  <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:'12px', padding: isMobKV ? '10px 12px' : '12px 14px', background:h.bg, borderRadius:'10px', border:`1px solid ${h.farge}22` }}>
-                    <span style={{ fontSize:'18px', flexShrink:0, marginTop:'1px' }}>{h.emoji}</span>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:'8px', flexWrap:'wrap' }}>
-                        <span style={{ fontSize: isMobKV ? '13px' : '14px', fontWeight:'700', color:h.farge }}>{h.tittel}</span>
-                        <span style={{ fontSize: isMobKV ? '11px' : '12px', color:'#64748b', fontFamily:'monospace' }}>{formaterTid(h.tid)}</span>
+              if (hendelser.length === 0) {
+                return <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>Ingen aktivitet ennå.</p>
+              }
+
+              const formaterTid = (iso) => {
+                try {
+                  const d = new Date(iso)
+                  return d.toLocaleString('nb-NO', {
+                    day:'2-digit', month:'2-digit', year:'2-digit',
+                    hour:'2-digit', minute:'2-digit',
+                  })
+                } catch { return iso }
+              }
+
+              return (
+                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                  {hendelser.map((h, i) => (
+                    <div key={i} style={{ padding:'10px 12px', background:h.bg, borderRadius:'8px', border:`1px solid ${h.farge}22` }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'2px' }}>
+                        <span style={{ fontSize:'14px' }}>{h.emoji}</span>
+                        <span style={{ fontSize:'12px', fontWeight:'700', color:h.farge }}>{h.tittel}</span>
                       </div>
+                      <div style={{ fontSize:'10px', color:'#64748b', fontFamily:'monospace', marginBottom: h.beskrivelse ? '3px' : 0 }}>{formaterTid(h.tid)}</div>
                       {h.beskrivelse && (
-                        <div style={{ fontSize: isMobKV ? '11px' : '12px', color:'#475569', marginTop:'3px' }}>{h.beskrivelse}</div>
+                        <div style={{ fontSize:'11px', color:'#475569', lineHeight:1.4 }}>{h.beskrivelse}</div>
                       )}
                     </div>
-                  </div>
-                ))}
-              </div>
-            )
-          })()}
-        </div>
+                  ))}
+                </div>
+              )
+            })()}
+          </div>
+          </>}
+        </div>}
       </div>
 
       {/* Import fra annen kalkyle modal */}
