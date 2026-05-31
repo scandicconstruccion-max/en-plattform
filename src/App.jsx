@@ -20647,6 +20647,7 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
   const weekDates = getWeekDates(week, year)
   const entries = sheet?.timesheet_entries || []
   const [submitting, setSubmitting] = useState(false)
+  const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
 
   const totalHours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc, 0)
   const totalKm = entries.reduce((acc,e)=>acc+(parseFloat(e.travel_km)||0), 0)
