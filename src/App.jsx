@@ -23365,6 +23365,7 @@ function RessursGanttGrid({
                                 lineHeight:1.1,
                                 letterSpacing:'0.01em',
                                 overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
+                                textShadow:'0 1px 2px rgba(0,0,0,0.35)',
                               }}>
                                 {proj?.project_number || (proj?.name || '').slice(0,6)}
                               </div>
@@ -23372,13 +23373,14 @@ function RessursGanttGrid({
                             {!isZoomedOut && showName && (
                               <div style={{
                                 fontSize: width > 150 ? '11px' : '10px',
-                                fontWeight:'500',
+                                fontWeight:'700',
                                 lineHeight:1.2,
                                 marginTop:'2px',
                                 opacity:1,
                                 overflow:'hidden', textOverflow:'ellipsis',
                                 display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical',
                                 whiteSpace:'normal',
+                                textShadow:'0 1px 2px rgba(0,0,0,0.35)',
                               }}>
                                 {proj?.name || '—'}
                               </div>
@@ -23409,10 +23411,11 @@ function RessursGanttGrid({
                           {/* Bunn: timer nederst til høyre */}
                           {showHours && !isZoomedOut && (
                             <div style={{
-                              fontSize:'10px', opacity:0.85, fontWeight:'600',
+                              fontSize:'10px', opacity:1, fontWeight:'700',
                               textAlign:'right',
                               overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                               marginTop:'2px',
+                              textShadow:'0 1px 2px rgba(0,0,0,0.35)',
                             }}>
                               {bar.hours.toFixed(1).replace('.', ',')}t{bar.plans.length > 1 && ` · ${bar.plans.length}d`}
                             </div>
