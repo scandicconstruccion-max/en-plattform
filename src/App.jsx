@@ -20465,7 +20465,9 @@ function TimelistePage() {
   const [selectedWeek, setSelectedWeek] = useState(getWeekNumber(new Date()))
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedEmployee, setSelectedEmployee] = useState(null)
-  const [editingSheet, setEditingSheet] = useState(null)
+  // Tripletex-modell: ingen separat "rediger"-side lenger. Dagene er direkte
+  // klikkbare i ukeoversikten. (Tidligere fantes editingSheet-state for en
+  // egen TimesheetEditor-side; den ble fjernet til fordel for inline editor.)
   const [statsView, setStatsView] = useState('uke') // 'dag'|'uke'|'maned'
   // Godkjennings-tilgang: admin = ser alt, PL = ser kun sine prosjekter,
   // ansatt uten rettigheter = ser ikke "Godkjenn"-fanen i det hele tatt
@@ -20525,8 +20527,6 @@ function TimelistePage() {
 
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster timelister...</p></div></div>
 
-  if (editingSheet) return <TimesheetEditor sheet={editingSheet} projects={projects} employees={employees} user={user} onBack={()=>{setEditingSheet(null);load()}} />
-
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', overflowX:'hidden', maxWidth:'100vw' }}>
       {/* Header */}
@@ -20585,15 +20585,56 @@ function TimelistePage() {
               </div>
             </div>
 
-            {/* Week sheet */}
-            <WeekSheet
-              sheet={currentSheet}
-              week={selectedWeek} year={selectedYear}
-              employeeId={selectedEmployee||employees[0]?.id}
-              projects={projects} user={user}
-              onEdit={()=>{
-                setEditingSheet({ sheet:currentSheet, week:selectedWeek, year:selectedYear, employeeId:selectedEmployee||employees[0]?.id })
+            {/* Kompakt total + status-rad — erstatter WeekSheet sin status-card.
+                Viser timer + entry-statussummering. Editoren under tar direkte klikk
+                på dagene for å føre/redigere (Tripletex-modell). */}
+            {(() => {
+              const cs = currentSheet
+              const csEntries = cs?.timesheet_entries || []
+              const total = csEntries.reduce((a,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+a, 0)
+              const counts = { 'Til godkjenning': 0, 'Godkjent': 0, 'Avvist': 0 }
+              for (const e of csEntries) {
+                const s = e.status || 'Til godkjenning'
+                if (counts[s] !== undefined) counts[s]++
+              }
+              return (
+                <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px 14px' : '14px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize: isMobTL ? '17px' : '18px', fontWeight:'800', color:'#059669' }}>{fmtHours(total)}t</span>
+                    <span style={{ fontSize:'12px', color:'#94a3b8' }}>denne uken</span>
+                    {counts['Til godkjenning'] > 0 && (
+                      <span style={{ background:'#fefce8', color:'#ca8a04', border:'1px solid #fef08a', padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>
+                        ⏳ {counts['Til godkjenning']} venter
+                      </span>
+                    )}
+                    {counts['Godkjent'] > 0 && (
+                      <span style={{ background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>
+                        ✅ {counts['Godkjent']} godkjent
+                      </span>
+                    )}
+                    {counts['Avvist'] > 0 && (
+                      <span style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>
+                        ❌ {counts['Avvist']} avvist
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Inline editor: dagsoversikt der man klikker direkte på dagen
+                for å føre/redigere. Erstatter den gamle "Rediger / Legg til"-flyten. */}
+            <TimesheetEditor
+              inline
+              sheet={{
+                sheet: currentSheet,
+                week: selectedWeek,
+                year: selectedYear,
+                employeeId: selectedEmployee || employees[0]?.id,
               }}
+              projects={projects}
+              employees={employees}
+              user={user}
               onRefresh={load}
             />
           </div>
@@ -20852,7 +20893,10 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
 }
 
 // ── TIMESHEET EDITOR – register hours per day ─────────────────────────────────
-function TimesheetEditor({ sheet: initData, projects, employees, user, onBack }) {
+// inline=true betyr at editoren rendres direkte i TimelistePage uten egen
+// header eller Tilbake-knapp (forrige design hadde to-steg: WeekSheet →
+// klikk Rediger → TimesheetEditor. Nå er editoren hovedvisningen).
+function TimesheetEditor({ sheet: initData, projects, employees, user, onBack, inline = false, onRefresh }) {
   const { sheet, week, year, employeeId } = initData
   const weekDates = getWeekDates(week, year)
   const [entries, setEntries] = useState([])
@@ -20863,11 +20907,16 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   const appAlert = useAppAlert()
   const isMobE = typeof window !== 'undefined' && window.innerWidth < 768
 
+  // Re-load entries når sheet endres (f.eks. ved uke-bytte i inline mode)
   useEffect(()=>{
     if (sheet?.timesheet_entries) {
       setEntries(sheet.timesheet_entries.map(e=>({...e, _dirty:false})))
+    } else {
+      setEntries([])
     }
-  },[])
+    setSheetId(sheet?.id || null)
+    setActiveDay(null)
+  },[sheet?.id, week, year, employeeId])
 
   const ensureSheet = async () => {
     if (sheetId) return sheetId
@@ -21023,6 +21072,8 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
       // Auto-lukk dag-editoren slik at brukeren ser ukeoversikten igjen.
       // Dette gir tydelig signal om at lagringen lyktes.
       setActiveDay(null)
+      // Refresh foreldre-data så liste-state oppdateres
+      if (onRefresh) onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
   }
@@ -21033,28 +21084,32 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
     await supabase.from('timesheet_entries').delete().eq('id',entry.id)
     setEntries(prev=>prev.filter(e=>e.date!==date))
     setActiveDay(null)
+    if (onRefresh) onRefresh()
   }
 
   const totalHours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc' }}>
-      {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobE ? '12px 14px' : '16px 20px', position:'sticky', top:0, zIndex:10 }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'6px', padding:0, minHeight:'32px' }}>← Tilbake</button>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
-          <div style={{ minWidth:0, flex:1 }}>
-            <div style={{ fontWeight:'800', fontSize: isMobE ? '15px' : '17px', color:'#0f172a' }}>Uke {week}, {year}</div>
-            <div style={{ fontSize: isMobE ? '12px' : '13px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{emp?.first_name} {emp?.last_name}</div>
-          </div>
-          <div style={{ textAlign:'right', flexShrink:0 }}>
-            <div style={{ fontSize: isMobE ? '20px' : '22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
-            <div style={{ fontSize:'11px', color:'#94a3b8' }}>denne uken</div>
+    <div style={{ fontFamily:'system-ui,sans-serif', minHeight: inline ? 'auto' : '100vh', background: inline ? 'transparent' : '#f8fafc' }}>
+      {/* Header — skjules i inline-modus siden TimelistePage har egen header.
+          I "egen-side"-modus (gammel flyt) vises header med Tilbake-knapp. */}
+      {!inline && (
+        <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobE ? '12px 14px' : '16px 20px', position:'sticky', top:0, zIndex:10 }}>
+          <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'6px', padding:0, minHeight:'32px' }}>← Tilbake</button>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ fontWeight:'800', fontSize: isMobE ? '15px' : '17px', color:'#0f172a' }}>Uke {week}, {year}</div>
+              <div style={{ fontSize: isMobE ? '12px' : '13px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{emp?.first_name} {emp?.last_name}</div>
+            </div>
+            <div style={{ textAlign:'right', flexShrink:0 }}>
+              <div style={{ fontSize: isMobE ? '20px' : '22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8' }}>denne uken</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ padding: isMobE ? '12px' : '16px', display:'flex', flexDirection:'column', gap:'10px' }}>
+      <div style={{ padding: inline ? 0 : (isMobE ? '12px' : '16px'), display:'flex', flexDirection:'column', gap:'10px' }}>
         {weekDates.map((date,i)=>{
           const entry = getEntry(date)
           const isWeekend = i>=5
