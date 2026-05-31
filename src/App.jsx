@@ -20558,7 +20558,7 @@ function TimelistePage() {
         </div>
       </div>
 
-      <div style={{ padding:'20px 24px' }}>
+      <div style={{ padding: isMobTL ? '12px' : '20px 24px' }}>
 
         {/* ── MINE TIMELISTER ── */}
         {view==='mine' && (
@@ -20728,9 +20728,9 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
       {/* Status-oversikt + actions — Tripletex-modell: per-entry-status, ikke uke */}
-      <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
-          <span style={{ fontSize:'14px', color:'#0f172a', fontWeight:'700' }}>{fmtHours(totalHours)} timer</span>
+      <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px 14px' : '16px 20px', display:'flex', alignItems: isMobTL ? 'stretch' : 'center', flexDirection: isMobTL ? 'column' : 'row', justifyContent:'space-between', flexWrap:'wrap', gap: isMobTL ? '10px' : '12px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+          <span style={{ fontSize: isMobTL ? '15px' : '14px', color:'#0f172a', fontWeight:'700' }}>{fmtHours(totalHours)} timer</span>
           {totalKm>0 && <span style={{ fontSize:'13px', color:'#64748b' }}>🚗 {totalKm} km</span>}
           {/* Vis entry-status-pilles hvis det finnes registreringer */}
           {entryStatusSummary['Til godkjenning'] > 0 && (
@@ -20749,8 +20749,8 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
             </span>
           )}
         </div>
-        <div style={{ display:'flex', gap:'8px' }}>
-          <button onClick={onEdit} style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+        <div style={{ display:'flex', gap:'8px', width: isMobTL ? '100%' : 'auto' }}>
+          <button onClick={onEdit} style={{ flex: isMobTL ? 1 : 'none', padding: isMobTL ? '13px 18px' : '10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTL ? '15px' : '14px', fontWeight:'700', minHeight: isMobTL ? '44px' : 'auto' }}>
             {sheet ? '✏️ Rediger / Legg til' : '+ Registrer timer'}
           </button>
         </div>
@@ -20860,6 +20860,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   const [activeDay, setActiveDay] = useState(null)
   const emp = employees.find(e=>e.id===employeeId)
   const appAlert = useAppAlert()
+  const isMobE = typeof window !== 'undefined' && window.innerWidth < 768
 
   useEffect(()=>{
     if (sheet?.timesheet_entries) {
@@ -21038,21 +21039,21 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   return (
     <div style={{ fontFamily:'system-ui,sans-serif', minHeight:'100vh', background:'#f8fafc' }}>
       {/* Header */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'16px 20px', position:'sticky', top:0, zIndex:10 }}>
-        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake</button>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-          <div>
-            <div style={{ fontWeight:'800', fontSize:'17px', color:'#0f172a' }}>Uke {week}, {year}</div>
-            <div style={{ fontSize:'13px', color:'#64748b' }}>{emp?.first_name} {emp?.last_name}</div>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobE ? '12px 14px' : '16px 20px', position:'sticky', top:0, zIndex:10 }}>
+        <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'8px', display:'flex', alignItems:'center', gap:'6px', padding:0, minHeight:'32px' }}>← Tilbake</button>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+          <div style={{ minWidth:0, flex:1 }}>
+            <div style={{ fontWeight:'800', fontSize: isMobE ? '15px' : '17px', color:'#0f172a' }}>Uke {week}, {year}</div>
+            <div style={{ fontSize: isMobE ? '12px' : '13px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{emp?.first_name} {emp?.last_name}</div>
           </div>
-          <div style={{ textAlign:'right' }}>
-            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize: isMobE ? '20px' : '22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
             <div style={{ fontSize:'11px', color:'#94a3b8' }}>denne uken</div>
           </div>
         </div>
       </div>
 
-      <div style={{ padding:'16px', display:'flex', flexDirection:'column', gap:'10px' }}>
+      <div style={{ padding: isMobE ? '12px' : '16px', display:'flex', flexDirection:'column', gap:'10px' }}>
         {weekDates.map((date,i)=>{
           const entry = getEntry(date)
           const isWeekend = i>=5
@@ -21230,12 +21231,12 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Merknad</label>
                   <textarea value={entry?.notes||''} onChange={e=>updateEntry(date,'notes',e.target.value)} rows={2} placeholder="Valgfri merknad..." style={{ ...tsInp, resize:'none', fontSize:'13px' }} /></div>
 
-                  {/* Actions */}
+                  {/* Actions — minimum 44px høyde for touch */}
                   <div style={{ display:'flex', gap:'8px' }}>
-                    <button onClick={()=>saveDay(date)} disabled={saving||!entry?._dirty} style={{ flex:1, padding:'12px', background:entry?._dirty?'#059669':'#f1f5f9', color:entry?._dirty?'white':'#94a3b8', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:entry?._dirty?'pointer':'default' }}>
+                    <button onClick={()=>saveDay(date)} disabled={saving||!entry?._dirty} style={{ flex:1, padding: isMobE ? '14px' : '12px', background:entry?._dirty?'#059669':'#f1f5f9', color:entry?._dirty?'white':'#94a3b8', border:'none', borderRadius:'12px', fontWeight:'700', fontSize: isMobE ? '15px' : '14px', cursor:entry?._dirty?'pointer':'default', minHeight: isMobE ? '48px' : '44px' }}>
                       {saving?'Lagrer...':'💾 Lagre dag'}
                     </button>
-                    {entry&&!entry._new&&<button onClick={()=>deleteEntry(date)} style={{ padding:'12px 16px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>🗑️</button>}
+                    {entry&&!entry._new&&<button onClick={()=>deleteEntry(date)} style={{ padding: isMobE ? '14px 18px' : '12px 16px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'600', fontSize:'14px', cursor:'pointer', minHeight: isMobE ? '48px' : '44px', minWidth:'48px' }}>🗑️</button>}
                   </div>
                     </>
                   )}
@@ -21530,6 +21531,7 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
   const [rejectComment, setRejectComment] = useState('')
   const [processing, setProcessing] = useState(false)
   const [perEntryReject, setPerEntryReject] = useState({})  // entryId → comment
+  const isMobG = typeof window !== 'undefined' && window.innerWidth < 768
 
   // Sjekk om en gitt entry kan godkjennes av denne brukeren:
   //   - Admin kan godkjenne alt
@@ -21685,21 +21687,21 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
 
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-        <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake</button>
-        <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px' }}>
+        <button onClick={()=>setSelected(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', display:'flex', alignItems:'center', gap:'6px', padding: isMobG ? '4px 0' : 0, minHeight:'36px' }}>← Tilbake</button>
+        <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding: isMobG ? '14px 16px' : '20px 24px' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', flexWrap:'wrap', gap:'12px' }}>
-            <div>
-              <h3 style={{ margin:'0 0 4px', fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>{emp?.first_name} {emp?.last_name}</h3>
+            <div style={{ minWidth:0, flex:1 }}>
+              <h3 style={{ margin:'0 0 4px', fontSize: isMobG ? '15px' : '17px', fontWeight:'800', color:'#0f172a' }}>{emp?.first_name} {emp?.last_name}</h3>
               <div style={{ fontSize:'13px', color:'#64748b' }}>Uke {gruppe.week}, {gruppe.year} · {gruppe.entries.length} registreringer</div>
             </div>
-            <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
+            <div style={{ fontSize: isMobG ? '18px' : '22px', fontWeight:'800', color:'#059669', flexShrink:0 }}>{fmtHours(totalHours)}t</div>
           </div>
 
           {/* Godkjenn-alle-knapp hvis det er pending */}
           {pendingCount > 0 && (
             <div style={{ marginBottom:'16px' }}>
               <button onClick={() => handleApproveAllPending(gruppe)} disabled={processing}
-                style={{ width:'100%', padding:'13px', background:processing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>
+                style={{ width:'100%', padding: isMobG ? '15px' : '13px', background:processing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', fontWeight:'700', fontSize: isMobG ? '15px' : '14px', cursor:'pointer', minHeight: isMobG ? '50px' : 'auto' }}>
                 ✅ Godkjenn alle {pendingCount} ventende registreringer
               </button>
             </div>
@@ -21757,24 +21759,27 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
                         <span style={{ fontWeight:'800', fontSize:'14px', color:'#059669', whiteSpace:'nowrap' }}>{fmtHours(hours)}t</span>
                       </div>
 
-                      {/* Godkjenn/Avvis-knapper kun hvis pending OG brukeren kan godkjenne */}
+                      {/* Godkjenn/Avvis-knapper kun hvis pending OG brukeren kan godkjenne.
+                          På mobil: stacket layout (input over, knapper under) for tydeligere trykk-mål */}
                       {!erBeh && kanBeh && (
-                        <div style={{ marginTop:'10px', display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                        <div style={{ marginTop:'10px', display:'flex', flexDirection: isMobG ? 'column' : 'row', gap: isMobG ? '8px' : '6px', flexWrap:'wrap' }}>
                           <input
                             type="text"
                             value={perEntryReject[e.id] || ''}
                             onChange={ev => setPerEntryReject(prev => ({ ...prev, [e.id]: ev.target.value }))}
                             placeholder="Skriv kommentar for å avvise..."
-                            style={{ flex:1, minWidth:'150px', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px' }}
+                            style={{ flex:1, minWidth: isMobG ? '0' : '150px', padding: isMobG ? '10px 12px' : '7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize: isMobG ? '13px' : '12px', minHeight: isMobG ? '40px' : 'auto' }}
                           />
-                          <button onClick={() => handleRejectEntry(e)} disabled={processing}
-                            style={{ padding:'7px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
-                            ❌ Avvis
-                          </button>
-                          <button onClick={() => handleApproveEntry(e)} disabled={processing}
-                            style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
-                            ✅ Godkjenn
-                          </button>
+                          <div style={{ display:'flex', gap:'6px', width: isMobG ? '100%' : 'auto' }}>
+                            <button onClick={() => handleRejectEntry(e)} disabled={processing}
+                              style={{ flex: isMobG ? 1 : 'none', padding: isMobG ? '11px' : '7px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', fontWeight:'700', fontSize: isMobG ? '13px' : '12px', cursor:'pointer', minHeight: isMobG ? '44px' : 'auto' }}>
+                              ❌ Avvis
+                            </button>
+                            <button onClick={() => handleApproveEntry(e)} disabled={processing}
+                              style={{ flex: isMobG ? 1 : 'none', padding: isMobG ? '11px' : '7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontWeight:'700', fontSize: isMobG ? '13px' : '12px', cursor:'pointer', minHeight: isMobG ? '44px' : 'auto' }}>
+                              ✅ Godkjenn
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
