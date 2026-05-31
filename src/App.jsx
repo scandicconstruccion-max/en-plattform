@@ -23347,14 +23347,15 @@ function RessursGanttGrid({
                             top:0, bottom:0,
                             left:`${(i * colW) - 2}px`,
                             width:`${colW}px`,
-                            background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0 4px, rgba(255,255,255,0.08) 4px 8px)',
+                            background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.22) 0 5px, rgba(255,255,255,0) 5px 10px)',
                             pointerEvents:'none',
                             zIndex:0,
                           }}/>
                         ))}
 
-                        {/* Content — Float-stil: kode øverst, navn under, timer nederst-høyre */}
-                        <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
+                        {/* Content — Float-stil: kode øverst, navn under, timer nederst-høyre.
+                            zIndex:2 sikrer at teksten alltid er over hull-overlayet. */}
+                        <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between', position:'relative', zIndex:2 }}>
                           {/* Topp: prosjektkode + navn */}
                           <div style={{ minWidth:0, overflow:'hidden' }}>
                             {!isZoomedOut && showCode && (
@@ -23374,7 +23375,7 @@ function RessursGanttGrid({
                                 fontWeight:'500',
                                 lineHeight:1.2,
                                 marginTop:'2px',
-                                opacity:0.92,
+                                opacity:1,
                                 overflow:'hidden', textOverflow:'ellipsis',
                                 display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical',
                                 whiteSpace:'normal',
