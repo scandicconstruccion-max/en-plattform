@@ -9206,11 +9206,11 @@ function NotifBell({ onNavigate }) {
 // ─── TILBUD MODULE ────────────────────────────────────────────────────────────
 
 const QUOTE_STATUS = {
-  'Utkast':   { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
-  'Sendt':    { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '📤' },
-  'Akseptert':{ bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
-  'Avslått':  { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
-  'Erstattet':{ bg: '#f5f3ff', color: '#7c3aed', border: '#e9d5ff', emoji: '🔄' },
+  'Utkast':          { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '📝' },
+  'Sendt':           { bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe', emoji: '📤' },
+  'Tilbud godkjent': { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
+  'Avslått':         { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+  'Erstattet':       { bg: '#f5f3ff', color: '#7c3aed', border: '#e9d5ff', emoji: '🔄' },
 }
 
 const qInp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
@@ -9292,7 +9292,7 @@ function TilbudPage() {
   })
 
   const counts = Object.keys(QUOTE_STATUS).reduce((acc, s) => { acc[s] = quotes.filter(q => q.status === s).length; return acc }, {})
-  const totalAkseptert = quotes.filter(q => q.status === 'Akseptert').reduce((acc, q) => acc + calcQuote(q.chapters || [], q.global_markup).grandTotal, 0)
+  const totalAkseptert = quotes.filter(q => q.status === 'Tilbud godkjent').reduce((acc, q) => acc + calcQuote(q.chapters || [], q.global_markup).grandTotal, 0)
 
   if (loading) return <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px', height:'36px', border:'3px solid #e2e8f0', borderTop:'3px solid #059669', borderRadius:'50%', margin:'0 auto 12px', animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8', fontSize:'14px' }}>Laster tilbud...</p></div></div>
 
@@ -9650,11 +9650,11 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
     // Bygge-/anleggsbransjen har 10 års oppbevaringskrav på aksepterte tilbud
     // (= byggekontrakter), jf. bokføringsforskriften § 8-1-5. Vi viser advarsel
     // som forklarer regelverket, men tillater sletting hvis bruker bekrefter.
-    const erAkseptert = q.status === 'Akseptert'
+    const erAkseptert = q.status === 'Tilbud godkjent'
     const erSendt = q.status === 'Sendt'
     let subMessage = 'Tilbudet og alle tilhørende linjer slettes permanent.'
     if (erAkseptert) {
-      subMessage = '⚠️ Dette tilbudet er AKSEPTERT og regnes som en byggekontrakt. ' +
+      subMessage = '⚠️ Dette tilbudet er GODKJENT og regnes som en byggekontrakt. ' +
         'Etter bokføringsforskriften § 8-1-5 skal byggekontrakter oppbevares i 10 år. ' +
         'Sletting kan svekke sporbarhet ved tvist eller bokettersyn. ' +
         'Vi anbefaler at du beholder tilbudet. Bedriften er selv ansvarlig for å følge lovkravene.'
@@ -9664,7 +9664,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
         'er selv ansvarlig for å vurdere om oppbevaring er nødvendig.'
     }
     if (!(await confirm({
-      message: erAkseptert ? 'Slett akseptert tilbud?' : erSendt ? 'Slett sendt tilbud?' : 'Slett dette tilbudet?',
+      message: erAkseptert ? 'Slett godkjent tilbud?' : erSendt ? 'Slett sendt tilbud?' : 'Slett dette tilbudet?',
       subMessage,
       danger: true,
       confirmLabel: erAkseptert ? 'Slett likevel' : 'Slett',
@@ -9674,8 +9674,12 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
   }
 
   const updateStatus = async (status) => {
-    const updates = { status, updated_at: new Date().toISOString() }
-    if (status === 'Akseptert') updates.accepted_at = new Date().toISOString()
+    const now = new Date().toISOString()
+    const updates = { status, updated_at: now }
+    // Sett tidsstempler automatisk basert på status
+    if (status === 'Tilbud godkjent') updates.accepted_at = now
+    if (status === 'Sendt' && !q.sent_at) updates.sent_at = now
+    if (status === 'Avslått') updates.rejected_at = now
     await supabase.from('quotes').update(updates).eq('id', q.id)
     setQ(v => ({ ...v, ...updates }))
   }
@@ -9747,7 +9751,7 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
             {q.status === 'Sendt' && <button onClick={() => setShowPurringModal(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 16px', background:'#dc2626', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobTD ? '11px' : '13px', fontWeight:'600' }}>{isMobTD ? '📧 Purring' : '📧 Send purring'}</button>}
             {!isMobTD && <button onClick={() => setShowNewRevision(true)} style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#7c3aed' }}>🔄 Ny revisjon</button>}
             {!isMobTD && <button onClick={exportQuotePDF} disabled={exportingPdf} title="Last ned som PDF" style={{ padding:'9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: exportingPdf?'not-allowed':'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>{exportingPdf ? '⏳' : '📄 PDF'}</button>}
-            {q.status !== 'Akseptert' && <button onClick={() => setEditing(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTD ? '12px' : '13px' }}>✏️</button>}
+            {q.status !== 'Tilbud godkjent' && <button onClick={() => setEditing(true)} style={{ padding: isMobTD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobTD ? '12px' : '13px' }}>✏️</button>}
             <button onClick={handleDelete} style={{ padding: isMobTD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobTD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
@@ -9897,12 +9901,15 @@ function TilbudDetaljer({ quote: init, projects, user, onBack }) {
           {/* Info */}
           <div style={qCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Detaljer</h3>
-            {[['Prosjekt', proj?.name], ['Revisjon', `Rev. ${q.revision_number || 1}`], ['Gyldig til', q.valid_until], ['Betalingsbetingelser', q.payment_terms], ['Leveringstid', q.delivery_time], ['Sendt', q.sent_at ? new Date(q.sent_at).toLocaleDateString('nb-NO') : null], ['Akseptert', q.accepted_at ? new Date(q.accepted_at).toLocaleDateString('nb-NO') : null]].filter(r=>r[1]).map(([k,v],i)=>(
+            {[['Prosjekt', proj?.name], ['Revisjon', `Rev. ${q.revision_number || 1}`], ['Gyldig til', q.valid_until], ['Betalingsbetingelser', q.payment_terms], ['Leveringstid', q.delivery_time], ['Sendt', q.sent_at ? new Date(q.sent_at).toLocaleDateString('nb-NO') : null], ['Godkjent', q.accepted_at ? new Date(q.accepted_at).toLocaleDateString('nb-NO') : null]].filter(r=>r[1]).map(([k,v],i)=>(
               <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
                 <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a', textAlign:'right', maxWidth:'55%' }}>{v}</span>
               </div>
             ))}
           </div>
+
+          {/* Aktivitetslogg — viser opprettet/sendt/godkjent/avvist tidslinje */}
+          <ActivityLogPanel record={q} recordType="quote" />
 
           {/* Revisjonshistorikk */}
           {revisions.length > 1 && (
@@ -10423,14 +10430,104 @@ function PurringModal({ quote, user, onClose, onSent }) {
 
 // ─── END TILBUD MODULE ────────────────────────────────────────────────────────
 
+// ─── ACTIVITY LOG PANEL ───────────────────────────────────────────────────────
+// Gjenbrukbar aktivitetslogg-komponent for sidebar i Tilbud, Ordre,
+// Endringsmelding, Anbud og Kalkulasjon.
+//
+// Viser kronologisk: opprettet → sendt → godkjent / avvist
+// Henter signed_name fra approval_tokens (hvis tilgjengelig) for å vise
+// hvem som godkjente/avviste i kundens portal (/em-view, /godkjenning etc).
+//
+// Props:
+//   - record: object med created_at, sent_at, accepted_at, rejected_at,
+//             rejected_reason og id
+//   - recordType: string — 'quote' | 'order' | 'change_order' | 'tender' | 'calculation'
+//                 Brukes for å filtrere approval_tokens på record_type.
+function ActivityLogPanel({ record, recordType }) {
+  const [tokens, setTokens] = React.useState([])
+  React.useEffect(() => {
+    if (!record?.id) return
+    let mounted = true
+    ;(async () => {
+      try {
+        const { data } = await supabase
+          .from('approval_tokens')
+          .select('signed_name, status, approved_at, rejected_at, reject_comment')
+          .eq('record_id', record.id)
+          .order('approved_at', { ascending: false, nullsFirst: false })
+        if (mounted) setTokens(data || [])
+      } catch (e) { console.warn('[ActivityLog] approval_tokens-fetch feilet:', e) }
+    })()
+    return () => { mounted = false }
+  }, [record?.id])
+
+  // Bygg event-liste i kronologisk rekkefølge
+  const events = []
+  if (record?.created_at) {
+    events.push({ ts: record.created_at, emoji: '📝', label: 'Opprettet', color: '#64748b' })
+  }
+  if (record?.sent_at) {
+    events.push({ ts: record.sent_at, emoji: '📤', label: 'Sendt', color: '#2563eb' })
+  }
+  if (record?.accepted_at) {
+    const approverToken = tokens.find(t => t.status === 'approved')
+    const navn = approverToken?.signed_name
+    events.push({
+      ts: record.accepted_at,
+      emoji: '✅',
+      label: navn ? `Godkjent av ${navn}` : 'Godkjent',
+      color: '#16a34a',
+    })
+  }
+  if (record?.rejected_at) {
+    const rejectToken = tokens.find(t => t.status === 'rejected')
+    const navn = rejectToken?.signed_name
+    const grunn = record.rejected_reason || rejectToken?.reject_comment
+    events.push({
+      ts: record.rejected_at,
+      emoji: '❌',
+      label: navn ? `Avvist av ${navn}` : 'Avvist',
+      detail: grunn,
+      color: '#dc2626',
+    })
+  }
+  events.sort((a, b) => new Date(a.ts) - new Date(b.ts))
+
+  if (events.length === 0) return null
+
+  return (
+    <div style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 16px', marginTop:'12px' }}>
+      <h3 style={{ margin:'0 0 12px', fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
+      <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+        {events.map((ev, i) => (
+          <div key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start' }}>
+            <div style={{ fontSize:'16px', flexShrink:0, lineHeight:1 }}>{ev.emoji}</div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:'12px', fontWeight:'600', color: ev.color }}>{ev.label}</div>
+              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>
+                {new Date(ev.ts).toLocaleString('nb-NO', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+              </div>
+              {ev.detail && (
+                <div style={{ fontSize:'11px', color:'#64748b', marginTop:'4px', padding:'6px 8px', background:'#fef2f2', borderRadius:'6px', borderLeft:'3px solid #fecaca', fontStyle:'italic' }}>
+                  "{ev.detail}"
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── GODKJENNING MODULE ───────────────────────────────────────────────────────
 
 const MODULE_CONFIG = {
-  quote:        { label: 'Tilbud',          emoji: '📋', table: 'quotes',           statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
+  quote:        { label: 'Tilbud',          emoji: '📋', table: 'quotes',           statusField: 'status', approvedStatus: 'Tilbud godkjent', rejectedStatus: 'Avslått',  notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
   calculation:  { label: 'Kalkulasjon',     emoji: '🧮', table: 'calculations',     statusField: 'status', approvedStatus: 'Tilbud godkjent',    rejectedStatus: 'Avslått',   notifTitle: (r) => `Tilbud godkjent: ${r.title}`, notifTitleReject: (r) => `Tilbud avslått: ${r.title}` },
   order:        { label: 'Ordre',           emoji: '📦', table: 'orders',           statusField: 'status', approvedStatus: 'Bekreftet', rejectedStatus: 'Avslått',  notifTitle: (r) => `Ordre bekreftet: ${r.title}`, notifTitleReject: (r) => `Ordre avslått: ${r.title}` },
   invoice:      { label: 'Faktura',         emoji: '🧾', table: 'invoices',         statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avvist',   notifTitle: (r) => `Faktura godkjent: ${r.title}`, notifTitleReject: (r) => `Faktura avvist: ${r.title}` },
-  change_order: { label: 'Endringsmelding', emoji: '🔄', table: 'change_orders',    statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avslått',  notifTitle: (r) => `Endringsmelding godkjent: ${r.title}`, notifTitleReject: (r) => `Endringsmelding avslått: ${r.title}` },
+  change_order: { label: 'Endringsmelding', emoji: '🔄', table: 'endringsmeldinger',    statusField: 'status', approvedStatus: 'Godkjent',  rejectedStatus: 'Avslått',  notifTitle: (r) => `Endringsmelding godkjent: ${r.title}`, notifTitleReject: (r) => `Endringsmelding avslått: ${r.title}` },
   tender:       { label: 'Anbud',           emoji: '📑', table: 'tenders',          statusField: 'status', approvedStatus: 'Akseptert', rejectedStatus: 'Avslått',  notifTitle: (r) => `Anbud akseptert: ${r.title}`, notifTitleReject: (r) => `Anbud avslått: ${r.title}` },
 }
 
@@ -11157,8 +11254,14 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
   useEffect(() => { load() }, [])
 
   const updateStatus = async (status) => {
-    await supabase.from('tenders').update({ status, updated_at: new Date().toISOString() }).eq('id', t.id)
-    setT(v=>({...v, status}))
+    const now = new Date().toISOString()
+    const updates = { status, updated_at: now }
+    // Sett tidsstempler automatisk basert på status (matcher Tilbud/Kalkulasjon)
+    if ((status === 'Sendt' || status === 'Levert') && !t.sent_at) updates.sent_at = now
+    if (status === 'Akseptert' || status === 'Tildelt') updates.accepted_at = now
+    if (status === 'Avslått') updates.rejected_at = now
+    await supabase.from('tenders').update(updates).eq('id', t.id)
+    setT(v=>({...v, ...updates}))
   }
 
   const handleDelete = async () => {
@@ -11368,6 +11471,9 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
               </div>
             ))}
           </div>
+
+          {/* Aktivitetslogg — viser opprettet/sendt/akseptert/avslått tidslinje */}
+          <ActivityLogPanel record={t} recordType="tender" />
         </div>
       </div>
 
