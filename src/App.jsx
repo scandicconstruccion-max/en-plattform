@@ -22680,6 +22680,87 @@ function RessursGanttGrid({
     })
   }
 
+  // ── DRAG-TO-CREATE BOOKING ────────────────────────────────────────────────
+  // Klikk-og-dra horisontalt på en tom rad for å markere periode for ny
+  // booking. Slipping åpner modal i 'Periode'-modus med start+slutt utfylt.
+  // Bruker pointer events for å støtte både mus og touch (mobil/iPad).
+  //
+  // dragCreate = { resourceId, resource, startIdx, currentIdx, hasMoved }
+  //   - hasMoved blir true når brukeren har dratt minst 1 celle. Hvis false
+  //     ved release, behandler vi det som et vanlig klikk (åpne én-dags-modal).
+  const [dragCreate, setDragCreate] = useState(null)
+  const dragCreateRef = React.useRef(null)
+  // Holder peker-koordinater for å beregne hvilken dato man er over.
+  // Brukes til touch (iPad i felt) der vi ikke har enter/leave på cellene.
+  const cellRowRefs = React.useRef(new Map())  // resourceId → element
+
+  const beginDragCreate = (resourceId, resource, dateIdx, e) => {
+    if (e?.pointerType === 'mouse' && e.button !== 0) return  // kun venstre-klikk
+    const initial = { resourceId, resource, startIdx: dateIdx, currentIdx: dateIdx, hasMoved: false }
+    dragCreateRef.current = initial
+    setDragCreate(initial)
+    // Sett pointer capture så vi får move/up selv om mus forlater cellen
+    if (e?.currentTarget && e.pointerId != null) {
+      try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
+    }
+  }
+
+  const updateDragCreate = (newIdx) => {
+    const cur = dragCreateRef.current
+    if (!cur) return
+    if (newIdx === cur.currentIdx) return
+    const next = { ...cur, currentIdx: newIdx, hasMoved: true }
+    dragCreateRef.current = next
+    setDragCreate(next)
+  }
+
+  const endDragCreate = () => {
+    const cur = dragCreateRef.current
+    if (!cur) return
+    const { resourceId, resource, startIdx, currentIdx, hasMoved } = cur
+    dragCreateRef.current = null
+    setDragCreate(null)
+
+    if (!hasMoved) {
+      // Vanlig klikk — åpner én-dags-modal (samme oppførsel som før)
+      handleCellClick(resourceId, dates[startIdx], resource)
+      return
+    }
+    // Drag fullført — åpne periode-modal
+    const from = Math.min(startIdx, currentIdx)
+    const to = Math.max(startIdx, currentIdx)
+    onOpenBooking({
+      resourceId,
+      resourceName: resource._isPlaceholder ? resource.name : (resource.first_name ? `${resource.first_name} ${resource.last_name}` : resource.name),
+      date: dates[from],
+      endDate: dates[to],     // <-- ny: signaliserer periode-booking
+      isPeriod: true,         // <-- flagg slik at modalen åpner riktig tab
+      existingPlans: [],
+      editPlan: null,
+    })
+  }
+
+  // Touch/pen: under move-event finn cellen pekeren er over via document.elementFromPoint
+  const handlePointerMoveOnCell = (e) => {
+    if (!dragCreateRef.current) return
+    // For mouse: vi får onPointerEnter på celler — bruker det.
+    // For touch: vi må manuelt finne cellen pekeren er over.
+    if (e.pointerType !== 'mouse') {
+      const el = document.elementFromPoint(e.clientX, e.clientY)
+      if (!el) return
+      const cellId = el.id || el.closest('[id^="gantt-cell-"]')?.id
+      if (!cellId) return
+      // ID format: gantt-cell-{resourceId}-{YYYY-MM-DD}
+      const m = cellId.match(/^gantt-cell-([^-]+(?:-[^-]+)*)-(\d{4}-\d{2}-\d{2})$/)
+      if (!m) return
+      const [, resId, dateStr] = m
+      const cur = dragCreateRef.current
+      if (resId !== cur.resourceId) return  // kun samme rad
+      const idx = dateIndex.get(dateStr)
+      if (idx !== undefined) updateDragCreate(idx)
+    }
+  }
+
   // Auto-scroll to today when view mounts or zoom/anchor changes
   const gridScrollRef = React.useRef(null)
   React.useEffect(() => {
@@ -22995,9 +23076,22 @@ function RessursGanttGrid({
                     return (
                       <div key={d}
                         id={`gantt-cell-${res.id}-${d}`}
-                        onClick={(e) => {
-                          // Only trigger on direct clicks (not on bar bubbles)
-                          if (e.target === e.currentTarget) handleCellClick(res.id, d, res)
+                        onPointerDown={(e) => {
+                          if (e.target !== e.currentTarget) return  // ignorer klikk på bar-bobler
+                          beginDragCreate(res.id, res, i, e)
+                        }}
+                        onPointerEnter={(e) => {
+                          // Mouse: oppdater current-idx når musen entrer en ny celle.
+                          // Kun samme rad — vi støtter ikke vertikal drag enda.
+                          if (e.pointerType === 'mouse' && dragCreateRef.current?.resourceId === res.id) {
+                            updateDragCreate(i)
+                          }
+                        }}
+                        onPointerMove={handlePointerMoveOnCell}
+                        onPointerUp={() => { endDragCreate() }}
+                        onPointerCancel={() => {
+                          dragCreateRef.current = null
+                          setDragCreate(null)
                         }}
                         onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move' }}
                         onDrop={(e)=>{
@@ -23010,6 +23104,7 @@ function RessursGanttGrid({
                           borderRight: ganttZoom==='days' ? '1px solid #f8fafc' : (i%7===6 ? '1px solid #e2e8f0' : 'none'),
                           cursor:'pointer',
                           position:'relative',
+                          touchAction:'none',  // forhindrer scroll-konflikt på touch under drag
                           ...(hol ? { backgroundImage: `repeating-linear-gradient(135deg, rgba(217,119,6,0.08) 0 6px, transparent 6px 12px)` } : {}),
                           ...(we && !hol ? { backgroundImage: `repeating-linear-gradient(135deg, rgba(148,163,184,0.08) 0 6px, transparent 6px 12px)` } : {}),
                         }}
@@ -23027,6 +23122,31 @@ function RessursGanttGrid({
                       pointerEvents:'none', zIndex:2,
                     }}/>
                   )}
+
+                  {/* Drag-to-create preview — semi-transparent bjelke som viser
+                      hvilken periode brukeren har dratt ut. Kun for denne ressursen. */}
+                  {dragCreate && dragCreate.resourceId === res.id && dragCreate.hasMoved && (() => {
+                    const from = Math.min(dragCreate.startIdx, dragCreate.currentIdx)
+                    const to = Math.max(dragCreate.startIdx, dragCreate.currentIdx)
+                    const previewLeft = from * colW + 2
+                    const previewWidth = (to - from + 1) * colW - 4
+                    const dagAntall = to - from + 1
+                    return (
+                      <div style={{
+                        position:'absolute',
+                        top:'8px', bottom:'8px',
+                        left:`${previewLeft}px`, width:`${previewWidth}px`,
+                        borderRadius:'6px',
+                        background: 'rgba(5, 150, 105, 0.22)',
+                        border: '2px dashed #059669',
+                        display:'flex', alignItems:'center', justifyContent:'center',
+                        color:'#059669', fontSize:'11px', fontWeight:'700',
+                        pointerEvents:'none', zIndex:3,
+                      }}>
+                        + {dagAntall} dag{dagAntall === 1 ? '' : 'er'}
+                      </div>
+                    )
+                  })()}
 
                   {/* Empty state hint */}
                   {bars.length === 0 && (
@@ -25689,6 +25809,8 @@ function RessursPage() {
           resourceId={showBookingModal.resourceId}
           resourceName={showBookingModal.resourceName}
           date={showBookingModal.date}
+          endDate={showBookingModal.endDate}
+          isPeriod={showBookingModal.isPeriod}
           existingPlans={showBookingModal.existingPlans||[]}
           editPlan={showBookingModal.editPlan}
           projects={filterProject!=='alle'?projects.filter(p=>p.id===filterProject):projects}
@@ -26440,7 +26562,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
   )
 }
 
-function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30', zIndex=100, settings={ skipWeekends: true } }) {
+function BookingModal({ resourceId, resourceName, date, endDate, isPeriod, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30', zIndex=100, settings={ skipWeekends: true } }) {
   const confirm = useConfirm()
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
@@ -26450,11 +26572,13 @@ function BookingModal({ resourceId, resourceName, date, existingPlans, editPlan,
   const [taskDescription, setTaskDescription] = useState(editPlan?.task_description||'')
 
   // ── Periode-booking state ──
-  // Bare for nye bookinger (ikke ved redigering)
-  const [bookingMode, setBookingMode] = useState('single') // 'single' | 'period'
+  // Bare for nye bookinger (ikke ved redigering).
+  // Hvis modalen åpnes via drag-to-create (isPeriod=true), starter vi i 'period'-modus
+  // med fromDate=date, toDate=endDate.
+  const [bookingMode, setBookingMode] = useState(isPeriod ? 'period' : 'single') // 'single' | 'period'
   const [periodMode, setPeriodMode] = useState('toDate') // 'toDate' | 'count'
   const [fromDate, setFromDate] = useState(date)
-  const [toDate, setToDate] = useState(date)
+  const [toDate, setToDate] = useState(endDate || date)
   const [dayCount, setDayCount] = useState(1)
 
   // Hjelper: regn ut arbeidsdager mellom to datoer (ikke-helger hvis skipWeekends)
