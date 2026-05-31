@@ -12396,6 +12396,33 @@ function EndringsmeldingPage() {
     load()
   }
 
+  // ── Manuelt endre status ──
+  // Vanligvis settes status automatisk: 'Sendt' når PL sender til kunde,
+  // 'Godkjent'/'Avvist' når kunden klikker i /em-view-siden. Men admin kan
+  // overstyre manuelt fra Status-kortet i sidebaren.
+  const updateEmStatus = async (em, newStatus) => {
+    if (em.status === newStatus) return
+    const now = new Date().toISOString()
+    const existingLog = Array.isArray(em.activity_log) ? em.activity_log : []
+    const newLog = [...existingLog, {
+      action: `Status endret manuelt til ${newStatus}`,
+      by: user?.email || null,
+      at: now,
+    }]
+    const updates = { status: newStatus, activity_log: newLog, updated_at: now }
+    // Sett tidsstempler automatisk basert på status
+    if (newStatus === 'Godkjent') updates.accepted_at = now
+    if (newStatus === 'Avvist') updates.rejected_at = now
+    try {
+      await supabase.from('endringsmeldinger').update(updates).eq('id', em.id)
+      // Refresh lokal state — endringer-array oppdateres via load()
+      load()
+    } catch (e) {
+      console.error('[updateEmStatus]', e)
+      alert('Kunne ikke endre status: ' + e.message)
+    }
+  }
+
   // ── Helper: Bestem type re-send basert på aktivitetslogg og status ────────
   // Returnerer: 'send' (første gang), 'resend' (uendret), 'revision' (redigert), 'copy' (godkjent/avvist)
   const getEmSendType = (em) => {
@@ -13462,11 +13489,29 @@ function EndringsmeldingPage() {
 
         {/* ── HØYRE SIDEBAR ── (samme stil som Ordre) */}
         <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-          {/* Status */}
+          {/* Status — klikkbare knapper, samme stil som Ordre.
+              Settes automatisk når kunde godkjenner i /em-view, men kan
+              også overstyres manuelt her. */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px' }}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
-            <div style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 14px', borderRadius:'10px', background:st.bg, border:`1px solid ${st.border}`, color:st.color, fontWeight:'700', fontSize:'13px' }}>
-              <span>{st.emoji}</span><span>{em.status}</span>
+            <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+              {Object.keys(EM_STATUS).map(s => (
+                <button key={s} onClick={() => updateEmStatus(em, s)} disabled={em.status === s}
+                  style={{
+                    padding:'9px 14px',
+                    borderRadius:'10px',
+                    border:`1px solid ${em.status === s ? EM_STATUS[s].border : '#e2e8f0'}`,
+                    background: em.status === s ? EM_STATUS[s].bg : 'white',
+                    color: em.status === s ? EM_STATUS[s].color : '#475569',
+                    fontWeight: em.status === s ? '700' : '400',
+                    fontSize:'13px',
+                    cursor: em.status === s ? 'default' : 'pointer',
+                    textAlign:'left',
+                    width:'100%',
+                  }}>
+                  {em.status === s ? '✓ ' : ''}{EM_STATUS[s].emoji} {s}
+                </button>
+              ))}
             </div>
           </div>
 
