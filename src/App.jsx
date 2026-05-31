@@ -21734,7 +21734,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
         <button
           onClick={() => { setExportFormat('excel'); setShowExportModal('timelister') }}
           disabled={exporting}
-          style={{ background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor: exporting ? 'wait' : 'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
+          style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor: exporting ? 'wait' : 'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
           📥 Eksporter timelister
         </button>
         <button
