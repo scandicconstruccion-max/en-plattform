@@ -370,6 +370,37 @@ async function erAdmin(userId) {
   }
 }
 
+// ── TIMELISTE-GODKJENNING ────────────────────────────────────────────────────
+// Bestemmer hvem som kan godkjenne timelister:
+//   - Admin (første registrerte bruker) kan godkjenne alt
+//   - Prosjektleder (PL) kan godkjenne timer for sine egne prosjekter
+//
+// projects.project_manager_email matches mot user.email for å finne PL-status.
+// Returnerer ID-ene til alle prosjekter brukeren er PL for (tom array hvis ingen).
+async function hentProsjekterSomPL(user) {
+  if (!user?.email) return []
+  try {
+    const { data } = await supabase
+      .from('projects')
+      .select('id')
+      .eq('project_manager_email', user.email)
+    return (data || []).map(p => p.id)
+  } catch (e) {
+    return []
+  }
+}
+
+// Sjekk om brukeren har noen som helst godkjennings-rettighet (admin eller PL).
+// Brukes til å skjule godkjennings-fanen helt for vanlige ansatte.
+async function harGodkjenningsrettigheter(user) {
+  if (!user?.id) return false
+  const [admin, plProsjekter] = await Promise.all([
+    erAdmin(user.id),
+    hentProsjekterSomPL(user),
+  ])
+  return admin || plProsjekter.length > 0
+}
+
 // Henter komplett e-post-kontekst for å sende e-post via send-quote Edge Function.
 // Returnerer { fromName, replyTo } basert på:
 //   - companySettings.company_name → fromName ("Scandic Construcción")
@@ -20314,11 +20345,28 @@ function TimelistePage() {
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [editingSheet, setEditingSheet] = useState(null)
   const [statsView, setStatsView] = useState('uke') // 'dag'|'uke'|'maned'
+  // Godkjennings-tilgang: admin = ser alt, PL = ser kun sine prosjekter,
+  // ansatt uten rettigheter = ser ikke "Godkjenn"-fanen i det hele tatt
+  const [erBrukerAdmin, setErBrukerAdmin] = useState(false)
+  const [plProsjekter, setPlProsjekter] = useState([])  // array av prosjekt-IDer
+  const harGodkjenne = erBrukerAdmin || plProsjekter.length > 0
+
+  // Last godkjennings-rettigheter ved mount
+  useEffect(() => {
+    (async () => {
+      const [admin, pls] = await Promise.all([
+        erAdmin(user?.id),
+        hentProsjekterSomPL(user),
+      ])
+      setErBrukerAdmin(admin)
+      setPlProsjekter(pls)
+    })()
+  }, [user?.id])
 
   const load = async () => {
     try {
       const [emp, proj, ts] = await Promise.all([
-        supabase.from('employees').select('id,first_name,last_name,hourly_rate').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
+        supabase.from('employees').select('id,first_name,last_name,hourly_rate,user_id,email').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
         supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
         supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}).then(r=>r.data||[])
       ])
@@ -20335,7 +20383,18 @@ function TimelistePage() {
     t.employee_id===(selectedEmployee||employees[0]?.id)
   )
 
-  const pendingApproval = timesheets.filter(t=>t.status==='Innlevert')
+  // Filtrer timelister basert på godkjennings-tilgang:
+  //   - Admin ser ALLE innleverte
+  //   - PL ser kun timelister der minst én time er på et prosjekt de er PL for
+  //   - Ansatte uten rettigheter ser ingen
+  const kanGodkjenne = (ts) => {
+    if (!ts || ts.status !== 'Innlevert') return false
+    if (erBrukerAdmin) return true
+    if (plProsjekter.length === 0) return false
+    const entries = ts.timesheet_entries || []
+    return entries.some(e => plProsjekter.includes(e.project_id))
+  }
+  const pendingApproval = timesheets.filter(t => t.status === 'Innlevert' && kanGodkjenne(t))
 
   const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -20358,9 +20417,13 @@ function TimelistePage() {
             </div>
           )}
         </div>
-        {/* View tabs */}
+        {/* View tabs — Godkjenn-fanen vises kun for admin og prosjektledere */}
         <div style={{ display:'flex', gap:'6px', marginTop: isMobTL ? '12px' : '16px', flexWrap:'wrap' }}>
-          {[['mine', isMobTL ? '📋 Mine' : '📋 Mine timelister'],['oversikt','📊 Oversikt'],['godkjenn','✅ Godkjenn']].map(([v,l])=>(
+          {[
+            ['mine', isMobTL ? '📋 Mine' : '📋 Mine timelister'],
+            ['oversikt', '📊 Oversikt'],
+            ...(harGodkjenne ? [['godkjenn', '✅ Godkjenn']] : []),
+          ].map(([v,l])=>(
             <button key={v} onClick={()=>setView(v)}
               style={{ padding: isMobTL ? '7px 12px' : '8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', position:'relative' }}>
               {l}
@@ -20375,13 +20438,14 @@ function TimelistePage() {
         {/* ── MINE TIMELISTER ── */}
         {view==='mine' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
-            {/* Employee selector + week nav */}
+            {/* Employee selector + week nav.
+                Tilgang: admin/PL ser alle ansatte. Vanlige ansatte ser kun seg selv. */}
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding: isMobTL ? '12px' : '16px 20px', display:'flex', gap: isMobTL ? '8px' : '12px', alignItems:'center', flexWrap:'wrap' }}>
               <div style={{ maxWidth: isMobTL ? '100%' : '260px', flex: isMobTL ? '1 1 100%' : '1', minWidth:'180px' }}>
                 <EmployeeNameSelect
                   valueAsId
-                  employees={employees}
-                  value={selectedEmployee || employees[0]?.id || ''}
+                  employees={harGodkjenne ? employees : employees.filter(e => e.user_id === user?.id)}
+                  value={selectedEmployee || (harGodkjenne ? employees[0]?.id : employees.find(e => e.user_id === user?.id)?.id) || ''}
                   onChange={v => setSelectedEmployee(v)}
                   placeholder="Velg ansatt..."
                   allowFreeText={false}
@@ -20437,7 +20501,15 @@ function TimelistePage() {
 
         {/* ── GODKJENNING ── */}
         {view==='godkjenn' && (
-          <GodkjenningView timesheets={timesheets} employees={employees} projects={projects} user={user} onRefresh={load} />
+          <GodkjenningView
+            timesheets={timesheets}
+            employees={employees}
+            projects={projects}
+            user={user}
+            onRefresh={load}
+            erBrukerAdmin={erBrukerAdmin}
+            plProsjekter={plProsjekter}
+          />
         )}
       </div>
     </div>
@@ -20490,18 +20562,27 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
         }
       }
 
-      // Varsle også admin-brukere
-      const { data: admins } = await supabase.from('user_roles').select('user_id').eq('role','admin')
-      if (admins?.length) {
-        const emp = employees.find(e => e.id === employeeId)
-        const empName = emp ? `${emp.first_name||''} ${emp.last_name||''}`.trim() : 'En ansatt'
-        for (const a of admins) {
-          if (a.user_id !== user?.id && !notifiedUsers.has(a.user_id)) {
-            notifiedUsers.add(a.user_id)
-            await supabase.from('notifications').insert({ user_id:a.user_id, title:`Ny timeliste til godkjenning`, message:`${empName} har levert inn timeliste for uke ${week}, ${year}.`, type:'info', link_page:'timelister' })
-          }
+      // Varsle også admin (første registrerte bruker)
+      try {
+        const { data: adminUser } = await supabase
+          .from('user_profiles')
+          .select('id')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle()
+        if (adminUser?.id && adminUser.id !== user?.id && !notifiedUsers.has(adminUser.id)) {
+          notifiedUsers.add(adminUser.id)
+          const emp = employees.find(e => e.id === employeeId)
+          const empName = emp ? `${emp.first_name||''} ${emp.last_name||''}`.trim() : 'En ansatt'
+          await supabase.from('notifications').insert({
+            user_id: adminUser.id,
+            title: 'Ny timeliste til godkjenning',
+            message: `${empName} har levert inn timeliste for uke ${week}, ${year}.`,
+            type: 'info',
+            link_page: 'timelister',
+          })
         }
-      }
+      } catch (e) { console.warn('[timeliste] kunne ikke varsle admin:', e) }
       onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSubmitting(false) }
@@ -21229,12 +21310,38 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 }
 
 // ── GODKJENNING VIEW ──────────────────────────────────────────────────────────
-function GodkjenningView({ timesheets, employees, projects, user, onRefresh }) {
+function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erBrukerAdmin = false, plProsjekter = [] }) {
   const [selected, setSelected] = useState(null)
   const [rejectComment, setRejectComment] = useState('')
   const [processing, setProcessing] = useState(false)
-  const pending = timesheets.filter(t=>t.status==='Innlevert').sort((a,b)=>new Date(a.submitted_at)-new Date(b.submitted_at))
-  const all = timesheets.filter(t=>t.status!=='Utkast').sort((a,b)=>new Date(b.submitted_at||b.created_at)-new Date(a.submitted_at||a.created_at))
+
+  // Sjekk om en gitt timeliste kan godkjennes av denne brukeren:
+  //   - Admin kan godkjenne alt
+  //   - PL kan godkjenne hvis minst én entry er på et prosjekt de leder
+  const kanGodkjenneSheet = (ts) => {
+    if (erBrukerAdmin) return true
+    if (plProsjekter.length === 0) return false
+    const entries = ts.timesheet_entries || []
+    return entries.some(e => plProsjekter.includes(e.project_id))
+  }
+
+  // Pending: kun innleverte timelister brukeren har rettighet til å godkjenne
+  const pending = timesheets
+    .filter(t => t.status === 'Innlevert' && kanGodkjenneSheet(t))
+    .sort((a,b) => new Date(a.submitted_at) - new Date(b.submitted_at))
+
+  // All-listen: alle behandlede (ikke utkast) som brukeren har relasjon til.
+  // For admin: alt. For PL: kun timelister der minst én entry er på deres prosjekter
+  // (uavhengig av status — så de ser også tidligere godkjente/avviste).
+  const all = timesheets
+    .filter(t => {
+      if (t.status === 'Utkast') return false
+      if (erBrukerAdmin) return true
+      if (plProsjekter.length === 0) return false
+      const entries = t.timesheet_entries || []
+      return entries.some(e => plProsjekter.includes(e.project_id))
+    })
+    .sort((a,b) => new Date(b.submitted_at || b.created_at) - new Date(a.submitted_at || a.created_at))
 
   const handleApprove = async (ts) => {
     setProcessing(true)
