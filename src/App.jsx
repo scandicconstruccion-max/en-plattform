@@ -23305,7 +23305,7 @@ function RessursGanttGrid({
                           cursor: dragging ? 'grabbing' : 'grab',
                           userSelect:'none',
                           display:'flex', flexDirection:'column',
-                          padding: '6px 10px',
+                          padding: '4px 10px',
                           zIndex: isDraggingThis ? 1 : 3,
                           boxShadow: isDraggingThis
                             ? 'none'
@@ -23354,8 +23354,10 @@ function RessursGanttGrid({
                         ))}
 
                         {/* Content — Float-stil: kode øverst, navn under, timer nederst-høyre.
-                            zIndex:2 sikrer at teksten alltid er over hull-overlayet. */}
-                        <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between', position:'relative', zIndex:2 }}>
+                            zIndex:2 sikrer at teksten alltid er over hull-overlayet.
+                            flex-start (i stedet for space-between) holder innholdet samlet
+                            øverst slik at timer-teksten ikke presses helt mot bunnkanten. */}
+                        <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'flex-start', position:'relative', zIndex:2 }}>
                           {/* Topp: prosjektkode + navn */}
                           <div style={{ minWidth:0, overflow:'hidden' }}>
                             {!isZoomedOut && showCode && (
