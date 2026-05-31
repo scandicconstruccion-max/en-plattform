@@ -23339,16 +23339,17 @@ function RessursGanttGrid({
                         {/* Hull i baren — vises som lyst stripet område over dager som
                             ikke er aktive (helger osv) i en sammenhengende fase.
                             Slik ser man tydelig at fasen er én logisk enhet, men at
-                            helgen ikke teller som arbeidsdag. */}
+                            helgen ikke teller som arbeidsdag.
+                            zIndex 0 = under tekstinnholdet (som er på default-stacking). */}
                         {holeIndices.map(i => (
                           <div key={`hole-${i}`} style={{
                             position:'absolute',
                             top:0, bottom:0,
                             left:`${(i * colW) - 2}px`,
                             width:`${colW}px`,
-                            background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0 4px, rgba(255,255,255,0.15) 4px 8px)',
+                            background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.35) 0 4px, rgba(255,255,255,0.08) 4px 8px)',
                             pointerEvents:'none',
-                            zIndex:1,
+                            zIndex:0,
                           }}/>
                         ))}
 
