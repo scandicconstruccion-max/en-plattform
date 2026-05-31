@@ -56,7 +56,28 @@ async function _loadJsPdf() {
     s.onload = resolve; s.onerror = reject
     document.head.appendChild(s)
   })
+  // Last også autotable-plugin for tabeller (timeliste-eksport bruker dette)
+  if (!window.jspdf?.jsPDF?.API?.autoTable) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script')
+      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.0/jspdf.plugin.autotable.min.js'
+      s.onload = resolve; s.onerror = reject
+      document.head.appendChild(s)
+    })
+  }
   return window.jspdf
+}
+
+// Last SheetJS for Excel-eksport. Lastes lazy ved første eksport.
+async function _loadSheetJs() {
+  if (window.XLSX) return window.XLSX
+  await new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'
+    s.onload = resolve; s.onerror = reject
+    document.head.appendChild(s)
+  })
+  return window.XLSX
 }
 
 async function _fetchBrandData() {
@@ -21312,6 +21333,11 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   const [periodFrom, setPeriodFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` })
   const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split('T')[0])
   const [selectedProject, setSelectedProject] = useState(null)
+  // Modal for å velge eksport-format (Excel / PDF) — én knapp åpner modal,
+  // brukeren velger format der.
+  const [showExportModal, setShowExportModal] = useState(null) // null | 'timelister' | 'lonnsgrunnlag'
+  const [exportFormat, setExportFormat] = useState('excel') // 'excel' | 'pdf'
+  const [exporting, setExporting] = useState(false)
 
   const filteredEntries = entries.filter(e => {
     if (selectedEmployee) {
@@ -21382,47 +21408,184 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   })
   const periods = Object.values(byPeriod).sort((a,b)=>b.key.localeCompare(a.key)).slice(0,20)
 
-  // Eksport — enkel CSV
-  const exportCSV = () => {
-    const rows = [
-      ['Dato','Ansatt','Ansattnr','Prosjekt','Aktivitet','Fravær','Fra','Til','Normal','OT50%','OT100%','Km','Diett','Utlegg','Utlegg beskr.','Merknad'],
-      ...filteredEntries.map(e=>{
-        const ts = timesheets.find(t=>t.id===e.timesheet_id)
-        const emp = employees.find(x=>x.id===ts?.employee_id)
-        const proj = projects.find(p=>p.id===e.project_id)
-        return [e.date,`${emp?.first_name||''} ${emp?.last_name||''}`,emp?.id||'',proj?.name||'',e.activity||'',e.absence_type||'',e.start_time||'',e.end_time||'',e.normal_hours||0,e.overtime_50||0,e.overtime_100||0,e.travel_km||0,e.diet||0,e.expenses||0,e.expenses_description||'',e.notes||'']
+  // ── EKSPORT — felles datasett ───────────────────────────────────────────────
+  // Bygger rader brukt av både Excel- og PDF-eksport. Headers + rader matches.
+  const buildTimelisterRows = () => {
+    return filteredEntries.map(e => {
+      const ts = timesheets.find(t => t.id === e.timesheet_id)
+      const emp = employees.find(x => x.id === ts?.employee_id)
+      const proj = projects.find(p => p.id === e.project_id)
+      return [
+        e.date,
+        `${emp?.first_name||''} ${emp?.last_name||''}`.trim(),
+        proj?.name || '',
+        e.activity || '',
+        e.absence_type || '',
+        e.start_time || '',
+        e.end_time || '',
+        parseFloat(e.normal_hours) || 0,
+        parseFloat(e.overtime_50) || 0,
+        parseFloat(e.overtime_100) || 0,
+        parseFloat(e.travel_km) || 0,
+        parseFloat(e.diet) || 0,
+        parseFloat(e.expenses) || 0,
+        e.description || e.notes || '',
+      ]
+    })
+  }
+  const TIMELISTER_HEADERS = ['Dato','Ansatt','Prosjekt','Aktivitet','Fravær','Fra','Til','Normal','OT50%','OT100%','Km','Diett','Utlegg','Beskrivelse']
+
+  const buildLonnsRows = () => {
+    return byEmployee.map(e => {
+      const paidAbsence = entries.filter(en => {
+        const ts = timesheets.find(t => t.id === en.timesheet_id)
+        return ts?.employee_id === e.id && en.absence_type && en.date >= periodFrom && en.date <= periodTo
+      }).filter(en => ['syk_egen','syk_lege','ferie','permisjon','avspasering','kurs'].includes(en.absence_type)).length
+      const unpaidAbsence = e.absence - paidAbsence
+      return [
+        `${e.first_name} ${e.last_name}`.trim(),
+        Number(e.normal.toFixed(1)),
+        Number(e.rate),
+        Math.round(e.normal * e.rate),
+        Number(e.ot50.toFixed(1)),
+        Math.round(e.ot50 * e.rate * 1.5),
+        Number(e.ot100.toFixed(1)),
+        Math.round(e.ot100 * e.rate * 2),
+        Number(e.total.toFixed(1)),
+        Math.round(e.cost),
+        Number(e.km),
+        Math.round(e.km * 4.90),
+        Number(e.diet),
+        Number(e.expenses),
+        e.absence,
+        paidAbsence,
+        unpaidAbsence,
+      ]
+    })
+  }
+  const LONNS_HEADERS = ['Navn','Normal t','Timepris','Normal kr','OT50% t','OT50% kr','OT100% t','OT100% kr','Total t','Total kr','Km','Km kr','Diett','Utlegg','Fraværsd.','Betalt','Ubetalt']
+
+  // ── EXCEL-EKSPORT (SheetJS) ─────────────────────────────────────────────────
+  // Bygger en formattert .xlsx med firma-info i header og En Plattform-footer.
+  const exportToExcel = async (kind) => {
+    setExporting(true)
+    try {
+      const XLSX = await _loadSheetJs()
+      const brand = await _fetchBrandData()
+      const settings = brand.settings || {}
+
+      const firmaNavn = settings.name || 'Bedrift'
+      const firmaOrg = settings.orgnr ? `Org.nr ${settings.orgnr}` : ''
+      const tittel = kind === 'lonnsgrunnlag' ? 'Lønnsgrunnlag' : 'Timelister'
+      const periode = `${periodFrom} – ${periodTo}`
+
+      const headers = kind === 'lonnsgrunnlag' ? LONNS_HEADERS : TIMELISTER_HEADERS
+      const rows = kind === 'lonnsgrunnlag' ? buildLonnsRows() : buildTimelisterRows()
+
+      // Bygg AOA (array-of-arrays) med branding på toppen
+      const aoa = [
+        [firmaNavn],
+        [firmaOrg],
+        [`${tittel} · ${periode}`],
+        [],
+        headers,
+        ...rows,
+        [],
+        ['En Plattform — Av håndverkern, for håndverkern'],
+      ]
+
+      const ws = XLSX.utils.aoa_to_sheet(aoa)
+
+      // Auto-bredde basert på lengste verdi i hver kolonne
+      const colWidths = headers.map((h, i) => {
+        const maxLen = Math.max(
+          h.length,
+          ...rows.map(r => String(r[i] ?? '').length)
+        )
+        return { wch: Math.min(Math.max(maxLen + 2, 10), 40) }
       })
-    ]
-    const csv = rows.map(r=>r.join(';')).join('\n')
-    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href=url; a.download=`timelister-${periodFrom}-${periodTo}.csv`; a.click()
+      ws['!cols'] = colWidths
+
+      // Styling: gjør header-radene fete (basis-styling, SheetJS-fri versjon
+      // støtter ikke full styling — disse vises som vanlig tekst)
+      ws['!merges'] = [
+        { s:{r:0,c:0}, e:{r:0,c:headers.length-1} },
+        { s:{r:1,c:0}, e:{r:1,c:headers.length-1} },
+        { s:{r:2,c:0}, e:{r:2,c:headers.length-1} },
+        { s:{r:aoa.length-1,c:0}, e:{r:aoa.length-1,c:headers.length-1} },
+      ]
+
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, tittel)
+      const filnavn = `${kind === 'lonnsgrunnlag' ? 'lonnsgrunnlag' : 'timelister'}-${periodFrom}-${periodTo}.xlsx`
+      XLSX.writeFile(wb, filnavn)
+    } catch (e) {
+      console.error('[exportExcel]', e)
+      alert('Kunne ikke eksportere Excel: ' + e.message)
+    } finally {
+      setExporting(false)
+    }
   }
 
-  // Lønnseksport — aggregert per ansatt
-  const exportPayroll = () => {
-    const rows = [
-      ['Ansattnr','Navn','Normal timer','Timepris','Normal beløp','OT50% timer','OT50% beløp','OT100% timer','OT100% beløp','Total timer','Total beløp','Km','Km-godtgjørelse','Diett','Utlegg','Fraværsdager','Fravær betalt','Fravær ubetalt','Periode'],
-      ...byEmployee.map(e => {
-        const paidAbsence = entries.filter(en => { const ts=timesheets.find(t=>t.id===en.timesheet_id); return ts?.employee_id===e.id && en.absence_type && en.date >= periodFrom && en.date <= periodTo }).filter(en => ['syk_egen','syk_lege','ferie','permisjon','avspasering','kurs'].includes(en.absence_type)).length
-        const unpaidAbsence = e.absence - paidAbsence
-        return [
-          e.id, `${e.first_name} ${e.last_name}`,
-          e.normal.toFixed(1), e.rate, Math.round(e.normal * e.rate),
-          e.ot50.toFixed(1), Math.round(e.ot50 * e.rate * 1.5),
-          e.ot100.toFixed(1), Math.round(e.ot100 * e.rate * 2),
-          e.total.toFixed(1), Math.round(e.cost),
-          e.km, Math.round(e.km * 4.90),
-          e.diet, e.expenses,
-          e.absence, paidAbsence, unpaidAbsence,
-          `${periodFrom} - ${periodTo}`
-        ]
+  // ── PDF-EKSPORT (jsPDF + autotable) ─────────────────────────────────────────
+  // Bruker createBrandedPdf for å få logo + footer "Av håndverkern, for
+  // håndverkern" konsistent med andre rapporter i appen.
+  const exportToPdf = async (kind) => {
+    setExporting(true)
+    try {
+      const tittel = kind === 'lonnsgrunnlag' ? 'LØNNSGRUNNLAG' : 'TIMELISTER'
+      const periode = `${periodFrom} til ${periodTo}`
+
+      // Landscape for bredere tabeller
+      const pdf = await createBrandedPdf({ orientation: 'l' })
+      pdf.drawHeader(tittel, `Periode: ${periode}`)
+
+      const headers = kind === 'lonnsgrunnlag' ? LONNS_HEADERS : TIMELISTER_HEADERS
+      const rows = kind === 'lonnsgrunnlag' ? buildLonnsRows() : buildTimelisterRows()
+
+      // Tabell med autotable
+      pdf.doc.autoTable({
+        startY: pdf.y + 4,
+        head: [headers],
+        body: rows.map(r => r.map(v => v == null ? '' : String(v))),
+        styles: {
+          font: 'helvetica', fontSize: 8, cellPadding: 2,
+          textColor: [30, 41, 59],
+        },
+        headStyles: {
+          fillColor: [5, 150, 105], textColor: [255, 255, 255],
+          fontStyle: 'bold', fontSize: 8,
+        },
+        alternateRowStyles: { fillColor: [248, 250, 252] },
+        margin: { left: pdf.ml, right: pdf.mr, bottom: 18 },
       })
-    ]
-    const csv = rows.map(r=>r.join(';')).join('\n')
-    const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a'); a.href=url; a.download=`lonnsgrunnlag-${periodFrom}-${periodTo}.csv`; a.click()
+
+      // Totaler nederst for timelister
+      if (kind === 'timelister' && rows.length > 0) {
+        const finalY = pdf.doc.lastAutoTable.finalY + 8
+        pdf.setY(finalY)
+        pdf.doc.setFontSize(10); pdf.doc.setFont('helvetica', 'bold')
+        pdf.setC(pdf.hex('#0f172a'))
+        pdf.doc.text(`Totalt: ${totalNormal.toFixed(1)}t normal + ${totalOT50.toFixed(1)}t OT50% + ${totalOT100.toFixed(1)}t OT100% = ${(totalNormal+totalOT50+totalOT100).toFixed(1)}t`, pdf.ml, finalY)
+      }
+
+      pdf.drawFooters()
+      const filnavn = `${kind === 'lonnsgrunnlag' ? 'lonnsgrunnlag' : 'timelister'}-${periodFrom}-${periodTo}.pdf`
+      pdf.doc.save(filnavn)
+    } catch (e) {
+      console.error('[exportPdf]', e)
+      alert('Kunne ikke eksportere PDF: ' + e.message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // Trigger valgt format
+  const handleExport = async () => {
+    const kind = showExportModal
+    setShowExportModal(null)
+    if (exportFormat === 'excel') await exportToExcel(kind)
+    else await exportToPdf(kind)
   }
 
   const ABSENCE_LABELS = { syk_egen:'Egenmelding', syk_lege:'Sykemelding', ferie:'Ferie', ferie_ubetalt:'Ferie (ubetalt)', permisjon:'Permisjon m/lønn', permisjon_ubetalt:'Permisjon u/lønn', avspasering:'Avspasering', kurs:'Kurs/opplæring', annet:'Annet' }
@@ -21566,13 +21729,70 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
         </div>
       )}
 
-      {/* Eksport-knapper */}
+      {/* Eksport-knapper — åpner modal for å velge format (Excel/PDF) */}
       <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-        <CsvButton kind="export" size="lg" label="Eksporter timelister (CSV)" onClick={exportCSV} style={{ width:'100%', borderRadius:'12px', gap:'8px' }} />
-        <button onClick={exportPayroll} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
+        <button
+          onClick={() => { setExportFormat('excel'); setShowExportModal('timelister') }}
+          disabled={exporting}
+          style={{ background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor: exporting ? 'wait' : 'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
+          📥 Eksporter timelister
+        </button>
+        <button
+          onClick={() => { setExportFormat('excel'); setShowExportModal('lonnsgrunnlag') }}
+          disabled={exporting}
+          style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px 24px', fontSize:'14px', fontWeight:'700', cursor: exporting ? 'wait' : 'pointer', display:'flex', alignItems:'center', gap:'8px', justifyContent:'center' }}>
           💰 Eksporter lønnsgrunnlag
         </button>
       </div>
+
+      {/* Eksport-modal: velg Excel eller PDF, deretter trigg eksport */}
+      {showExportModal && (
+        <div onClick={(e) => { if (e.target === e.currentTarget && !exporting) setShowExportModal(null) }}
+          style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', backdropFilter:'blur(4px)' }}>
+          <div style={{ background:'white', borderRadius:'16px', padding:'24px', width:'100%', maxWidth:'420px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
+              <h3 style={{ margin:0, fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>
+                {showExportModal === 'lonnsgrunnlag' ? '💰 Eksporter lønnsgrunnlag' : '📥 Eksporter timelister'}
+              </h3>
+              <button onClick={() => setShowExportModal(null)} disabled={exporting} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'20px', color:'#94a3b8' }}>×</button>
+            </div>
+            <p style={{ margin:'0 0 18px', fontSize:'13px', color:'#64748b' }}>
+              Periode: <strong>{periodFrom}</strong> til <strong>{periodTo}</strong>
+            </p>
+
+            <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Format</label>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px', marginBottom:'20px' }}>
+              {[
+                { v:'excel', emoji:'📊', name:'Excel', desc:'.xlsx — redigerbar' },
+                { v:'pdf',   emoji:'📄', name:'PDF',   desc:'Pent format for utskrift' },
+              ].map(opt => (
+                <button key={opt.v}
+                  onClick={() => setExportFormat(opt.v)}
+                  style={{
+                    padding:'14px', borderRadius:'12px', cursor:'pointer', textAlign:'left',
+                    background: exportFormat === opt.v ? '#f0fdf4' : 'white',
+                    border: `2px solid ${exportFormat === opt.v ? '#059669' : '#e2e8f0'}`,
+                  }}>
+                  <div style={{ fontSize:'22px', marginBottom:'4px' }}>{opt.emoji}</div>
+                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{opt.name}</div>
+                  <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>{opt.desc}</div>
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', gap:'8px' }}>
+              <button onClick={() => setShowExportModal(null)} disabled={exporting}
+                style={{ flex:1, padding:'12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'10px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>
+                Avbryt
+              </button>
+              <button onClick={handleExport} disabled={exporting}
+                style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: exporting ? 'wait' : 'pointer' }}>
+                {exporting ? 'Eksporterer...' : `Last ned ${exportFormat === 'excel' ? 'Excel' : 'PDF'}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
