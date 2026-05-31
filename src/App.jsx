@@ -20383,18 +20383,21 @@ function TimelistePage() {
     t.employee_id===(selectedEmployee||employees[0]?.id)
   )
 
-  // Filtrer timelister basert på godkjennings-tilgang:
-  //   - Admin ser ALLE innleverte
-  //   - PL ser kun timelister der minst én time er på et prosjekt de er PL for
+  // Filtrer entries basert på godkjennings-tilgang:
+  //   - Admin ser ALLE entries med status 'Til godkjenning'
+  //   - PL ser kun entries på prosjekter de er PL for
   //   - Ansatte uten rettigheter ser ingen
-  const kanGodkjenne = (ts) => {
-    if (!ts || ts.status !== 'Innlevert') return false
-    if (erBrukerAdmin) return true
-    if (plProsjekter.length === 0) return false
-    const entries = ts.timesheet_entries || []
-    return entries.some(e => plProsjekter.includes(e.project_id))
-  }
-  const pendingApproval = timesheets.filter(t => t.status === 'Innlevert' && kanGodkjenne(t))
+  // Tripletex-modell: vi teller per entry, ikke per uke.
+  const pendingApprovalEntries = timesheets.flatMap(t =>
+    (t.timesheet_entries || []).filter(e => {
+      if ((e.status || 'Til godkjenning') !== 'Til godkjenning') return false
+      if (erBrukerAdmin) return true
+      if (plProsjekter.length === 0) return false
+      return plProsjekter.includes(e.project_id)
+    })
+  )
+  // Antall unike ansatt-uker som har pending — for header-badge
+  const pendingApprovalCount = pendingApprovalEntries.length
 
   const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
 
@@ -20411,9 +20414,9 @@ function TimelistePage() {
             <h1 style={{ fontSize: isMobTL ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
             {!isMobTL && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>}
           </div>
-          {pendingApproval.length>0 && (
+          {pendingApprovalCount>0 && (
             <div style={{ background:'#fffbeb', borderRadius:'10px', padding: isMobTL ? '6px 10px' : '8px 14px', border:'1px solid #fde68a', fontSize: isMobTL ? '11px' : '13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
-              ⏳ {pendingApproval.length} venter
+              ⏳ {pendingApprovalCount} venter
             </div>
           )}
         </div>
@@ -20427,7 +20430,7 @@ function TimelistePage() {
             <button key={v} onClick={()=>setView(v)}
               style={{ padding: isMobTL ? '7px 12px' : '8px 16px', borderRadius:'10px', border:'none', background:view===v?'#059669':'#f8fafc', color:view===v?'white':'#64748b', fontWeight:view===v?'700':'500', fontSize: isMobTL ? '12px' : '13px', cursor:'pointer', position:'relative' }}>
               {l}
-              {v==='godkjenn'&&pendingApproval.length>0&&<span style={{ position:'absolute', top:'-4px', right:'-4px', background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'10px', fontWeight:'800', minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px' }}>{pendingApproval.length}</span>}
+              {v==='godkjenn'&&pendingApprovalCount>0&&<span style={{ position:'absolute', top:'-4px', right:'-4px', background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'10px', fontWeight:'800', minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 3px' }}>{pendingApprovalCount}</span>}
             </button>
           ))}
         </div>
@@ -20588,32 +20591,46 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
     finally { setSubmitting(false) }
   }
 
-  const statusCfg = sheet ? TS_STATUS[sheet.status] : null
+  // Tripletex-modell: status er ikke lenger på uke-nivå men per entry.
+  // Vi oppsummerer entry-statusene for ukesoversikten.
+  const entryStatusSummary = (() => {
+    const allEntries = sheet?.timesheet_entries || []
+    const counts = { 'Til godkjenning': 0, 'Godkjent': 0, 'Avvist': 0 }
+    for (const e of allEntries) {
+      const s = e.status || 'Til godkjenning'
+      if (counts[s] !== undefined) counts[s]++
+    }
+    return counts
+  })()
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-      {/* Status + actions */}
+      {/* Status-oversikt + actions — Tripletex-modell: per-entry-status, ikke uke */}
       <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:'12px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-          {sheet ? (
-            <span style={{ background:statusCfg.bg, color:statusCfg.color, border:`1px solid ${statusCfg.border}`, padding:'4px 12px', borderRadius:'999px', fontSize:'13px', fontWeight:'700' }}>{statusCfg.emoji} {sheet.status}</span>
-          ) : (
-            <span style={{ background:'#f8fafc', color:'#94a3b8', border:'1px solid #e2e8f0', padding:'4px 12px', borderRadius:'999px', fontSize:'13px', fontWeight:'600' }}>📝 Ikke startet</span>
-          )}
+        <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
           <span style={{ fontSize:'14px', color:'#0f172a', fontWeight:'700' }}>{fmtHours(totalHours)} timer</span>
           {totalKm>0 && <span style={{ fontSize:'13px', color:'#64748b' }}>🚗 {totalKm} km</span>}
+          {/* Vis entry-status-pilles hvis det finnes registreringer */}
+          {entryStatusSummary['Til godkjenning'] > 0 && (
+            <span style={{ background:'#fefce8', color:'#ca8a04', border:'1px solid #fef08a', padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>
+              ⏳ {entryStatusSummary['Til godkjenning']} til godkjenning
+            </span>
+          )}
+          {entryStatusSummary['Godkjent'] > 0 && (
+            <span style={{ background:'#f0fdf4', color:'#16a34a', border:'1px solid #bbf7d0', padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>
+              ✅ {entryStatusSummary['Godkjent']} godkjent
+            </span>
+          )}
+          {entryStatusSummary['Avvist'] > 0 && (
+            <span style={{ background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>
+              ❌ {entryStatusSummary['Avvist']} avvist
+            </span>
+          )}
         </div>
         <div style={{ display:'flex', gap:'8px' }}>
-          {(!sheet||sheet.status==='Utkast'||sheet.status==='Avvist') && (
-            <button onClick={onEdit} style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
-              {sheet ? '✏️ Rediger' : '+ Registrer timer'}
-            </button>
-          )}
-          {sheet?.status==='Utkast' && (
-            <button onClick={handleSubmit} disabled={submitting} style={{ padding:'10px 18px', background:submitting?'#6ee7b7':'#2563eb', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
-              {submitting?'Sender...':'📤 Lever inn'}
-            </button>
-          )}
+          <button onClick={onEdit} style={{ padding:'10px 18px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+            {sheet ? '✏️ Rediger / Legg til' : '+ Registrer timer'}
+          </button>
         </div>
       </div>
 
@@ -20742,7 +20759,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   const initEntry = (date) => ({
     _new:true, date, project_id:'', activity:'', absence_type:'', start_time:'07:00', end_time:'15:30',
     normal_hours:7.5, overtime_50:0, overtime_100:0, travel_km:0, diet:0, expenses:0,
-    expenses_description:'', notes:''
+    expenses_description:'', description:'', notes:'', status:'Til godkjenning',
   })
 
   const updateEntry = (date, field, value) => {
@@ -20824,6 +20841,13 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
     setSaving(true)
     try {
       const sid = await ensureSheet()
+      const now = new Date().toISOString()
+      // Tripletex-modell: hver entry sendes automatisk til godkjenning når lagret.
+      // status='Til godkjenning' med mindre det er en eksisterende godkjent entry
+      // (da skal vi ikke endre status — men da skal vi heller ikke kunne nå hit
+      // fordi godkjente entries er låst for ansatte).
+      const erEksisterende = entry.id && !entry._new
+      const erGodkjent = erEksisterende && entry.status === 'Godkjent'
       const payload = {
         timesheet_id:sid, date:entry.date,
         project_id:entry.project_id||null, activity:entry.activity||null,
@@ -20836,9 +20860,20 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
         diet:parseFloat(entry.diet)||0,
         expenses:parseFloat(entry.expenses)||0,
         expenses_description:entry.expenses_description||null,
+        description:entry.description||null,
         notes:entry.notes||null,
       }
-      if (entry.id&&!entry._new) {
+      // Ved nye eller endrede entries: re-send til godkjenning.
+      // Hvis allerede godkjent skal vi normalt ikke nå hit (UI låser) — men som
+      // sikkerhetsnett: bevarer status hvis Godkjent.
+      if (!erGodkjent) {
+        payload.status = 'Til godkjenning'
+        payload.submitted_at = now
+        // Nullstill evt. tidligere avslag når den re-sendes
+        payload.rejected_at = null
+        payload.reject_comment = null
+      }
+      if (erEksisterende) {
         await supabase.from('timesheet_entries').update(payload).eq('id',entry.id)
       } else {
         const {data}=await supabase.from('timesheet_entries').insert(payload).select().single()
@@ -20885,12 +20920,27 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
           const isToday = date===_todayStr
           const isActive = activeDay===date
           const dayHours = entry?(parseFloat(entry.normal_hours)||0)+(parseFloat(entry.overtime_50)||0)+(parseFloat(entry.overtime_100)||0):0
+          // Tripletex-modell: entry har egen status. Godkjente entries låses for ansatt.
+          const entryStatus = entry?.status || 'Til godkjenning'
+          const erGodkjent = entry?.id && !entry._new && entryStatus === 'Godkjent'
+          const erAvvist = entry?.id && !entry._new && entryStatus === 'Avvist'
+          // Bestemmer fargekoding på dagsraden basert på status
+          const statusCfg = {
+            'Til godkjenning': { bg:'#fefce8', color:'#ca8a04', emoji:'⏳', label:'Til godkjenning' },
+            'Godkjent':        { bg:'#f0fdf4', color:'#16a34a', emoji:'✅', label:'Godkjent' },
+            'Avvist':          { bg:'#fef2f2', color:'#dc2626', emoji:'❌', label:'Avvist' },
+            'Utkast':          { bg:'#f8fafc', color:'#64748b', emoji:'📝', label:'Utkast' },
+          }[entryStatus] || null
 
           return (
-            <div key={date} style={{ background:'white', borderRadius:'16px', border:`2px solid ${isActive?'#059669':isToday?'#bbf7d0':isWeekend?'#f1f5f9':'#f1f5f9'}`, overflow:'hidden' }}>
+            <div key={date} style={{ background:'white', borderRadius:'16px', border:`2px solid ${isActive?'#059669':isToday?'#bbf7d0':isWeekend?'#f1f5f9':'#f1f5f9'}`, overflow:'hidden', opacity: erGodkjent ? 0.92 : 1 }}>
               {/* Day header – always visible */}
-              <div onClick={()=>setActiveDay(isActive?null:date)}
-                style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', cursor:'pointer', background:isActive?'#f0fdf4':isToday?'#f0fdf4':'white' }}>
+              <div onClick={() => {
+                  // Hvis godkjent: ikke utvid skjemaet (låst for ansatt)
+                  if (erGodkjent) return
+                  setActiveDay(isActive?null:date)
+                }}
+                style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 18px', cursor: erGodkjent ? 'default' : 'pointer', background:isActive?'#f0fdf4':isToday?'#f0fdf4':'white' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
                   <div style={{ width:'40px', height:'40px', borderRadius:'50%', background:dayHours>0?'#059669':isWeekend?'#f1f5f9':'#f8fafc', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     {dayHours>0 ? <span style={{ fontSize:'12px', fontWeight:'800', color:'white' }}>{fmtHours(dayHours)}</span> : <span style={{ fontSize:'16px' }}>{isWeekend?'🏖️':'+'}</span>}
@@ -20901,8 +20951,15 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                   </div>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  {/* Status-badge — vises kun hvis det finnes en lagret entry */}
+                  {entry && !entry._new && statusCfg && (
+                    <span style={{ background:statusCfg.bg, color:statusCfg.color, fontSize:'10px', fontWeight:'700', padding:'3px 8px', borderRadius:'999px', whiteSpace:'nowrap' }}>
+                      {statusCfg.emoji} {statusCfg.label}
+                    </span>
+                  )}
                   {entry?._dirty&&<span style={{ width:'8px',height:'8px',borderRadius:'50%',background:'#d97706',display:'inline-block' }}/>}
-                  <span style={{ fontSize:'16px', color:'#94a3b8', transform:isActive?'rotate(90deg)':'none', transition:'transform 0.2s' }}>›</span>
+                  {!erGodkjent && <span style={{ fontSize:'16px', color:'#94a3b8', transform:isActive?'rotate(90deg)':'none', transition:'transform 0.2s' }}>›</span>}
+                  {erGodkjent && <span style={{ fontSize:'14px', color:'#94a3b8' }}>🔒</span>}
                 </div>
               </div>
 
@@ -21015,6 +21072,19 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
                     <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Beskrivelse utlegg</label>
                     <input value={entry?.expenses_description||''} onChange={e=>updateEntry(date,'expenses_description',e.target.value)} placeholder="Hva ble kjøpt?" style={tsInp} /></div>
                   )}
+
+                  <div>
+                    <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>
+                      💬 Hva utførte du?
+                    </label>
+                    <textarea
+                      value={entry?.description||''}
+                      onChange={e=>updateEntry(date,'description',e.target.value)}
+                      rows={2}
+                      placeholder="Beskriv arbeidet — sees av leder ved godkjenning"
+                      style={{ ...tsInp, resize:'none', fontSize:'13px' }}
+                    />
+                  </div>
 
                   <div><label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Merknad</label>
                   <textarea value={entry?.notes||''} onChange={e=>updateEntry(date,'notes',e.target.value)} rows={2} placeholder="Valgfri merknad..." style={{ ...tsInp, resize:'none', fontSize:'13px' }} /></div>
@@ -21310,69 +21380,167 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 }
 
 // ── GODKJENNING VIEW ──────────────────────────────────────────────────────────
+// Tripletex-modell: godkjenning skjer per entry (dag/aktivitet), ikke per uke.
+// PL kan velge å:
+//   - Godkjenne / avvise enkelt-entry
+//   - Godkjenne / avvise alle entries for en ansatts uke samlet
 function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erBrukerAdmin = false, plProsjekter = [] }) {
-  const [selected, setSelected] = useState(null)
+  const [selected, setSelected] = useState(null)  // {employee_id, week, year, sheetId}
   const [rejectComment, setRejectComment] = useState('')
   const [processing, setProcessing] = useState(false)
+  const [perEntryReject, setPerEntryReject] = useState({})  // entryId → comment
 
-  // Sjekk om en gitt timeliste kan godkjennes av denne brukeren:
+  // Sjekk om en gitt entry kan godkjennes av denne brukeren:
   //   - Admin kan godkjenne alt
-  //   - PL kan godkjenne hvis minst én entry er på et prosjekt de leder
-  const kanGodkjenneSheet = (ts) => {
+  //   - PL kan godkjenne hvis entry er på et prosjekt de leder
+  const kanGodkjenneEntry = (entry) => {
     if (erBrukerAdmin) return true
     if (plProsjekter.length === 0) return false
-    const entries = ts.timesheet_entries || []
-    return entries.some(e => plProsjekter.includes(e.project_id))
+    return plProsjekter.includes(entry.project_id)
   }
 
-  // Pending: kun innleverte timelister brukeren har rettighet til å godkjenne
-  const pending = timesheets
-    .filter(t => t.status === 'Innlevert' && kanGodkjenneSheet(t))
-    .sort((a,b) => new Date(a.submitted_at) - new Date(b.submitted_at))
+  // Bygg "ansatt-uke"-grupperinger med pending entries.
+  // En gruppe vises hvis minst én entry er 'Til godkjenning' og brukeren kan godkjenne.
+  // For "all"-listen tas også behandlede entries med.
+  const allEntries = timesheets.flatMap(t =>
+    (t.timesheet_entries || []).map(e => ({
+      ...e,
+      _employee_id: t.employee_id,
+      _week: t.week_number,
+      _year: t.year,
+      _sheet_id: t.id,
+      _created_by: t.created_by,
+    }))
+  )
 
-  // All-listen: alle behandlede (ikke utkast) som brukeren har relasjon til.
-  // For admin: alt. For PL: kun timelister der minst én entry er på deres prosjekter
-  // (uavhengig av status — så de ser også tidligere godkjente/avviste).
-  const all = timesheets
-    .filter(t => {
-      if (t.status === 'Utkast') return false
-      if (erBrukerAdmin) return true
-      if (plProsjekter.length === 0) return false
-      const entries = t.timesheet_entries || []
-      return entries.some(e => plProsjekter.includes(e.project_id))
-    })
-    .sort((a,b) => new Date(b.submitted_at || b.created_at) - new Date(a.submitted_at || a.created_at))
+  // Filtrer til entries brukeren faktisk kan se
+  const synligeEntries = allEntries.filter(e => {
+    if (erBrukerAdmin) return true
+    if (plProsjekter.length === 0) return false
+    return plProsjekter.includes(e.project_id)
+  })
 
-  const handleApprove = async (ts) => {
+  // Pending entries: 'Til godkjenning' på prosjekter brukeren styrer
+  const pendingEntries = synligeEntries.filter(e => (e.status || 'Til godkjenning') === 'Til godkjenning')
+
+  // Grupper pending entries per ansatt+uke for listevisning
+  const grupper = {}
+  for (const e of synligeEntries) {
+    const key = `${e._employee_id}_${e._year}_${e._week}`
+    if (!grupper[key]) grupper[key] = { employee_id:e._employee_id, week:e._week, year:e._year, sheetId:e._sheet_id, entries:[], pending:0, godkjent:0, avvist:0 }
+    grupper[key].entries.push(e)
+    const s = e.status || 'Til godkjenning'
+    if (s === 'Til godkjenning') grupper[key].pending++
+    else if (s === 'Godkjent') grupper[key].godkjent++
+    else if (s === 'Avvist') grupper[key].avvist++
+  }
+  // Sorter: pending først (med flest pending), så nyeste behandlet
+  const grupperArr = Object.values(grupper).sort((a,b) => {
+    if (a.pending !== b.pending) return b.pending - a.pending
+    return (b.year * 100 + b.week) - (a.year * 100 + a.week)
+  })
+
+  // Godkjenn én entry
+  const handleApproveEntry = async (entry) => {
+    if (!kanGodkjenneEntry(entry)) return
     setProcessing(true)
     try {
-      await supabase.from('timesheets').update({ status:'Godkjent', approved_at:new Date().toISOString(), approved_by:user?.id, updated_at:new Date().toISOString() }).eq('id',ts.id)
-      if (ts.created_by) { await supabase.from('notifications').insert({ user_id:ts.created_by, title:`Timeliste godkjent – uke ${ts.week_number}`, message:`Din timeliste for uke ${ts.week_number}, ${ts.year} er godkjent.`, type:'success', link_page:'timelister' }) }
-      setSelected(null)
+      const now = new Date().toISOString()
+      await supabase.from('timesheet_entries').update({
+        status:'Godkjent',
+        approved_at:now,
+        approved_by:user?.id,
+        rejected_at:null,
+        reject_comment:null,
+      }).eq('id', entry.id)
+      // Varsel til den ansatte
+      if (entry._created_by) {
+        await supabase.from('notifications').insert({
+          user_id: entry._created_by,
+          title: `Time godkjent – ${new Date(entry.date).toLocaleDateString('nb-NO')}`,
+          message: `Din timeregistrering for ${new Date(entry.date).toLocaleDateString('nb-NO')} er godkjent.`,
+          type: 'success',
+          link_page: 'timelister',
+        })
+      }
       onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setProcessing(false) }
   }
 
-  const handleReject = async (ts) => {
-    if (!rejectComment.trim()) return alert('Skriv en kommentar til den ansatte')
+  // Avvis én entry — krever kommentar
+  const handleRejectEntry = async (entry) => {
+    const kommentar = (perEntryReject[entry.id] || '').trim()
+    if (!kommentar) {
+      alert('Skriv en kommentar til den ansatte før du avviser')
+      return
+    }
+    if (!kanGodkjenneEntry(entry)) return
     setProcessing(true)
     try {
-      await supabase.from('timesheets').update({ status:'Avvist', reject_comment:rejectComment.trim(), updated_at:new Date().toISOString() }).eq('id',ts.id)
-      if (ts.created_by) { await supabase.from('notifications').insert({ user_id:ts.created_by, title:`Timeliste avvist – uke ${ts.week_number}`, message:`Din timeliste for uke ${ts.week_number}, ${ts.year} ble avvist.${rejectComment.trim() ? ' Kommentar: '+rejectComment.trim() : ''}`, type:'warning', link_page:'timelister' }) }
-      setRejectComment(''); setSelected(null)
+      const now = new Date().toISOString()
+      await supabase.from('timesheet_entries').update({
+        status:'Avvist',
+        rejected_at:now,
+        reject_comment:kommentar,
+        approved_at:null,
+        approved_by:null,
+      }).eq('id', entry.id)
+      if (entry._created_by) {
+        await supabase.from('notifications').insert({
+          user_id: entry._created_by,
+          title: `Time avvist – ${new Date(entry.date).toLocaleDateString('nb-NO')}`,
+          message: `Din timeregistrering for ${new Date(entry.date).toLocaleDateString('nb-NO')} ble avvist. Kommentar: ${kommentar}`,
+          type: 'warning',
+          link_page: 'timelister',
+        })
+      }
+      setPerEntryReject(prev => { const ny = {...prev}; delete ny[entry.id]; return ny })
       onRefresh()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setProcessing(false) }
   }
 
+  // Godkjenn alle pending entries i en ansatt-uke
+  const handleApproveAllPending = async (gruppe) => {
+    const pending = gruppe.entries.filter(e => (e.status || 'Til godkjenning') === 'Til godkjenning' && kanGodkjenneEntry(e))
+    if (pending.length === 0) return
+    if (!confirm(`Godkjenn alle ${pending.length} ventende registreringer for uke ${gruppe.week}?`)) return
+    setProcessing(true)
+    try {
+      const now = new Date().toISOString()
+      const ids = pending.map(e => e.id)
+      await supabase.from('timesheet_entries').update({
+        status:'Godkjent',
+        approved_at:now,
+        approved_by:user?.id,
+        rejected_at:null,
+        reject_comment:null,
+      }).in('id', ids)
+      // Ett samlet varsel
+      const createdBy = pending[0]._created_by
+      if (createdBy) {
+        await supabase.from('notifications').insert({
+          user_id: createdBy,
+          title: `Timer godkjent – uke ${gruppe.week}`,
+          message: `${pending.length} timeregistrering${pending.length===1?'':'er'} for uke ${gruppe.week}, ${gruppe.year} er godkjent.`,
+          type: 'success',
+          link_page: 'timelister',
+        })
+      }
+      onRefresh()
+    } catch(e) { alert('Feil: '+e.message) }
+    finally { setProcessing(false) }
+  }
+
+  // DETALJVISNING: en valgt ansatt-uke
   if (selected) {
-    const emp = employees.find(e=>e.id===selected.employee_id)
-    const entries = selected.timesheet_entries||[]
-    const weekDates = getWeekDates(selected.week_number, selected.year)
-    const totalHours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
-    const totalKm = entries.reduce((acc,e)=>acc+(parseFloat(e.travel_km)||0),0)
-    const totalDiet = entries.reduce((acc,e)=>acc+(parseFloat(e.diet)||0),0)
+    const gruppe = grupperArr.find(g => g.sheetId === selected.sheetId) ||
+      { employee_id: selected.employee_id, week: selected.week, year: selected.year, sheetId: selected.sheetId, entries: [] }
+    const emp = employees.find(e => e.id === gruppe.employee_id)
+    const weekDates = getWeekDates(gruppe.week, gruppe.year)
+    const totalHours = gruppe.entries.reduce((a,e) => (parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+a, 0)
+    const pendingCount = gruppe.entries.filter(e => (e.status || 'Til godkjenning') === 'Til godkjenning' && kanGodkjenneEntry(e)).length
 
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
@@ -21381,25 +21549,93 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', flexWrap:'wrap', gap:'12px' }}>
             <div>
               <h3 style={{ margin:'0 0 4px', fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>{emp?.first_name} {emp?.last_name}</h3>
-              <div style={{ fontSize:'13px', color:'#64748b' }}>Uke {selected.week_number}, {selected.year} · Innlevert {selected.submitted_at?new Date(selected.submitted_at).toLocaleDateString('nb-NO'):''}</div>
+              <div style={{ fontSize:'13px', color:'#64748b' }}>Uke {gruppe.week}, {gruppe.year} · {gruppe.entries.length} registreringer</div>
             </div>
             <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{fmtHours(totalHours)}t</div>
           </div>
 
+          {/* Godkjenn-alle-knapp hvis det er pending */}
+          {pendingCount > 0 && (
+            <div style={{ marginBottom:'16px' }}>
+              <button onClick={() => handleApproveAllPending(gruppe)} disabled={processing}
+                style={{ width:'100%', padding:'13px', background:processing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>
+                ✅ Godkjenn alle {pendingCount} ventende registreringer
+              </button>
+            </div>
+          )}
+
           {/* Entries per day */}
           {weekDates.map((date,i)=>{
-            const dayEntries = entries.filter(e=>e.date===date)
-            if (dayEntries.length===0) return null
+            const dayEntries = gruppe.entries.filter(e => e.date === date)
+            if (dayEntries.length === 0) return null
             return (
-              <div key={date} style={{ marginBottom:'12px', background:'#f8fafc', borderRadius:'12px', padding:'12px 16px' }}>
-                <div style={{ fontWeight:'700', fontSize:'13px', color:'#374151', marginBottom:'8px' }}>{DAYS_FULL[i]} {new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})}</div>
-                {dayEntries.map(e=>{
-                  const proj = projects.find(p=>p.id===e.project_id)
-                  const hours=(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)
+              <div key={date} style={{ marginBottom:'14px', background:'#f8fafc', borderRadius:'12px', padding:'14px 16px' }}>
+                <div style={{ fontWeight:'700', fontSize:'13px', color:'#374151', marginBottom:'10px' }}>
+                  {DAYS_FULL[i]} {new Date(date+'T12:00:00').toLocaleDateString('nb-NO',{day:'numeric',month:'short'})}
+                </div>
+                {dayEntries.map(e => {
+                  const proj = projects.find(p => p.id === e.project_id)
+                  const hours = (parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)
+                  const entryStatus = e.status || 'Til godkjenning'
+                  const cfg = {
+                    'Til godkjenning': { bg:'#fefce8', color:'#ca8a04', emoji:'⏳' },
+                    'Godkjent':        { bg:'#f0fdf4', color:'#16a34a', emoji:'✅' },
+                    'Avvist':          { bg:'#fef2f2', color:'#dc2626', emoji:'❌' },
+                  }[entryStatus] || { bg:'#f8fafc', color:'#64748b', emoji:'📝' }
+                  const kanBeh = kanGodkjenneEntry(e)
+                  const erBeh = entryStatus !== 'Til godkjenning'
+
                   return (
-                    <div key={e.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'13px', color:'#475569', marginBottom:'4px' }}>
-                      <span>{proj?.name||'—'} · {e.activity||'—'}{e.start_time?` · ${e.start_time.slice(0,5)}–${e.end_time?.slice(0,5)||'?'}`:''}</span>
-                      <span style={{ fontWeight:'700', color:'#059669' }}>{fmtHours(hours)}t</span>
+                    <div key={e.id} style={{ background:'white', borderRadius:'10px', padding:'12px 14px', marginBottom:'8px', border:'1px solid #f1f5f9' }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'10px', marginBottom:'6px', flexWrap:'wrap' }}>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', marginBottom:'4px' }}>
+                            <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{proj?.name || '—'}</span>
+                            {e.activity && <span style={{ fontSize:'12px', color:'#64748b' }}>· {e.activity}</span>}
+                            <span style={{ background:cfg.bg, color:cfg.color, fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>
+                              {cfg.emoji} {entryStatus}
+                            </span>
+                          </div>
+                          <div style={{ fontSize:'11px', color:'#64748b' }}>
+                            {e.start_time && `${e.start_time.slice(0,5)}–${e.end_time?.slice(0,5)||'?'}`}
+                            {e.normal_hours > 0 && ` · Normal ${fmtHours(e.normal_hours)}t`}
+                            {e.overtime_50 > 0 && <span style={{ color:'#d97706' }}> · OT50 {fmtHours(e.overtime_50)}t</span>}
+                            {e.overtime_100 > 0 && <span style={{ color:'#dc2626' }}> · OT100 {fmtHours(e.overtime_100)}t</span>}
+                          </div>
+                          {e.description && (
+                            <div style={{ marginTop:'6px', padding:'8px 10px', background:'#f8fafc', borderRadius:'6px', fontSize:'12px', color:'#475569', lineHeight:1.4 }}>
+                              💬 {e.description}
+                            </div>
+                          )}
+                          {e.reject_comment && entryStatus === 'Avvist' && (
+                            <div style={{ marginTop:'6px', padding:'6px 10px', background:'#fef2f2', borderRadius:'6px', fontSize:'11px', color:'#dc2626' }}>
+                              ❌ {e.reject_comment}
+                            </div>
+                          )}
+                        </div>
+                        <span style={{ fontWeight:'800', fontSize:'14px', color:'#059669', whiteSpace:'nowrap' }}>{fmtHours(hours)}t</span>
+                      </div>
+
+                      {/* Godkjenn/Avvis-knapper kun hvis pending OG brukeren kan godkjenne */}
+                      {!erBeh && kanBeh && (
+                        <div style={{ marginTop:'10px', display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                          <input
+                            type="text"
+                            value={perEntryReject[e.id] || ''}
+                            onChange={ev => setPerEntryReject(prev => ({ ...prev, [e.id]: ev.target.value }))}
+                            placeholder="Skriv kommentar for å avvise..."
+                            style={{ flex:1, minWidth:'150px', padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12px' }}
+                          />
+                          <button onClick={() => handleRejectEntry(e)} disabled={processing}
+                            style={{ padding:'7px 14px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'8px', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
+                            ❌ Avvis
+                          </button>
+                          <button onClick={() => handleApproveEntry(e)} disabled={processing}
+                            style={{ padding:'7px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', fontWeight:'700', fontSize:'12px', cursor:'pointer' }}>
+                            ✅ Godkjenn
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -21407,64 +21643,60 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
             )
           })}
 
-          <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'12px 16px', display:'flex', gap:'16px', flexWrap:'wrap', fontSize:'13px', fontWeight:'600', color:'#16a34a', marginBottom:'16px' }}>
-            <span>Normal: {fmtHours(entries.reduce((a,e)=>a+(parseFloat(e.normal_hours)||0),0))}t</span>
-            {entries.reduce((a,e)=>a+(parseFloat(e.overtime_50)||0),0)>0&&<span style={{ color:'#d97706' }}>OT50%: {fmtHours(entries.reduce((a,e)=>a+(parseFloat(e.overtime_50)||0),0))}t</span>}
-            {entries.reduce((a,e)=>a+(parseFloat(e.overtime_100)||0),0)>0&&<span style={{ color:'#dc2626' }}>OT100%: {fmtHours(entries.reduce((a,e)=>a+(parseFloat(e.overtime_100)||0),0))}t</span>}
-            {totalKm>0&&<span style={{ color:'#2563eb' }}>Km: {totalKm}</span>}
-            {totalDiet>0&&<span style={{ color:'#7c3aed' }}>Diett: {totalDiet}kr</span>}
-          </div>
-
-          <div style={{ marginBottom:'12px' }}>
-            <label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Kommentar ved retur/avslag</label>
-            <textarea value={rejectComment} onChange={e=>setRejectComment(e.target.value)} rows={2} placeholder="Forklar hva som må korrigeres..." style={{ ...tsInp, resize:'none' }} />
-          </div>
-
-          <div style={{ display:'flex', gap:'10px' }}>
-            <button onClick={()=>handleReject(selected)} disabled={processing} style={{ flex:1, padding:'13px', background:processing?'#fca5a5':'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>❌ Avvis</button>
-            <button onClick={async ()=>{
-              if (!rejectComment.trim()) return alert('Skriv en kommentar om hva som må korrigeres')
-              setProcessing(true)
-              try {
-                await supabase.from('timesheets').update({ status:'Returnert', reject_comment:rejectComment.trim(), updated_at:new Date().toISOString() }).eq('id',selected.id)
-                if (selected.created_by) {
-                  await supabase.from('notifications').insert({ user_id:selected.created_by, title:`Timeliste returnert – uke ${selected.week_number}`, message:`Din timeliste for uke ${selected.week_number}, ${selected.year} er returnert for korrigering. Kommentar: ${rejectComment.trim()}`, type:'warning', link_page:'timelister' })
-                }
-                setRejectComment(''); setSelected(null); onRefresh()
-              } catch(e) { alert('Feil: '+e.message) }
-              finally { setProcessing(false) }
-            }} disabled={processing} style={{ flex:1, padding:'13px', background:processing?'#fde68a':'#fffbeb', color:'#d97706', border:'1px solid #fde68a', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>🔄 Returner</button>
-            <button onClick={()=>handleApprove(selected)} disabled={processing} style={{ flex:2, padding:'13px', background:processing?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'12px', fontWeight:'700', fontSize:'14px', cursor:'pointer' }}>✅ Godkjenn timeliste</button>
-          </div>
+          {gruppe.entries.length === 0 && (
+            <div style={{ padding:'24px', textAlign:'center', color:'#94a3b8', fontSize:'13px' }}>
+              Ingen registreringer for denne uken.
+            </div>
+          )}
         </div>
       </div>
     )
   }
 
+  // LISTEVISNING: ansatte med ventende godkjenning
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'12px' }}>
-      {pending.length===0&&<div style={{ background:'#f0fdf4', borderRadius:'14px', border:'1px solid #bbf7d0', padding:'24px', textAlign:'center', color:'#16a34a', fontWeight:'600', fontSize:'14px' }}>✅ Ingen timelister venter godkjenning</div>}
-      {all.map(ts=>{
-        const emp = employees.find(e=>e.id===ts.employee_id)
-        const entries = ts.timesheet_entries||[]
-        const hours = entries.reduce((acc,e)=>(parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+acc,0)
-        const cfg = TS_STATUS[ts.status]
+      {pendingEntries.length === 0 && grupperArr.length === 0 && (
+        <div style={{ background:'#f0fdf4', borderRadius:'14px', border:'1px solid #bbf7d0', padding:'24px', textAlign:'center', color:'#16a34a', fontWeight:'600', fontSize:'14px' }}>
+          ✅ Ingen timer venter godkjenning
+        </div>
+      )}
+      {grupperArr.map(gruppe => {
+        const emp = employees.find(e => e.id === gruppe.employee_id)
+        const totalHours = gruppe.entries.reduce((a,e) => (parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)+a, 0)
+        const harPending = gruppe.pending > 0
         return (
-          <div key={ts.id} onClick={()=>setSelected(ts)}
-            style={{ background:'white', borderRadius:'14px', border:`1px solid ${ts.status==='Innlevert'?'#bfdbfe':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', transition:'box-shadow 0.15s' }}
+          <div key={`${gruppe.sheetId}`} onClick={() => setSelected(gruppe)}
+            style={{ background:'white', borderRadius:'14px', border:`1px solid ${harPending?'#fde68a':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'14px', transition:'box-shadow 0.15s' }}
             onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
-            <div style={{ width:'44px', height:'44px', borderRadius:'50%', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'18px', fontWeight:'800', color:cfg.color, flexShrink:0 }}>
+            <div style={{ width:'44px', height:'44px', borderRadius:'50%', background: harPending?'#fefce8':'#f0fdf4', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'14px', fontWeight:'800', color: harPending?'#ca8a04':'#16a34a', flexShrink:0 }}>
               {emp?.first_name?.[0]}{emp?.last_name?.[0]}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px', flexWrap:'wrap' }}>
                 <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{emp?.first_name} {emp?.last_name}</span>
-                <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700' }}>{cfg.emoji} {ts.status}</span>
+                <span style={{ fontSize:'12px', color:'#64748b' }}>Uke {gruppe.week}, {gruppe.year}</span>
               </div>
-              <div style={{ fontSize:'12px', color:'#64748b' }}>Uke {ts.week_number}, {ts.year}{ts.submitted_at?` · Innlevert ${new Date(ts.submitted_at).toLocaleDateString('nb-NO')}`:''}</div>
+              <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+                {gruppe.pending > 0 && (
+                  <span style={{ background:'#fefce8', color:'#ca8a04', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>
+                    ⏳ {gruppe.pending} til godkjenning
+                  </span>
+                )}
+                {gruppe.godkjent > 0 && (
+                  <span style={{ background:'#f0fdf4', color:'#16a34a', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>
+                    ✅ {gruppe.godkjent}
+                  </span>
+                )}
+                {gruppe.avvist > 0 && (
+                  <span style={{ background:'#fef2f2', color:'#dc2626', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px' }}>
+                    ❌ {gruppe.avvist}
+                  </span>
+                )}
+              </div>
             </div>
             <div style={{ textAlign:'right', flexShrink:0 }}>
-              <div style={{ fontWeight:'800', fontSize:'16px', color:'#059669' }}>{fmtHours(hours)}t</div>
+              <div style={{ fontWeight:'800', fontSize:'16px', color:'#059669' }}>{fmtHours(totalHours)}t</div>
             </div>
             <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
           </div>
