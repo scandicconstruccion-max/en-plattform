@@ -2676,6 +2676,9 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState('ue')
   const [showCreateSub, setShowCreateSub] = useState(false)
+  // Navn på den som godkjenner timer på prosjektet — vises i sidebar.
+  // Hentes fra employees.user_id → employees.first_name/last_name.
+  const [timeApproverInfo, setTimeApproverInfo] = useState(null)
   const f = { fontFamily:'system-ui, sans-serif', overflowX:'hidden', maxWidth:'100vw', boxSizing:'border-box' }
   const card = { background:'white', borderRadius: isMobH ? '12px' : '16px', border:'1px solid #f1f5f9', boxShadow:'0 1px 4px rgba(0,0,0,0.04)', padding: isMobH ? '14px' : '24px', overflow:'hidden', wordBreak:'break-word' }
 
@@ -2693,6 +2696,22 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       setChecklists(clRes.data || [])
       setEndringsmeldinger(emRes.data || [])
       setChecklistTemplates(tmplRes)
+      // Last navn/epost på den som godkjenner timer (hvis satt)
+      if (proj?.time_approver_id) {
+        try {
+          const { data: appr } = await supabase
+            .from('employees')
+            .select('first_name, last_name, email')
+            .eq('user_id', proj.time_approver_id)
+            .maybeSingle()
+          setTimeApproverInfo(appr || null)
+        } catch (e) {
+          console.warn('[ProsjektDetaljer] kunne ikke laste godkjenner:', e)
+          setTimeApproverInfo(null)
+        }
+      } else {
+        setTimeApproverInfo(null)
+      }
     } catch(e){console.error(e)} finally { setLoading(false) }
   }
   useEffect(() => { load() }, [projectId])
@@ -3017,6 +3036,32 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
             {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
+          </div>
+          {/* ── TIMER GODKJENNES AV ──
+              Viser hvem som er ansvarlig for godkjenning av timeregistreringer
+              på prosjektet. Hentes fra projects.time_approver_id og slås opp
+              i employees-tabellen for å vise navn + epost. */}
+          <div style={card}>
+            <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>⏱️ Timer godkjennes av</h3>
+            {timeApproverInfo ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}>
+                <p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>
+                  {`${timeApproverInfo.first_name||''} ${timeApproverInfo.last_name||''}`.trim() || timeApproverInfo.email}
+                </p>
+                {timeApproverInfo.email && (
+                  <a href={`mailto:${timeApproverInfo.email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>
+                    ✉️ {timeApproverInfo.email}
+                  </a>
+                )}
+              </div>
+            ) : (
+              <div>
+                <p style={{ color:'#dc2626', fontSize:'13px', margin:'0 0 4px', fontWeight:'600' }}>⚠️ Ikke valgt</p>
+                <p style={{ color:'#94a3b8', fontSize:'12px', margin:0, lineHeight:1.4 }}>
+                  Admin godkjenner som default. Sett en spesifikk godkjenner i prosjekt-redigering.
+                </p>
+              </div>
+            )}
           </div>
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏢 Kunde</h3>
