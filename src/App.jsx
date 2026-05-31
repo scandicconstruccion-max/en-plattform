@@ -20737,6 +20737,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   const [sheetId, setSheetId] = useState(sheet?.id||null)
   const [activeDay, setActiveDay] = useState(null)
   const emp = employees.find(e=>e.id===employeeId)
+  const appAlert = useAppAlert()
 
   useEffect(()=>{
     if (sheet?.timesheet_entries) {
@@ -20838,6 +20839,21 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
   const saveDay = async (date) => {
     const entry = entries.find(e=>e.date===date)
     if (!entry?._dirty&&!entry?._new) return
+
+    // Validering: "Hva utførte du?" er påkrevd UTEN ved fravær (fravær har
+    // egen absence_type som beskrivelse). Bruk trim() for å fange tomme strenger
+    // og rene mellomrom.
+    const erFravar = !!entry?.absence_type
+    const harBeskrivelse = (entry?.description || '').trim().length > 0
+    if (!erFravar && !harBeskrivelse) {
+      await appAlert({
+        message: 'Beskrivelse mangler',
+        subMessage: 'Du må beskrive hva som ble utført i feltet "Hva utførte du?" før dagen kan lagres.',
+        kind: 'warn',
+      })
+      return
+    }
+
     setSaving(true)
     try {
       const sid = await ensureSheet()
@@ -20880,6 +20896,9 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
         setEntries(prev=>prev.map(e=>e.date===date?{...data,_dirty:false}:e))
       }
       setEntries(prev=>prev.map(e=>e.date===date?{...e,_dirty:false,_new:false}:e))
+      // Auto-lukk dag-editoren slik at brukeren ser ukeoversikten igjen.
+      // Dette gir tydelig signal om at lagringen lyktes.
+      setActiveDay(null)
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
   }
@@ -21075,13 +21094,13 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack })
 
                   <div>
                     <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>
-                      💬 Hva utførte du?
+                      💬 Hva utførte du? {!entry?.absence_type && <span style={{ color:'#dc2626' }}>*</span>}
                     </label>
                     <textarea
                       value={entry?.description||''}
                       onChange={e=>updateEntry(date,'description',e.target.value)}
                       rows={2}
-                      placeholder="Beskriv arbeidet — sees av leder ved godkjenning"
+                      placeholder={entry?.absence_type ? "Valgfritt ved fravær" : "Beskriv arbeidet — påkrevd, sees av leder ved godkjenning"}
                       style={{ ...tsInp, resize:'none', fontSize:'13px' }}
                     />
                   </div>
