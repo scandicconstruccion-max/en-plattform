@@ -13320,7 +13320,9 @@ function EndringsmeldingPage() {
             </div>
           </div>
         </div>
-        <div style={{ padding: isMobEM ? '12px' : '24px 32px', maxWidth:'800px' }}>
+        <div style={{ padding: isMobEM ? '12px' : '24px 32px', maxWidth:'1400px', margin:'0 auto', display:'grid', gridTemplateColumns: isMobEM ? '1fr' : '2fr 1fr', gap: isMobEM ? '12px' : '20px' }}>
+          {/* ── VENSTRE KOLONNE: hovedinnhold ── */}
+          <div>
           {/* Versjoner-seksjon */}
           {Array.isArray(em.versions) && em.versions.length > 0 && (
             <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', marginBottom:'16px', overflow:'hidden' }}>
@@ -13373,16 +13375,6 @@ function EndringsmeldingPage() {
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'20px', marginBottom:'16px' }}>
             <h3 style={{ margin:'0 0 8px', fontSize:'14px', fontWeight:'600' }}>Beskrivelse</h3>
             <p style={{ margin:0, fontSize:'14px', color:'#374151', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{em.description || '—'}</p>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px', marginBottom:'16px' }}>
-            <div style={{ background:'#f0fdf4', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
-              <div style={{ fontSize:'22px', fontWeight:'800', color:'#059669' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
-              <div style={{ fontSize:'12px', color:'#64748b' }}>Totalt beløp eks. mva</div>
-            </div>
-            {em.time_consequence && <div style={{ background:'#fffbeb', borderRadius:'14px', padding:'16px', textAlign:'center' }}>
-              <div style={{ fontSize:'14px', fontWeight:'700', color:'#d97706' }}>{em.time_consequence}</div>
-              <div style={{ fontSize:'12px', color:'#64748b' }}>Tidskonsekvens</div>
-            </div>}
           </div>
 
           {/* Poster */}
@@ -13466,18 +13458,67 @@ function EndringsmeldingPage() {
               {em.vedlegg.map((v, i) => <a key={i} href={v.url} target="_blank" rel="noreferrer" style={{ display:'block', color:'#2563eb', fontSize:'13px', marginBottom:'4px' }}>📎 {v.name}</a>)}
             </div>
           )}
-          {/* Aktivitetslogg */}
+        </div>
+
+        {/* ── HØYRE SIDEBAR ── (samme stil som Ordre) */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
+          {/* Status */}
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px' }}>
-            <h3 style={{ margin:'0 0 10px', fontSize:'14px', fontWeight:'600' }}>📋 Aktivitetslogg</h3>
-            {(em.activity_log || []).slice().reverse().map((log, i) => (
-              <div key={i} style={{ display:'flex', gap:'10px', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
-                <span style={{ color:'#94a3b8', fontSize: isMobEM ? '10px' : '12px', width: isMobEM ? 'auto' : '130px', flexShrink:0 }}>{new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}</span>
-                <span style={{ color:'#374151', fontSize: isMobEM ? '12px' : '13px' }}>{log.action}</span>
-                {!isMobEM && <span style={{ color:'#94a3b8', marginLeft:'auto' }}>{log.by}</span>}
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Status</h3>
+            <div style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 14px', borderRadius:'10px', background:st.bg, border:`1px solid ${st.border}`, color:st.color, fontWeight:'700', fontSize:'13px' }}>
+              <span>{st.emoji}</span><span>{em.status}</span>
+            </div>
+          </div>
+
+          {/* Oppsummering — beløp og tidskonsekvens */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px' }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>💰 Oppsummering</h3>
+            <div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'14px', textAlign:'center', border:'1px solid #bbf7d0', marginBottom: em.time_consequence ? '10px' : 0 }}>
+              <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Totalt beløp eks. mva</div>
+              <div style={{ fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')} kr</div>
+            </div>
+            {em.time_consequence && (
+              <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'14px', textAlign:'center', border:'1px solid #fde68a' }}>
+                <div style={{ fontSize:'11px', color:'#d97706', fontWeight:'600', textTransform:'uppercase', marginBottom:'4px' }}>Tidskonsekvens</div>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#92400e' }}>{em.time_consequence}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Detaljer */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px' }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>ℹ️ Detaljer</h3>
+            {[['EM-nr', em.em_number], ['Prosjekt', proj?.name], ['Årsak', em.reason], ['Opprettet', em.created_at ? new Date(em.created_at).toLocaleDateString('nb-NO') : null]].filter(r=>r[1]).map(([k,v],i)=>(
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
+                <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'500', color:'#0f172a', textAlign:'right', maxWidth:'60%' }}>{v}</span>
               </div>
             ))}
-            {(!em.activity_log || em.activity_log.length === 0) && <p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Ingen aktivitet registrert</p>}
           </div>
+
+          {/* Aktivitetslogg — eksisterende activity_log-JSON i sidebar */}
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px' }}>
+            <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
+            {Array.isArray(em.activity_log) && em.activity_log.length > 0 ? (
+              <div style={{ display:'flex', flexDirection:'column', gap:'2px', maxHeight:'320px', overflowY:'auto' }}>
+                {[...em.activity_log].reverse().map((log, i) => (
+                  <div key={i} style={{ padding:'8px 10px', borderBottom: i < em.activity_log.length - 1 ? '1px solid #f8fafc' : 'none', fontSize:'13px' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'8px', flexWrap:'wrap' }}>
+                      <span style={{ color:'#0f172a', fontWeight:'500' }}>{log.action}</span>
+                      <span style={{ color:'#94a3b8', fontSize:'11px', whiteSpace:'nowrap' }}>
+                        {new Date(log.at).toLocaleString('nb-NO', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
+                      </span>
+                    </div>
+                    {log.by && (
+                      <div style={{ fontSize:'11px', color:'#64748b', marginTop:'2px' }}>{log.by}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p style={{ margin:0, fontSize:'13px', color:'#94a3b8' }}>Ingen aktivitet registrert</p>
+            )}
+          </div>
+        </div>
         </div>
 
         {/* Modaler også i detaljvisning */}
