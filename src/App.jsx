@@ -371,19 +371,19 @@ async function erAdmin(userId) {
 }
 
 // ── TIMELISTE-GODKJENNING ────────────────────────────────────────────────────
-// Bestemmer hvem som kan godkjenne timelister:
+// Bestemmer hvem som kan godkjenne timer:
 //   - Admin (første registrerte bruker) kan godkjenne alt
-//   - Prosjektleder (PL) kan godkjenne timer for sine egne prosjekter
+//   - Brukere satt som time_approver_id på prosjekter kan godkjenne for de
+//     prosjektene (fleksibelt — kan være PL, daglig leder, regnskap, m.fl.)
 //
-// projects.project_manager_email matches mot user.email for å finne PL-status.
-// Returnerer ID-ene til alle prosjekter brukeren er PL for (tom array hvis ingen).
+// Returnerer ID-ene til alle prosjekter brukeren er godkjenner for.
 async function hentProsjekterSomPL(user) {
-  if (!user?.email) return []
+  if (!user?.id) return []
   try {
     const { data } = await supabase
       .from('projects')
       .select('id')
-      .eq('project_manager_email', user.email)
+      .eq('time_approver_id', user.id)
     return (data || []).map(p => p.id)
   } catch (e) {
     return []
@@ -1705,6 +1705,57 @@ function ContactList({ title, items, onChange }) {
   )
 }
 
+// Dropdown for å velge hvem som skal godkjenne timer på et prosjekt.
+// Henter alle aktive ansatte som har en user_id (= kan logge inn).
+// Returnerer user_id (UUID) som value.
+function TimeApproverSelect({ value, onChange, placeholder = 'Velg godkjenner...' }) {
+  const [godkjennere, setGodkjennere] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('employees')
+          .select('user_id, first_name, last_name, email')
+          .eq('status', 'Aktiv')
+          .not('user_id', 'is', null)
+          .order('last_name')
+        setGodkjennere(data || [])
+      } catch (e) {
+        console.warn('[TimeApproverSelect] kunne ikke laste:', e)
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [])
+
+  return (
+    <select
+      value={value || ''}
+      onChange={e => onChange(e.target.value || null)}
+      disabled={loading}
+      style={{
+        width: '100%',
+        padding: '10px 12px',
+        border: '1px solid #e2e8f0',
+        borderRadius: '8px',
+        fontSize: '14px',
+        background: 'white',
+        outline: 'none',
+        cursor: loading ? 'wait' : 'pointer',
+      }}
+    >
+      <option value="">{placeholder}</option>
+      {godkjennere.map(g => (
+        <option key={g.user_id} value={g.user_id}>
+          {`${g.first_name || ''} ${g.last_name || ''}`.trim() || g.email}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 const emptyForm = {
   name: '', project_number: '', description: '', status: 'planlagt',
   address_street: '', address_postal: '', address_city: '',
@@ -1712,6 +1763,7 @@ const emptyForm = {
   client_name: '', client_contact: '', client_email: '', client_phone: '',
   resident_name: '', resident_phone: '', resident_email: '',
   project_manager_name: '', project_manager_email: '', project_manager_phone: '',
+  time_approver_id: null,
   subcontractors: [], architects: [], consultants: [],
 }
 
@@ -1743,6 +1795,18 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
           <Field label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></Field>
           <Field label="Telefon"><Input2 value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></Field>
           <div style={{ gridColumn: '1 / -1' }}><Field label="E-post"><Input2 type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></Field></div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <Field label="⏱️ Timer godkjennes av">
+              <TimeApproverSelect
+                value={form.time_approver_id}
+                onChange={v => set('time_approver_id', v)}
+                placeholder="Velg godkjenner (default: admin)"
+              />
+              <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#64748b' }}>
+                Hvem som skal godkjenne timer registrert på dette prosjektet. Kan være prosjektleder, daglig leder, regnskap eller annen ansvarlig. Lar du feltet stå tomt brukes admin (første registrerte bruker) som default.
+              </p>
+            </Field>
+          </div>
         </div>
       </div>
       <div>
@@ -2225,6 +2289,7 @@ const emptyProsjekt = {
   client_name:'', client_contact:'', client_email:'', client_phone:'',
   resident_name:'', resident_phone:'', resident_email:'',
   project_manager_name:'', project_manager_email:'', project_manager_phone:'', customer_id:'',
+  time_approver_id: null,
   subcontractors:[], architects:[], consultants:[],
 }
 
@@ -2344,6 +2409,18 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
               <FLabel label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></FLabel>
               <FLabel label="Telefon"><FInput value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></FLabel>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="E-post"><FInput type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></FLabel></div>
+              <div style={{ gridColumn:'1/-1' }}>
+                <FLabel label="⏱️ Timer godkjennes av">
+                  <TimeApproverSelect
+                    value={form.time_approver_id}
+                    onChange={v => set('time_approver_id', v)}
+                    placeholder="Velg godkjenner (default: admin)"
+                  />
+                </FLabel>
+                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#64748b' }}>
+                  Hvem som skal godkjenne timer på dette prosjektet. Kan være prosjektleder, daglig leder, regnskap eller annen ansvarlig.
+                </p>
+              </div>
             </div>
             {sec('Kunde')}
             <div style={g2}>
