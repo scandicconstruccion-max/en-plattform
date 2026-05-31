@@ -21339,6 +21339,42 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   const [exportFormat, setExportFormat] = useState('excel') // 'excel' | 'pdf'
   const [exporting, setExporting] = useState(false)
 
+  // Avanserte eksport-innstillinger (Leveranse 2 — Tripletex-stil filtrering).
+  // ALLE_KOLONNER: nøkler matcher buildTimelisterRows-utvalget. Bare felt vi
+  // har data for er inkludert (pause, timebank, ordre droppet).
+  const ALLE_KOLONNER = [
+    { key:'dato',        label:'Dato' },
+    { key:'ukenummer',   label:'Ukenummer' },
+    { key:'navn',        label:'Navn' },
+    { key:'prosjekt',    label:'Prosjekt' },
+    { key:'klokkeslett', label:'Klokkeslett' },
+    { key:'timer',       label:'Timer (normal)' },
+    { key:'overtid',     label:'Overtid' },
+    { key:'total',       label:'Total timer' },
+    { key:'kommentar',   label:'Kommentar' },
+    { key:'timetype',    label:'Timetype' },
+    { key:'godkjent',    label:'Godkjent' },
+  ]
+  const [eksportKolonner, setEksportKolonner] = useState(() => new Set(ALLE_KOLONNER.map(k => k.key)))
+  const [eksportTotaler, setEksportTotaler] = useState({
+    sumTimer: true,
+    sumOvertid: true,
+    sumTimetyper: false,
+  })
+  // 'samlet' = alle entries i én tabell
+  // 'samlet_ansatt' = samlet liste + ekstra seksjon per ansatt
+  // 'samlet_prosjekt' = samlet liste + ekstra seksjon per prosjekt
+  // 'per_ansatt' = kun seksjoner per ansatt (ingen samlet liste)
+  const [utskriftstype, setUtskriftstype] = useState('samlet')
+
+  const toggleKolonne = (key) => {
+    setEksportKolonner(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+  }
+
   const filteredEntries = entries.filter(e => {
     if (selectedEmployee) {
       const ts = timesheets.find(t=>t.id===e.timesheet_id)
@@ -21409,31 +21445,68 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   const periods = Object.values(byPeriod).sort((a,b)=>b.key.localeCompare(a.key)).slice(0,20)
 
   // ── EKSPORT — felles datasett ───────────────────────────────────────────────
-  // Bygger rader brukt av både Excel- og PDF-eksport. Headers + rader matches.
-  const buildTimelisterRows = () => {
-    return filteredEntries.map(e => {
+  // Bygger headers + rader basert på valgte kolonner (eksportKolonner-Set).
+  // Returnerer { headers, rows } slik at både Excel og PDF kan bruke det samme.
+  const STATUS_LABELS = { 'Godkjent':'Ja', 'Til godkjenning':'Venter', 'Avvist':'Avvist', 'Utkast':'Utkast' }
+  const ABSENCE_LABELS = { syk_egen:'Egenmelding', syk_lege:'Sykemelding', ferie:'Ferie', ferie_ubetalt:'Ferie (ubetalt)', permisjon:'Permisjon m/lønn', permisjon_ubetalt:'Permisjon u/lønn', avspasering:'Avspasering', kurs:'Kurs/opplæring', annet:'Annet' }
+  const buildTimelisterData = (entriesToUse = filteredEntries) => {
+    const headers = []
+    const cellBuilders = []
+    // Hjelpere — én per kolonne. Pushes i FAST rekkefølge for konsistens.
+    if (eksportKolonner.has('dato'))        { headers.push('Dato');        cellBuilders.push((e, ctx) => e.date) }
+    if (eksportKolonner.has('ukenummer'))   { headers.push('Uke');         cellBuilders.push((e, ctx) => e.date ? getWeekNumber(new Date(e.date)) : '') }
+    if (eksportKolonner.has('navn'))        { headers.push('Navn');        cellBuilders.push((e, ctx) => `${ctx.emp?.first_name||''} ${ctx.emp?.last_name||''}`.trim()) }
+    if (eksportKolonner.has('prosjekt'))    { headers.push('Prosjekt');    cellBuilders.push((e, ctx) => ctx.proj?.name || '') }
+    if (eksportKolonner.has('klokkeslett')) { headers.push('Fra');         cellBuilders.push((e, ctx) => e.start_time || '') }
+    if (eksportKolonner.has('klokkeslett')) { headers.push('Til');         cellBuilders.push((e, ctx) => e.end_time || '') }
+    if (eksportKolonner.has('timer'))       { headers.push('Normal');      cellBuilders.push((e, ctx) => parseFloat(e.normal_hours) || 0) }
+    if (eksportKolonner.has('overtid'))     { headers.push('OT50%');       cellBuilders.push((e, ctx) => parseFloat(e.overtime_50) || 0) }
+    if (eksportKolonner.has('overtid'))     { headers.push('OT100%');      cellBuilders.push((e, ctx) => parseFloat(e.overtime_100) || 0) }
+    if (eksportKolonner.has('total'))       { headers.push('Total');       cellBuilders.push((e, ctx) => (parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)) }
+    if (eksportKolonner.has('timetype'))    { headers.push('Timetype');    cellBuilders.push((e, ctx) => e.absence_type ? (ABSENCE_LABELS[e.absence_type]||e.absence_type) : (e.activity || 'Normal')) }
+    if (eksportKolonner.has('kommentar'))   { headers.push('Kommentar');   cellBuilders.push((e, ctx) => e.description || e.notes || '') }
+    if (eksportKolonner.has('godkjent'))    { headers.push('Godkjent');    cellBuilders.push((e, ctx) => STATUS_LABELS[e.status || 'Til godkjenning'] || '') }
+
+    const rows = entriesToUse.map(e => {
       const ts = timesheets.find(t => t.id === e.timesheet_id)
       const emp = employees.find(x => x.id === ts?.employee_id)
       const proj = projects.find(p => p.id === e.project_id)
-      return [
-        e.date,
-        `${emp?.first_name||''} ${emp?.last_name||''}`.trim(),
-        proj?.name || '',
-        e.activity || '',
-        e.absence_type || '',
-        e.start_time || '',
-        e.end_time || '',
-        parseFloat(e.normal_hours) || 0,
-        parseFloat(e.overtime_50) || 0,
-        parseFloat(e.overtime_100) || 0,
-        parseFloat(e.travel_km) || 0,
-        parseFloat(e.diet) || 0,
-        parseFloat(e.expenses) || 0,
-        e.description || e.notes || '',
-      ]
+      const ctx = { ts, emp, proj }
+      return cellBuilders.map(fn => fn(e, ctx))
     })
+    return { headers, rows }
   }
-  const TIMELISTER_HEADERS = ['Dato','Ansatt','Prosjekt','Aktivitet','Fravær','Fra','Til','Normal','OT50%','OT100%','Km','Diett','Utlegg','Beskrivelse']
+
+  // Beregn totaler basert på eksportTotaler-valg. Returnerer array av strings
+  // som settes inn under tabellen i begge formater.
+  const buildTotalerLinjer = (entriesToUse = filteredEntries) => {
+    const linjer = []
+    const sumNormal = entriesToUse.reduce((a,e)=>a+(parseFloat(e.normal_hours)||0),0)
+    const sumOt50   = entriesToUse.reduce((a,e)=>a+(parseFloat(e.overtime_50)||0),0)
+    const sumOt100  = entriesToUse.reduce((a,e)=>a+(parseFloat(e.overtime_100)||0),0)
+    const sumTotal  = sumNormal + sumOt50 + sumOt100
+
+    if (eksportTotaler.sumTimer) {
+      linjer.push(`Sum timer: ${sumTotal.toFixed(1)}t (normal: ${sumNormal.toFixed(1)}t)`)
+    }
+    if (eksportTotaler.sumOvertid && (sumOt50 > 0 || sumOt100 > 0)) {
+      linjer.push(`Sum overtid: ${(sumOt50+sumOt100).toFixed(1)}t (OT50%: ${sumOt50.toFixed(1)}t, OT100%: ${sumOt100.toFixed(1)}t)`)
+    }
+    if (eksportTotaler.sumTimetyper) {
+      const byType = {}
+      for (const e of entriesToUse) {
+        const t = e.absence_type ? (ABSENCE_LABELS[e.absence_type]||e.absence_type) : (e.activity || 'Normal')
+        const h = (parseFloat(e.normal_hours)||0)+(parseFloat(e.overtime_50)||0)+(parseFloat(e.overtime_100)||0)
+        byType[t] = (byType[t] || 0) + h
+      }
+      const parts = Object.entries(byType).map(([k,v]) => `${k}: ${v.toFixed(1)}t`)
+      if (parts.length) linjer.push(`Pr. timetype: ${parts.join(' · ')}`)
+    }
+    return linjer
+  }
+
+  // Backwards-kompatibel — brukes ikke direkte lenger, men beholdes
+  const buildTimelisterRows = () => buildTimelisterData().rows
 
   const buildLonnsRows = () => {
     return byEmployee.map(e => {
@@ -21479,41 +21552,92 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
       const tittel = kind === 'lonnsgrunnlag' ? 'Lønnsgrunnlag' : 'Timelister'
       const periode = `${periodFrom} – ${periodTo}`
 
-      const headers = kind === 'lonnsgrunnlag' ? LONNS_HEADERS : TIMELISTER_HEADERS
-      const rows = kind === 'lonnsgrunnlag' ? buildLonnsRows() : buildTimelisterRows()
-
-      // Bygg AOA (array-of-arrays) med branding på toppen
+      // Bygg AOA-rad-liste: startrader + seksjoner + footer
       const aoa = [
         [firmaNavn],
         [firmaOrg],
         [`${tittel} · ${periode}`],
         [],
-        headers,
-        ...rows,
-        [],
-        ['En Plattform — Av håndverkern, for håndverkern'],
       ]
+
+      if (kind === 'lonnsgrunnlag') {
+        // Lønnsgrunnlag — alltid samlet aggregert
+        aoa.push(LONNS_HEADERS)
+        for (const r of buildLonnsRows()) aoa.push(r)
+      } else {
+        // Timelister — bruker utskriftstype + valgte kolonner
+        // Hjelpe-funksjon for å pushe en seksjon med tittel + tabell + totaler
+        const pushSeksjon = (seksjonTittel, entriesForSeksjon) => {
+          if (seksjonTittel) {
+            aoa.push([])
+            aoa.push([seksjonTittel])
+          }
+          const { headers, rows } = buildTimelisterData(entriesForSeksjon)
+          aoa.push(headers)
+          for (const r of rows) aoa.push(r)
+          const totaler = buildTotalerLinjer(entriesForSeksjon)
+          if (totaler.length) {
+            aoa.push([])
+            for (const t of totaler) aoa.push([t])
+          }
+        }
+
+        const trengerSamlet = utskriftstype === 'samlet' || utskriftstype === 'samlet_ansatt' || utskriftstype === 'samlet_prosjekt'
+        if (trengerSamlet) {
+          pushSeksjon(null, filteredEntries)
+        }
+
+        if (utskriftstype === 'samlet_ansatt' || utskriftstype === 'per_ansatt') {
+          // Grupper per ansatt
+          const ansatteMap = new Map()  // employee_id → entries[]
+          for (const e of filteredEntries) {
+            const ts = timesheets.find(t => t.id === e.timesheet_id)
+            const empId = ts?.employee_id
+            if (!empId) continue
+            if (!ansatteMap.has(empId)) ansatteMap.set(empId, [])
+            ansatteMap.get(empId).push(e)
+          }
+          for (const [empId, empEntries] of ansatteMap) {
+            const emp = employees.find(x => x.id === empId)
+            const navn = `${emp?.first_name||''} ${emp?.last_name||''}`.trim() || 'Ukjent'
+            pushSeksjon(`— ${navn} —`, empEntries)
+          }
+        }
+
+        if (utskriftstype === 'samlet_prosjekt') {
+          // Grupper per prosjekt
+          const projMap = new Map()  // project_id → entries[]
+          for (const e of filteredEntries) {
+            const k = e.project_id || '_uten'
+            if (!projMap.has(k)) projMap.set(k, [])
+            projMap.get(k).push(e)
+          }
+          for (const [pid, projEntries] of projMap) {
+            const proj = projects.find(p => p.id === pid)
+            const navn = proj?.name || 'Uten prosjekt'
+            pushSeksjon(`— ${navn} —`, projEntries)
+          }
+        }
+      }
+
+      // Footer-rad
+      aoa.push([])
+      aoa.push(['En Plattform — Av håndverkern, for håndverkern'])
 
       const ws = XLSX.utils.aoa_to_sheet(aoa)
 
-      // Auto-bredde basert på lengste verdi i hver kolonne
-      const colWidths = headers.map((h, i) => {
-        const maxLen = Math.max(
-          h.length,
-          ...rows.map(r => String(r[i] ?? '').length)
-        )
-        return { wch: Math.min(Math.max(maxLen + 2, 10), 40) }
-      })
+      // Auto-bredde basert på lengste verdi
+      const maxCols = Math.max(...aoa.map(r => r.length))
+      const colWidths = []
+      for (let i = 0; i < maxCols; i++) {
+        let maxLen = 10
+        for (const r of aoa) {
+          const v = r[i]
+          if (v != null) maxLen = Math.max(maxLen, String(v).length)
+        }
+        colWidths.push({ wch: Math.min(maxLen + 2, 40) })
+      }
       ws['!cols'] = colWidths
-
-      // Styling: gjør header-radene fete (basis-styling, SheetJS-fri versjon
-      // støtter ikke full styling — disse vises som vanlig tekst)
-      ws['!merges'] = [
-        { s:{r:0,c:0}, e:{r:0,c:headers.length-1} },
-        { s:{r:1,c:0}, e:{r:1,c:headers.length-1} },
-        { s:{r:2,c:0}, e:{r:2,c:headers.length-1} },
-        { s:{r:aoa.length-1,c:0}, e:{r:aoa.length-1,c:headers.length-1} },
-      ]
 
       const wb = XLSX.utils.book_new()
       XLSX.utils.book_append_sheet(wb, ws, tittel)
@@ -21540,33 +21664,90 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
       const pdf = await createBrandedPdf({ orientation: 'l' })
       pdf.drawHeader(tittel, `Periode: ${periode}`)
 
-      const headers = kind === 'lonnsgrunnlag' ? LONNS_HEADERS : TIMELISTER_HEADERS
-      const rows = kind === 'lonnsgrunnlag' ? buildLonnsRows() : buildTimelisterRows()
-
-      // Tabell med autotable
-      pdf.doc.autoTable({
-        startY: pdf.y + 4,
-        head: [headers],
-        body: rows.map(r => r.map(v => v == null ? '' : String(v))),
-        styles: {
-          font: 'helvetica', fontSize: 8, cellPadding: 2,
-          textColor: [30, 41, 59],
-        },
-        headStyles: {
-          fillColor: [5, 150, 105], textColor: [255, 255, 255],
-          fontStyle: 'bold', fontSize: 8,
-        },
-        alternateRowStyles: { fillColor: [248, 250, 252] },
+      // Felles tabell-styling
+      const tableStyles = {
+        styles: { font:'helvetica', fontSize:8, cellPadding:2, textColor:[30,41,59] },
+        headStyles: { fillColor:[5,150,105], textColor:[255,255,255], fontStyle:'bold', fontSize:8 },
+        alternateRowStyles: { fillColor:[248,250,252] },
         margin: { left: pdf.ml, right: pdf.mr, bottom: 18 },
-      })
+      }
 
-      // Totaler nederst for timelister
-      if (kind === 'timelister' && rows.length > 0) {
-        const finalY = pdf.doc.lastAutoTable.finalY + 8
+      // Hjelpefunksjon: tegn tittel + tabell + totaler
+      const tegnSeksjon = (seksjonTittel, entriesForSeksjon) => {
+        let startY = pdf.y
+        if (seksjonTittel) {
+          // Seksjon-tittel som banner
+          pdf.doc.setFontSize(11); pdf.doc.setFont('helvetica', 'bold')
+          pdf.setC(pdf.hex('#0f172a'))
+          pdf.doc.text(seksjonTittel, pdf.ml, startY + 6)
+          startY += 9
+        }
+        const { headers, rows } = buildTimelisterData(entriesForSeksjon)
+        pdf.doc.autoTable({
+          startY,
+          head: [headers],
+          body: rows.map(r => r.map(v => v == null ? '' : String(v))),
+          ...tableStyles,
+        })
+        let finalY = pdf.doc.lastAutoTable.finalY + 6
+
+        const totaler = buildTotalerLinjer(entriesForSeksjon)
+        if (totaler.length) {
+          pdf.doc.setFontSize(9); pdf.doc.setFont('helvetica', 'bold')
+          pdf.setC(pdf.hex('#0f172a'))
+          for (const t of totaler) {
+            pdf.doc.text(t, pdf.ml, finalY)
+            finalY += 5
+          }
+          finalY += 3
+        }
         pdf.setY(finalY)
-        pdf.doc.setFontSize(10); pdf.doc.setFont('helvetica', 'bold')
-        pdf.setC(pdf.hex('#0f172a'))
-        pdf.doc.text(`Totalt: ${totalNormal.toFixed(1)}t normal + ${totalOT50.toFixed(1)}t OT50% + ${totalOT100.toFixed(1)}t OT100% = ${(totalNormal+totalOT50+totalOT100).toFixed(1)}t`, pdf.ml, finalY)
+      }
+
+      if (kind === 'lonnsgrunnlag') {
+        // Lønnsgrunnlag — alltid samlet aggregert (ingen utskriftstype-valg)
+        pdf.doc.autoTable({
+          startY: pdf.y + 4,
+          head: [LONNS_HEADERS],
+          body: buildLonnsRows().map(r => r.map(v => v == null ? '' : String(v))),
+          ...tableStyles,
+        })
+      } else {
+        // Timelister med utskriftstype
+        const trengerSamlet = utskriftstype === 'samlet' || utskriftstype === 'samlet_ansatt' || utskriftstype === 'samlet_prosjekt'
+        if (trengerSamlet) {
+          tegnSeksjon(null, filteredEntries)
+        }
+
+        if (utskriftstype === 'samlet_ansatt' || utskriftstype === 'per_ansatt') {
+          const ansatteMap = new Map()
+          for (const e of filteredEntries) {
+            const ts = timesheets.find(t => t.id === e.timesheet_id)
+            const empId = ts?.employee_id
+            if (!empId) continue
+            if (!ansatteMap.has(empId)) ansatteMap.set(empId, [])
+            ansatteMap.get(empId).push(e)
+          }
+          for (const [empId, empEntries] of ansatteMap) {
+            const emp = employees.find(x => x.id === empId)
+            const navn = `${emp?.first_name||''} ${emp?.last_name||''}`.trim() || 'Ukjent'
+            tegnSeksjon(`— ${navn} —`, empEntries)
+          }
+        }
+
+        if (utskriftstype === 'samlet_prosjekt') {
+          const projMap = new Map()
+          for (const e of filteredEntries) {
+            const k = e.project_id || '_uten'
+            if (!projMap.has(k)) projMap.set(k, [])
+            projMap.get(k).push(e)
+          }
+          for (const [pid, projEntries] of projMap) {
+            const proj = projects.find(p => p.id === pid)
+            const navn = proj?.name || 'Uten prosjekt'
+            tegnSeksjon(`— ${navn} —`, projEntries)
+          }
+        }
       }
 
       pdf.drawFooters()
@@ -21587,8 +21768,6 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
     if (exportFormat === 'excel') await exportToExcel(kind)
     else await exportToPdf(kind)
   }
-
-  const ABSENCE_LABELS = { syk_egen:'Egenmelding', syk_lege:'Sykemelding', ferie:'Ferie', ferie_ubetalt:'Ferie (ubetalt)', permisjon:'Permisjon m/lønn', permisjon_ubetalt:'Permisjon u/lønn', avspasering:'Avspasering', kurs:'Kurs/opplæring', annet:'Annet' }
 
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:'16px' }}>
@@ -21749,7 +21928,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
       {showExportModal && (
         <div onClick={(e) => { if (e.target === e.currentTarget && !exporting) setShowExportModal(null) }}
           style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', zIndex:9000, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', backdropFilter:'blur(4px)' }}>
-          <div style={{ background:'white', borderRadius:'16px', padding:'24px', width:'100%', maxWidth:'420px', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+          <div style={{ background:'white', borderRadius:'16px', padding:'24px', width:'100%', maxWidth:'520px', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 25px 50px -12px rgba(0,0,0,0.25)' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
               <h3 style={{ margin:0, fontSize:'17px', fontWeight:'800', color:'#0f172a' }}>
                 {showExportModal === 'lonnsgrunnlag' ? '💰 Eksporter lønnsgrunnlag' : '📥 Eksporter timelister'}
@@ -21780,13 +21959,67 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
               ))}
             </div>
 
+            {/* Tripletex-stil filtrering — vises kun for timelister.
+                Lønnsgrunnlag er alltid aggregert per ansatt og har egne kolonner. */}
+            {showExportModal === 'timelister' && (
+              <>
+                {/* Utskriftstype */}
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Utskriftstype</label>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'20px' }}>
+                  {[
+                    { v:'samlet',          label:'Samlet liste' },
+                    { v:'samlet_ansatt',   label:'Samlet liste + per ansatt' },
+                    { v:'samlet_prosjekt', label:'Samlet liste + per prosjekt' },
+                    { v:'per_ansatt',      label:'Per ansatt' },
+                  ].map(opt => (
+                    <label key={opt.v} style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', padding:'8px 12px', borderRadius:'8px', background: utskriftstype===opt.v ? '#f0fdf4' : 'white', border:`1px solid ${utskriftstype===opt.v ? '#bbf7d0' : '#e2e8f0'}` }}>
+                      <input type="radio" name="utskriftstype" checked={utskriftstype === opt.v} onChange={() => setUtskriftstype(opt.v)} style={{ accentColor:'#059669' }} />
+                      <span style={{ fontSize:'13px', color:'#0f172a', fontWeight: utskriftstype===opt.v ? '600' : '400' }}>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {/* Totaler */}
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Totaler</label>
+                <div style={{ display:'flex', flexDirection:'column', gap:'6px', marginBottom:'20px' }}>
+                  {[
+                    { k:'sumTimer',     label:'Vis sum timer' },
+                    { k:'sumOvertid',   label:'Vis sum overtid' },
+                    { k:'sumTimetyper', label:'Vis sum per timetype' },
+                  ].map(opt => (
+                    <label key={opt.k} style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', padding:'6px 4px' }}>
+                      <input type="checkbox" checked={eksportTotaler[opt.k]} onChange={e => setEksportTotaler(prev => ({ ...prev, [opt.k]: e.target.checked }))} style={{ accentColor:'#059669' }} />
+                      <span style={{ fontSize:'13px', color:'#0f172a' }}>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+
+                {/* Kolonner */}
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:'8px' }}>
+                  <label style={{ fontSize:'12px', fontWeight:'700', color:'#374151' }}>Kolonner som skal vises</label>
+                  <div style={{ display:'flex', gap:'8px' }}>
+                    <button type="button" onClick={() => setEksportKolonner(new Set(ALLE_KOLONNER.map(k => k.key)))} style={{ fontSize:'11px', color:'#059669', background:'none', border:'none', cursor:'pointer', textDecoration:'underline', padding:0 }}>Velg alle</button>
+                    <button type="button" onClick={() => setEksportKolonner(new Set())} style={{ fontSize:'11px', color:'#dc2626', background:'none', border:'none', cursor:'pointer', textDecoration:'underline', padding:0 }}>Fjern alle</button>
+                  </div>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'4px', marginBottom:'20px', padding:'10px', background:'#f8fafc', borderRadius:'10px' }}>
+                  {ALLE_KOLONNER.map(opt => (
+                    <label key={opt.key} style={{ display:'flex', alignItems:'center', gap:'8px', cursor:'pointer', padding:'4px' }}>
+                      <input type="checkbox" checked={eksportKolonner.has(opt.key)} onChange={() => toggleKolonne(opt.key)} style={{ accentColor:'#059669' }} />
+                      <span style={{ fontSize:'12px', color:'#0f172a' }}>{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
+              </>
+            )}
+
             <div style={{ display:'flex', gap:'8px' }}>
               <button onClick={() => setShowExportModal(null)} disabled={exporting}
                 style={{ flex:1, padding:'12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'10px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>
                 Avbryt
               </button>
-              <button onClick={handleExport} disabled={exporting}
-                style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: exporting ? 'wait' : 'pointer' }}>
+              <button onClick={handleExport} disabled={exporting || (showExportModal === 'timelister' && eksportKolonner.size === 0)}
+                style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: exporting ? 'wait' : 'pointer', opacity: (showExportModal === 'timelister' && eksportKolonner.size === 0) ? 0.5 : 1 }}>
                 {exporting ? 'Eksporterer...' : `Last ned ${exportFormat === 'excel' ? 'Excel' : 'PDF'}`}
               </button>
             </div>
