@@ -22525,6 +22525,58 @@ function RessursGanttGrid({
       visiblePlans.filter(p => p.resource_type === 'material' && p.project_id === projectId && p.date === date)
     const bars = []
     const seen = new Set()
+
+    // ── FØRSTE PASS: grupper alle planer som deler fase_id ──
+    // Disse stammer fra periode-booking og skal vises som ÉN logisk bar
+    // selv om datoene har hull (helg, fridager, ev. droppete dager).
+    // Slik vil "5+3 dager med helg imellom" bli én sammenhengende bar.
+    const fasePlanerMap = new Map()  // fase_id → planer[]
+    for (const plan of own) {
+      if (!plan.fase_id) continue
+      if (!fasePlanerMap.has(plan.fase_id)) fasePlanerMap.set(plan.fase_id, [])
+      fasePlanerMap.get(plan.fase_id).push(plan)
+    }
+    for (const [faseId, faseplans] of fasePlanerMap) {
+      faseplans.sort((a,b) => a.date.localeCompare(b.date))
+      const first = faseplans[0]
+      const last = faseplans[faseplans.length - 1]
+      const mats = new Set()
+      for (const p of faseplans) {
+        materialOnProj(p.project_id, p.date).forEach(m => mats.add(m.notes || 'Materiell'))
+        seen.add(p.id)
+      }
+      const hasConflict = faseplans.some(p => {
+        const totalOnDate = plans
+          .filter(pp => pp.resource_id === resourceId && pp.date === p.date)
+          .reduce((s, pp) => s + (parseFloat(pp.hours)||0), 0)
+        return totalOnDate > 8
+      })
+      // Sjekk om det er hull i datoene (typisk pga helger eller helligdager).
+      // Hvis hull finnes, lagrer vi datoene som er aktive — UI bruker det til
+      // å tegne stiplet connector i mellomrommene.
+      const activeDates = new Set(faseplans.map(p => p.date))
+      bars.push({
+        id: first.id,
+        projectId: first.project_id,
+        startDate: first.date,
+        endDate: last.date,
+        plans: faseplans,
+        hours: faseplans.reduce((s,p)=>s+(parseFloat(p.hours)||0), 0),
+        notes: first.notes,
+        taskDescription: first.task_description || null,
+        faseId,
+        activeDates,                    // NY: datoer som er aktive i fasen
+        resourceId,
+        resourceType: first.resource_type,
+        isPlaceholder: first.resource_type === 'placeholder',
+        materials: Array.from(mats),
+        linkedMachineId: first.linked_machine_id,
+        hasConflict,
+      })
+    }
+
+    // ── ANDRE PASS: alle planer UTEN fase_id (eldre, eller én-dags-bookinger) ──
+    // Bruker den gamle sammeslåings-logikken: prosjekt + oppgave + sammenhengende datoer.
     for (const plan of own) {
       if (seen.has(plan.id)) continue
       let endDate = plan.date
@@ -22532,20 +22584,19 @@ function RessursGanttGrid({
       const mats = new Set()
       materialOnProj(plan.project_id, plan.date).forEach(m => mats.add(m.notes || 'Materiell'))
       seen.add(plan.id)
-      // Nøkkelen for "sammeslåbar": prosjekt + oppgave. Ulik oppgave → egen bar.
       const planTask = plan.task_description || null
       let cursor = new Date(plan.date + 'T12:00:00')
       while (true) {
         cursor.setDate(cursor.getDate() + 1)
         const cstr = cursor.toISOString().split('T')[0]
-        // Allow gaps across weekends only
         const isWE = cursor.getDay() === 0 || cursor.getDay() === 6
         if (isWE && settings.skipWeekends) continue
         const next = own.find(p =>
           !seen.has(p.id) &&
+          !p.fase_id &&                  // viktig: fase-rader er allerede tatt i første pass
           p.date === cstr &&
           p.project_id === plan.project_id &&
-          (p.task_description || null) === planTask  // NY: bryt ved endret oppgave
+          (p.task_description || null) === planTask
         )
         if (next) {
           seen.add(next.id)
@@ -22554,7 +22605,6 @@ function RessursGanttGrid({
           materialOnProj(plan.project_id, cstr).forEach(m => mats.add(m.notes || 'Materiell'))
         } else break
       }
-      // Sjekk om noen av planene i denne baren har dobbeltbooking (>8t på samme dag)
       const hasConflict = planGroup.some(p => {
         const totalOnDate = plans
           .filter(pp => pp.resource_id === resourceId && pp.date === p.date)
@@ -22569,7 +22619,9 @@ function RessursGanttGrid({
         plans: planGroup,
         hours: planGroup.reduce((s,p)=>s+(parseFloat(p.hours)||0), 0),
         notes: plan.notes,
-        taskDescription: planTask, // NY: bar-nivå oppgave
+        taskDescription: planTask,
+        faseId: null,
+        activeDates: new Set(planGroup.map(p => p.date)),
         resourceId,
         resourceType: plan.resource_type,
         isPlaceholder: plan.resource_type === 'placeholder',
@@ -23183,6 +23235,22 @@ function RessursGanttGrid({
                     const showHours = width > 60
                     const isZoomedOut = ganttZoom === 'months' || ganttZoom === 'quarters'
 
+                    // ── Beregn hull innenfor baren ──
+                    // For periode-bookinger med fase_id kan baren strekke seg over
+                    // helger uten faktisk å ha plan-rader for de dagene. Vi marker
+                    // dem som "hull" og rendrer dem mer transparent for å vise at
+                    // jobben ikke er aktiv akkurat de dagene, men er konseptuelt
+                    // én sammenhengende periode.
+                    const holeIndices = []
+                    if (bar.activeDates && span > 1) {
+                      for (let i = 0; i < span; i++) {
+                        const dStr = dates[startIdx + i]
+                        if (dStr && !bar.activeDates.has(dStr)) {
+                          holeIndices.push(i)
+                        }
+                      }
+                    }
+
                     return (
                       <div key={bar.id}
                         draggable
@@ -23267,6 +23335,22 @@ function RessursGanttGrid({
                           onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(255,255,255,0.4)'; e.currentTarget.parentElement.setAttribute('draggable','false') }}
                           onMouseLeave={(e)=>{ e.currentTarget.style.background='transparent'; e.currentTarget.parentElement.setAttribute('draggable','true') }}
                         />
+
+                        {/* Hull i baren — vises som lyst stripet område over dager som
+                            ikke er aktive (helger osv) i en sammenhengende fase.
+                            Slik ser man tydelig at fasen er én logisk enhet, men at
+                            helgen ikke teller som arbeidsdag. */}
+                        {holeIndices.map(i => (
+                          <div key={`hole-${i}`} style={{
+                            position:'absolute',
+                            top:0, bottom:0,
+                            left:`${(i * colW) - 2}px`,
+                            width:`${colW}px`,
+                            background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.55) 0 4px, rgba(255,255,255,0.15) 4px 8px)',
+                            pointerEvents:'none',
+                            zIndex:1,
+                          }}/>
+                        ))}
 
                         {/* Content — Float-stil: kode øverst, navn under, timer nederst-høyre */}
                         <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', flexDirection:'column', justifyContent:'space-between' }}>
@@ -26734,6 +26818,14 @@ function BookingModal({ resourceId, resourceName, date, endDate, isPeriod, exist
         }
         if (finalDates.length === 0) { alert('Ingen dager å booke etter å ha hoppet over konflikter'); setSaving(false); return }
 
+        // Generer fase_id som binder alle dagene i denne periode-bookingen
+        // sammen som én logisk enhet. UI bruker dette til å vise sammenhengende
+        // bjelke selv over helger (med stiplet connector mellom dagene).
+        // crypto.randomUUID er tilgjengelig i alle moderne browsere.
+        const faseId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+          ? crypto.randomUUID()
+          : `fase-${Date.now()}-${Math.random().toString(36).slice(2,9)}`
+
         const plans = finalDates.map(d => sanitizeDbPayload({
           resource_id: resourceId,
           resource_type: isEmployee ? 'employee' : 'machine',
@@ -26742,6 +26834,7 @@ function BookingModal({ resourceId, resourceName, date, endDate, isPeriod, exist
           hours: parseFloat(hours) || 8,
           notes: notes || null,
           task_description: taskDescription || null,
+          fase_id: faseId,
           created_by: user?.id,
         }))
         // Batch-insert
@@ -26750,10 +26843,14 @@ function BookingModal({ resourceId, resourceName, date, endDate, isPeriod, exist
           const { error } = await supabase.from('resource_plans').insert(batch)
           if (error) throw error
         }
-        // Maskin-kobling (hvis aktuelt) — bruker maskin-datoer innenfor ansattens periode
+        // Maskin-kobling (hvis aktuelt) — bruker maskin-datoer innenfor ansattens periode.
+        // Maskinen får sin egen fase_id slik at den kan grupperes uavhengig.
         if (isEmployee && showMachinePicker && linkedMachineId) {
           // Filtrer finalDates til kun de som er innenfor maskinens eget tidsrom
           const machineDates = finalDates.filter(d => d >= machineFromDate && d <= machineToDate)
+          const machineFaseId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+            ? crypto.randomUUID()
+            : `fase-${Date.now()}-${Math.random().toString(36).slice(2,9)}`
           const machinePlans = machineDates.map(d => sanitizeDbPayload({
             resource_id: linkedMachineId,
             resource_type: 'machine',
@@ -26761,6 +26858,7 @@ function BookingModal({ resourceId, resourceName, date, endDate, isPeriod, exist
             date: d,
             hours: parseFloat(hours) || 8,
             notes: `Koblet til ${resourceName}`,
+            fase_id: machineFaseId,
             created_by: user?.id,
           }))
           if (machinePlans.length > 0) {
