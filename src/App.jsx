@@ -22680,32 +22680,33 @@ function RessursGanttGrid({
     })
   }
 
-  // ── DRAG-TO-CREATE BOOKING ────────────────────────────────────────────────
+  // ── DRAG-TO-CREATE BOOKING (desktop only) ────────────────────────────────
   // Klikk-og-dra horisontalt på en tom rad for å markere periode for ny
   // booking. Slipping åpner modal i 'Periode'-modus med start+slutt utfylt.
-  // Bruker pointer events for å støtte både mus og touch (mobil/iPad).
+  //
+  // Per ditt valg: kun desktop (mus). Mobil/touch bruker dagens én-klikk-flyt.
   //
   // dragCreate = { resourceId, resource, startIdx, currentIdx, hasMoved }
   //   - hasMoved blir true når brukeren har dratt minst 1 celle. Hvis false
   //     ved release, behandler vi det som et vanlig klikk (åpne én-dags-modal).
+  //
+  // VIKTIG: bruker IKKE setPointerCapture. I stedet lytter vi på document
+  // for pointermove/up under drag, og finner cellen via elementFromPoint.
+  // Det er nødvendig fordi pointer-capture på én celle hindrer andre celler
+  // i å motta pointerenter.
   const [dragCreate, setDragCreate] = useState(null)
   const dragCreateRef = React.useRef(null)
-  // Holder peker-koordinater for å beregne hvilken dato man er over.
-  // Brukes til touch (iPad i felt) der vi ikke har enter/leave på cellene.
-  const cellRowRefs = React.useRef(new Map())  // resourceId → element
 
   const beginDragCreate = (resourceId, resource, dateIdx, e) => {
-    if (e?.pointerType === 'mouse' && e.button !== 0) return  // kun venstre-klikk
+    // Kun mus, kun venstreklikk. Touch bruker dagens én-klikk-flyt.
+    if (e.pointerType !== 'mouse') return
+    if (e.button !== 0) return
     const initial = { resourceId, resource, startIdx: dateIdx, currentIdx: dateIdx, hasMoved: false }
     dragCreateRef.current = initial
     setDragCreate(initial)
-    // Sett pointer capture så vi får move/up selv om mus forlater cellen
-    if (e?.currentTarget && e.pointerId != null) {
-      try { e.currentTarget.setPointerCapture(e.pointerId) } catch {}
-    }
   }
 
-  const updateDragCreate = (newIdx) => {
+  const updateDragCreateIdx = (newIdx) => {
     const cur = dragCreateRef.current
     if (!cur) return
     if (newIdx === cur.currentIdx) return
@@ -22714,7 +22715,7 @@ function RessursGanttGrid({
     setDragCreate(next)
   }
 
-  const endDragCreate = () => {
+  const finishDragCreate = () => {
     const cur = dragCreateRef.current
     if (!cur) return
     const { resourceId, resource, startIdx, currentIdx, hasMoved } = cur
@@ -22722,44 +22723,54 @@ function RessursGanttGrid({
     setDragCreate(null)
 
     if (!hasMoved) {
-      // Vanlig klikk — åpner én-dags-modal (samme oppførsel som før)
+      // Vanlig klikk — åpne én-dags-modal
       handleCellClick(resourceId, dates[startIdx], resource)
       return
     }
-    // Drag fullført — åpne periode-modal
     const from = Math.min(startIdx, currentIdx)
     const to = Math.max(startIdx, currentIdx)
     onOpenBooking({
       resourceId,
       resourceName: resource._isPlaceholder ? resource.name : (resource.first_name ? `${resource.first_name} ${resource.last_name}` : resource.name),
       date: dates[from],
-      endDate: dates[to],     // <-- ny: signaliserer periode-booking
-      isPeriod: true,         // <-- flagg slik at modalen åpner riktig tab
+      endDate: dates[to],
+      isPeriod: true,
       existingPlans: [],
       editPlan: null,
     })
   }
 
-  // Touch/pen: under move-event finn cellen pekeren er over via document.elementFromPoint
-  const handlePointerMoveOnCell = (e) => {
-    if (!dragCreateRef.current) return
-    // For mouse: vi får onPointerEnter på celler — bruker det.
-    // For touch: vi må manuelt finne cellen pekeren er over.
-    if (e.pointerType !== 'mouse') {
+  // Global pointermove-lytter under drag. Finner cellen pekeren er over og
+  // oppdaterer currentIdx hvis den er i samme rad (= samme ressurs).
+  React.useEffect(() => {
+    if (!dragCreate) return
+    const handleMove = (e) => {
       const el = document.elementFromPoint(e.clientX, e.clientY)
       if (!el) return
-      const cellId = el.id || el.closest('[id^="gantt-cell-"]')?.id
-      if (!cellId) return
-      // ID format: gantt-cell-{resourceId}-{YYYY-MM-DD}
-      const m = cellId.match(/^gantt-cell-([^-]+(?:-[^-]+)*)-(\d{4}-\d{2}-\d{2})$/)
+      const cellEl = el.id?.startsWith('gantt-cell-') ? el : el.closest('[id^="gantt-cell-"]')
+      if (!cellEl) return
+      const m = cellEl.id.match(/^gantt-cell-(.+)-(\d{4}-\d{2}-\d{2})$/)
       if (!m) return
       const [, resId, dateStr] = m
       const cur = dragCreateRef.current
-      if (resId !== cur.resourceId) return  // kun samme rad
+      if (!cur || resId !== cur.resourceId) return  // kun samme rad — vertikal drag støttes ikke
       const idx = dateIndex.get(dateStr)
-      if (idx !== undefined) updateDragCreate(idx)
+      if (idx !== undefined) updateDragCreateIdx(idx)
     }
-  }
+    const handleUp = () => { finishDragCreate() }
+    const handleCancel = () => {
+      dragCreateRef.current = null
+      setDragCreate(null)
+    }
+    document.addEventListener('pointermove', handleMove)
+    document.addEventListener('pointerup', handleUp)
+    document.addEventListener('pointercancel', handleCancel)
+    return () => {
+      document.removeEventListener('pointermove', handleMove)
+      document.removeEventListener('pointerup', handleUp)
+      document.removeEventListener('pointercancel', handleCancel)
+    }
+  }, [dragCreate?.resourceId, dragCreate?.startIdx])
 
   // Auto-scroll to today when view mounts or zoom/anchor changes
   const gridScrollRef = React.useRef(null)
@@ -23080,18 +23091,12 @@ function RessursGanttGrid({
                           if (e.target !== e.currentTarget) return  // ignorer klikk på bar-bobler
                           beginDragCreate(res.id, res, i, e)
                         }}
-                        onPointerEnter={(e) => {
-                          // Mouse: oppdater current-idx når musen entrer en ny celle.
-                          // Kun samme rad — vi støtter ikke vertikal drag enda.
-                          if (e.pointerType === 'mouse' && dragCreateRef.current?.resourceId === res.id) {
-                            updateDragCreate(i)
-                          }
-                        }}
-                        onPointerMove={handlePointerMoveOnCell}
-                        onPointerUp={() => { endDragCreate() }}
-                        onPointerCancel={() => {
-                          dragCreateRef.current = null
-                          setDragCreate(null)
+                        onClick={(e) => {
+                          // Fallback for touch og pen — siden vi bare har drag for mus,
+                          // åpner et klikk her én-dags-modalen som før.
+                          if (e.target !== e.currentTarget) return
+                          if (e.pointerType === 'mouse') return  // håndteres via pointer-flow
+                          handleCellClick(res.id, d, res)
                         }}
                         onDragOver={(e)=>{ e.preventDefault(); e.dataTransfer.dropEffect='move' }}
                         onDrop={(e)=>{
@@ -23104,7 +23109,7 @@ function RessursGanttGrid({
                           borderRight: ganttZoom==='days' ? '1px solid #f8fafc' : (i%7===6 ? '1px solid #e2e8f0' : 'none'),
                           cursor:'pointer',
                           position:'relative',
-                          touchAction:'none',  // forhindrer scroll-konflikt på touch under drag
+                          userSelect:'none',  // ikke marker tekst under drag
                           ...(hol ? { backgroundImage: `repeating-linear-gradient(135deg, rgba(217,119,6,0.08) 0 6px, transparent 6px 12px)` } : {}),
                           ...(we && !hol ? { backgroundImage: `repeating-linear-gradient(135deg, rgba(148,163,184,0.08) 0 6px, transparent 6px 12px)` } : {}),
                         }}
