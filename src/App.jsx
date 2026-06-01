@@ -5657,6 +5657,13 @@ function AvvikPage() {
   const [loading, setLoading] = useState(true)
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
+  // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
+  // å forlate Avvik-modulen helt.
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [filterStatus, setFilterStatus] = useState('alle')
   const [filterSeverity, setFilterSeverity] = useState('alle')
   const [filterProject, setFilterProject] = useState('alle')
@@ -7195,6 +7202,13 @@ function HmsPage() {
   const [showNew, setShowNew] = useState(false)
   const [newType, setNewType] = useState(null)
   const [selected, setSelected] = useState(null)
+  // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
+  // å forlate HMS-modulen helt.
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
 
   const loadData = async () => {
     try {
@@ -22260,6 +22274,13 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 //   - Godkjenne / avvise alle entries for en ansatts uke samlet
 function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erBrukerAdmin = false, plProsjekter = [] }) {
   const [selected, setSelected] = useState(null)  // {employee_id, week, year, sheetId}
+  // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
+  // å forlate Godkjenning-modulen helt.
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [rejectComment, setRejectComment] = useState('')
   const [processing, setProcessing] = useState(false)
   const [perEntryReject, setPerEntryReject] = useState({})  // entryId → comment
@@ -29529,6 +29550,13 @@ function KunderPage() {
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('alle')
   const [selected, setSelected] = useState(null)
+  // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
+  // å forlate Kunder-modulen helt.
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
+  }, [selected])
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [importData, setImportData] = useState(null)
@@ -32658,6 +32686,14 @@ function BefaringPage() {
       if (selected) sessionStorage.setItem('befaring:selected', JSON.stringify(selected))
       else sessionStorage.removeItem('befaring:selected')
     } catch {}
+  }, [selected])
+
+  // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
+  // å forlate Befaring-modulen helt.
+  React.useEffect(() => {
+    if (selected && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelected(null))
+    }
   }, [selected])
 
   // Hvis vi har persisted selected men listen ikke er lastet ennå, vent.
@@ -55071,6 +55107,12 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
       window.__enterDetailView(() => setViewKalk(null))
     }
   }, [viewKalk])
+  // Browser tilbake-knapp: lukk redigering også (ikke bare detaljvisning)
+  React.useEffect(() => {
+    if (editKalk && window.__enterDetailView) {
+      window.__enterDetailView(() => setEditKalk(null))
+    }
+  }, [editKalk])
   const [showFaktorerPage, setShowFaktorerPage] = useState(false)
   const [showBibliotekPage, setShowBibliotekPage] = useState(false)
   const [showPrisbokPage, setShowPrisbokPage] = useState(false)
