@@ -11114,6 +11114,26 @@ function AnbudsPage() {
   }
   useEffect(() => { load() }, [])
 
+  // Auto-åpne anbud fra varsel-klikk i bjellen.
+  // window.__pendingLinkId settes av navigate() når brukeren klikker en
+  // notification med link_page='anbud' og link_id=<tender.id>.
+  useEffect(() => {
+    const pendingId = window.__pendingLinkId
+    if (!pendingId) return
+    ;(async () => {
+      try {
+        const { data } = await supabase.from('tenders').select('*').eq('id', pendingId).single()
+        if (data) {
+          setSelected(data)
+          setTenders(prev => prev.map(t => t.id === data.id ? data : t))
+        }
+      } catch(e) { console.error('Kunne ikke åpne anbud fra varsel:', e) }
+      finally {
+        window.__pendingLinkId = null
+      }
+    })()
+  }, [])
+
   const filtered = tenders.filter(t => {
     if (filterStatus !== 'alle' && t.status !== filterStatus) return false
     if (filterType !== 'alle' && t.type !== filterType) return false
@@ -12153,6 +12173,17 @@ function EndringsmeldingPage() {
     finally { setLoading(false) }
   }
   useEffect(() => { load() }, [])
+
+  // Auto-åpne endringsmelding fra varsel-klikk i bjellen.
+  // window.__pendingLinkId settes av navigate() når brukeren klikker en
+  // notification med link_page='endringsmelding' og link_id=<em.id>.
+  // EM bruker route-state for detaljvisning, så vi setter route direkte.
+  useEffect(() => {
+    const pendingId = window.__pendingLinkId
+    if (!pendingId) return
+    window.__pendingLinkId = null
+    setRoute({ view: 'detail', id: pendingId })
+  }, [])
 
   const filtered = endringer.filter(em => {
     if (statusFilter !== 'all' && em.status !== statusFilter) return false
