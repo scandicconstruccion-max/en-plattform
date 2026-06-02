@@ -37366,6 +37366,33 @@ function FDVPage() {
   const [selectedComp, setSelectedComp] = useState(null)
   const [search, setSearch] = useState('')
 
+  // Browser tilbake-knapp og mobil-sveip: lukk intern FDV-navigasjon i stedet
+  // for å forlate FDV-modulen helt.
+  //
+  // FDV har 3 nivåer av "detalj-visning":
+  //   1. aktivtKapittel — drill-down i et NS 3456-kapittel (f.eks. "2 Bygning")
+  //   2. selectedComp   — åpnet en spesifikk komponent
+  //   3. editDoc        — åpnet et dokument
+  //
+  // Hvert nivå skal stoppe browser-tilbake og lukke seg selv først.
+  React.useEffect(() => {
+    if (aktivtKapittel && window.__enterDetailView) {
+      window.__enterDetailView(() => setAktivtKapittel(null))
+    }
+  }, [aktivtKapittel])
+
+  React.useEffect(() => {
+    if (selectedComp && window.__enterDetailView) {
+      window.__enterDetailView(() => setSelectedComp(null))
+    }
+  }, [selectedComp])
+
+  React.useEffect(() => {
+    if (editDoc && window.__enterDetailView) {
+      window.__enterDetailView(() => setEditDoc(null))
+    }
+  }, [editDoc])
+
   const load = async () => {
     try {
       const [comp, docs, proj] = await Promise.all([
