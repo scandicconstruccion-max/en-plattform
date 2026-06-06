@@ -65216,10 +65216,10 @@ function AppContent() {
       {/* Egen sidemeny-tooltip: umiddelbar, matcher systemets stil, vises kun når menyen er slått sammen */}
       {hoverTip && collapsed && !isMobile && (
         <div style={{ position: 'fixed', top: hoverTip.top, left: sidebarWidth + 6, transform: 'translateY(-50%)',
-          background: '#0f172a', color: 'white', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap',
-          padding: '7px 12px', borderRadius: '10px', boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
+          background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap',
+          padding: '7px 12px', borderRadius: '10px', boxShadow: '0 6px 20px rgba(0,0,0,0.12)',
           zIndex: 60, pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
-          <span style={{ position: 'absolute', left: '-4px', top: '50%', transform: 'translateY(-50%) rotate(45deg)', width: '8px', height: '8px', background: '#0f172a', borderRadius: '1px' }} />
+          <span style={{ position: 'absolute', left: '-5px', top: '50%', transform: 'translateY(-50%) rotate(45deg)', width: '8px', height: '8px', background: '#ecfdf5', borderLeft: '1px solid #a7f3d0', borderBottom: '1px solid #a7f3d0', borderRadius: '1px' }} />
           {hoverTip.label}
         </div>
       )}
