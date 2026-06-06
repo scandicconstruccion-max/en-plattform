@@ -63314,6 +63314,8 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
       // for at Outlook desktop ikke skal blåse opp fargene til hele cellebredden
       const emailHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif">
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f1f5f9">Tilbud fra ${ci.name || 'oss'} · Totalsum ${Math.round(totals.totMedFortjeneste).toLocaleString('nb-NO')} kr eks. mva</div>
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f1f5f9">&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;&#8204;&#160;</div>
 <table cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f1f5f9">
   <tr><td align="center" style="padding:24px 16px">
     <table cellpadding="0" cellspacing="0" border="0" width="600" style="max-width:600px;background:#ffffff;border:1px solid #e2e8f0">
