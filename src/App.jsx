@@ -4305,6 +4305,7 @@ const CATEGORY_LABELS = {
 
 // ─── SJEKKLISTER PAGE ─────────────────────────────────────────────────────
 function SjekklistePage({ onNavigateDetail }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const [checklists, setChecklists] = useState([])
   const [projects, setProjects] = useState([])
@@ -5038,6 +5039,7 @@ function TemplateEditorModal({ template, onSave, onClose, saving }) {
 }
 
 function SjekklisteDetaljerPage({ checklistId, onBack }) {
+  const alert = useAppAlert()
   const { user, displayName } = useAuth()
   const [checklist, setChecklist] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -5851,6 +5853,7 @@ function AvvikPage() {
 }
 
 function AvvikModal({ projects, user, onClose, onSaved, initial }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState(initial || {
     title: '', description: '', location: '', severity: 'Medium',
     project_id: '', assigned_to: '', assigned_to_user_id: '',
@@ -6682,6 +6685,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
 }
 
 function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({
     title: dev.title || '',
     description: dev.description || '',
@@ -7363,6 +7367,7 @@ function HmsPage() {
 }
 
 function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [rec, setRec] = useState(initialRecord)
@@ -7458,6 +7463,7 @@ function HmsDetaljer({ record: initialRecord, projects, user, onBack }) {
 }
 
 function SjaModal({ projects, user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [title, setTitle] = useState(initial?.title || '')
   const [projectId, setProjectId] = useState(initial?.project_id || '')
@@ -7628,6 +7634,7 @@ function SjaView({ rec, proj }) {
 }
 
 function RuhModal({ projects, user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [title, setTitle] = useState(initial?.title||'')
   const [projectId, setProjectId] = useState(initial?.project_id||'')
@@ -7715,6 +7722,7 @@ function RuhView({ rec, proj }) {
 }
 
 function RisikoModal({ projects, user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [title, setTitle] = useState(initial?.title||'')
   const [projectId, setProjectId] = useState(initial?.project_id||'')
@@ -7880,6 +7888,7 @@ function RisikoView({ rec, proj }) {
 }
 
 function MottakskontrollModal({ projects, user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [title, setTitle] = useState(initial?.title||'')
   const [projectId, setProjectId] = useState(initial?.project_id||'')
@@ -8011,6 +8020,7 @@ const HMS_HANDBOK_KAPITLER = [
 ]
 
 function HandbokModal({ user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const d0 = initial?.data||{}
   const [form, setForm] = useState({
@@ -8643,6 +8653,7 @@ function MaskinDetaljer({ maskin: init, projects, user, onBack }) {
 }
 
 function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [newStatus, setNewStatus] = useState(maskin.status)
   const [projectId, setProjectId] = useState(maskin.current_project_id||'')
   const [employeeName, setEmployeeName] = useState('')
@@ -8834,6 +8845,7 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved }) {
 }
 
 function MaskinModal({ projects, user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [form, setForm] = useState({
     name: initial?.name||'', category: initial?.category||'', type: initial?.type||'',
@@ -10226,6 +10238,7 @@ function TilbudEditorModal({ projects, user, initial, onClose, onSaved }) {
 }
 
 function SendTilbudModal({ quote, user, onClose, onSent }) {
+  const alert = useAppAlert()
   const [email, setEmail] = useState(quote.customer_email || '')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -10313,6 +10326,7 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
 }
 
 function PurringModal({ quote, user, onClose, onSent }) {
+  const alert = useAppAlert()
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
   const [newValidUntil, setNewValidUntil] = useState(() => {
@@ -10546,6 +10560,7 @@ const MODULE_CONFIG = {
 }
 
 function GodkjenningsPage() {
+  const alert = useAppAlert()
   const [token, setToken] = useState(null)
   const [tokenData, setTokenData] = useState(null)
   const [record, setRecord] = useState(null)
@@ -10833,6 +10848,7 @@ async function createApprovalToken({ module, recordId, recipientEmail, createdBy
 // ─── UE SVAR PAGE (Offentlig — ingen innlogging) ─────────────────────────────
 
 function UESvarPage() {
+  const alert = useAppAlert()
   const [foresp, setForesp] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -11865,6 +11881,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
 }
 
 function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const pricedUes = ues.filter(u=>u.status==='Priset').sort((a,b)=>(a.total_amount||0)-(b.total_amount||0))
   const [selectedUE, setSelectedUE] = useState(pricedUes[0]?.id||'')
   const [projectId, setProjectId] = useState(tender.project_id||'')
@@ -11931,6 +11948,7 @@ function TildelModal({ tender, ues, projects, user, onClose, onSaved }) {
 
 // ─── UE PRISINGSSIDE ──────────────────────────────────────────────────────────
 function UEPrisingsPage() {
+  const alert = useAppAlert()
   const [token, setToken] = useState(null)
   const [ueData, setUeData] = useState(null)
   const [tender, setTender] = useState(null)
@@ -15219,6 +15237,7 @@ function OrdreEditorModal({ projects, user, initial, onClose, onSaved }) {
 }
 
 function FraIlbudModal({ quotes, projects, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [selectedQuote, setSelectedQuote] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -15865,6 +15884,7 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
 }
 
 function EndringsmeldingModal({ order, user, existingCount, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ title:'', description:'', amount:0 })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
@@ -19664,6 +19684,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
 }
 
 function SendFakturaModal({ invoice, user, onClose, onSent }) {
+  const alert = useAppAlert()
   const [email, setEmail] = useState(invoice.customer_email||'')
   const [sending, setSending] = useState(false)
   const [sent, setSent] = useState(false)
@@ -20274,6 +20295,7 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
 }
 
 function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [form, setForm] = useState({
     first_name:initial?.first_name||'', last_name:initial?.last_name||'',
@@ -20367,6 +20389,7 @@ function AnsattEditorModal({ projects, user, initial, onClose, onSaved }) {
 }
 
 function LeggTilSertifikatModal({ employeeId, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ name:'', issuer:'', issued_date:'', expiry_date:'', certificate_number:'', notes:'' })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
@@ -20416,6 +20439,7 @@ function LeggTilSertifikatModal({ employeeId, onClose, onSaved }) {
 }
 
 function LeggTilProsjektModal({ employeeId, projects, existingIds, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ project_id:'', role:'', from_date:'', to_date:'' })
   const [saving, setSaving] = useState(false)
   const available = projects.filter(p=>!existingIds.includes(p.id))
@@ -20462,6 +20486,7 @@ function LeggTilProsjektModal({ employeeId, projects, existingIds, onClose, onSa
 }
 
 function ImportCSVModal({ user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [csvText, setCsvText] = useState('')
   const [preview, setPreview] = useState([])
   const [importing, setImporting] = useState(false)
@@ -20572,6 +20597,7 @@ const SKILL_LEVELS = {
 }
 
 function SkillsTab({ employeeId, skills, onRefresh }) {
+  const alert = useAppAlert()
   const [adding, setAdding] = useState(false)
   const [newSkill, setNewSkill] = useState('')
   const [newLevel, setNewLevel] = useState('basis')
@@ -20942,6 +20968,7 @@ function TimelistePage() {
 
 // ── WEEK SHEET – mobile-first weekly overview ─────────────────────────────────
 function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRefresh }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const weekDates = getWeekDates(week, year)
   const entries = sheet?.timesheet_entries || []
@@ -21566,6 +21593,7 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack, i
 
 // ── STATS VIEW ────────────────────────────────────────────────────────────────
 function TimesheetStats({ entries, timesheets, employees, projects, selectedEmployee, statsView }) {
+  const alert = useAppAlert()
   const [reportType, setReportType] = useState('oversikt') // 'oversikt'|'ansatt'|'prosjekt'
   const [periodFrom, setPeriodFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` })
   const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split('T')[0])
@@ -22273,6 +22301,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 //   - Godkjenne / avvise enkelt-entry
 //   - Godkjenne / avvise alle entries for en ansatts uke samlet
 function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erBrukerAdmin = false, plProsjekter = [] }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const [selected, setSelected] = useState(null)  // {employee_id, week, year, sheetId}
   // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
@@ -24746,6 +24775,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function RessursPage() {
+  const alert = useAppAlert()
   const { user } = useAuth()
   const confirm = useConfirm()
   const [employees, setEmployees] = useState([])
@@ -26324,6 +26354,7 @@ function RessursPage() {
 }
 
 function MilestoneModal({ initial, date, projects, employees, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const isEdit = !!initial
 
@@ -26548,6 +26579,7 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
 // En "fase" = alle bookinger i bar.plans (samme prosjekt + oppgave + ressurs + tilstøtende dager)
 // Operasjoner: Flytt, Split, Slett, Rediger enkeltdag (fallback til BookingModal)
 function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onClose, onSaved, onEditSingleDay, settings = { skipWeekends: true } }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const [mode, setMode] = useState('overview') // 'overview' | 'move' | 'split'
   const [moveDays, setMoveDays] = useState(0)
@@ -26904,6 +26936,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
 }
 
 function BookingModal({ resourceId, resourceName, date, endDate, isPeriod, existingPlans, editPlan, projects, user, onClose, onSaved, resourceType, machines, defaultStartTime='07:00', defaultEndTime='15:30', zIndex=100, settings={ skipWeekends: true } }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const [projectId, setProjectId] = useState(editPlan?.project_id||'')
   const [hours, setHours] = useState(editPlan?.hours||8)
@@ -28631,6 +28664,7 @@ function CalDayView({ date, events, projects, employees, attendees, getHolidayFo
 
 // ── EVENT MODAL ───────────────────────────────────────────────────────────────
 function EventModal({ date, initial, projects, employees, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title||'',
@@ -28823,6 +28857,7 @@ function EventDetailModal({ event, projects, employees, attendees, user, onClose
 
 // ── SHARING MODAL ─────────────────────────────────────────────────────────────
 function SharingModal({ user, employees, sharing, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [selected, setSelected] = useState(sharing.filter(s=>s.owner_id===user?.id).map(s=>s.shared_with_id))
   const [saving, setSaving] = useState(false)
 
@@ -29130,6 +29165,7 @@ function InterChatPage() {
 }
 
 function ChatWindow({ channel, user, employees, members, projects, onRefresh, onBack }) {
+  const alert = useAppAlert()
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
@@ -29423,6 +29459,7 @@ function ChatWindow({ channel, user, employees, members, projects, onRefresh, on
 }
 
 function NewChannelModal({ user, employees, projects, defaultProjectId, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ name:'', description:'', type:'group', project_id:defaultProjectId||'', is_private:false })
   const [selectedMembers, setSelectedMembers] = useState([])
   const [saving, setSaving] = useState(false)
@@ -30574,6 +30611,7 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
 }
 
 function KontaktpersonModal({ customerId, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ name:'', title:'', email:'', phone:'' })
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
@@ -30670,6 +30708,7 @@ function fmtVal(n) { return n ? (Math.round(parseFloat(n)||0)).toLocaleString('n
 
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function CRMPage() {
+  const alert = useAppAlert()
   const { user } = useAuth()
   const [customers, setCustomers] = useState([])
   const [contacts, setContacts] = useState([])
@@ -31064,6 +31103,7 @@ function CRMPage() {
 }
 
 function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
+  const alert = useAppAlert()
   const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
   const [c, setC] = useState(init)
@@ -31404,6 +31444,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 }
 
 function CRMEditorModal({ user, initial, onClose, onSaved }) {
+  const alert = useAppAlert()
   const isEdit=!!initial
   const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'' })
   const [saving, setSaving] = useState(false)
@@ -31480,6 +31521,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
 }
 
 function ContactModal({ customerId, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ name:'', title:'', email:'', phone:'', notes:'', is_primary:false })
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -31516,6 +31558,7 @@ function ContactModal({ customerId, onClose, onSaved }) {
 }
 
 function ActivityModal({ customerId, defaultType, user, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ type:defaultType||'note', title:'', description:'', date:new Date().toISOString().split('T')[0], due_date:'' })
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
@@ -35584,6 +35627,8 @@ const BYGGEFASER = [
 ]
 
 function BildedokPage() {
+  const alert = useAppAlert()
+  const confirm = useConfirm()
   const { user } = useAuth()
   const [photos, setPhotos] = useState([])
   const [projects, setProjects] = useState([])
@@ -35745,7 +35790,7 @@ function BildedokPage() {
                   <div style={{ padding: isMobBild ? '4px 10px 12px' : '4px 20px 20px', borderTop:'1px solid #f1f5f9' }}>
                     <div style={{ display:'grid', gridTemplateColumns: isMobBild ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(160px,1fr))', gap: isMobBild ? '8px' : '10px', marginTop:'12px' }}>
                       {fase.photos.map(photo => (
-                        <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
+                        <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={async ()=>{ if(await confirm({ message: 'Slett bildet?', danger: true })){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
                       ))}
                     </div>
                   </div>
@@ -35777,7 +35822,7 @@ function BildedokPage() {
                 <div style={{ display:'grid', gridTemplateColumns: isMobBild ? 'repeat(2,1fr)' : 'repeat(auto-fill,minmax(160px,1fr))', gap: isMobBild ? '8px' : '10px' }}>
                   {datePhotos.map(photo => {
                     const fase = BYGGEFASER.find(f=>f.id===photo.fase)
-                    return <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={()=>{ if(confirm('Slett bildet?')){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
+                    return <BildedokThumbnail key={photo.id} photo={photo} fase={fase} projects={projects} onClick={()=>setLightbox(photo)} onDelete={async ()=>{ if(await confirm({ message: 'Slett bildet?', danger: true })){ supabase.from('photos').delete().eq('id',photo.id).then(load) } }} />
                   })}
                 </div>
               </div>
@@ -35829,6 +35874,7 @@ function BildedokThumbnail({ photo, fase, projects, onClick, onDelete }) {
 }
 
 function BildedokUploadModal({ projects, initialFase, user, uploading, onClose, onUpload }) {
+  const alert = useAppAlert()
   const [fase, setFase] = useState(initialFase||'under_arbeid')
   const [projectId, setProjectId] = useState('')
   const [rom, setRom] = useState('')
@@ -38674,6 +38720,7 @@ const mbSec = t => <div style={{ fontSize:'12px', fontWeight:'700', color:'#94a3
 // SUPERADMIN — Platform Owner Control Panel
 // ═══════════════════════════════════════════════════════════════════════
 function SuperAdminPage() {
+  const alert = useAppAlert()
   const { user } = useAuth()
   const [companies, setCompanies] = useState([])
   const [allUsers, setAllUsers] = useState([])
@@ -40584,6 +40631,7 @@ function BrukeradminPage() {
 
 // ── USER DETAIL PAGE ─────────────────────────────────────────────────────────
 function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }) {
+  const alert = useAppAlert()
   const confirm = useConfirm()
   const [u, setU] = useState(init)
   const [saving, setSaving] = useState(false)
@@ -40774,6 +40822,7 @@ function UserDetaljer({ userProfile: init, currentUser, companyModules, onBack }
 
 // ── INVITER BRUKER MODAL ─────────────────────────────────────────────────────
 function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
+  const alert = useAppAlert()
   const [form, setForm] = useState({ email:'', role:'ansatt', full_name:'' })
   const [selectedModules, setSelectedModules] = useState([])
   const [step, setStep] = useState(1)
@@ -59499,7 +59548,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   }
 
   const handleDelete = async () => {
-    const ok = await confirm('Slett kalkulasjon', 'Er du sikker?')
+    const ok = await confirm({ message: 'Slett kalkulasjon', subMessage: 'Er du sikker?', danger: true })
     if (!ok) return
     await supabase.from('calculations').delete().eq('id', k.id)
     onBack()
