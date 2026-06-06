@@ -22273,6 +22273,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
 //   - Godkjenne / avvise enkelt-entry
 //   - Godkjenne / avvise alle entries for en ansatts uke samlet
 function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erBrukerAdmin = false, plProsjekter = [] }) {
+  const confirm = useConfirm()
   const [selected, setSelected] = useState(null)  // {employee_id, week, year, sheetId}
   // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
   // å forlate Godkjenning-modulen helt.
@@ -22401,7 +22402,7 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
   const handleApproveAllPending = async (gruppe) => {
     const pending = gruppe.entries.filter(e => (e.status || 'Til godkjenning') === 'Til godkjenning' && kanGodkjenneEntry(e))
     if (pending.length === 0) return
-    if (!confirm(`Godkjenn alle ${pending.length} ventende registreringer for uke ${gruppe.week}?`)) return
+    if (!(await confirm({ message: 'Godkjenn alle ventende registreringer?', subMessage: `${pending.length} registrering${pending.length === 1 ? '' : 'er'} for uke ${gruppe.week} blir godkjent.`, confirmLabel: 'Godkjenn' }))) return
     setProcessing(true)
     try {
       const now = new Date().toISOString()
