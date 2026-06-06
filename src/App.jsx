@@ -64674,6 +64674,12 @@ function AppContent() {
   const [hoverTip, setHoverTip] = useState(null) // { label, top } | null
   const visSidebarTip = (e, label) => setHoverTip({ label, top: e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 })
   const skjulSidebarTip = () => setHoverTip(null)
+  // Registrer service worker (PWA + pushvarsler). Idempotent — trygt å kalle ved hver oppstart.
+  React.useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW-registrering feilet:', err))
+    }
+  }, [])
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
   const [activeModules, setActiveModules] = useState(null) // null = loading
