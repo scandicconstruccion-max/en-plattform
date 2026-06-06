@@ -64661,7 +64661,17 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 
 function AppContent() {
   const { user, loading, supabase, displayName, isPlatformOwner, profile } = useAuth()
-  const [collapsed, setCollapsed] = useState(false)
+  // Husk om sidemenyen er sammenslått på tvers av økter (brukerens eget valg)
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('ep_sidebar_collapsed') === '1' } catch { return false }
+  })
+  React.useEffect(() => {
+    try { localStorage.setItem('ep_sidebar_collapsed', collapsed ? '1' : '0') } catch {}
+  }, [collapsed])
+  // Egen tooltip for sammenslått sidemeny — vises umiddelbart på hover, matcher systemets stil
+  const [hoverTip, setHoverTip] = useState(null) // { label, top } | null
+  const visSidebarTip = (e, label) => setHoverTip({ label, top: e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 })
+  const skjulSidebarTip = () => setHoverTip(null)
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
   const [activeModules, setActiveModules] = useState(null) // null = loading
@@ -65135,7 +65145,10 @@ function AppContent() {
                 return (
                   <button key={item.id}
                     onClick={() => locked ? setUpsellModul(item.id) : navigate(item.id)}
-                    title={collapsed ? (item.label + (locked ? ' — bestill her' : '')) : undefined}
+                    aria-label={item.label}
+                    onMouseEnter={(e) => collapsed && visSidebarTip(e, item.label + (locked ? ' · bestill her' : ''))}
+                    onMouseLeave={skjulSidebarTip}
+                    onClickCapture={skjulSidebarTip}
                     style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#94a3b8' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.65 : 1 }}>
                     <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
                     {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
@@ -65148,7 +65161,8 @@ function AppContent() {
         </nav>
         {/* Patch 21: Tilbakemelding-knapp */}
         <div style={{ padding: '8px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-          <button onClick={() => setShowFeedbackModal(true)} title={collapsed ? 'Tilbakemelding' : undefined}
+          <button onClick={() => setShowFeedbackModal(true)} aria-label="Tilbakemelding"
+            onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Tilbakemelding')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
               padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
               cursor: 'pointer', background: 'transparent', color: '#475569', fontSize: '14px',
@@ -65157,7 +65171,8 @@ function AppContent() {
             {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Tilbakemelding</span>}
           </button>
           {erTilbakemeldingAdmin && (
-            <button onClick={() => navigate('feedback-admin')} title={collapsed ? `Admin (${uleseTilbakemeldinger} nye)` : undefined}
+            <button onClick={() => navigate('feedback-admin')} aria-label={`Admin (${uleseTilbakemeldinger} nye)`}
+              onMouseEnter={(e) => collapsed && visSidebarTip(e, `Admin (${uleseTilbakemeldinger} nye)`)} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
                 padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
                 cursor: 'pointer', background: activePage === 'feedback-admin' ? '#ecfdf5' : 'transparent',
@@ -65196,6 +65211,17 @@ function AppContent() {
           )}
         </div>
       </div>
+      )}
+
+      {/* Egen sidemeny-tooltip: umiddelbar, matcher systemets stil, vises kun når menyen er slått sammen */}
+      {hoverTip && collapsed && !isMobile && (
+        <div style={{ position: 'fixed', top: hoverTip.top, left: sidebarWidth + 6, transform: 'translateY(-50%)',
+          background: '#0f172a', color: 'white', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap',
+          padding: '7px 12px', borderRadius: '10px', boxShadow: '0 6px 20px rgba(0,0,0,0.18)',
+          zIndex: 60, pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
+          <span style={{ position: 'absolute', left: '-4px', top: '50%', transform: 'translateY(-50%) rotate(45deg)', width: '8px', height: '8px', background: '#0f172a', borderRadius: '1px' }} />
+          {hoverTip.label}
+        </div>
       )}
 
       <main style={{ marginLeft: isMobile ? 0 : sidebarWidth, flex: 1, transition: 'margin-left 0.3s', minHeight: '100vh', minWidth: 0, overflowX: 'clip' }}>
