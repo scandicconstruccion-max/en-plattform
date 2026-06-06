@@ -32,6 +32,12 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
+// Sjekker at en e-postadresse har gyldig format (fanger skrivefeil som ola@firma, dobbel @, mellomrom).
+// Merk: bekrefter KUN format — ikke at adressen faktisk finnes (det krever bounce-fangst, Nivå 2).
+function erGyldigEpost(e) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e || '').trim())
+}
+
 // ══════════════════════════════════════════════════════════════════════
 // PDF-RAMMEVERK: createBrandedPdf()
 // ══════════════════════════════════════════════════════════════════════
@@ -6902,7 +6908,7 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
     if (!wantEmail && !wantNotification) {
       return appAlert({ message: 'Velg minst én leveringsmåte', subMessage: 'Velg e-post, systemvarsel, eller begge.', kind: 'warn' })
     }
-    if (wantEmail && (!email || !email.includes('@'))) return appAlert({ message: 'Ugyldig e-postadresse', kind: 'error' })
+    if (wantEmail && !erGyldigEpost(email)) return appAlert({ message: 'Ugyldig e-postadresse', kind: 'error' })
 
     // Hvis varsel er valgt, sjekk om mottakeren har brukerkonto
     let targetUserIdResolved = recipientUserId
@@ -10245,7 +10251,7 @@ function SendTilbudModal({ quote, user, onClose, onSent }) {
   const { grandTotal } = calcQuote(quote.chapters || [], quote.global_markup)
 
   const handleSend = async () => {
-    if (!email) return alert('E-postadresse er påkrevd')
+    if (!erGyldigEpost(email)) return alert('Ugyldig e-postadresse — sjekk at adressen er korrekt')
     setSending(true)
     try {
       const approvalUrl = await createApprovalToken({ module: 'quote', recordId: quote.id, recipientEmail: email, createdBy: user?.id })
@@ -10338,7 +10344,7 @@ function PurringModal({ quote, user, onClose, onSent }) {
 
   const handleSendPurring = async () => {
     const email = quote.customer_email
-    if (!email) return alert('Ingen e-postadresse registrert for denne kunden')
+    if (!erGyldigEpost(email)) return alert('Ugyldig eller manglende e-postadresse for denne kunden')
     setSending(true)
     try {
       const approvalUrl = await createApprovalToken({ module: 'quote', recordId: quote.id, recipientEmail: email, createdBy: user?.id })
@@ -12963,7 +12969,7 @@ function EndringsmeldingPage() {
 
   // ── Send til kunde ─────────────────────────────────────────────────────────
   const sendToCustomer = async (em, reminderDays = null) => {
-    if (!em.customer_email) return appAlert({ message: 'Legg til kundens e-post først', kind: 'warn' })
+    if (!erGyldigEpost(em.customer_email)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', subMessage: 'Sjekk kundens e-postadresse før utsending.', kind: 'warn' })
     try {
       const proj = projects.find(p => p.id === em.project_id)
 
@@ -13106,7 +13112,7 @@ function EndringsmeldingPage() {
 
   // ── Send purring (forenklet påminnelse) ────────────────────────────────────
   const sendReminder = async (em) => {
-    if (!em.customer_email) return appAlert({ message: 'Legg til kundens e-post først', kind: 'warn' })
+    if (!erGyldigEpost(em.customer_email)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', subMessage: 'Sjekk kundens e-postadresse før utsending.', kind: 'warn' })
     try {
       const proj = projects.find(p => p.id === em.project_id)
       const viewToken = em.view_token || crypto.randomUUID()
@@ -13189,7 +13195,7 @@ function EndringsmeldingPage() {
   // ── Send på nytt / Revisjon / Kopi ─────────────────────────────────────────
   const resendToCustomer = async (em, sendType, reminderDays = null) => {
     // sendType: 'resend' | 'revision' | 'copy'
-    if (!em.customer_email) return appAlert({ message: 'Kundens e-post mangler', kind: 'warn' })
+    if (!erGyldigEpost(em.customer_email)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', kind: 'warn' })
     try {
       const proj = projects.find(p => p.id === em.project_id)
       const viewToken = em.view_token || crypto.randomUUID()
@@ -15311,7 +15317,7 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
   const { grandTotal } = calcOrder(order.chapters||[], order.global_markup)
 
   const handleSend = async () => {
-    if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
+    if (!erGyldigEpost(email)) return appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'Sjekk at adressen er korrekt før utsending.', kind: 'warn' })
     setSending(true)
     try {
       // Hent eller lag view_token for "Se full ordre"-lenken
@@ -15419,7 +15425,7 @@ function SendOrdreModal({ order, user, getPdfBase64, onClose, onSent }) {
       const ccList = ccEmails
         .split(/[,;]/)
         .map(e => e.trim())
-        .filter(e => e && e.includes('@'))
+        .filter(e => erGyldigEpost(e))
 
       const allRecipients = [email, ...ccList]
 
@@ -15601,7 +15607,7 @@ function SendOrderReminderModal({ order, user, getPdfBase64, onClose, onSent }) 
   const daysSince = lastSent ? Math.floor((Date.now() - new Date(lastSent).getTime()) / (1000 * 60 * 60 * 24)) : null
 
   const handleSend = async () => {
-    if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
+    if (!erGyldigEpost(email)) return appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'Sjekk at adressen er korrekt før utsending.', kind: 'warn' })
     setSending(true)
     try {
       const viewToken = order.view_token || crypto.randomUUID()
@@ -15760,7 +15766,7 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
   const { grandTotal } = calcOrder(order.chapters || [], order.global_markup)
 
   const handleSend = async () => {
-    if (!email) return appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' })
+    if (!erGyldigEpost(email)) return appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'Sjekk at adressen er korrekt før utsending.', kind: 'warn' })
     setSending(true)
     try {
       const viewToken = order.view_token || crypto.randomUUID()
@@ -19691,7 +19697,7 @@ function SendFakturaModal({ invoice, user, onClose, onSent }) {
   const { net, gross } = calcLines(invoice.lines)
 
   const handleSend = async () => {
-    if (!email) return alert('E-postadresse er påkrevd')
+    if (!erGyldigEpost(email)) return alert('Ugyldig e-postadresse — sjekk at adressen er korrekt')
     setSending(true)
     try {
       const html = `
@@ -34584,7 +34590,7 @@ function SendObservationsSheet({ inspection, observations, proj, user, onClose, 
 
   const handleSend = async () => {
     const { email, name } = getRecipientEmail()
-    if (!email || !email.includes('@')) return bAlert('Ugyldig e-post', 'Velg eller skriv en gyldig e-postadresse.', 'warning')
+    if (!erGyldigEpost(email)) return bAlert('Ugyldig e-post', 'Velg eller skriv en gyldig e-postadresse.', 'warning')
     if (observations.length === 0) return bAlert('Ingen punkter', 'Det er ingen observasjoner å sende.', 'warning')
 
     setSending(true)
@@ -59532,7 +59538,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
-    if (!ue.email) { await appAlert({ message: 'E-postadresse mangler', subMessage: 'UE-en må ha en e-postadresse.', kind: 'warn' }); return }
+    if (!erGyldigEpost(ue.email)) { await appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'UE-en mangler en gyldig e-postadresse.', kind: 'warn' }); return }
     if (!ue.navn) { await appAlert({ message: 'UE-navn er påkrevd', kind: 'warn' }); return }
     try {
       const kl = kalkyler.find(x => x.id === kalId)
@@ -63465,7 +63471,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
   }
 
   const handleSend = async () => {
-    if (!email) { await appAlert({ message: 'E-postadresse er påkrevd', kind: 'warn' }); return }
+    if (!erGyldigEpost(email)) { await appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'Sjekk at adressen er korrekt før utsending.', kind: 'warn' }); return }
     setSending(true)
     try {
       // Lagre tilbuds-innstillinger på kalkylen så de huskes til neste gang
