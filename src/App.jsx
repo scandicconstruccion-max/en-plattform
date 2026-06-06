@@ -40996,11 +40996,179 @@ function InviterBrukerModal({ currentUser, companyModules, onClose, onSaved }) {
 
 // ─── VARSLER PAGE ─────────────────────────────────────────────────────────────
 
+// ── Pushvarsler: hjelpefunksjoner + innstillinger-modal ──
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const raw = atob(base64)
+  const arr = new Uint8Array(raw.length)
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
+  return arr
+}
+
+function PushInnstillingerModal({ onClose }) {
+  const { user } = useAuth()
+  const alert = useAppAlert()
+  const [status, setStatus] = useState('checking') // checking|unsupported|denied|default|subscribed
+  const [busy, setBusy] = useState(false)
+  const [enabled, setEnabled] = useState(true)
+  const [quietStart, setQuietStart] = useState('')
+  const [quietEnd, setQuietEnd] = useState('')
+  const [endpoint, setEndpoint] = useState(null)
+
+  const supported = typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
+  // iOS krever at appen er installert på hjemskjerm for push
+  const erStandalone = typeof window !== 'undefined' && (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true)
+  const erIOS = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
+
+  useEffect(() => {
+    (async () => {
+      if (!supported) { setStatus('unsupported'); return }
+      if (Notification.permission === 'denied') { setStatus('denied'); return }
+      try {
+        const reg = await navigator.serviceWorker.ready
+        const sub = await reg.pushManager.getSubscription()
+        if (sub) {
+          setEndpoint(sub.endpoint)
+          const { data } = await supabase.from('push_subscriptions').select('enabled,quiet_start,quiet_end').eq('endpoint', sub.endpoint).maybeSingle()
+          if (data) {
+            setEnabled(data.enabled)
+            setQuietStart(data.quiet_start ? String(data.quiet_start).slice(0,5) : '')
+            setQuietEnd(data.quiet_end ? String(data.quiet_end).slice(0,5) : '')
+          }
+          setStatus('subscribed')
+        } else {
+          setStatus('default')
+        }
+      } catch (e) { setStatus('default') }
+    })()
+  }, [])
+
+  const aktiver = async () => {
+    if (!VAPID_PUBLIC_KEY) { await alert({ message: 'Mangler oppsett', subMessage: 'VAPID-nøkkel er ikke konfigurert. Kontakt support.', kind: 'error' }); return }
+    setBusy(true)
+    try {
+      const perm = await Notification.requestPermission()
+      if (perm !== 'granted') { setStatus(perm === 'denied' ? 'denied' : 'default'); setBusy(false); return }
+      const reg = await navigator.serviceWorker.ready
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) })
+      const json = sub.toJSON()
+      const { error } = await supabase.from('push_subscriptions').upsert({
+        user_id: user.id, endpoint: sub.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+        enabled: true, user_agent: navigator.userAgent,
+      }, { onConflict: 'endpoint' })
+      if (error) throw error
+      setEndpoint(sub.endpoint); setEnabled(true); setStatus('subscribed')
+    } catch (e) {
+      await alert({ message: 'Kunne ikke aktivere pushvarsler', subMessage: e.message, kind: 'error' })
+    }
+    setBusy(false)
+  }
+
+  const toggleEnabled = async () => {
+    const ny = !enabled
+    setEnabled(ny)
+    if (endpoint) await supabase.from('push_subscriptions').update({ enabled: ny }).eq('endpoint', endpoint)
+  }
+
+  const lagreStilletid = async () => {
+    if (!endpoint) return
+    setBusy(true)
+    const { error } = await supabase.from('push_subscriptions').update({ quiet_start: quietStart || null, quiet_end: quietEnd || null }).eq('endpoint', endpoint)
+    setBusy(false)
+    if (error) await alert({ message: 'Kunne ikke lagre', subMessage: error.message, kind: 'error' })
+    else await alert({ message: 'Stilletid lagret' })
+  }
+
+  const labelStyle = { fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'6px', display:'block' }
+
+  return (
+    <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000, padding:'16px' }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:'white', borderRadius:'18px', maxWidth:'440px', width:'100%', maxHeight:'90vh', overflowY:'auto', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>⚙️ Pushvarsler</h2>
+          <button onClick={onClose} style={{ border:'none', background:'#f1f5f9', borderRadius:'8px', width:'30px', height:'30px', cursor:'pointer', color:'#64748b', fontSize:'16px' }}>✕</button>
+        </div>
+        <div style={{ padding:'24px' }}>
+
+          {status === 'checking' && <p style={{ color:'#64748b', fontSize:'14px', margin:0 }}>Sjekker status…</p>}
+
+          {status === 'unsupported' && (
+            <p style={{ color:'#64748b', fontSize:'14px', margin:0, lineHeight:1.6 }}>
+              Denne nettleseren støtter ikke pushvarsler. Prøv Chrome (Android/PC) eller Safari på iPhone med appen installert på hjemskjermen.
+            </p>
+          )}
+
+          {status === 'denied' && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'16px', fontSize:'14px', color:'#991b1b', lineHeight:1.6 }}>
+              Varsler er blokkert i nettleseren. Du må tillate varsler for denne siden i nettleserens innstillinger (klikk på hengelåsen i adressefeltet → Varsler → Tillat), og deretter prøve igjen.
+            </div>
+          )}
+
+          {status === 'default' && (
+            <div>
+              {erIOS && !erStandalone && (
+                <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'14px', fontSize:'13px', color:'#1e40af', lineHeight:1.6, marginBottom:'16px' }}>
+                  📱 På iPhone må appen først legges til på hjemskjermen: trykk Del-knappen nederst → «Legg til på Hjem-skjerm». Åpne så appen derfra og aktiver varsler.
+                </div>
+              )}
+              <p style={{ color:'#64748b', fontSize:'14px', margin:'0 0 16px', lineHeight:1.6 }}>
+                Få varsler rett på denne enheten – også når appen er lukket. Du blir bedt om å tillate varsler.
+              </p>
+              <button onClick={aktiver} disabled={busy}
+                style={{ width:'100%', padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'15px', fontWeight:'700', cursor: busy?'wait':'pointer' }}>
+                {busy ? 'Aktiverer…' : '🔔 Aktiver pushvarsler'}
+              </button>
+            </div>
+          )}
+
+          {status === 'subscribed' && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'20px' }}>
+              {/* Av/på på denne enheten */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px' }}>
+                <div>
+                  <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Pushvarsler på denne enheten</div>
+                  <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>{enabled ? 'På – du får varsler' : 'Av – ingen push til denne enheten'}</div>
+                </div>
+                <button onClick={toggleEnabled} role="switch" aria-checked={enabled}
+                  style={{ flexShrink:0, width:'48px', height:'28px', borderRadius:'999px', border:'none', cursor:'pointer', background: enabled?'#059669':'#cbd5e1', position:'relative', transition:'background 0.2s' }}>
+                  <span style={{ position:'absolute', top:'3px', left: enabled?'23px':'3px', width:'22px', height:'22px', borderRadius:'50%', background:'white', transition:'left 0.2s', boxShadow:'0 1px 3px rgba(0,0,0,0.2)' }} />
+                </button>
+              </div>
+
+              {/* Stilletid */}
+              <div style={{ opacity: enabled?1:0.5, pointerEvents: enabled?'auto':'none' }}>
+                <label style={labelStyle}>Stilletid (ingen push i dette tidsrommet)</label>
+                <div style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                  <input type="time" value={quietStart} onChange={e=>setQuietStart(e.target.value)}
+                    style={{ flex:1, padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px' }} />
+                  <span style={{ color:'#94a3b8', fontSize:'13px' }}>til</span>
+                  <input type="time" value={quietEnd} onChange={e=>setQuietEnd(e.target.value)}
+                    style={{ flex:1, padding:'9px 10px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px' }} />
+                </div>
+                <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>La feltene stå tomme for ingen stilletid. Varslene havner uansett i bjella – kun pushen holdes tilbake.</div>
+                <button onClick={lagreStilletid} disabled={busy}
+                  style={{ marginTop:'12px', padding:'9px 16px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'10px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
+                  Lagre stilletid
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function VarslerPage({ onNavigate }) {
   const confirm = useConfirm()
   const { notifs, unread, markRead, markAllRead, load } = useNotif()
   const [filter, setFilter] = useState('alle')
   const { user } = useAuth()
+  const [showPush, setShowPush] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
   const typeIcon = (type) => ({ info:'ℹ️', success:'✅', warning:'⚠️', quote:'📋', error:'❌' }[type] || 'ℹ️')
   const typeName = (type) => ({ info:'Info', success:'Fullført', warning:'Advarsel', quote:'Tilbud', error:'Feil' }[type] || 'Info')
@@ -41043,31 +41211,35 @@ function VarslerPage({ onNavigate }) {
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'20px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px' }}>
-          <div>
-            <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔔 Varsler</h1>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMob?'16px':'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'16px', gap:'10px' }}>
+          <div style={{ minWidth:0 }}>
+            <h1 style={{ fontSize: isMob?'19px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔔 Varsler</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>
               {unread > 0 ? `${unread} uleste varsler` : 'Alle varsler er lest'}
             </p>
           </div>
-          <div style={{ display:'flex', gap:'8px' }}>
+          <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+            <button onClick={() => setShowPush(true)} title="Varselinnstillinger" aria-label="Varselinnstillinger"
+              style={{ padding: isMob?'9px 11px':'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', color:'#475569', cursor:'pointer', fontSize:'15px', lineHeight:1 }}>
+              ⚙️
+            </button>
             {unread > 0 && (
               <button onClick={markAllRead}
-                style={{ padding:'9px 16px', border:'1px solid #bbf7d0', borderRadius:'10px', background:'#f0fdf4', color:'#059669', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-                ✓ Merk alle lest
+                style={{ padding: isMob?'9px 11px':'9px 16px', border:'1px solid #bbf7d0', borderRadius:'10px', background:'#f0fdf4', color:'#059669', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                {isMob ? '✓ Lest' : '✓ Merk alle lest'}
               </button>
             )}
             {notifs.length > 0 && (
               <button onClick={deleteAll}
-                style={{ padding:'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', color:'#dc2626', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-                🗑️ Slett alle
+                style={{ padding: isMob?'9px 11px':'9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', color:'#dc2626', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
+                {isMob ? '🗑️' : '🗑️ Slett alle'}
               </button>
             )}
           </div>
         </div>
-        {/* Filter tabs */}
-        <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+        {/* Filter tabs — på mobil: én rad med horisontal scroll i stedet for rotete wrap */}
+        <div style={{ display:'flex', gap:'6px', flexWrap: isMob?'nowrap':'wrap', overflowX: isMob?'auto':'visible', paddingBottom: isMob?'4px':0, margin: isMob?'0 -16px':0, paddingLeft: isMob?'16px':0, paddingRight: isMob?'16px':0, WebkitOverflowScrolling:'touch', scrollbarWidth:'none' }}>
           {[
             ['alle','📋 Alle', notifs.length],
             ['ulest','🔵 Ulest', unread],
@@ -41076,7 +41248,7 @@ function VarslerPage({ onNavigate }) {
             ['info','ℹ️ Info', notifs.filter(n=>n.type==='info').length],
           ].map(([id, label, count]) => (
             <button key={id} onClick={() => setFilter(id)}
-              style={{ padding:'7px 14px', borderRadius:'10px', border:'none', background:filter===id?'#059669':'#f8fafc', color:filter===id?'white':'#64748b', fontWeight:filter===id?'700':'500', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px' }}>
+              style={{ flexShrink:0, padding:'7px 14px', borderRadius:'10px', border:'none', background:filter===id?'#059669':'#f8fafc', color:filter===id?'white':'#64748b', fontWeight:filter===id?'700':'500', fontSize:'13px', cursor:'pointer', display:'flex', alignItems:'center', gap:'5px', whiteSpace:'nowrap' }}>
               {label}
               {count > 0 && <span style={{ background:filter===id?'rgba(255,255,255,0.3)':'#e2e8f0', color:filter===id?'white':'#475569', fontSize:'11px', fontWeight:'700', padding:'1px 6px', borderRadius:'999px' }}>{count}</span>}
             </button>
@@ -41084,7 +41256,9 @@ function VarslerPage({ onNavigate }) {
         </div>
       </div>
 
-      <div style={{ padding:'20px 32px', maxWidth:'760px' }}>
+      {showPush && <PushInnstillingerModal onClose={() => setShowPush(false)} />}
+
+      <div style={{ padding: isMob?'16px':'20px 32px', maxWidth:'760px' }}>
         {filtered.length === 0 ? (
           <div style={{ background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
             <div style={{ fontSize:'48px', marginBottom:'12px' }}>🔔</div>
