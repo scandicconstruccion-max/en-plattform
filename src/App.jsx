@@ -12390,14 +12390,17 @@ function EndringsmeldingPage() {
   const f = { fontFamily:'system-ui,sans-serif' }
   const inp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
 
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const load = async () => {
     try {
+      // Offline Lag 2: network-first med fallback til IndexedDB
       const [emRes, prRes] = await Promise.all([
-        supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'),
+        lesMedCache('endringer:liste', () => supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false })),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')),
       ])
-      setEndringer(emRes.data || [])
-      setProjects(prRes.data || [])
+      setEndringer(emRes.data)
+      setProjects(prRes.data)
+      setCacheInfo({ fraCache: emRes.fraCache, lagretAt: emRes.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -13872,6 +13875,7 @@ function EndringsmeldingPage() {
           <div>
             <h1 style={{ margin:0, fontSize: isMobEM ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>🔄 Endringsmeldinger</h1>
             {!isMobEM && <p style={{ margin:'3px 0 0', fontSize:'13px', color:'#64748b' }}>Opprett og send endringer fra byggeplassen</p>}
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
             <button onClick={() => navNew()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>
@@ -14541,14 +14545,17 @@ function OrdrePage() {
     }
   }, [selected])
 
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const load = async () => {
     try {
-      const [o, q, p] = await Promise.all([
-        supabase.from('orders').select('*').order('created_at', { ascending:false }).then(r=>r.data||[]),
-        supabase.from('quotes').select('*').eq('status','Akseptert').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[])
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [oRes, qRes, pRes] = await Promise.all([
+        lesMedCache('ordre:liste', () => supabase.from('orders').select('*').order('created_at', { ascending:false })),
+        lesMedCache('ordre:quotes', () => supabase.from('quotes').select('*').eq('status','Akseptert').order('created_at',{ascending:false})),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')),
       ])
-      setOrders(o); setQuotes(q); setProjects(p)
+      setOrders(oRes.data); setQuotes(qRes.data); setProjects(pRes.data)
+      setCacheInfo({ fraCache: oRes.fraCache, lagretAt: oRes.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -14593,6 +14600,7 @@ function OrdrePage() {
           <div>
             <h1 style={{ fontSize: isMobO ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📦 Ordre</h1>
             {!isMobO && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ordrebehandling, bekreftelser og endringsmeldinger</p>}
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
             {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 10px' : '10px 16px', fontSize: isMobO ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobO ? '📋 Tilbud' : '📋 Fra tilbud'}</button>}
@@ -25067,18 +25075,21 @@ function RessursPage() {
   const [scrollToTodayTrigger, setScrollToTodayTrigger] = useState(0)
   const [ganttDragCreate, setGanttDragCreate] = useState(null) // { resourceId, startDate, endDate }
 
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const load = async () => {
     try {
+      // Offline Lag 2: network-first med fallback til IndexedDB
       const [emp, mac, proj, pl, ms, sk] = await Promise.all([
-        supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('machines').select('id,name,category,status').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
-        supabase.from('resource_plans').select('*').then(r=>r.data||[]),
-        supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date').then(r=>r.data||[]),
-        supabase.from('employee_skills').select('*').then(r=>r.data||[])
+        lesMedCache('ressurs:ansatte', () => supabase.from('employees').select('id,first_name,last_name,department').eq('status','Aktiv').order('last_name')),
+        lesMedCache('ressurs:maskiner', () => supabase.from('machines').select('id,name,category,status')),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')),
+        lesMedCache('ressurs:planer', () => supabase.from('resource_plans').select('*')),
+        lesMedCache('ressurs:milestones', () => supabase.from('calendar_events').select('*').eq('type','milestone').order('start_date')),
+        lesMedCache('ressurs:skills', () => supabase.from('employee_skills').select('*')),
       ])
-      setEmployees(emp); setMachines(mac); setProjects(proj); setPlans(pl); setMilestones(ms)
-      setAllSkills(sk)
+      setEmployees(emp.data); setMachines(mac.data); setProjects(proj.data); setPlans(pl.data); setMilestones(ms.data)
+      setAllSkills(sk.data)
+      setCacheInfo({ fraCache: pl.fraCache, lagretAt: pl.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -25331,6 +25342,7 @@ function RessursPage() {
           <h1 style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', margin:0, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:'6px' }}>
             <span>📌</span><span>Ressursplan</span>
           </h1>
+          {cacheInfo.fraCache && <SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} />}
 
           {/* Ansatte/Maskiner toggle — segmentert knappegruppe */}
           <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'7px', padding:'2px', gap:'2px', flexShrink:0 }}>
