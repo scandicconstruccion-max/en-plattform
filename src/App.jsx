@@ -64856,9 +64856,12 @@ function useTilkobling() {
   return online
 }
 
-// Vedvarende statuspille nederst til venstre. Diskret når man er på nett,
-// tydelig gul når man er frakoblet (sikkerhetsrelevant: du ser lagret data).
-function TilkoblingsIndikator({ isMobile }) {
+// Tilkoblingsmarkør nederst til venstre.
+// Mobil + på nett: bare en liten prikk (diskret, dekker ikke tekst).
+// Mobil + frakoblet: kompakt gul pille med kort tekst (sikkerhetsrelevant).
+// Desktop: full pille med tekst (god plass).
+// Skjules helt når mobilmenyen er åpen, så den aldri ligger oppå menyinnhold.
+function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
   const online = useTilkobling()
   const [nyligTilkoblet, setNyligTilkoblet] = React.useState(false)
   const forrige = React.useRef(online)
@@ -64872,13 +64875,43 @@ function TilkoblingsIndikator({ isMobile }) {
     forrige.current = online
   }, [online])
 
+  // Ikke vis oppå den åpne mobilmenyen
+  if (isMobile && mobileMenuOpen) return null
+
   const offline = !online
+  const prikk = offline ? '#f59e0b' : '#22c55e'
+
+  // Mobil + på nett → kun en liten prikk, ingen tekst
+  const kunPrikk = isMobile && !offline
+  if (kunPrikk) {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        title={nyligTilkoblet ? 'Tilkoblet igjen' : 'Tilkoblet'}
+        style={{
+          position: 'fixed', bottom: '12px', left: '12px', zIndex: 1600,
+          width: '22px', height: '22px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.92)', border: '1px solid #e2e8f0',
+          boxShadow: '0 1px 6px rgba(0,0,0,0.12)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none', userSelect: 'none', transition: 'all 0.25s ease',
+        }}
+      >
+        <span style={{
+          width: '9px', height: '9px', borderRadius: '50%', background: prikk, display: 'inline-block',
+          boxShadow: '0 0 0 3px rgba(34,197,94,0.18)',
+        }} />
+      </div>
+    )
+  }
+
+  // Pille med tekst (mobil-frakoblet = kompakt, desktop = full)
   const bg = offline ? '#fef3c7' : (nyligTilkoblet ? '#dcfce7' : 'rgba(255,255,255,0.92)')
   const kant = offline ? '#f59e0b' : (nyligTilkoblet ? '#86efac' : '#e2e8f0')
   const tekstFarge = offline ? '#92400e' : (nyligTilkoblet ? '#166534' : '#475569')
-  const prikk = offline ? '#f59e0b' : '#22c55e'
   const etikett = offline
-    ? (isMobile ? 'Frakoblet \u2013 lagret data' : 'Frakoblet \u2013 viser lagret data')
+    ? (isMobile ? 'Frakoblet' : 'Frakoblet \u2013 viser lagret data')
     : (nyligTilkoblet ? 'Tilkoblet igjen' : 'Tilkoblet')
 
   return (
@@ -64887,15 +64920,15 @@ function TilkoblingsIndikator({ isMobile }) {
       aria-live="polite"
       style={{
         position: 'fixed',
-        bottom: isMobile ? '14px' : '16px',
-        left: isMobile ? '14px' : '16px',
+        bottom: isMobile ? '12px' : '16px',
+        left: isMobile ? '12px' : '16px',
         zIndex: 1600,
         display: 'flex',
         alignItems: 'center',
-        gap: '7px',
-        padding: offline ? '7px 13px' : '6px 11px',
+        gap: '6px',
+        padding: isMobile ? '5px 10px' : (offline ? '7px 13px' : '6px 11px'),
         borderRadius: '999px',
-        fontSize: '12px',
+        fontSize: isMobile ? '11px' : '12px',
         fontWeight: 600,
         fontFamily: 'system-ui, sans-serif',
         boxShadow: offline ? '0 2px 12px rgba(180,83,9,0.25)' : '0 2px 10px rgba(0,0,0,0.10)',
@@ -65287,7 +65320,7 @@ function AppContent() {
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', '--sidebar-width': sidebarWidth + 'px' }}>
 
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
-      <TilkoblingsIndikator isMobile={isMobile} />
+      <TilkoblingsIndikator isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} />
 
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
