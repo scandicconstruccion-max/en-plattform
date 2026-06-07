@@ -6140,13 +6140,10 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
       const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
       const initialLog = [{ at: now, by: user?.id || null, by_name: userName, action: 'Avvik opprettet', meta: {} }]
 
-      // Generér unikt avviksnummer (AV-NNNN) ved opprettelse
-      const { data: existingDevs } = await supabase.from('deviations').select('deviation_number')
-      const devNr = nextSequenceNumber(existingDevs || [], 'AV', 'deviation_number')
-
+      // Avviksnummer (AV-YYYY-NNNN) tildeles nå atomisk av databasen (trigger).
+      // Vi sender det IKKE fra klienten — gjør nummereringen race-fri og offline-trygg.
       const { error } = await supabase.from('deviations').insert({
         title: form.title.trim(),
-        deviation_number: devNr,
         description: form.description,
         location: form.location,
         severity: form.severity,
@@ -35262,9 +35259,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
 
   const convertToDeviation = async (item) => {
     try {
-      const { data: ed } = await supabase.from('deviations').select('deviation_number')
-      const devNr = nextSequenceNumber(ed||[], 'AV', 'deviation_number')
-      await supabase.from('deviations').insert({ title:item.description, deviation_number:devNr, project_id:ins.project_id, description:'Opprettet fra befaring "'+ins.title+'" ('+ins.date+').\n\nSjekkpunkt: '+item.description, severity:'Middels', status:'Åpen', images:[], created_by:user?.id })
+      await supabase.from('deviations').insert({ title:item.description, project_id:ins.project_id, description:'Opprettet fra befaring "'+ins.title+'" ('+ins.date+').\n\nSjekkpunkt: '+item.description, severity:'Middels', status:'Åpen', images:[], created_by:user?.id })
       bAlert('Avvik opprettet', `Avvik nummer ${devNr} ble opprettet og linket til dette befaringspunktet.`, 'success')
     } catch(e){bAlert('Feil', e.message, 'error')}
   }
