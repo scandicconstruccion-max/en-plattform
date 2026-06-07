@@ -1971,9 +1971,9 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
 // ─── DB HELPERS ───────────────────────────────────────────────────────────
 const db = {
   async getProjects() {
-    const { data, error } = await supabase.from('projects').select('*').order('created_at', { ascending: false })
-    if (error) throw error
-    return data || []
+    // Offline Lag 2: network-first med fallback til IndexedDB
+    const res = await lesMedCache('projects:alle', () => supabase.from('projects').select('*').order('created_at', { ascending: false }))
+    return res.data
   },
   async getProject(id) {
     const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
@@ -2599,6 +2599,7 @@ function ProsjekterPage({ onNavigateDetail }) {
   const appAlert = useAppAlert()
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const isMobProj = typeof window !== 'undefined' && window.innerWidth < 768
@@ -2614,7 +2615,13 @@ function ProsjekterPage({ onNavigateDetail }) {
   const f = { fontFamily:'system-ui, sans-serif', overflowX:'clip', maxWidth:'100vw' }
   const inp = { width:'100%', padding: isMobProj ? '8px 10px' : '9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize: isMobProj ? '13px' : '14px', outline:'none', boxSizing:'border-box' }
 
-  const load = async () => { try { setProjects(await db.getProjects()) } catch(e){console.error(e)} finally { setLoading(false) } }
+  const load = async () => {
+    try {
+      const res = await lesMedCache('projects:alle', () => supabase.from('projects').select('*').order('created_at', { ascending: false }))
+      setProjects(res.data)
+      setCacheInfo({ fraCache: res.fraCache, lagretAt: res.lagretAt })
+    } catch(e){console.error(e)} finally { setLoading(false) }
+  }
   useEffect(() => { load() }, [])
 
   const archivedCount = projects.filter(p => p.status === 'arkivert').length
@@ -2675,6 +2682,7 @@ function ProsjekterPage({ onNavigateDetail }) {
             <div>
               <h1 style={{ margin:0, fontSize: typeof window !== 'undefined' && window.innerWidth < 768 ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Prosjekter</h1>
               <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{activeProjects.length} prosjekter{archivedCount > 0 && !showArchived ? ` · ${archivedCount} arkivert` : ''}</p>
+              {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
             </div>
             <button onClick={() => setShowCreate(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: typeof window !== 'undefined' && window.innerWidth < 768 ? '9px 14px' : '10px 18px', fontSize:'13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Nytt prosjekt</button>
           </div>
@@ -4412,6 +4420,7 @@ function SjekklistePage({ onNavigateDetail }) {
   const [projects, setProjects] = useState([])
   const [templates, setTemplates] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [search, setSearch] = useState('')
   const [projectFilter, setProjectFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -4437,15 +4446,18 @@ function SjekklistePage({ onNavigateDetail }) {
 
   const loadData = async () => {
     try {
-      const [cl, pr, tmpl] = await Promise.all([
-        supabase.from('checklists').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || []),
-        supabase.from('checklist_templates').select('*').order('name').then(r => r.data || []),
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [clRes, prRes, tmplRes] = await Promise.all([
+        lesMedCache('sjekklister:liste', () => supabase.from('checklists').select('*').order('created_at', { ascending: false })),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')),
+        lesMedCache('sjekkliste:maler', () => supabase.from('checklist_templates').select('*').order('name')),
       ])
-      setChecklists(cl)
-      setProjects(pr)
-      // If no templates, seed with defaults
-      if (tmpl.length === 0) {
+      setChecklists(clRes.data)
+      setProjects(prRes.data)
+      setCacheInfo({ fraCache: clRes.fraCache, lagretAt: clRes.lagretAt })
+      // Seed standardmaler KUN når vi har ferske data (online) og lista er tom —
+      // aldri offline, da ville insert feile og fraCache gi falskt «tomt».
+      if (tmplRes.data.length === 0 && !tmplRes.fraCache) {
         const seeds = DEFAULT_TEMPLATES.map(t => ({
           name: t.name,
           description: t.description,
@@ -4456,8 +4468,9 @@ function SjekklistePage({ onNavigateDetail }) {
         await supabase.from('checklist_templates').insert(seeds)
         const { data: newTmpl } = await supabase.from('checklist_templates').select('*').order('name')
         setTemplates(newTmpl || [])
+        idbSett('sjekkliste:maler', newTmpl || [])   // oppdater cache med de seedede malene
       } else {
-        setTemplates(tmpl)
+        setTemplates(tmplRes.data)
       }
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
@@ -4674,6 +4687,7 @@ function SjekklistePage({ onNavigateDetail }) {
           <div>
             <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Sjekklister</h1>
             <p style={{ margin: '3px 0 0', fontSize: '12px', color: '#64748b' }}>{checklists.length} sjekklister totalt</p>
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>
             {view === 'maler' && <button onClick={() => { setEditTemplate(null); setShowNewTemplate(true) }} style={{ background: 'white', color: '#059669', border: '1px solid #059669', borderRadius: '10px', padding: isMob ? '8px 12px' : '10px 18px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ Ny mal</button>}
@@ -32817,6 +32831,7 @@ function BefaringPage() {
   const [inspections, setInspections] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   // selected persistes i sessionStorage så vi overlever kamera-retur på mobil
   const [selected, setSelected] = useState(() => {
     try {
@@ -32860,11 +32875,13 @@ function BefaringPage() {
 
   const load = async () => {
     try {
-      const [ins, proj] = await Promise.all([
-        supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name').then(r=>r.data||[])
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [insRes, projRes] = await Promise.all([
+        lesMedCache('befaring:liste', () => supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date',{ascending:false})),
+        lesMedCache('projects:nav_adr', () => supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name'))
       ])
-      setInspections(ins); setProjects(proj)
+      setInspections(insRes.data); setProjects(projRes.data)
+      setCacheInfo({ fraCache: insRes.fraCache, lagretAt: insRes.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -32899,6 +32916,7 @@ function BefaringPage() {
           <div>
             <h1 style={{ fontSize: isMobB ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🔍 Befaring</h1>
             {!isMobB && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Befaringsrapporter, sjekklister og oppfølging</p>}
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <button onClick={()=>setShowNew(true)} style={{ padding: isMobB ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobB ? '12px' : '14px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>{isMobB ? '+ Befaring' : '+ Ny befaring'}</button>
         </div>
