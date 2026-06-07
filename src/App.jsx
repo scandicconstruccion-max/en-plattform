@@ -3345,6 +3345,7 @@ function ProsjektfilerPage() {
   const [files, setFiles] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
   const [selectedProject, setSelectedProject] = useState('all')
@@ -3395,12 +3396,14 @@ function ProsjektfilerPage() {
   const loadData = async () => {
     setLoading(true)
     try {
+      // Offline Lag 2: network-first med fallback til IndexedDB
       const [filesRes, projRes] = await Promise.all([
-        supabase.from('project_files').select('*').order('created_at', { ascending: false }),
-        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')
+        lesMedCache('prosjektfiler:liste', () => supabase.from('project_files').select('*').order('created_at', { ascending: false })),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'))
       ])
-      setFiles(filesRes.data || [])
-      setProjects(projRes.data || [])
+      setFiles(filesRes.data)
+      setProjects(projRes.data)
+      setCacheInfo({ fraCache: filesRes.fraCache, lagretAt: filesRes.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -3586,13 +3589,23 @@ function ProsjektfilerPage() {
 
   const handleDownload = async (file) => {
     try {
-      const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
-      if (error) throw error
-      const url = URL.createObjectURL(data)
+      let blob = null
+      try {
+        // Network-first: hent ferskt og oppdater blob-cachen
+        const { data, error } = await supabase.storage.from('plattform-files').download(file.file_url)
+        if (error || !data) throw (error || new Error('tomt svar'))
+        blob = data
+        idbBlobSett('pf:' + file.file_url, blob)
+      } catch (nettFeil) {
+        // Uten nett: bruk cachet fil hvis den er lastet ned før
+        blob = await idbBlobHent('pf:' + file.file_url)
+        if (!blob) throw nettFeil
+      }
+      const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url; a.download = file.name; a.click()
       URL.revokeObjectURL(url)
-    } catch(e) { await appAlert({ message: 'Feil ved nedlasting', subMessage: e.message, kind: 'error' }) }
+    } catch(e) { await appAlert({ message: 'Feil ved nedlasting', subMessage: 'Fila er ikke lagret offline. Last den ned én gang med nett først.', kind: 'error' }) }
   }
 
   // Show local confirm dialog then delete
@@ -3633,7 +3646,10 @@ function ProsjektfilerPage() {
       <div style={{ position: 'sticky', top: isMob ? '52px' : '56px', zIndex: 20, background: 'white', flexShrink: 0 }}>
         {/* Header */}
         <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+          <div>
+            <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
+            {cacheInfo.fraCache && <div style={{ marginTop:'6px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
+          </div>
           <button onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer' }}>
             ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
           </button>
@@ -8465,6 +8481,7 @@ function MaskinPage() {
   const [maskiner, setMaskiner] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [filterStatus, setFilterStatus] = useState('alle')
   const [filterKat, setFilterKat] = useState('alle')
   const [search, setSearch] = useState('')
@@ -8479,11 +8496,13 @@ function MaskinPage() {
 
   const load = async () => {
     try {
-      const [m, p] = await Promise.all([
-        supabase.from('machines').select('*').order('name').then(r => r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r => r.data||[])
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [mRes, pRes] = await Promise.all([
+        lesMedCache('maskiner:liste', () => supabase.from('machines').select('*').order('name')),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')),
       ])
-      setMaskiner(m); setProjects(p)
+      setMaskiner(mRes.data); setProjects(pRes.data)
+      setCacheInfo({ fraCache: mRes.fraCache, lagretAt: mRes.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -8518,6 +8537,7 @@ function MaskinPage() {
           <div>
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🚜 Maskinregister</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Oversikt, lokasjon, service og hendelseslogg for alt utstyr</p>
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>+ Ny maskin</button>
         </div>
