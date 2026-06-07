@@ -155,7 +155,7 @@ async function idbBlobHent(noekkel) {
 // Bilde som virker offline. Cache-first på blob: er bildet lagret, vises det fra
 // cache (også offline, uavhengig av navigator.onLine). Er det ikke lagret enda,
 // vises url-en direkte mens fila hentes og lagres i bakgrunnen for neste gang.
-function OfflineBilde({ url, alt, style, onClick }) {
+function OfflineBilde({ url, alt, style, onClick, ...rest }) {
   const [src, setSrc] = React.useState(null)
   React.useEffect(() => {
     let levende = true
@@ -173,7 +173,7 @@ function OfflineBilde({ url, alt, style, onClick }) {
     return () => { levende = false; if (objektUrl) URL.revokeObjectURL(objektUrl) }
   }, [url])
   if (!src) return null
-  return <img src={src} alt={alt || ''} style={style} onClick={onClick} />
+  return <img src={src} alt={alt || ''} style={style} onClick={onClick} {...rest} />
 }
 // ─── END OFFLINE LAG 2 FUNDAMENT ───────────────────────────────────────────────
 
@@ -5826,6 +5826,7 @@ function AvvikPage() {
   const [deviations, setDeviations] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [showNew, setShowNew] = useState(false)
   const [selected, setSelected] = useState(null)
   // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
@@ -5842,12 +5843,14 @@ function AvvikPage() {
 
   const loadData = async () => {
     try {
-      const [devData, projData] = await Promise.all([
-        supabase.from('deviations').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || [])
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [devRes, projRes] = await Promise.all([
+        lesMedCache('avvik:liste', () => supabase.from('deviations').select('*').order('created_at', { ascending: false })),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')),
       ])
-      setDeviations(devData)
-      setProjects(projData)
+      setDeviations(devRes.data)
+      setProjects(projRes.data)
+      setCacheInfo({ fraCache: devRes.fraCache, lagretAt: devRes.lagretAt })
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -5899,6 +5902,7 @@ function AvvikPage() {
           <div>
             <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>⚠️ Avvik</h1>
             {!isMob && <p style={{ color: '#64748b', marginTop: '4px', fontSize: '14px', marginBottom: 0 }}>Registrer, følg opp og lukk avvik</p>}
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <button onClick={() => setShowNew(true)}
             style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 12px' : '11px 20px', fontSize: isMob ? '12px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}>
@@ -6665,7 +6669,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
               <h3 style={{ margin: '0 0 14px', fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>📷 Bilder ({imageUrls.length})</h3>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '10px' }}>
                 {imageUrls.map((url, i) => (
-                  <img key={i} src={url} alt={`Avviksbilde ${i+1}`} onClick={() => setLightbox(url)}
+                  <OfflineBilde key={i} url={url} alt={`Avviksbilde ${i+1}`} onClick={() => setLightbox(url)}
                     style={{ width: '100%', height: '120px', objectFit: 'cover', borderRadius: '10px', cursor: 'pointer', border: '1px solid #f1f5f9', transition: 'opacity 0.15s' }}
                     onMouseEnter={e => e.target.style.opacity = '0.85'}
                     onMouseLeave={e => e.target.style.opacity = '1'} />
@@ -6815,7 +6819,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
       {/* Lightbox */}
       {lightbox && (
         <div onMouseDown={(e) => { if (e.target === e.currentTarget) setLightbox(null); }} style={{ position: 'fixed', inset: 0, zIndex: 300, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'zoom-out', padding: '20px' }}>
-          <img src={lightbox} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '12px' }} />
+          <OfflineBilde url={lightbox} alt="" style={{ maxWidth: '90vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: '12px' }} />
         </div>
       )}
 
@@ -35811,6 +35815,7 @@ function BildedokPage() {
   const [projects, setProjects] = useState([])
   const [employees, setEmployees] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [view, setView] = useState('mappe')
   const [filterProject, setFilterProject] = useState('alle')
   const [filterFase, setFilterFase] = useState('alle')
@@ -35825,12 +35830,14 @@ function BildedokPage() {
 
   const load = async () => {
     try {
-      const [ph, proj, emp] = await Promise.all([
-        supabase.from('photos').select('*').order('created_at',{ascending:false}).then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
-        supabase.from('employees').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [phRes, projRes, empRes] = await Promise.all([
+        lesMedCache('bildedok:photos', () => supabase.from('photos').select('*').order('created_at',{ascending:false})),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')),
+        lesMedCache('bildedok:ansatte', () => supabase.from('employees').select('id,name,parent_id,depth,project_number').order('name')),
       ])
-      setPhotos(ph); setProjects(proj); setEmployees(emp)
+      setPhotos(phRes.data); setProjects(projRes.data); setEmployees(empRes.data)
+      setCacheInfo({ fraCache: phRes.fraCache, lagretAt: phRes.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -35915,6 +35922,7 @@ function BildedokPage() {
           <div>
             <h1 style={{ fontSize: isMobBild ? '18px' : '22px', fontWeight:'800', color:'#0f172a', margin:0 }}>{isMobBild ? '📷 Bildedok' : 'Bildedokumentasjon'}</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize: isMobBild ? '12px' : '14px', marginBottom:0 }}>{filtered.length} bilder</p>
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <button onClick={()=>setShowUploadModal(true)} style={{ padding: isMobBild ? '9px 12px' : '10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobBild ? '12px' : '14px', fontWeight:'700', display:'flex', alignItems:'center', gap:'6px', whiteSpace:'nowrap', flexShrink:0 }}>
             {isMobBild ? '📷 Last opp' : '+ Last opp bilder'}
@@ -35957,7 +35965,7 @@ function BildedokPage() {
                   </div>
                   <div style={{ display:'flex',alignItems:'center',gap: isMobBild ? '4px' : '8px' }}>
                     {!isMobBild && fase.photos.slice(0,4).map((p,i)=>(
-                      <img key={p.id} src={p.file_url} alt="" style={{ width:'30px',height:'30px',borderRadius:'6px',objectFit:'cover',border:'2px solid white',marginLeft:i>0?'-8px':0 }} />
+                      <OfflineBilde key={p.id} url={p.file_url} alt="" style={{ width:'30px',height:'30px',borderRadius:'6px',objectFit:'cover',border:'2px solid white',marginLeft:i>0?'-8px':0 }} />
                     ))}
                     {!isMobBild && <button onClick={e=>{e.stopPropagation();setUploadFase(fase.id);setShowUploadModal(true)}} style={{ padding:'5px 12px', background:'#f1f5f9', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#475569', marginLeft:'4px' }}>+ Legg til</button>}
                     <span style={{ color:'#94a3b8',fontSize:'18px',transform:expanded?'rotate(180deg)':'rotate(0)',transition:'transform 0.2s',display:'inline-block' }}>▾</span>
@@ -36010,7 +36018,7 @@ function BildedokPage() {
 
       {lightbox&&(
         <div style={{ position:'fixed',inset:0,zIndex:200,background:'rgba(0,0,0,0.95)',display:'flex',alignItems:'center',justifyContent:'center' }} onMouseDown={(e) => { if (e.target === e.currentTarget) setLightbox(null); }}>
-          <img src={lightbox.file_url} alt={lightbox.description||''} style={{ maxWidth:'90vw',maxHeight:'85vh',objectFit:'contain',borderRadius:'8px' }} />
+          <OfflineBilde url={lightbox.file_url} alt={lightbox.description||''} style={{ maxWidth:'90vw',maxHeight:'85vh',objectFit:'contain',borderRadius:'8px' }} />
           <button onClick={()=>setLightbox(null)} style={{ position:'absolute',top:'20px',right:'20px',background:'rgba(255,255,255,0.15)',border:'none',borderRadius:'50%',width:'40px',height:'40px',color:'white',fontSize:'20px',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>×</button>
           <div style={{ position:'absolute',bottom:'24px',left:'50%',transform:'translateX(-50%)',background:'rgba(0,0,0,0.7)',color:'white',borderRadius:'12px',padding:'12px 20px',fontSize:'13px',display:'flex',gap:'14px',alignItems:'center',flexWrap:'wrap',maxWidth:'80vw' }}>
             {lightbox.upload_method==='manuell'&&<span style={{ background:'rgba(255,255,255,0.15)',borderRadius:'6px',padding:'2px 8px',fontSize:'11px' }}>Manuell opplasting</span>}
@@ -36033,7 +36041,7 @@ function BildedokThumbnail({ photo, fase, projects, onClick, onDelete }) {
       onClick={onClick}
       onMouseEnter={e=>{ const pa=e.currentTarget.querySelector('.pa'); if(pa) pa.style.opacity='1'; e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.12)' }}
       onMouseLeave={e=>{ const pa=e.currentTarget.querySelector('.pa'); if(pa) pa.style.opacity='0'; e.currentTarget.style.boxShadow='none' }}>
-      <img src={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'140px', objectFit:'cover', display:'block' }} />
+      <OfflineBilde url={photo.file_url} alt={photo.description||''} style={{ width:'100%', height:'140px', objectFit:'cover', display:'block' }} />
       {photo.upload_method==='manuell'&&<div style={{ position:'absolute',top:'7px',left:'7px',background:'rgba(0,0,0,0.55)',color:'white',borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'600' }}>Manuell opplasting</div>}
       {fase&&<div style={{ position:'absolute',bottom:'7px',left:'7px',background:fase.bg,color:fase.color,borderRadius:'6px',padding:'2px 7px',fontSize:'10px',fontWeight:'700' }}>{fase.label}</div>}
       <div className="pa" style={{ position:'absolute',top:'6px',right:'6px',opacity:0,transition:'opacity 0.15s' }}>
