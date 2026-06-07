@@ -291,6 +291,15 @@ async function koAntall() {
   return alle.length
 }
 
+// Slå sammen array-felt ved synk: behold serverens innhold, legg til nye
+// oppføringer som ikke alt finnes (dedup på eksakt JSON → idempotent ved retry).
+function koMergeAppend(eksisterende, nye) {
+  const base = Array.isArray(eksisterende) ? eksisterende : []
+  const nyeArr = Array.isArray(nye) ? nye : []
+  const finnes = new Set(base.map(e => JSON.stringify(e)))
+  return [...base, ...nyeArr.filter(n => !finnes.has(JSON.stringify(n)))]
+}
+
 // Flush-motor: replay køen mot serveren i rekkefølge.
 // Transiente feil stopper flushen (rekkefølge bevares, prøver igjen senere).
 // En operasjon som feiler 8 ganger merkes 'feilet' og hoppes over (poison-vern).
@@ -310,6 +319,17 @@ async function flushKo() {
           if (error) throw error
         } else if (op.type === 'update') {
           const { error } = await supabase.from(op.tabell).update(op.endringer).eq('id', op.radId)
+          if (error) throw error
+        } else if (op.type === 'update_merge') {
+          // Les serverens nåværende rad, slå sammen array-felt, skriv tilbake.
+          const { data: serverRad, error: lesFeil } = await supabase.from(op.tabell).select('*').eq('id', op.radId).single()
+          if (lesFeil) throw lesFeil
+          const merged = { ...(op.scalar || {}) }
+          const appendSpec = op.append || {}
+          for (const felt of Object.keys(appendSpec)) {
+            merged[felt] = koMergeAppend(serverRad ? serverRad[felt] : [], appendSpec[felt])
+          }
+          const { error } = await supabase.from(op.tabell).update(merged).eq('id', op.radId)
           if (error) throw error
         }
         await koSlett(op.id)                          // suksess → fjern fra kø
@@ -6556,31 +6576,51 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
         ? { at: now, by: user?.id || null, by_name: userName, action: 'Avvik lukket', meta: { close_comment: closeComment || null } }
         : { at: now, by: user?.id || null, by_name: userName, action: `Status endret: ${dev.status || '—'} -> ${newStatus}`, meta: { from: dev.status, to: newStatus } }
 
-      const updates = {
-        status: newStatus,
-        updated_at: now,
-        activity_log: [...existingLog, logEntry],
-      }
-      if (newStatus === 'Lukket') { updates.closed_at = now; updates.close_comment = closeComment }
-      const { data, error } = await supabase.from('deviations').update(updates).eq('id', dev.id).select().single()
-      if (error) throw error
-      setDev(data)
-      setShowClose(false)
+      const scalar = { status: newStatus, updated_at: now }
+      if (newStatus === 'Lukket') { scalar.closed_at = now; scalar.close_comment = closeComment }
 
-      // Varsle ansvarlig person om statusendring
-      if (dev.assigned_to_user_id && dev.assigned_to_user_id !== user?.id) {
-        const statusLabels = { 'Under behandling': 'satt til under behandling', 'Lukket': 'lukket', 'Åpen': 'gjenåpnet' }
-        await supabase.from('notifications').insert({
-          user_id: dev.assigned_to_user_id,
-          title: `Avvik ${statusLabels[newStatus] || 'oppdatert'}: ${dev.title}`,
-          message: `${proj?.name || 'Ukjent prosjekt'}${dev.location ? ' · '+dev.location : ''}${newStatus === 'Lukket' && closeComment ? ' · Kommentar: '+closeComment : ''}`,
-          type: newStatus === 'Lukket' ? 'success' : 'info',
-          link_page: 'avvik',
-        })
+      // Offline (Lag 3): legg statusendringen i køen som merge-op (bevarer logg ved synk)
+      const lagreOffline = async () => {
+        await koLeggTil({ tabell: 'deviations', type: 'update_merge', radId: dev.id, scalar, append: { activity_log: [logEntry] } })
+        setDev({ ...dev, ...scalar, activity_log: [...existingLog, logEntry], _venter: true })
+        setShowClose(false)
+        try {
+          const cachet = await idbHent('avvik:liste')
+          if (cachet && Array.isArray(cachet.data)) {
+            await idbSett('avvik:liste', cachet.data.map(d => d.id === dev.id ? { ...d, ...scalar, _venter: true } : d))
+          }
+        } catch (e) { /* svelg */ }
       }
-      // Varsle prosjektleder også
-      if (dev.project_id) {
-        await notifyProjectManager(dev.project_id, `Avvik ${newStatus.toLowerCase()}: ${dev.title}`, `Status endret til ${newStatus}${dev.location ? ' · Sted: '+dev.location : ''}`, newStatus === 'Lukket' ? 'success' : 'info', 'avvik')
+
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) { await lagreOffline(); return }
+
+      try {
+        const updates = { ...scalar, activity_log: [...existingLog, logEntry] }
+        const { data, error } = await supabase.from('deviations').update(updates).eq('id', dev.id).select().single()
+        if (error) throw error
+        setDev(data)
+        setShowClose(false)
+
+        // Varsle ansvarlig person om statusendring
+        if (dev.assigned_to_user_id && dev.assigned_to_user_id !== user?.id) {
+          const statusLabels = { 'Under behandling': 'satt til under behandling', 'Lukket': 'lukket', 'Åpen': 'gjenåpnet' }
+          await supabase.from('notifications').insert({
+            user_id: dev.assigned_to_user_id,
+            title: `Avvik ${statusLabels[newStatus] || 'oppdatert'}: ${dev.title}`,
+            message: `${proj?.name || 'Ukjent prosjekt'}${dev.location ? ' · '+dev.location : ''}${newStatus === 'Lukket' && closeComment ? ' · Kommentar: '+closeComment : ''}`,
+            type: newStatus === 'Lukket' ? 'success' : 'info',
+            link_page: 'avvik',
+          })
+        }
+        // Varsle prosjektleder også
+        if (dev.project_id) {
+          await notifyProjectManager(dev.project_id, `Avvik ${newStatus.toLowerCase()}: ${dev.title}`, `Status endret til ${newStatus}${dev.location ? ' · Sted: '+dev.location : ''}`, newStatus === 'Lukket' ? 'success' : 'info', 'avvik')
+        }
+      } catch (e) {
+        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
+          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        if (nettFeil) { await lagreOffline(); return }
+        throw e
       }
     } catch (e) { appAlert({ message: 'Kunne ikke oppdatere status', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
@@ -6876,6 +6916,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobD ? '6px' : '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 {dev.deviation_number && <span style={{ fontSize: isMobD ? '12px' : '13px', fontWeight: '700', color: '#64748b', background: '#f1f5f9', borderRadius: '6px', padding: '2px 8px', flexShrink: 0 }}>{dev.deviation_number}</span>}
+                {dev._venter && <span style={{ fontSize: isMobD ? '11px' : '12px', fontWeight: '700', color: '#1e40af', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '6px', padding: '2px 8px', flexShrink: 0 }}>⏳ Venter på synk</span>}
                 <h1 style={{ margin: 0, fontSize: isMobD ? '16px' : '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
                 <SeverityBadge severity={dev.severity} />
                 <AvvikStatusBadge status={dev.status} />
@@ -7151,14 +7192,34 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
         newLogEntries.push({ at: now, by: user?.id || null, by_name: userName, action: 'Avvik redigert', meta: {} })
       }
 
-      const { error } = await supabase.from('deviations').update({
-        ...rest,
-        assigned_to_name: assigned_to || null,
-        activity_log: [...existingLog, ...newLogEntries],
-        updated_at: now,
-      }).eq('id', dev.id)
-      if (error) throw error
-      onSaved()
+      const scalar = { ...rest, assigned_to_name: assigned_to || null, updated_at: now }
+
+      // Offline (Lag 3): legg redigeringen i køen som merge-op (bevarer logg ved synk)
+      const lagreOffline = async () => {
+        await koLeggTil({ tabell: 'deviations', type: 'update_merge', radId: dev.id, scalar, append: { activity_log: newLogEntries } })
+        try {
+          const cachet = await idbHent('avvik:liste')
+          if (cachet && Array.isArray(cachet.data)) {
+            await idbSett('avvik:liste', cachet.data.map(d => d.id === dev.id ? { ...d, ...scalar, _venter: true } : d))
+          }
+        } catch (e) { /* svelg */ }
+        onSaved()
+      }
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) { await lagreOffline(); return }
+
+      try {
+        const { error } = await supabase.from('deviations').update({
+          ...scalar,
+          activity_log: [...existingLog, ...newLogEntries],
+        }).eq('id', dev.id)
+        if (error) throw error
+        onSaved()
+      } catch (e) {
+        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
+          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        if (nettFeil) { await lagreOffline(); return }
+        throw e
+      }
     } catch (e) { alert('Feil: ' + e.message) }
     finally { setSaving(false) }
   }
