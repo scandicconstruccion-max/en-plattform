@@ -40,17 +40,19 @@ const supabase = createClient(
 const IDB_NAVN = 'ep_offline'
 const IDB_STORE = 'kv'
 const IDB_BLOBS = 'blobs'
+const IDB_KO = 'ko'
 let _idbPromise = null
 function idbAapne() {
   if (_idbPromise) return _idbPromise
   _idbPromise = new Promise((resolve, reject) => {
     try {
       if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB utilgjengelig')); return }
-      const req = indexedDB.open(IDB_NAVN, 2)
+      const req = indexedDB.open(IDB_NAVN, 3)
       req.onupgradeneeded = () => {
         const db = req.result
         if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE)
         if (!db.objectStoreNames.contains(IDB_BLOBS)) db.createObjectStore(IDB_BLOBS)
+        if (!db.objectStoreNames.contains(IDB_KO)) db.createObjectStore(IDB_KO, { keyPath: 'id' })
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
@@ -220,6 +222,122 @@ async function forhandslast({ tving = false } = {}) {
     _forhandslastSist = Date.now()
   } catch (e) { /* svelg – forhåndslasting er best-effort */ }
   finally { _forhandslastKjorer = false }
+}
+
+// ─── SKRIVEKØ (Offline Lag 3) ──────────────────────────────────────────────────
+// Lokal kø i IndexedDB for skriveoperasjoner som gjøres uten nett. Online skriver
+// appen direkte som før; køen brukes KUN offline. En flush-motor tømmer køen mot
+// Supabase når man er på nett igjen, i rekkefølge. Operasjoner:
+//   { id, tabell, type:'insert'|'update', payload?, endringer?, radId?, opprettet, forsok, status, sisteFeil }
+function nyId() {
+  try { return crypto.randomUUID() } catch (e) { return 'lok-' + Date.now() + '-' + Math.random().toString(36).slice(2) }
+}
+async function koLeggTil(op) {
+  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, ...op }
+  try {
+    const db = await idbAapne()
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_KO, 'readwrite')
+      tx.objectStore(IDB_KO).put(full)
+      tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('ep-ko-endret'))
+  return full
+}
+async function koHentAlle() {
+  try {
+    const db = await idbAapne()
+    const alle = await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_KO, 'readonly')
+      const r = tx.objectStore(IDB_KO).getAll()
+      r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error)
+    })
+    return alle.sort((a, b) => (a.opprettet || 0) - (b.opprettet || 0))
+  } catch (e) { return [] }
+}
+async function koSlett(id) {
+  try {
+    const db = await idbAapne()
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_KO, 'readwrite')
+      tx.objectStore(IDB_KO).delete(id)
+      tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('ep-ko-endret'))
+}
+async function koOppdater(id, felter) {
+  try {
+    const db = await idbAapne()
+    const eksisterende = await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_KO, 'readonly')
+      const r = tx.objectStore(IDB_KO).get(id)
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error)
+    })
+    if (!eksisterende) return
+    const oppdatert = { ...eksisterende, ...felter }
+    const db2 = await idbAapne()
+    await new Promise((res, rej) => {
+      const tx = db2.transaction(IDB_KO, 'readwrite')
+      tx.objectStore(IDB_KO).put(oppdatert)
+      tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg */ }
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('ep-ko-endret'))
+}
+async function koAntall() {
+  const alle = await koHentAlle()
+  return alle.length
+}
+
+// Flush-motor: replay køen mot serveren i rekkefølge.
+// Transiente feil stopper flushen (rekkefølge bevares, prøver igjen senere).
+// En operasjon som feiler 8 ganger merkes 'feilet' og hoppes over (poison-vern).
+let _flushKjorer = false
+async function flushKo() {
+  if (_flushKjorer) return
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+  _flushKjorer = true
+  try {
+    const ops = await koHentAlle()
+    for (const op of ops) {
+      if (op.status === 'feilet') continue           // poison – hopp over
+      try {
+        if (op.type === 'insert') {
+          const { error } = await supabase.from(op.tabell).insert(op.payload)
+          if (error) throw error
+        } else if (op.type === 'update') {
+          const { error } = await supabase.from(op.tabell).update(op.endringer).eq('id', op.radId)
+          if (error) throw error
+        }
+        await koSlett(op.id)                          // suksess → fjern fra kø
+      } catch (e) {
+        const forsok = (op.forsok || 0) + 1
+        await koOppdater(op.id, { forsok, sisteFeil: String((e && e.message) || e), status: forsok >= 8 ? 'feilet' : 'venter' })
+        if (forsok < 8) break                          // transient → stopp, bevar rekkefølge
+        // forsok >= 8 → poison, fortsett med resten
+      }
+    }
+  } finally {
+    _flushKjorer = false
+    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('ep-ko-endret'))
+  }
+}
+
+// Hook: antall operasjoner som venter i køen (for indikatoren).
+function useKoAntall() {
+  const [antall, setAntall] = React.useState(0)
+  React.useEffect(() => {
+    let levende = true
+    const oppdater = async () => { const n = await koAntall(); if (levende) setAntall(n) }
+    oppdater()
+    const lytter = () => oppdater()
+    window.addEventListener('ep-ko-endret', lytter)
+    const iv = setInterval(oppdater, 10000)             // sikkerhetsnett
+    return () => { levende = false; window.removeEventListener('ep-ko-endret', lytter); clearInterval(iv) }
+  }, [])
+  return antall
 }
 // ─── END OFFLINE LAG 2 FUNDAMENT ───────────────────────────────────────────────
 
@@ -6055,6 +6173,7 @@ function AvvikPage() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
                       {dev.deviation_number && <span style={{ fontSize: isMob ? '11px' : '12px', fontWeight: '700', color: '#64748b', background: '#f1f5f9', borderRadius: '6px', padding: '2px 7px', flexShrink: 0 }}>{dev.deviation_number}</span>}
+                      {dev._venter && <span style={{ fontSize: isMob ? '10px' : '11px', fontWeight: '700', color: '#1e40af', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '6px', padding: '2px 7px', flexShrink: 0 }}>⏳ Venter på synk</span>}
                       <span style={{ fontWeight: '700', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMob ? 'calc(100vw - 120px)' : 'none' }}>{dev.title}</span>
                       <SeverityBadge severity={dev.severity} />
                       <AvvikStatusBadge status={dev.status} />
@@ -6129,54 +6248,104 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
     if (!form.project_id) return alert('Velg et prosjekt')
     setUploading(true)
     try {
-      const imageUrls = []
-      for (const img of images) {
-        const ext = img.name.split('.').pop()
-        const path = `avvik/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const { error } = await supabase.storage.from('plattform-files').upload(path, img)
-        if (!error) imageUrls.push(path)
-      }
       const projName = projects.find(p => p.id === form.project_id)?.name || ''
       const now = new Date().toISOString()
       const userName = user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Bruker'
       const initialLog = [{ at: now, by: user?.id || null, by_name: userName, action: 'Avvik opprettet', meta: {} }]
 
-      // Avviksnummer (AV-YYYY-NNNN) tildeles nå atomisk av databasen (trigger).
-      // Vi sender det IKKE fra klienten — gjør nummereringen race-fri og offline-trygg.
-      const { error } = await supabase.from('deviations').insert({
-        title: form.title.trim(),
-        description: form.description,
-        location: form.location,
-        severity: form.severity,
-        project_id: form.project_id || null,
-        assigned_to_name: form.assigned_to || null,
-        assigned_to_user_id: form.assigned_to_user_id || null,
-        status: 'Åpen',
-        images: imageUrls,
-        created_by: user?.id,
-        has_cost_impact: !!form.has_cost_impact,
-        cost_impact_amount: form.has_cost_impact && form.cost_impact_amount ? parseFloat(form.cost_impact_amount) : null,
-        has_time_impact: !!form.has_time_impact,
-        time_impact_days: form.has_time_impact && form.time_impact_days ? parseInt(form.time_impact_days, 10) : null,
-        activity_log: initialLog,
-        sent_to: [],
-      })
-      if (error) throw error
-
-      // Varsle prosjektleder
-      if (form.project_id) {
-        await notifyProjectManager(form.project_id, `Nytt avvik: ${form.title.trim()}`, `Alvorlighet: ${form.severity||'–'}${form.location ? ' · Sted: '+form.location : ''} · Prosjekt: ${projName}`, 'warning', 'avvik')
+      // ── Offline (Lag 3): lag avviket lokalt og legg det i skrivekøen ──
+      const lagreOfflineOgVis = async () => {
+        const radId = nyId()
+        const rad = {
+          id: radId,
+          title: form.title.trim(),
+          description: form.description,
+          location: form.location,
+          severity: form.severity,
+          project_id: form.project_id || null,
+          assigned_to_name: form.assigned_to || null,
+          assigned_to_user_id: form.assigned_to_user_id || null,
+          status: 'Åpen',
+          images: [],
+          created_by: user?.id,
+          created_at: now,
+          has_cost_impact: !!form.has_cost_impact,
+          cost_impact_amount: form.has_cost_impact && form.cost_impact_amount ? parseFloat(form.cost_impact_amount) : null,
+          has_time_impact: !!form.has_time_impact,
+          time_impact_days: form.has_time_impact && form.time_impact_days ? parseInt(form.time_impact_days, 10) : null,
+          activity_log: initialLog,
+          sent_to: [],
+        }
+        // Insert-operasjon i køen (ren rad). DB tildeler AV-nummer ved synk.
+        await koLeggTil({ tabell: 'deviations', type: 'insert', payload: rad, radId })
+        // Optimistisk: vis avviket i lista med en gang (merket _venter for badge)
+        try {
+          const cachet = await idbHent('avvik:liste')
+          const liste = cachet && Array.isArray(cachet.data) ? cachet.data : []
+          await idbSett('avvik:liste', [{ ...rad, _venter: true }, ...liste])
+        } catch (e) { /* svelg */ }
+        if (images.length > 0) {
+          alert('Avviket er lagret offline og synkes når du er på nett. Bilder kan ikke legges til uten dekning ennå – legg dem til etterpå.')
+        }
       }
 
-      // Varsle ansvarlig person (hvis valgt, og ikke samme som innlogget bruker)
-      if (form.assigned_to_user_id && form.assigned_to_user_id !== user?.id) {
-        await supabase.from('notifications').insert({
-          user_id: form.assigned_to_user_id,
-          title: `Du er tildelt et avvik: ${form.title.trim()}`,
-          message: `Alvorlighet: ${form.severity} · ${projName}${form.location ? ' · Sted: '+form.location : ''}. Avviket krever din oppfølging.`,
-          type: 'warning',
-          link_page: 'avvik',
+      // Vet vi allerede at vi er offline → rett i kø.
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        await lagreOfflineOgVis(); onSaved(); return
+      }
+
+      // ── Online: forsøk direkte skriving, fall tilbake til kø ved nettverksfeil ──
+      try {
+        const imageUrls = []
+        for (const img of images) {
+          const ext = img.name.split('.').pop()
+          const path = `avvik/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+          const { error } = await supabase.storage.from('plattform-files').upload(path, img)
+          if (!error) imageUrls.push(path)
+        }
+
+        // Avviksnummer (AV-YYYY-NNNN) tildeles atomisk av databasen (trigger).
+        const { error } = await supabase.from('deviations').insert({
+          title: form.title.trim(),
+          description: form.description,
+          location: form.location,
+          severity: form.severity,
+          project_id: form.project_id || null,
+          assigned_to_name: form.assigned_to || null,
+          assigned_to_user_id: form.assigned_to_user_id || null,
+          status: 'Åpen',
+          images: imageUrls,
+          created_by: user?.id,
+          has_cost_impact: !!form.has_cost_impact,
+          cost_impact_amount: form.has_cost_impact && form.cost_impact_amount ? parseFloat(form.cost_impact_amount) : null,
+          has_time_impact: !!form.has_time_impact,
+          time_impact_days: form.has_time_impact && form.time_impact_days ? parseInt(form.time_impact_days, 10) : null,
+          activity_log: initialLog,
+          sent_to: [],
         })
+        if (error) throw error
+
+        // Varsle prosjektleder
+        if (form.project_id) {
+          await notifyProjectManager(form.project_id, `Nytt avvik: ${form.title.trim()}`, `Alvorlighet: ${form.severity||'–'}${form.location ? ' · Sted: '+form.location : ''} · Prosjekt: ${projName}`, 'warning', 'avvik')
+        }
+
+        // Varsle ansvarlig person (hvis valgt, og ikke samme som innlogget bruker)
+        if (form.assigned_to_user_id && form.assigned_to_user_id !== user?.id) {
+          await supabase.from('notifications').insert({
+            user_id: form.assigned_to_user_id,
+            title: `Du er tildelt et avvik: ${form.title.trim()}`,
+            message: `Alvorlighet: ${form.severity} · ${projName}${form.location ? ' · Sted: '+form.location : ''}. Avviket krever din oppfølging.`,
+            type: 'warning',
+            link_page: 'avvik',
+          })
+        }
+      } catch (e) {
+        // Nettverksfeil midt i (mistet dekning) → fall tilbake til offline-kø.
+        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
+          || /fetch|network|load failed|err_internet|err_network|timeout/i.test(String((e && e.message) || e))
+        if (nettFeil) { await lagreOfflineOgVis(); onSaved(); return }
+        throw e   // ekte feil → vis i ytre catch
       }
 
       onSaved()
@@ -65117,6 +65286,7 @@ function useTilkobling() {
 // Skjules helt når mobilmenyen er åpen, så den aldri ligger oppå menyinnhold.
 function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
   const online = useTilkobling()
+  const koAntall = useKoAntall()
   const [nyligTilkoblet, setNyligTilkoblet] = React.useState(false)
   const forrige = React.useRef(online)
   React.useEffect(() => {
@@ -65133,10 +65303,10 @@ function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
   if (isMobile && mobileMenuOpen) return null
 
   const offline = !online
-  const prikk = offline ? '#f59e0b' : '#22c55e'
+  const venter = koAntall > 0
 
-  // Mobil + på nett → kun en liten prikk, ingen tekst
-  const kunPrikk = isMobile && !offline
+  // Mobil + på nett + ingenting i kø → kun en liten prikk, ingen tekst
+  const kunPrikk = isMobile && !offline && !venter
   if (kunPrikk) {
     return (
       <div
@@ -65153,20 +65323,30 @@ function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
         }}
       >
         <span style={{
-          width: '9px', height: '9px', borderRadius: '50%', background: prikk, display: 'inline-block',
+          width: '9px', height: '9px', borderRadius: '50%', background: '#22c55e', display: 'inline-block',
           boxShadow: '0 0 0 3px rgba(34,197,94,0.18)',
         }} />
       </div>
     )
   }
 
-  // Pille med tekst (mobil-frakoblet = kompakt, desktop = full)
-  const bg = offline ? '#fef3c7' : (nyligTilkoblet ? '#dcfce7' : 'rgba(255,255,255,0.92)')
-  const kant = offline ? '#f59e0b' : (nyligTilkoblet ? '#86efac' : '#e2e8f0')
-  const tekstFarge = offline ? '#92400e' : (nyligTilkoblet ? '#166534' : '#475569')
-  const etikett = offline
-    ? (isMobile ? 'Frakoblet' : 'Frakoblet \u2013 viser lagret data')
-    : (nyligTilkoblet ? 'Tilkoblet igjen' : 'Tilkoblet')
+  // Tilstand → farge + etikett. Prioritet: frakoblet > venter på synk > nylig tilkoblet > tilkoblet.
+  let bg, kant, tekstFarge, prikkFarge, etikett
+  if (offline) {
+    bg = '#fef3c7'; kant = '#f59e0b'; tekstFarge = '#92400e'; prikkFarge = '#f59e0b'
+    etikett = venter
+      ? (isMobile ? `Frakoblet · ${koAntall}` : `Frakoblet · ${koAntall} venter på synk`)
+      : (isMobile ? 'Frakoblet' : 'Frakoblet – viser lagret data')
+  } else if (venter) {
+    bg = '#dbeafe'; kant = '#93c5fd'; tekstFarge = '#1e40af'; prikkFarge = '#3b82f6'
+    etikett = isMobile ? `${koAntall} venter` : `${koAntall} venter på synk`
+  } else if (nyligTilkoblet) {
+    bg = '#dcfce7'; kant = '#86efac'; tekstFarge = '#166534'; prikkFarge = '#22c55e'
+    etikett = 'Tilkoblet igjen'
+  } else {
+    bg = 'rgba(255,255,255,0.92)'; kant = '#e2e8f0'; tekstFarge = '#475569'; prikkFarge = '#22c55e'
+    etikett = 'Tilkoblet'
+  }
 
   return (
     <div
@@ -65195,8 +65375,8 @@ function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
       }}
     >
       <span style={{
-        width: '9px', height: '9px', borderRadius: '50%', background: prikk, display: 'inline-block', flexShrink: 0,
-        boxShadow: offline ? 'none' : '0 0 0 3px rgba(34,197,94,0.18)',
+        width: '9px', height: '9px', borderRadius: '50%', background: prikkFarge, display: 'inline-block', flexShrink: 0,
+        boxShadow: offline ? 'none' : '0 0 0 3px rgba(34,197,94,0.12)',
       }} />
       {etikett}
     </div>
@@ -65233,6 +65413,21 @@ function AppContent() {
     document.addEventListener('visibilitychange', synlig)
     return () => {
       clearInterval(interval)
+      window.removeEventListener('online', paaNett)
+      document.removeEventListener('visibilitychange', synlig)
+    }
+  }, [user])
+  // Offline Lag 3: tøm skrivekøen mot serveren når vi har nett.
+  React.useEffect(() => {
+    if (!user) return
+    flushKo()                                                       // ved oppstart
+    const paaNett = () => flushKo()                                 // ved gjenoppkobling
+    const synlig = () => { if (document.visibilityState === 'visible') flushKo() }
+    const iv = setInterval(() => flushKo(), 60 * 1000)              // sikkerhetsnett hvert minutt
+    window.addEventListener('online', paaNett)
+    document.addEventListener('visibilitychange', synlig)
+    return () => {
+      clearInterval(iv)
       window.removeEventListener('online', paaNett)
       document.removeEventListener('visibilitychange', synlig)
     }
