@@ -64841,6 +64841,81 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 
 // ─── END BEFARING VIEW PAGE ────────────────────────────────────────────────────
 
+// ─── TILKOBLINGSINDIKATOR (Offline Lag 1) ──────────────────────────────────────
+// Sporer om enheten er på nett. Lytter på nettleserens online/offline-hendelser.
+// I Lag 2 kan denne også mates fra faktiske Supabase-kall som feiler.
+function useTilkobling() {
+  const [online, setOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  React.useEffect(() => {
+    const paaNett = () => setOnline(true)
+    const avNett = () => setOnline(false)
+    window.addEventListener('online', paaNett)
+    window.addEventListener('offline', avNett)
+    return () => { window.removeEventListener('online', paaNett); window.removeEventListener('offline', avNett) }
+  }, [])
+  return online
+}
+
+// Vedvarende statuspille nederst til venstre. Diskret når man er på nett,
+// tydelig gul når man er frakoblet (sikkerhetsrelevant: du ser lagret data).
+function TilkoblingsIndikator({ isMobile }) {
+  const online = useTilkobling()
+  const [nyligTilkoblet, setNyligTilkoblet] = React.useState(false)
+  const forrige = React.useRef(online)
+  React.useEffect(() => {
+    if (online && forrige.current === false) {
+      setNyligTilkoblet(true)
+      const t = setTimeout(() => setNyligTilkoblet(false), 3000)
+      forrige.current = online
+      return () => clearTimeout(t)
+    }
+    forrige.current = online
+  }, [online])
+
+  const offline = !online
+  const bg = offline ? '#fef3c7' : (nyligTilkoblet ? '#dcfce7' : 'rgba(255,255,255,0.92)')
+  const kant = offline ? '#f59e0b' : (nyligTilkoblet ? '#86efac' : '#e2e8f0')
+  const tekstFarge = offline ? '#92400e' : (nyligTilkoblet ? '#166534' : '#475569')
+  const prikk = offline ? '#f59e0b' : '#22c55e'
+  const etikett = offline
+    ? (isMobile ? 'Frakoblet \u2013 lagret data' : 'Frakoblet \u2013 viser lagret data')
+    : (nyligTilkoblet ? 'Tilkoblet igjen' : 'Tilkoblet')
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{
+        position: 'fixed',
+        bottom: isMobile ? '14px' : '16px',
+        left: isMobile ? '14px' : '16px',
+        zIndex: 1600,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '7px',
+        padding: offline ? '7px 13px' : '6px 11px',
+        borderRadius: '999px',
+        fontSize: '12px',
+        fontWeight: 600,
+        fontFamily: 'system-ui, sans-serif',
+        boxShadow: offline ? '0 2px 12px rgba(180,83,9,0.25)' : '0 2px 10px rgba(0,0,0,0.10)',
+        border: '1px solid ' + kant,
+        background: bg,
+        color: tekstFarge,
+        transition: 'all 0.25s ease',
+        pointerEvents: 'none',
+        userSelect: 'none',
+      }}
+    >
+      <span style={{
+        width: '9px', height: '9px', borderRadius: '50%', background: prikk, display: 'inline-block', flexShrink: 0,
+        boxShadow: offline ? 'none' : '0 0 0 3px rgba(34,197,94,0.18)',
+      }} />
+      {etikett}
+    </div>
+  )
+}
+
 function AppContent() {
   const { user, loading, supabase, displayName, isPlatformOwner, profile } = useAuth()
   // Husk om sidemenyen er sammenslått på tvers av økter (brukerens eget valg)
@@ -65210,6 +65285,9 @@ function AppContent() {
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', '--sidebar-width': sidebarWidth + 'px' }}>
+
+      {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
+      <TilkoblingsIndikator isMobile={isMobile} />
 
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
