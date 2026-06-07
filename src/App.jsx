@@ -84,11 +84,19 @@ async function idbHent(noekkel) {
 //   lagQuery   – funksjon som returnerer en Supabase-spørring (thenable → {data,error})
 // Returnerer { data, fraCache, lagretAt, feil }.
 async function lesMedCache(noekkel, lagQuery) {
+  // Vet vi allerede at vi er offline? Les rett fra cache — ikke stol på at
+  // Supabase-klienten kaster en feil (den kan returnere data:null uten feil).
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    const cachet = await idbHent(noekkel)
+    if (cachet) return { data: cachet.data, fraCache: true, lagretAt: cachet.lagretAt, feil: null }
+  }
   try {
     const { data, error } = await lagQuery()
     if (error) throw error
-    if (data != null) idbSett(noekkel, data)            // skriv gjennom (fire-and-forget)
-    return { data: data || [], fraCache: false, lagretAt: Date.now(), feil: null }
+    // data == null (men ingen feil) = ikke et gyldig svar (typisk ved tapt nett) → fall til cache
+    if (data == null) throw new Error('tomt svar uten feil')
+    idbSett(noekkel, data)                              // skriv gjennom (fire-and-forget)
+    return { data, fraCache: false, lagretAt: Date.now(), feil: null }
   } catch (e) {
     const cachet = await idbHent(noekkel)
     if (cachet) return { data: cachet.data, fraCache: true, lagretAt: cachet.lagretAt, feil: null }
