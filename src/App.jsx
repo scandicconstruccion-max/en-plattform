@@ -32,6 +32,93 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 )
 
+// ─── OFFLINE LAG 2 — LESING (FUNDAMENT) ────────────────────────────────────────
+// Lett IndexedDB-lag (ingen eksterne avhengigheter) + en network-first wrapper.
+// Prinsipp: prøv nett → ved suksess, skriv gjennom til IndexedDB → ved feil/uten
+// nett, les fra IndexedDB. På nett er oppførselen identisk med før (pluss en
+// sidelagring som er fullt try/catch-et, så caching kan ALDRI knekke hovedflyten).
+const IDB_NAVN = 'ep_offline'
+const IDB_STORE = 'kv'
+let _idbPromise = null
+function idbAapne() {
+  if (_idbPromise) return _idbPromise
+  _idbPromise = new Promise((resolve, reject) => {
+    try {
+      if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB utilgjengelig')); return }
+      const req = indexedDB.open(IDB_NAVN, 1)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE)
+      }
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    } catch (e) { reject(e) }
+  })
+  return _idbPromise
+}
+async function idbSett(noekkel, data) {
+  try {
+    const db = await idbAapne()
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, noekkel)
+      tx.oncomplete = () => res()
+      tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg — caching skal aldri knekke hovedflyten */ }
+}
+async function idbHent(noekkel) {
+  try {
+    const db = await idbAapne()
+    return await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const r = tx.objectStore(IDB_STORE).get(noekkel)
+      r.onsuccess = () => res(r.result || null)
+      r.onerror = () => rej(r.error)
+    })
+  } catch (e) { return null }
+}
+
+// Network-first lesing med offline-fallback.
+//   noekkel    – stabil cache-nøkkel, f.eks. 'hms:records'
+//   lagQuery   – funksjon som returnerer en Supabase-spørring (thenable → {data,error})
+// Returnerer { data, fraCache, lagretAt, feil }.
+async function lesMedCache(noekkel, lagQuery) {
+  try {
+    const { data, error } = await lagQuery()
+    if (error) throw error
+    if (data != null) idbSett(noekkel, data)            // skriv gjennom (fire-and-forget)
+    return { data: data || [], fraCache: false, lagretAt: Date.now(), feil: null }
+  } catch (e) {
+    const cachet = await idbHent(noekkel)
+    if (cachet) return { data: cachet.data, fraCache: true, lagretAt: cachet.lagretAt, feil: null }
+    return { data: [], fraCache: false, lagretAt: null, feil: e }   // ingen cache enda
+  }
+}
+
+function formaterCacheTid(ts) {
+  if (!ts) return ''
+  try {
+    return new Date(ts).toLocaleString('nb-NO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+  } catch (e) { return '' }
+}
+
+// Lite merke som kun vises når data kommer fra offline-cache.
+function SistOppdatert({ lagretAt, fraCache }) {
+  if (!fraCache || !lagretAt) return null
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: '6px',
+      fontSize: '12px', color: '#92400e', background: '#fef3c7',
+      border: '1px solid #fcd34d', borderRadius: '8px', padding: '4px 10px', fontWeight: 500,
+    }}>
+      <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+      Offline – sist oppdatert {formaterCacheTid(lagretAt)}
+    </div>
+  )
+}
+// ─── END OFFLINE LAG 2 FUNDAMENT ───────────────────────────────────────────────
+
 // Sjekker at en e-postadresse har gyldig format (fanger skrivefeil som ola@firma, dobbel @, mellomrom).
 // Merk: bekrefter KUN format — ikke at adressen faktisk finnes (det krever bounce-fangst, Nivå 2).
 function erGyldigEpost(e) {
@@ -7205,6 +7292,7 @@ function HmsPage() {
   const [records, setRecords] = useState([])
   const [projects, setProjects] = useState([])
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [activeTab, setActiveTab] = useState('alle')
   const [filterProject, setFilterProject] = useState('alle')
   const [filterStatus, setFilterStatus] = useState('alle')
@@ -7222,11 +7310,13 @@ function HmsPage() {
 
   const loadData = async () => {
     try {
-      const [recs, projs] = await Promise.all([
-        supabase.from('hms_records').select('*').order('created_at', { ascending: false }).then(r => r.data || []),
-        supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name').then(r => r.data || [])
+      // Offline Lag 2: network-first med fallback til IndexedDB
+      const [recsRes, projsRes] = await Promise.all([
+        lesMedCache('hms:records', () => supabase.from('hms_records').select('*').order('created_at', { ascending: false })),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')),
       ])
-      setRecords(recs); setProjects(projs)
+      setRecords(recsRes.data); setProjects(projsRes.data)
+      setCacheInfo({ fraCache: recsRes.fraCache, lagretAt: recsRes.lagretAt })
     } catch (e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -7286,6 +7376,7 @@ function HmsPage() {
           <div>
             <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🛡️ HMS & Risiko</h1>
             {!isMob && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>SJA, RUH, Risikoanalyse, Mottakskontroll og HMS-håndbok</p>}
+            {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <div style={{ position:'relative' }}>
             <button onClick={() => setShowNew(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMob ? '9px 12px' : '11px 20px', fontSize: isMob ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>+ HMS-skjema ▾</button>
