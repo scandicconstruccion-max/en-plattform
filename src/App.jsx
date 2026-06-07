@@ -6054,6 +6054,7 @@ function AvvikPage() {
                   </div>}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '6px' }}>
+                      {dev.deviation_number && <span style={{ fontSize: isMob ? '11px' : '12px', fontWeight: '700', color: '#64748b', background: '#f1f5f9', borderRadius: '6px', padding: '2px 7px', flexShrink: 0 }}>{dev.deviation_number}</span>}
                       <span style={{ fontWeight: '700', color: '#0f172a', fontSize: isMob ? '13px' : '15px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: isMob ? 'calc(100vw - 120px)' : 'none' }}>{dev.title}</span>
                       <SeverityBadge severity={dev.severity} />
                       <AvvikStatusBadge status={dev.status} />
@@ -6685,6 +6686,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
             </div>}
             <div style={{ minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobD ? '6px' : '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                {dev.deviation_number && <span style={{ fontSize: isMobD ? '12px' : '13px', fontWeight: '700', color: '#64748b', background: '#f1f5f9', borderRadius: '6px', padding: '2px 8px', flexShrink: 0 }}>{dev.deviation_number}</span>}
                 <h1 style={{ margin: 0, fontSize: isMobD ? '16px' : '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
                 <SeverityBadge severity={dev.severity} />
                 <AvvikStatusBadge status={dev.status} />
