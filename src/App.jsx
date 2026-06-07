@@ -299,6 +299,7 @@ async function flushKo() {
   if (_flushKjorer) return
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return
   _flushKjorer = true
+  let antallFullfort = 0
   try {
     const ops = await koHentAlle()
     for (const op of ops) {
@@ -312,16 +313,27 @@ async function flushKo() {
           if (error) throw error
         }
         await koSlett(op.id)                          // suksess → fjern fra kø
+        antallFullfort++
       } catch (e) {
+        // Nettverksfeil = transient: stopp og prøv igjen senere, IKKE tell mot poison.
+        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
+          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        if (nettFeil) break
+        // Ekte datafeil → tell mot poison-grensen (8 forsøk), så fortsett med resten.
         const forsok = (op.forsok || 0) + 1
         await koOppdater(op.id, { forsok, sisteFeil: String((e && e.message) || e), status: forsok >= 8 ? 'feilet' : 'venter' })
-        if (forsok < 8) break                          // transient → stopp, bevar rekkefølge
-        // forsok >= 8 → poison, fortsett med resten
       }
     }
   } finally {
     _flushKjorer = false
-    if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('ep-ko-endret'))
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('ep-ko-endret'))
+      if (antallFullfort > 0) {
+        // Synk fullført: frisk opp cachene og be aktive moduler laste på nytt.
+        forhandslast({ tving: true })
+        window.dispatchEvent(new CustomEvent('ep-synk-fullfort'))
+      }
+    }
   }
 }
 
@@ -6036,6 +6048,14 @@ function AvvikPage() {
   }
 
   useEffect(() => { loadData() }, [])
+
+  // Offline Lag 3: når skrivekøen er synket ferdig, last lista på nytt
+  // så optimistiske «venter på synk»-rader erstattes av server-data (med AV-nummer).
+  useEffect(() => {
+    const paaSynk = () => loadData()
+    window.addEventListener('ep-synk-fullfort', paaSynk)
+    return () => window.removeEventListener('ep-synk-fullfort', paaSynk)
+  }, [])
 
   const filtered = deviations.filter(d => {
     if (filterStatus !== 'alle' && d.status !== filterStatus) return false
@@ -65421,14 +65441,16 @@ function AppContent() {
   React.useEffect(() => {
     if (!user) return
     flushKo()                                                       // ved oppstart
-    const paaNett = () => flushKo()                                 // ved gjenoppkobling
+    const proev = () => flushKo()
     const synlig = () => { if (document.visibilityState === 'visible') flushKo() }
-    const iv = setInterval(() => flushKo(), 60 * 1000)              // sikkerhetsnett hvert minutt
-    window.addEventListener('online', paaNett)
+    const iv = setInterval(() => flushKo(), 15 * 1000)              // sjekk køen hvert 15. sek
+    window.addEventListener('online', proev)                        // gjenoppkobling
+    window.addEventListener('focus', proev)                         // tilbake til fanen
     document.addEventListener('visibilitychange', synlig)
     return () => {
       clearInterval(iv)
-      window.removeEventListener('online', paaNett)
+      window.removeEventListener('online', proev)
+      window.removeEventListener('focus', proev)
       document.removeEventListener('visibilitychange', synlig)
     }
   }, [user])
