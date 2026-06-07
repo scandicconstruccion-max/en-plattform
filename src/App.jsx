@@ -39,16 +39,18 @@ const supabase = createClient(
 // sidelagring som er fullt try/catch-et, så caching kan ALDRI knekke hovedflyten).
 const IDB_NAVN = 'ep_offline'
 const IDB_STORE = 'kv'
+const IDB_BLOBS = 'blobs'
 let _idbPromise = null
 function idbAapne() {
   if (_idbPromise) return _idbPromise
   _idbPromise = new Promise((resolve, reject) => {
     try {
       if (typeof indexedDB === 'undefined') { reject(new Error('IndexedDB utilgjengelig')); return }
-      const req = indexedDB.open(IDB_NAVN, 1)
+      const req = indexedDB.open(IDB_NAVN, 2)
       req.onupgradeneeded = () => {
         const db = req.result
         if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE)
+        if (!db.objectStoreNames.contains(IDB_BLOBS)) db.createObjectStore(IDB_BLOBS)
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
@@ -124,6 +126,54 @@ function SistOppdatert({ lagretAt, fraCache }) {
       Offline – sist oppdatert {formaterCacheTid(lagretAt)}
     </div>
   )
+}
+
+// Blob-cache for bilder (eget object store). Lagrer/henter selve bildefila.
+async function idbBlobSett(noekkel, blob) {
+  try {
+    const db = await idbAapne()
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_BLOBS, 'readwrite')
+      tx.objectStore(IDB_BLOBS).put(blob, noekkel)
+      tx.oncomplete = () => res()
+      tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg */ }
+}
+async function idbBlobHent(noekkel) {
+  try {
+    const db = await idbAapne()
+    return await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_BLOBS, 'readonly')
+      const r = tx.objectStore(IDB_BLOBS).get(noekkel)
+      r.onsuccess = () => res(r.result || null)
+      r.onerror = () => rej(r.error)
+    })
+  } catch (e) { return null }
+}
+
+// Bilde som virker offline. Cache-first på blob: er bildet lagret, vises det fra
+// cache (også offline, uavhengig av navigator.onLine). Er det ikke lagret enda,
+// vises url-en direkte mens fila hentes og lagres i bakgrunnen for neste gang.
+function OfflineBilde({ url, alt, style, onClick }) {
+  const [src, setSrc] = React.useState(null)
+  React.useEffect(() => {
+    let levende = true
+    let objektUrl = null
+    if (!url) { setSrc(null); return }
+    ;(async () => {
+      const cachet = await idbBlobHent(url)
+      if (cachet && levende) { objektUrl = URL.createObjectURL(cachet); setSrc(objektUrl); return }
+      if (levende) setSrc(url)                       // ikke cachet enda → vis url direkte
+      try {                                          // ...og cache fila i bakgrunnen
+        const r = await fetch(url)
+        if (r.ok) idbBlobSett(url, await r.blob())
+      } catch (e) { /* CORS/offline – hopp over caching */ }
+    })()
+    return () => { levende = false; if (objektUrl) URL.revokeObjectURL(objektUrl) }
+  }, [url])
+  if (!src) return null
+  return <img src={src} alt={alt || ''} style={style} onClick={onClick} />
 }
 // ─── END OFFLINE LAG 2 FUNDAMENT ───────────────────────────────────────────────
 
@@ -5158,6 +5208,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
   const { user, displayName } = useAuth()
   const [checklist, setChecklist] = useState(null)
   const [loading, setLoading] = useState(true)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
   const f = { fontFamily: 'system-ui, sans-serif' }
@@ -5165,8 +5216,10 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
 
   const load = async () => {
     try {
-      const { data } = await supabase.from('checklists').select('*').eq('id', checklistId).single()
-      setChecklist(data)
+      // Offline Lag 2: detaljen caches per id
+      const res = await lesMedCache('sjekkliste:detalj:' + checklistId, () => supabase.from('checklists').select('*').eq('id', checklistId).single())
+      setChecklist(res.data)
+      setCacheInfo({ fraCache: res.fraCache, lagretAt: res.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -5579,6 +5632,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
               {avvik.length > 0 && <span style={{ color: '#d97706' }}>⚠ {avvik.length} avvik</span>}
               <span>📅 {new Date(checklist.created_at).toLocaleDateString('nb-NO')}</span>
             </div>
+            {cacheInfo.fraCache && <div style={{ marginTop:'10px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <button onClick={exportPDF} disabled={exporting}
             style={{ padding:'10px 18px', background: exporting ? '#94a3b8' : 'white', color: exporting ? 'white' : '#374151', border:'1px solid #e2e8f0', borderRadius:'10px', cursor: exporting ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600', display:'flex', alignItems:'center', gap:'8px' }}>
@@ -5667,7 +5721,7 @@ function SjekklisteDetaljerPage({ checklistId, onBack }) {
                           : (img.name || 'Bilde')
                         return (
                           <div key={imgI} title={uploadedInfo} style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0' }}>
-                            <img src={img.url} alt={uploadedInfo} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(img.url, '_blank')} />
+                            <OfflineBilde url={img.url} alt={uploadedInfo} style={{ width: '100%', height: '100%', objectFit: 'cover', cursor: 'pointer' }} onClick={() => window.open(img.url, '_blank')} />
                             <button onClick={() => removeItemImage(item.idx, imgI)}
                               style={{ position: 'absolute', top: '2px', right: '2px', width: '18px', height: '18px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', color: 'white', border: 'none', cursor: 'pointer', fontSize: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
                           </div>
