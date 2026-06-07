@@ -438,7 +438,7 @@ async function harGodkjenningsrettigheter(user) {
 // Trygt fallback: hvis noe feiler, returneres tomme verdier slik at e-posten
 // fortsatt sendes (med default avsender og uten Reply-To).
 async function hentEpostKontekst(user) {
-  const ctx = { fromName: null, replyTo: null }
+  const ctx = { fromName: null, replyTo: null, senderUserId: user?.id || null }
   if (!user) return ctx
   try {
     // Hent company_settings én gang
