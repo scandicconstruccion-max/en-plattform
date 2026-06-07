@@ -175,6 +175,52 @@ function OfflineBilde({ url, alt, style, onClick, ...rest }) {
   if (!src) return null
   return <img src={src} alt={alt || ''} style={style} onClick={onClick} {...rest} />
 }
+
+// ─── FORHÅNDSLASTING ───────────────────────────────────────────────────────────
+// Holder offline-cachen fersk og komplett mens man har nett, så øyeblikksbildet
+// er oppdatert når dekningen ryker – uten at brukeren må åpne hver modul.
+// Henter KUN listedata (lett); detaljsider og bilder caches fortsatt ved åpning.
+// VIKTIG: nøkler og spørringer her må matche dem i modulenes load-funksjoner.
+const FORHANDSLAST_LISTER = [
+  ['hms:records', () => supabase.from('hms_records').select('*').order('created_at', { ascending: false })],
+  ['projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')],
+  ['projects:alle', () => supabase.from('projects').select('*').order('created_at', { ascending: false })],
+  ['projects:nav_adr', () => supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name')],
+  ['sjekklister:liste', () => supabase.from('checklists').select('*').order('created_at', { ascending: false })],
+  ['sjekkliste:maler', () => supabase.from('checklist_templates').select('*').order('name')],
+  ['befaring:liste', () => supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date', { ascending: false })],
+  ['avvik:liste', () => supabase.from('deviations').select('*').order('created_at', { ascending: false })],
+  ['bildedok:photos', () => supabase.from('photos').select('*').order('created_at', { ascending: false })],
+  ['bildedok:ansatte', () => supabase.from('employees').select('id,name,parent_id,depth,project_number').order('name')],
+  ['maskiner:liste', () => supabase.from('machines').select('*').order('name')],
+  ['prosjektfiler:liste', () => supabase.from('project_files').select('*').order('created_at', { ascending: false })],
+  ['endringer:liste', () => supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false })],
+  ['ordre:liste', () => supabase.from('orders').select('*').order('created_at', { ascending: false })],
+  ['ordre:quotes', () => supabase.from('quotes').select('*').eq('status', 'Akseptert').order('created_at', { ascending: false })],
+  ['ressurs:ansatte', () => supabase.from('employees').select('id,first_name,last_name,department').eq('status', 'Aktiv').order('last_name')],
+  ['ressurs:maskiner', () => supabase.from('machines').select('id,name,category,status')],
+  ['ressurs:planer', () => supabase.from('resource_plans').select('*')],
+  ['ressurs:milestones', () => supabase.from('calendar_events').select('*').eq('type', 'milestone').order('start_date')],
+  ['ressurs:skills', () => supabase.from('employee_skills').select('*')],
+]
+let _forhandslastKjorer = false
+let _forhandslastSist = 0
+async function forhandslast({ tving = false } = {}) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return
+  if (_forhandslastKjorer) return
+  const naa = Date.now()
+  if (!tving && naa - _forhandslastSist < 60000) return    // maks én gang per minutt
+  _forhandslastKjorer = true
+  try {
+    // Kjør i små grupper så vi ikke fyrer av alle kallene samtidig
+    for (let i = 0; i < FORHANDSLAST_LISTER.length; i += 4) {
+      const gruppe = FORHANDSLAST_LISTER.slice(i, i + 4)
+      await Promise.all(gruppe.map(([key, q]) => lesMedCache(key, q)))
+    }
+    _forhandslastSist = Date.now()
+  } catch (e) { /* svelg – forhåndslasting er best-effort */ }
+  finally { _forhandslastKjorer = false }
+}
 // ─── END OFFLINE LAG 2 FUNDAMENT ───────────────────────────────────────────────
 
 // Sjekker at en e-postadresse har gyldig format (fanger skrivefeil som ola@firma, dobbel @, mellomrom).
@@ -65179,6 +65225,21 @@ function AppContent() {
       navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW-registrering feilet:', err))
     }
   }, [])
+  // Offline Lag 2: forhåndslasting — hold cachen fersk mens vi har nett.
+  React.useEffect(() => {
+    if (!user) return
+    forhandslast({ tving: true })                                   // ved oppstart
+    const interval = setInterval(() => forhandslast(), 5 * 60 * 1000) // hver 5. min
+    const paaNett = () => forhandslast({ tving: true })             // ved gjenoppkobling
+    const synlig = () => { if (document.visibilityState === 'visible') forhandslast() }
+    window.addEventListener('online', paaNett)
+    document.addEventListener('visibilitychange', synlig)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('online', paaNett)
+      document.removeEventListener('visibilitychange', synlig)
+    }
+  }, [user])
   const [projectId, setProjectId] = useState(null)
   const [checklistId, setChecklistId] = useState(null)
   const [activeModules, setActiveModules] = useState(null) // null = loading
