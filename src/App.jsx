@@ -153,6 +153,16 @@ async function idbBlobHent(noekkel) {
     })
   } catch (e) { return null }
 }
+async function idbBlobSlett(noekkel) {
+  try {
+    const db = await idbAapne()
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_BLOBS, 'readwrite')
+      tx.objectStore(IDB_BLOBS).delete(noekkel)
+      tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg */ }
+}
 
 // Bilde som virker offline. Cache-first på blob: er bildet lagret, vises det fra
 // cache (også offline, uavhengig av navigator.onLine). Er det ikke lagret enda,
@@ -315,8 +325,23 @@ async function flushKo() {
       if (op.status === 'feilet') continue           // poison – hopp over
       try {
         if (op.type === 'insert') {
-          const { error } = await supabase.from(op.tabell).insert(op.payload)
+          // Last opp eventuelle ventende bilde-blober først, og fyll inn stiene.
+          let payload = op.payload
+          if (Array.isArray(op.bilder) && op.bilder.length) {
+            const stier = []
+            for (const b of op.bilder) {
+              const blob = await idbBlobHent(b.key)
+              if (!blob) continue                         // blob borte → hopp over
+              const { error: upErr } = await supabase.storage.from('plattform-files').upload(b.path, blob, { upsert: true })
+              if (upErr) throw upErr
+              stier.push(b.path)
+            }
+            payload = { ...payload, images: [...(payload.images || []), ...stier] }
+          }
+          const { error } = await supabase.from(op.tabell).insert(payload)
           if (error) throw error
+          // Rydd opp blober etter vellykket insert
+          for (const b of (op.bilder || [])) await idbBlobSlett(b.key)
         } else if (op.type === 'update') {
           const { error } = await supabase.from(op.tabell).update(op.endringer).eq('id', op.radId)
           if (error) throw error
@@ -6296,6 +6321,15 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
       // ── Offline (Lag 3): lag avviket lokalt og legg det i skrivekøen ──
       const lagreOfflineOgVis = async () => {
         const radId = nyId()
+        // Lagre eventuelle valgte bilder som blober lokalt; de lastes opp ved synk.
+        const bilder = []
+        for (const img of images) {
+          const ext = (img.name && img.name.split('.').pop()) || 'jpg'
+          const path = `avvik/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+          const key = 'pending-img:' + nyId()
+          await idbBlobSett(key, img)
+          bilder.push({ key, path })
+        }
         const rad = {
           id: radId,
           title: form.title.trim(),
@@ -6316,17 +6350,14 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
           activity_log: initialLog,
           sent_to: [],
         }
-        // Insert-operasjon i køen (ren rad). DB tildeler AV-nummer ved synk.
-        await koLeggTil({ tabell: 'deviations', type: 'insert', payload: rad, radId })
-        // Optimistisk: vis avviket i lista med en gang (merket _venter for badge)
+        // Insert-operasjon i køen (ren rad + ventende bilder). DB tildeler AV-nummer ved synk.
+        await koLeggTil({ tabell: 'deviations', type: 'insert', payload: rad, radId, bilder })
+        // Optimistisk: vis avviket i lista med en gang (merket _venter + antall ventende bilder)
         try {
           const cachet = await idbHent('avvik:liste')
           const liste = cachet && Array.isArray(cachet.data) ? cachet.data : []
-          await idbSett('avvik:liste', [{ ...rad, _venter: true }, ...liste])
+          await idbSett('avvik:liste', [{ ...rad, _venter: true, _ventendeBilder: bilder.length }, ...liste])
         } catch (e) { /* svelg */ }
-        if (images.length > 0) {
-          alert('Avviket er lagret offline og synkes når du er på nett. Bilder kan ikke legges til uten dekning ennå – legg dem til etterpå.')
-        }
       }
 
       // Vet vi allerede at vi er offline → rett i kø.
@@ -6966,6 +6997,11 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
                     onMouseLeave={e => e.target.style.opacity = '1'} />
                 ))}
               </div>
+            </div>
+          )}
+          {dev._ventendeBilder > 0 && (
+            <div style={{ ...card, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+              <p style={{ margin: 0, fontSize: '13px', color: '#1e40af', fontWeight: '600' }}>📷 {dev._ventendeBilder} {dev._ventendeBilder === 1 ? 'bilde lastes' : 'bilder lastes'} opp ved synk</p>
             </div>
           )}
 
