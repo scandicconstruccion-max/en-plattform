@@ -1,25 +1,16 @@
 // En Plattform — Service Worker
-// Håndterer pushvarsler og klikk på varsler, OG app-skall-caching (Offline Lag 1).
+// Håndterer pushvarsler og klikk på varsler, OG app-skall-caching (Offline Lag 1),
+// OG bilde-caching av Supabase storage (Offline — bilder offline).
 // Ligger i /public og serveres på /sw.js.
 // Versjonsnummeret kan bumpes for å tvinge oppdatering av service worker i nettleseren.
-const SW_VERSION = 'v2'
+const SW_VERSION = 'v3'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OFFLINE LAG 1 — APP-SKALL-CACHING
-// Strategi:
-//  • Navigasjon (HTML-sider/SPA-ruter): network-first → fall tilbake til cachet
-//    index.html når du er uten nett. Sikrer at nye deploys plukkes opp med nett.
-//  • Statiske ressurser fra eget domene (Vite-bundles med hash, ikoner, fonter):
-//    cache-first. Hash-navn endres ved ny deploy, så cache-first er trygt.
-//  • Alt annet (Supabase-API, kryssdomene, ikke-GET): røres IKKE — går rett til
-//    nett som før. Datahenting offline håndteres i Lag 2 (IndexedDB).
 // ─────────────────────────────────────────────────────────────────────────────
 const SHELL_CACHE = 'ep-shell-' + SW_VERSION
-// Minimalt skall som er trygt å pre-cache (faste, kjente navn).
 const PRECACHE_URLS = ['/', '/index.html', '/icon-192.png', '/badge-96.png']
 
-// Tolerant pre-cache: én fil som mangler skal ikke avbryte hele installasjonen
-// (og dermed risikere å påvirke pushvarsler).
 async function precacheShell() {
   const cache = await caches.open(SHELL_CACHE)
   await Promise.allSettled(
@@ -27,13 +18,11 @@ async function precacheShell() {
   )
 }
 
-// Installer umiddelbart (ikke vent på at gamle faner lukkes)
 self.addEventListener('install', (event) => {
   event.waitUntil(precacheShell())
   self.skipWaiting()
 })
 
-// Ta kontroll over åpne faner med en gang + rydd bort gamle skall-cacher
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     (async () => {
@@ -48,26 +37,21 @@ self.addEventListener('activate', (event) => {
   )
 })
 
-// Fetch: app-skall-caching. Påvirker bare GET fra eget domene.
 self.addEventListener('fetch', (event) => {
   const req = event.request
-  // Kun GET — aldri rør POST/PUT/PATCH/DELETE (skriving går alltid til nett)
   if (req.method !== 'GET') return
 
   let url
   try { url = new URL(req.url) } catch (e) { return }
 
-  // Kun http/https og kun eget domene. Supabase, Resend, CDN-er osv. røres ikke.
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return
   if (url.origin !== self.location.origin) return
 
-  // Naviger (last side / SPA-rute): network-first, fall tilbake til cachet skall
   if (req.mode === 'navigate') {
     event.respondWith(
       (async () => {
         try {
           const ferskt = await fetch(req)
-          // Oppdater cachet index.html så neste offline-start er fersk
           if (ferskt && ferskt.ok) {
             const cache = await caches.open(SHELL_CACHE)
             cache.put('/index.html', ferskt.clone())
@@ -86,7 +70,6 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Statiske ressurser: cache-first, hent fra nett ved miss og lagre for neste gang
   event.respondWith(
     (async () => {
       const cache = await caches.open(SHELL_CACHE)
@@ -94,13 +77,80 @@ self.addEventListener('fetch', (event) => {
       if (cachet) return cachet
       try {
         const ferskt = await fetch(req)
-        // Lagre kun gyldige, samme-domene-svar (ikke feil/opaque)
         if (ferskt && ferskt.ok && ferskt.type === 'basic') {
           cache.put(req, ferskt.clone())
         }
         return ferskt
       } catch (e) {
-        // Ingen cache og ingen nett — la kallet feile som normalt
+        return Response.error()
+      }
+    })()
+  )
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OFFLINE — BILDE-CACHE (Supabase storage)
+// Bilder fra Supabase storage (avvik, bildedok, befaring …) ligger på et ANNET
+// domene og røres derfor ikke av skall-cachen over. Her caches de slik at de
+// vises offline etter at de er sett én gang.
+// Strategi: cache-først, med oppfrisking i bakgrunnen (stale-while-revalidate).
+// Cache-nøkkel uten query-streng → re-signerte URL-er (avvik bruker signerte
+// URL-er med utløp) treffer samme entry selv når tokenet endres.
+// Egen fetch-lytter: den eksisterende returnerer for kryssdomene uten å svare,
+// så denne kan trygt håndtere storage-bildene uten å kollidere med skall/push.
+// ─────────────────────────────────────────────────────────────────────────────
+const BILDE_CACHE = 'ep-bilder-v1'
+const BILDE_CACHE_MAKS = 200
+
+async function trimBildeCache(cache) {
+  try {
+    const keys = await cache.keys()
+    if (keys.length > BILDE_CACHE_MAKS) {
+      const overskudd = keys.length - BILDE_CACHE_MAKS
+      for (let i = 0; i < overskudd; i++) await cache.delete(keys[i])
+    }
+  } catch (e) { /* ignorer */ }
+}
+
+self.addEventListener('fetch', (event) => {
+  const req = event.request
+  if (req.method !== 'GET') return
+  if (req.destination !== 'image') return
+
+  let url
+  try { url = new URL(req.url) } catch (e) { return }
+
+  if (!url.hostname.endsWith('.supabase.co')) return
+  if (!url.pathname.includes('/storage/v1/object/')) return
+
+  const cacheNokkel = new Request(url.origin + url.pathname, { method: 'GET' })
+
+  event.respondWith(
+    (async () => {
+      const cache = await caches.open(BILDE_CACHE)
+      const cachet = await cache.match(cacheNokkel)
+
+      if (cachet) {
+        event.waitUntil((async () => {
+          try {
+            const ferskt = await fetch(req)
+            if (ferskt && (ferskt.ok || ferskt.type === 'opaque')) {
+              await cache.put(cacheNokkel, ferskt.clone())
+              await trimBildeCache(cache)
+            }
+          } catch (e) { /* offline — behold det cachede */ }
+        })())
+        return cachet
+      }
+
+      try {
+        const ferskt = await fetch(req)
+        if (ferskt && (ferskt.ok || ferskt.type === 'opaque')) {
+          await cache.put(cacheNokkel, ferskt.clone())
+          await trimBildeCache(cache)
+        }
+        return ferskt
+      } catch (e) {
         return Response.error()
       }
     })()
@@ -111,7 +161,6 @@ self.addEventListener('fetch', (event) => {
 // PUSHVARSLER (uendret)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Mottar push fra server og viser varsel — fungerer selv om appen er lukket
 self.addEventListener('push', (event) => {
   let data = {}
   try {
@@ -124,7 +173,7 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/badge-96.png',
-    tag: data.tag || undefined,            // samme tag = erstatter forrige varsel i stedet for å stable
+    tag: data.tag || undefined,
     renotify: !!data.tag,
     data: {
       url: data.url || '/',
@@ -135,7 +184,6 @@ self.addEventListener('push', (event) => {
   event.waitUntil(self.registration.showNotification(title, options))
 })
 
-// Når brukeren trykker på varselet: fokuser åpen fane (og naviger), ellers åpne ny
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const d = event.notification.data || {}
@@ -145,7 +193,6 @@ self.addEventListener('notificationclick', (event) => {
       for (const client of clientList) {
         if ('focus' in client) {
           client.focus()
-          // Fortell appen hvilken side/varsel som skal åpnes (appen lytter på dette)
           client.postMessage({ type: 'NOTIF_CLICK', link_page: d.link_page, link_id: d.link_id })
           return
         }
