@@ -63157,19 +63157,35 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
+    // Fallback: slett direkte mot databasen + best-effort Storage når Edge
+    // Function-en er uncåbar (ikke deployet, nettverk/CORS). Databaseraden er
+    // det brukeren faktisk ser; eventuell foreldreløs Storage-fil ryddes senere.
+    const slettDirekte = async (aarsak) => {
+      console.warn('[bim-sesjon] faller tilbake til direkte sletting:', aarsak)
+      const { error: direkteFeil } = await bimSlettSesjon(sesjonId)
+      if (direkteFeil) {
+        console.warn('[bim-sesjon] direkte sletting feilet også:', direkteFeil)
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (direkteFeil.message || 'ukjent feil'))
+        return false
+      }
+      setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
+      return true
+    }
+
     try {
       // Steg 5: Bruk Edge Function (service_role) som omgår RLS-quirken på Storage
       const { data, error } = await supabase.functions.invoke('bim-sesjon-rydd', {
         body: { action: 'slett', sesjonId },
       })
       if (error) {
-        console.warn('[bim-sesjon] sletting via edge function feilet:', error)
-        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
+        // Edge Function uncåbar (f.eks. "Failed to send a request to the Edge
+        // Function") — la ikke sletting stoppe på det; slett direkte i stedet.
+        await slettDirekte(error.message || 'edge function feilet')
         return
       }
       if (data && !data.ok) {
         console.warn('[bim-sesjon] edge function returnerte feil:', data.error)
-        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (data.error || 'ukjent feil'))
+        await slettDirekte(data.error || 'edge function returnerte feil')
         return
       }
       // Logg om Storage-fil ble slettet (informasjon, ikke feil)
@@ -63180,8 +63196,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       }
       setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
     } catch (e) {
-      console.warn('[bim-sesjon] sletting kastet:', e)
-      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (e.message || 'ukjent feil'))
+      // Uventet kast (typisk nettverksfeil mot Edge Function) — prøv direkte.
+      await slettDirekte(e.message || 'sletting kastet')
     }
   }
 
