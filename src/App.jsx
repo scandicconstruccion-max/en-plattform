@@ -2848,182 +2848,6 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
   )
 }
 
-// ─── PWA INSTALLASJONSGUIDE («Legg til på startskjerm») ───────────────────────
-// Hjelper mobilbrukere som logger inn i nettleseren med å legge appen på
-// startskjermen, så de slipper å logge inn på nytt hver gang. Vises kun på
-// mobil, kun når appen IKKE allerede kjører installert, og kun én gang
-// (localStorage). Koblet til dashbord-turen: guiden vises FØRST når turen er
-// fullført/hoppet over — de to overlapper aldri. Modul-turer trigger den ikke.
-
-let epDeferredInstallPrompt = null
-if (typeof window !== 'undefined') {
-  // beforeinstallprompt fyres tidlig ved app-last (Android/Chrome). Fang og lagre
-  // den, så vi kan trigge den native prompten senere når guiden faktisk vises.
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault()
-    epDeferredInstallPrompt = e
-    window.dispatchEvent(new Event('ep-install-available'))
-  })
-  window.addEventListener('appinstalled', () => {
-    epDeferredInstallPrompt = null
-    try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
-    window.dispatchEvent(new Event('ep-installed'))
-  })
-}
-
-function erPwaStandalone() {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
-}
-function erMobilEnhet() {
-  if (typeof window === 'undefined') return false
-  const smal = window.innerWidth < 768
-  const touch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
-  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
-  return smal || (touch && coarse)
-}
-function detekterMobilOS() {
-  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
-  const erIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
-  const erAndroid = /android/i.test(ua)
-  return { erIOS, erAndroid }
-}
-function harSettInstallGuide() {
-  try { return localStorage.getItem('ep-install-guide-seen') === 'done' } catch (_) { return false }
-}
-function markerInstallGuideSett() {
-  try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
-}
-
-// iOS Del-ikon (firkant med pil opp) — gjør instruksjonen tydelig.
-function DelIkon({ size = 22, color = '#059669' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-      <path d="M12 3v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8.5 6.5 12 3l3.5 3.5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v7A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 18.5 10H17" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function InstallGuide({ aktivSide }) {
-  const [synlig, setSynlig] = React.useState(false)
-  const [visInstruks, setVisInstruks] = React.useState(false)
-  const [promptTilgjengelig, setPromptTilgjengelig] = React.useState(!!epDeferredInstallPrompt)
-  const turAktivRef = React.useRef(false)
-  const { erIOS, erAndroid } = detekterMobilOS()
-
-  const visGuide = React.useCallback((tvunget = false) => {
-    if (erPwaStandalone()) return
-    if (!tvunget) {
-      if (!erMobilEnhet()) return
-      if (harSettInstallGuide()) return
-      markerInstallGuideSett()               // mirror turen: marker som sett straks den vises
-    }
-    setVisInstruks(false)
-    setSynlig(true)
-  }, [])
-
-  // Koblingsbuss: lytt på dashbord-turen og på manuell åpning fra menyen.
-  React.useEffect(() => {
-    const paaTurAktiv = () => { turAktivRef.current = true }
-    const paaTurFerdig = () => {
-      turAktivRef.current = false
-      // Kort forsinkelse så turens overlegg rekker å forsvinne først (aldri overlapp).
-      setTimeout(() => visGuide(false), 450)
-    }
-    const paaVisManuelt = () => visGuide(true)
-    const paaTilgjengelig = () => setPromptTilgjengelig(true)
-    const paaInstallert = () => setSynlig(false)
-    window.addEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
-    window.addEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
-    window.addEventListener('ep-install-guide-vis', paaVisManuelt)
-    window.addEventListener('ep-install-available', paaTilgjengelig)
-    window.addEventListener('ep-installed', paaInstallert)
-    return () => {
-      window.removeEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
-      window.removeEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
-      window.removeEventListener('ep-install-guide-vis', paaVisManuelt)
-      window.removeEventListener('ep-install-available', paaTilgjengelig)
-      window.removeEventListener('ep-installed', paaInstallert)
-    }
-  }, [visGuide])
-
-  // Tilbakevendende brukere: dashbord-turen er allerede sett og starter ikke på
-  // nytt, så onSteg-signalet kommer aldri. Vis guiden direkte på dashbordet hvis
-  // den ikke er vist før — men kun hvis turen ikke er i gang denne økten.
-  React.useEffect(() => {
-    if (aktivSide !== 'dashboard') return
-    if (harSettInstallGuide()) return
-    if (!erMobilEnhet() || erPwaStandalone()) return
-    const t = setTimeout(() => { if (!turAktivRef.current) visGuide(false) }, 1600)
-    return () => clearTimeout(t)
-  }, [aktivSide, visGuide])
-
-  if (!synlig) return null
-
-  const installer = async () => {
-    const dp = epDeferredInstallPrompt
-    if (!dp) { setVisInstruks(true); return }
-    try { dp.prompt(); await dp.userChoice } catch (_) {}
-    epDeferredInstallPrompt = null
-    setPromptTilgjengelig(false)
-    setSynlig(false)
-  }
-  const lukk = () => setSynlig(false)
-
-  // Android/Chrome med fanget event → native prompt. iOS støtter aldri prompt.
-  const kanNativInstallere = !erIOS && promptTilgjengelig
-
-  const primaryStil = { flex: 1, padding: '12px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }
-  const sekundaerStil = { padding: '12px 16px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }
-  const instruksBoks = { marginTop: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px', fontSize: '13.5px', color: '#166534', lineHeight: 1.6 }
-
-  return (
-    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', padding: '12px', pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
-      <style>{`@keyframes epInstallOpp { from { transform: translateY(120%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }`}</style>
-      <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: '460px', background: 'white', borderRadius: '18px', boxShadow: '0 -8px 40px rgba(15,23,42,0.22)', border: '1px solid #f1f5f9', padding: '18px 20px 20px', animation: 'epInstallOpp 0.3s ease-out' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-          <img src="/icon-192.png" alt="En Plattform" style={{ width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Få En Plattform som app</h3>
-            <p style={{ margin: 0, fontSize: '13.5px', color: '#64748b', lineHeight: 1.5 }}>Logg inn med ett trykk hver gang — legg appen på startskjermen.</p>
-          </div>
-          <button onClick={lukk} aria-label="Lukk" style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', width: '28px', height: '28px', cursor: 'pointer', color: '#94a3b8', fontSize: '15px', lineHeight: 1, flexShrink: 0 }}>×</button>
-        </div>
-
-        {visInstruks && erIOS && (
-          <div style={instruksBoks}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontWeight: '700' }}>
-              <DelIkon /> <span>Slik legger du appen til på iPhone/iPad:</span>
-            </div>
-            <div>1. Trykk <strong>Del</strong>-ikonet (firkant med pil opp) i Safari.</div>
-            <div>2. Bla ned og trykk <strong>«Legg til på Hjem-skjerm»</strong>.</div>
-            <div>3. Trykk <strong>«Legg til»</strong> øverst til høyre.</div>
-          </div>
-        )}
-        {visInstruks && !erIOS && (
-          <div style={instruksBoks}>
-            <div style={{ fontWeight: '700', marginBottom: '8px' }}>Slik legger du appen til:</div>
-            <div>1. Trykk <strong>⋮</strong>-menyen øverst til høyre i nettleseren.</div>
-            <div>2. Velg <strong>«Legg til på startskjerm»</strong> (eller «Installer app»).</div>
-            <div>3. Bekreft med <strong>«Legg til»</strong>.</div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '10px', marginTop: '16px', alignItems: 'center' }}>
-          {kanNativInstallere ? (
-            <button onClick={installer} style={primaryStil}>📲 Installer</button>
-          ) : (
-            <button onClick={() => setVisInstruks(v => !v)} style={primaryStil}>{visInstruks ? 'Skjul' : 'Vis meg hvordan'}</button>
-          )}
-          <button onClick={lukk} style={sekundaerStil}>Ikke nå</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const DASHBOARD_TOUR = [
   { tittel: '👋 Velkommen', tekst: 'Velkommen til En Plattform! Her er en rask omvisning av forsiden. Du kan gå frem og tilbake, eller hoppe over når som helst.' },
   { target: 'hovedmeny', tittel: 'Hovedmenyen', tekst: 'Til venstre finner du alle modulene — prosjekter, sjekklister, avvik, befaring og mer. På mobil åpner du menyen med knappen øverst til venstre.' },
@@ -3196,8 +3020,7 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kan
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR}
-        onSteg={(i) => window.dispatchEvent(new Event(i === -1 ? 'ep-dashboard-tur-ferdig' : 'ep-dashboard-tur-aktiv'))} />
+      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR} />
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: mob ? '16px' : '24px 32px' }}>
         <div style={{ display: 'flex', alignItems: mob ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: mob ? 'column' : 'row', gap: mob ? '10px' : '0' }}>
           <div>
@@ -37446,6 +37269,40 @@ function crmBrukerNavn(usersById, userId) {
   return 'Ukjent'
 }
 
+// Ett felt i CRM-kundekortets «Informasjon»-grid. Kopierbare felt får et
+// diskret kopier-ikon som vises på hover (permanent, lavmælt, på touch-enheter).
+function CrmInfoFelt({ label, value, copyValue }) {
+  const [hover, setHover] = useState(false)
+  const [kopiert, setKopiert] = useState(false)
+  const kopierbar = copyValue != null && String(copyValue).trim() !== ''
+  const ingenHover = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(hover: none)').matches : false
+  const kopier = async (e) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(String(copyValue))
+      setKopiert(true)
+      setTimeout(() => setKopiert(false), 1500)
+    } catch (err) { console.error('[CRM] Kopiering feilet:', err) }
+  }
+  const synlig = kopiert || hover || ingenHover
+  return (
+    <div onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+      style={{ position:'relative', background:'#f8fafc', borderRadius:'8px', padding: kopierbar ? '9px 30px 9px 12px' : '9px 12px' }}>
+      <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{label}</div>
+      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{value}</div>
+      {kopierbar && (
+        <button onClick={kopier} title={kopiert ? 'Kopiert' : 'Kopier'} aria-label={`Kopier ${label}`}
+          style={{ position:'absolute', top:'7px', right:'7px', background:'none', border:'none', cursor:'pointer', padding:'2px', lineHeight:0,
+            opacity: synlig ? (ingenHover && !hover && !kopiert ? 0.4 : 1) : 0, transition:'opacity 0.15s' }}>
+          {kopiert
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // Farge-skala for kjøpspotensial-score (høyere = varmere/grønnere)
 function crmScoreColor(score) {
   const s = parseFloat(score) || 0
@@ -37697,7 +37554,7 @@ function CRMPage() {
 
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, minWidth: mob?'auto':'260px', maxWidth: mob?'none':'360px', flex: mob?'1 1 100%':'1 1 260px' }} />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth: mob?'none':'240px', flex: mob?'1 1 100%':'1' }} />
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
@@ -38152,11 +38009,8 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null],['Neste oppfølging',c.neste_oppfolging||null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null]].filter(r=>r[1]).map(([k,v])=>(
-                    <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
-                      <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
-                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
-                    </div>
+                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging||null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
+                    <CrmInfoFelt key={k} label={k} value={v} copyValue={cv} />
                   ))}
                 </div>
                 {c.notes&&<div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Notater</div><p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{c.notes}</p></div>}
@@ -50527,17 +50381,16 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', maxHeight:'90vh', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', display:'flex', flexDirection:'column' }}>
-        {/* Gradient header — sticky topp */}
-        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative', flexShrink:0 }}>
-          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        {/* Gradient header */}
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
+          <button onClick={lukkMedBekreftelse} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
           <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
           <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
         </div>
 
-        {/* Scrollbart midtparti — vokser/krymper mellom sticky header og footer */}
-        <div style={{ padding:'24px', overflowY:'auto', flex:1, minHeight:0 }}>
+        <div style={{ padding:'24px' }}>
           <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
             BIM-Kalkyle er for proffe aktører som kalkulerer fra BIM-modeller. Last opp en IFC-fil fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy, og få automatisk mengdeuttak, 3D-visning, materialmatching mot ditt bibliotek og ferdig kalkyle.
           </p>
@@ -50560,10 +50413,7 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
               </div>
             ))}
           </div>
-        </div>
 
-        {/* Sticky footer — pris/kjøp-seksjonen holdes alltid synlig uten scroll */}
-        <div style={{ flexShrink:0, padding:'18px 24px 20px', borderTop:'1px solid #f1f5f9', background:'white' }}>
           {loading ? (
             <div style={{ textAlign:'center', padding:'12px', color:'#94a3b8', fontSize:'13px' }}>Laster...</div>
           ) : !hasBasis ? (
@@ -63338,35 +63188,19 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
-    // Fallback: slett direkte mot databasen + best-effort Storage når Edge
-    // Function-en er uncåbar (ikke deployet, nettverk/CORS). Databaseraden er
-    // det brukeren faktisk ser; eventuell foreldreløs Storage-fil ryddes senere.
-    const slettDirekte = async (aarsak) => {
-      console.warn('[bim-sesjon] faller tilbake til direkte sletting:', aarsak)
-      const { error: direkteFeil } = await bimSlettSesjon(sesjonId)
-      if (direkteFeil) {
-        console.warn('[bim-sesjon] direkte sletting feilet også:', direkteFeil)
-        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (direkteFeil.message || 'ukjent feil'))
-        return false
-      }
-      setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
-      return true
-    }
-
     try {
       // Steg 5: Bruk Edge Function (service_role) som omgår RLS-quirken på Storage
       const { data, error } = await supabase.functions.invoke('bim-sesjon-rydd', {
         body: { action: 'slett', sesjonId },
       })
       if (error) {
-        // Edge Function uncåbar (f.eks. "Failed to send a request to the Edge
-        // Function") — la ikke sletting stoppe på det; slett direkte i stedet.
-        await slettDirekte(error.message || 'edge function feilet')
+        console.warn('[bim-sesjon] sletting via edge function feilet:', error)
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
         return
       }
       if (data && !data.ok) {
         console.warn('[bim-sesjon] edge function returnerte feil:', data.error)
-        await slettDirekte(data.error || 'edge function returnerte feil')
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (data.error || 'ukjent feil'))
         return
       }
       // Logg om Storage-fil ble slettet (informasjon, ikke feil)
@@ -63377,8 +63211,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       }
       setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
     } catch (e) {
-      // Uventet kast (typisk nettverksfeil mot Edge Function) — prøv direkte.
-      await slettDirekte(e.message || 'sletting kastet')
+      console.warn('[bim-sesjon] sletting kastet:', e)
+      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (e.message || 'ukjent feil'))
     }
   }
 
@@ -64593,53 +64427,6 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
   return { totTimer, totArbeid, totMaterial, totUE, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent, mva, totInkMva: totMedFortjeneste + mva }
 }
 
-// ─── FEILGRENSE FOR BIM-MODULEN ──────────────────────────────────────────────
-// Fanger render-/referansefeil inne i BIM-Kalkyle slik at en enkelt udefinert
-// referanse (f.eks. en gammel copy/paste-feil) ikke blanker hele appen.
-// Viser en pen feilmelding med mulighet til å lukke modulen i stedet.
-class BimErrorBoundary extends React.Component {
-  constructor(props) {
-    super(props)
-    this.state = { hasError: false, error: null }
-  }
-  static getDerivedStateFromError(error) {
-    return { hasError: true, error }
-  }
-  componentDidCatch(error, info) {
-    console.error('BIM-modul krasjet:', error, info)
-  }
-  handleClose = () => {
-    this.setState({ hasError: false, error: null })
-    if (this.props.onClose) this.props.onClose()
-  }
-  render() {
-    if (!this.state.hasError) return this.props.children
-    return (
-      <div style={{ position:'fixed', inset:0, zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', background:'rgba(15,23,42,0.55)' }}>
-        <div style={{ background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
-          <div style={{ background:'linear-gradient(135deg, #ef4444 0%, #f97316 100%)', padding:'24px', color:'white' }}>
-            <div style={{ fontSize:'38px', marginBottom:'6px' }}>⚠️</div>
-            <h2 style={{ margin:0, fontSize:'20px', fontWeight:'800' }}>Noe gikk galt i BIM-Kalkyle</h2>
-          </div>
-          <div style={{ padding:'24px' }}>
-            <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
-              Vi klarte ikke å vise BIM-Kalkyle akkurat nå. Ingen data har gått tapt. Lukk modulen og prøv igjen — vedvarer feilen, kontakt support.
-            </p>
-            {this.state.error?.message && (
-              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'10px 12px', marginBottom:'16px', fontSize:'12px', color:'#991b1b', fontFamily:'monospace', wordBreak:'break-word' }}>
-                {this.state.error.message}
-              </div>
-            )}
-            <button onClick={this.handleClose} style={{ width:'100%', padding:'12px 18px', background:'#0f172a', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
-              Lukk BIM-Kalkyle
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
-}
-
 // ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
 
 function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
@@ -64875,31 +64662,26 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
 
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
 
-  if (showBimImport) {
-    const lukkBimImport = () => {
+  if (showBimImport) return <BimImportPage
+    onTilbake={() => {
       setShowBimImport(false)
       setEditBimSesjon(null)
       // Hvis brukeren kom direkte fra bim_kalkyle-URL, naviger til kalkulator-listen
       if (autoOpenBim && onNavigate) onNavigate('kalkulator')
-    }
-    return <BimErrorBoundary onClose={lukkBimImport}>
-      <BimImportPage
-        onTilbake={lukkBimImport}
-        onAlert={appAlert}
-        onKalkyleOpprettet={async (created) => {
-          // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
-          // reload listen, og åpne den nye kalkylen direkte for brukeren.
-          setShowBimImport(false)
-          setEditBimSesjon(null)
-          await load()
-          if (created) setViewKalk(created)
-        }}
-        user={user}
-        eksisterendeSesjon={editBimSesjon?.sesjon || null}
-        redigeringAvKalkyle={editBimSesjon?.kalk || null}
-      />
-    </BimErrorBoundary>
-  }
+    }}
+    onAlert={appAlert}
+    onKalkyleOpprettet={async (created) => {
+      // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
+      // reload listen, og åpne den nye kalkylen direkte for brukeren.
+      setShowBimImport(false)
+      setEditBimSesjon(null)
+      await load()
+      if (created) setViewKalk(created)
+    }}
+    user={user}
+    eksisterendeSesjon={editBimSesjon?.sesjon || null}
+    redigeringAvKalkyle={editBimSesjon?.kalk || null}
+  />
 
   // ── Sammenligningsvisning ──
   if (showCompare && compareIds.length === 2) {
@@ -65453,11 +65235,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
           })
         }
       }} />}
-      {showBimUpsell && (
-        <BimErrorBoundary onClose={() => setShowBimUpsell(false)}>
-          <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />
-        </BimErrorBoundary>
-      )}
+      {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
     </div>
   )
 }
@@ -75818,9 +75596,6 @@ function AppContent() {
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
       <TilkoblingsIndikator isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} />
 
-      {/* ── PWA installasjonsguide (mobil, koblet til dashbord-turen) ── */}
-      <InstallGuide aktivSide={activePage} />
-
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
         <>
@@ -75861,15 +75636,6 @@ function AppContent() {
             </nav>
             {/* Patch 21: Tilbakemelding-knapp (mobil) */}
             <div style={{ padding:'8px', borderTop:'1px solid #f1f5f9' }}>
-              {!erPwaStandalone() && (
-                <button onClick={() => { setMobileMenuOpen(false); window.dispatchEvent(new Event('ep-install-guide-vis')) }}
-                  style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
-                    borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
-                    color:'#475569', fontSize:'15px', textAlign:'left', marginBottom:'2px' }}>
-                  <span style={{ fontSize:'18px', flexShrink:0 }}>📲</span>
-                  <span style={{ flex:1 }}>Installer app</span>
-                </button>
-              )}
               <button onClick={() => { setShowFeedbackModal(true); setMobileMenuOpen(false) }}
                 style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
                   borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
@@ -75969,17 +75735,6 @@ function AppContent() {
         </nav>
         {/* Patch 21: Tilbakemelding-knapp */}
         <div style={{ padding: '8px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-          {!erPwaStandalone() && (
-            <button onClick={() => window.dispatchEvent(new Event('ep-install-guide-vis'))} aria-label="Installer app"
-              onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Installer app')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-                padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
-                cursor: 'pointer', background: 'transparent', color: '#475569', fontSize: '14px',
-                justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '2px' }}>
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>📲</span>
-              {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Installer app</span>}
-            </button>
-          )}
           <button onClick={() => setShowFeedbackModal(true)} aria-label="Tilbakemelding"
             onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Tilbakemelding')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
