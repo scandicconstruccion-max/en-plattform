@@ -50530,7 +50530,7 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
         {/* Gradient header */}
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
-          <button onClick={lukkMedBekreftelse} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
           <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
           <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
@@ -64589,6 +64589,53 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
   return { totTimer, totArbeid, totMaterial, totUE, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent, mva, totInkMva: totMedFortjeneste + mva }
 }
 
+// ─── FEILGRENSE FOR BIM-MODULEN ──────────────────────────────────────────────
+// Fanger render-/referansefeil inne i BIM-Kalkyle slik at en enkelt udefinert
+// referanse (f.eks. en gammel copy/paste-feil) ikke blanker hele appen.
+// Viser en pen feilmelding med mulighet til å lukke modulen i stedet.
+class BimErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error }
+  }
+  componentDidCatch(error, info) {
+    console.error('BIM-modul krasjet:', error, info)
+  }
+  handleClose = () => {
+    this.setState({ hasError: false, error: null })
+    if (this.props.onClose) this.props.onClose()
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children
+    return (
+      <div style={{ position:'fixed', inset:0, zIndex:300, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', background:'rgba(15,23,42,0.55)' }}>
+        <div style={{ background:'white', borderRadius:'20px', width:'100%', maxWidth:'440px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+          <div style={{ background:'linear-gradient(135deg, #ef4444 0%, #f97316 100%)', padding:'24px', color:'white' }}>
+            <div style={{ fontSize:'38px', marginBottom:'6px' }}>⚠️</div>
+            <h2 style={{ margin:0, fontSize:'20px', fontWeight:'800' }}>Noe gikk galt i BIM-Kalkyle</h2>
+          </div>
+          <div style={{ padding:'24px' }}>
+            <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
+              Vi klarte ikke å vise BIM-Kalkyle akkurat nå. Ingen data har gått tapt. Lukk modulen og prøv igjen — vedvarer feilen, kontakt support.
+            </p>
+            {this.state.error?.message && (
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'10px 12px', marginBottom:'16px', fontSize:'12px', color:'#991b1b', fontFamily:'monospace', wordBreak:'break-word' }}>
+                {this.state.error.message}
+              </div>
+            )}
+            <button onClick={this.handleClose} style={{ width:'100%', padding:'12px 18px', background:'#0f172a', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+              Lukk BIM-Kalkyle
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+}
+
 // ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
 
 function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
@@ -64824,26 +64871,31 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
 
   if (showPrisbokPage) return <PrisbokPage onBack={() => setShowPrisbokPage(false)} />
 
-  if (showBimImport) return <BimImportPage
-    onTilbake={() => {
+  if (showBimImport) {
+    const lukkBimImport = () => {
       setShowBimImport(false)
       setEditBimSesjon(null)
       // Hvis brukeren kom direkte fra bim_kalkyle-URL, naviger til kalkulator-listen
       if (autoOpenBim && onNavigate) onNavigate('kalkulator')
-    }}
-    onAlert={appAlert}
-    onKalkyleOpprettet={async (created) => {
-      // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
-      // reload listen, og åpne den nye kalkylen direkte for brukeren.
-      setShowBimImport(false)
-      setEditBimSesjon(null)
-      await load()
-      if (created) setViewKalk(created)
-    }}
-    user={user}
-    eksisterendeSesjon={editBimSesjon?.sesjon || null}
-    redigeringAvKalkyle={editBimSesjon?.kalk || null}
-  />
+    }
+    return <BimErrorBoundary onClose={lukkBimImport}>
+      <BimImportPage
+        onTilbake={lukkBimImport}
+        onAlert={appAlert}
+        onKalkyleOpprettet={async (created) => {
+          // Patch 14.C: Når kalkyle er opprettet i BIM-flyten, lukk BIM-siden,
+          // reload listen, og åpne den nye kalkylen direkte for brukeren.
+          setShowBimImport(false)
+          setEditBimSesjon(null)
+          await load()
+          if (created) setViewKalk(created)
+        }}
+        user={user}
+        eksisterendeSesjon={editBimSesjon?.sesjon || null}
+        redigeringAvKalkyle={editBimSesjon?.kalk || null}
+      />
+    </BimErrorBoundary>
+  }
 
   // ── Sammenligningsvisning ──
   if (showCompare && compareIds.length === 2) {
@@ -65397,7 +65449,11 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
           })
         }
       }} />}
-      {showBimUpsell && <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />}
+      {showBimUpsell && (
+        <BimErrorBoundary onClose={() => setShowBimUpsell(false)}>
+          <BimKalkyleUpsellModal onClose={() => setShowBimUpsell(false)} onNavigate={onNavigate} />
+        </BimErrorBoundary>
+      )}
     </div>
   )
 }
