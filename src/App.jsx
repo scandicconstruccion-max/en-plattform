@@ -50527,16 +50527,17 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
-        {/* Gradient header */}
-        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', maxHeight:'90vh', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', display:'flex', flexDirection:'column' }}>
+        {/* Gradient header — sticky topp */}
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative', flexShrink:0 }}>
           <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
           <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
           <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
         </div>
 
-        <div style={{ padding:'24px' }}>
+        {/* Scrollbart midtparti — vokser/krymper mellom sticky header og footer */}
+        <div style={{ padding:'24px', overflowY:'auto', flex:1, minHeight:0 }}>
           <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
             BIM-Kalkyle er for proffe aktører som kalkulerer fra BIM-modeller. Last opp en IFC-fil fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy, og få automatisk mengdeuttak, 3D-visning, materialmatching mot ditt bibliotek og ferdig kalkyle.
           </p>
@@ -50559,7 +50560,10 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
               </div>
             ))}
           </div>
+        </div>
 
+        {/* Sticky footer — pris/kjøp-seksjonen holdes alltid synlig uten scroll */}
+        <div style={{ flexShrink:0, padding:'18px 24px 20px', borderTop:'1px solid #f1f5f9', background:'white' }}>
           {loading ? (
             <div style={{ textAlign:'center', padding:'12px', color:'#94a3b8', fontSize:'13px' }}>Laster...</div>
           ) : !hasBasis ? (
