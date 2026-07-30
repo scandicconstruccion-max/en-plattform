@@ -37697,7 +37697,7 @@ function CRMPage() {
 
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth: mob?'none':'240px', flex: mob?'1 1 100%':'1' }} />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, minWidth: mob?'auto':'260px', maxWidth: mob?'none':'360px', flex: mob?'1 1 100%':'1 1 260px' }} />
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
