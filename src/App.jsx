@@ -2333,6 +2333,8 @@ function InvitasjonAksept({ token }) {
 function Registrer() {
   const lbl = { display:'block', fontSize:'14px', fontWeight:'500', color:'#374151', marginBottom:'6px' }
   const inp = { width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
+  const errBorder = { border:'1px solid #dc2626' }
+  const errTxt = { margin:'6px 0 0', fontSize:'12px', color:'#dc2626', fontWeight:'500' }
   const [bedrift, setBedrift] = React.useState('')
   const [orgnr, setOrgnr] = React.useState('')
   const [navn, setNavn] = React.useState('')
@@ -2345,6 +2347,13 @@ function Registrer() {
   const [saving, setSaving] = React.useState(false)
   const [ferdig, setFerdig] = React.useState(null)
   const [plan, setPlan] = React.useState('full') // 'full' = plattform m/grunnpakke · 'kalkyle' = kun Kalkulasjon
+  const [fieldErrors, setFieldErrors] = React.useState({})
+  const refs = {
+    bedrift: React.useRef(null), navn: React.useRef(null), epost: React.useRef(null),
+    telefon: React.useRef(null), adresse: React.useRef(null), passord: React.useRef(null), passord2: React.useRef(null),
+  }
+  // Fjern feilmarkering på et felt så snart brukeren begynner å rette det
+  const clearErr = (k) => setFieldErrors(p => { if (!p[k]) return p; const n = { ...p }; delete n[k]; return n })
 
   // Allerede innlogget? Send til appen (unngå dobbel bedrift).
   React.useEffect(() => {
@@ -2354,13 +2363,26 @@ function Registrer() {
   }, [])
 
   const fullfor = async () => {
-    if (!bedrift.trim()) { setError('Skriv inn bedriftsnavn'); return }
-    if (!navn.trim()) { setError('Skriv inn navnet ditt'); return }
-    if (!epost.trim()) { setError('Skriv inn e-post'); return }
-    if (!telefon.trim()) { setError('Skriv inn telefonnummer'); return }
-    if (!adresse.trim()) { setError('Skriv inn adresse'); return }
-    if (passord.length < 10) { setError('Passordet må være minst 10 tegn'); return }
-    if (passord !== passord2) { setError('Passordene er ikke like'); return }
+    // Samme påkrevd-regler som før — men samle alle feil så vi kan markere hvert felt
+    const errs = {}
+    if (!bedrift.trim()) errs.bedrift = 'Fyll inn bedriftsnavn'
+    if (!navn.trim()) errs.navn = 'Fyll inn navnet ditt'
+    if (!epost.trim()) errs.epost = 'Fyll inn e-post'
+    if (!telefon.trim()) errs.telefon = 'Fyll inn telefonnummer'
+    if (!adresse.trim()) errs.adresse = 'Fyll inn adresse'
+    if (passord.length < 10) errs.passord = 'Passordet må være minst 10 tegn'
+    if (passord !== passord2) errs.passord2 = 'Passordene er ikke like'
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs)
+      setError('Noen felt mangler — vi har markert dem')
+      // Scroll det første ugyldige feltet inn i synsfeltet og gi det fokus
+      const rekkefolge = ['bedrift','navn','epost','telefon','adresse','passord','passord2']
+      const forste = rekkefolge.find(k => errs[k])
+      const el = refs[forste]?.current
+      if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
+      return
+    }
+    setFieldErrors({})
     setSaving(true); setError('')
     try {
       const { data, error: suErr } = await supabase.auth.signUp({
@@ -2447,10 +2469,10 @@ function Registrer() {
         </div>
         <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'8px', lineHeight:1.5 }}>Begge starter med 15 dager gratis — uten binding, uten kortnummer. I prøveperioden kan du teste hele plattformen uansett hva du velger.</div>
       </div>
-      {error && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', color:'#dc2626', marginBottom:'1rem', fontSize:'14px' }}>{error}</div>}
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Bedriftsnavn</label>
-        <input value={bedrift} onChange={e=>setBedrift(e.target.value)} placeholder="Bedriften AS" style={inp} />
+        <input ref={refs.bedrift} value={bedrift} onChange={e=>{setBedrift(e.target.value); clearErr('bedrift')}} placeholder="Bedriften AS" style={fieldErrors.bedrift ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.bedrift && <p style={errTxt}>{fieldErrors.bedrift}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Organisasjonsnummer <span style={{ color:'#94a3b8', fontWeight:'400' }}>(valgfritt)</span></label>
@@ -2458,29 +2480,36 @@ function Registrer() {
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Ditt navn</label>
-        <input value={navn} onChange={e=>setNavn(e.target.value)} placeholder="Ola Nordmann" style={inp} />
+        <input ref={refs.navn} value={navn} onChange={e=>{setNavn(e.target.value); clearErr('navn')}} placeholder="Ola Nordmann" style={fieldErrors.navn ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.navn && <p style={errTxt}>{fieldErrors.navn}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>E-post</label>
-        <input type="email" value={epost} onChange={e=>setEpost(e.target.value)} placeholder="navn@bedrift.no" style={inp} />
+        <input ref={refs.epost} type="email" value={epost} onChange={e=>{setEpost(e.target.value); clearErr('epost')}} placeholder="navn@bedrift.no" style={fieldErrors.epost ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.epost && <p style={errTxt}>{fieldErrors.epost}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Telefon</label>
-        <input type="tel" value={telefon} onChange={e=>setTelefon(e.target.value)} placeholder="+47 xxx xx xxx" style={inp} />
+        <input ref={refs.telefon} type="tel" value={telefon} onChange={e=>{setTelefon(e.target.value); clearErr('telefon')}} placeholder="+47 xxx xx xxx" style={fieldErrors.telefon ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.telefon && <p style={errTxt}>{fieldErrors.telefon}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Adresse</label>
-        <input value={adresse} onChange={e=>setAdresse(e.target.value)} placeholder="Gateadresse, postnr sted" style={inp} />
+        <input ref={refs.adresse} value={adresse} onChange={e=>{setAdresse(e.target.value); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.adresse && <p style={errTxt}>{fieldErrors.adresse}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Passord (min. 10 tegn)</label>
-        <input type="password" value={passord} onChange={e=>setPassord(e.target.value)} placeholder="••••••••" style={inp} />
+        <input ref={refs.passord} type="password" value={passord} onChange={e=>{setPassord(e.target.value); clearErr('passord')}} placeholder="••••••••" style={fieldErrors.passord ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.passord && <p style={errTxt}>{fieldErrors.passord}</p>}
         <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8', lineHeight:1.4 }}>💡 Tips: Lengde er viktigere enn spesialtegn. Bruk gjerne en passfrase med tre tilfeldige ord, f.eks. «kaffe-traktor-fjord».</p>
       </div>
       <div style={{ marginBottom:'1.5rem' }}>
         <label style={lbl}>Gjenta passord</label>
-        <input type="password" value={passord2} onChange={e=>setPassord2(e.target.value)} placeholder="••••••••" style={inp} />
+        <input ref={refs.passord2} type="password" value={passord2} onChange={e=>{setPassord2(e.target.value); clearErr('passord2')}} placeholder="••••••••" style={fieldErrors.passord2 ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.passord2 && <p style={errTxt}>{fieldErrors.passord2}</p>}
       </div>
+      {error && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', color:'#dc2626', marginBottom:'1rem', fontSize:'14px' }}>{error}</div>}
       <button onClick={fullfor} disabled={saving} style={{ width:'100%', padding:'12px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'15px', fontWeight:'600', cursor:saving?'not-allowed':'pointer' }}>{saving?'Oppretter...':'Start gratis prøveperiode'}</button>
     </div>
   )
@@ -2819,6 +2848,182 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
   )
 }
 
+// ─── PWA INSTALLASJONSGUIDE («Legg til på startskjerm») ───────────────────────
+// Hjelper mobilbrukere som logger inn i nettleseren med å legge appen på
+// startskjermen, så de slipper å logge inn på nytt hver gang. Vises kun på
+// mobil, kun når appen IKKE allerede kjører installert, og kun én gang
+// (localStorage). Koblet til dashbord-turen: guiden vises FØRST når turen er
+// fullført/hoppet over — de to overlapper aldri. Modul-turer trigger den ikke.
+
+let epDeferredInstallPrompt = null
+if (typeof window !== 'undefined') {
+  // beforeinstallprompt fyres tidlig ved app-last (Android/Chrome). Fang og lagre
+  // den, så vi kan trigge den native prompten senere når guiden faktisk vises.
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault()
+    epDeferredInstallPrompt = e
+    window.dispatchEvent(new Event('ep-install-available'))
+  })
+  window.addEventListener('appinstalled', () => {
+    epDeferredInstallPrompt = null
+    try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
+    window.dispatchEvent(new Event('ep-installed'))
+  })
+}
+
+function erPwaStandalone() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+}
+function erMobilEnhet() {
+  if (typeof window === 'undefined') return false
+  const smal = window.innerWidth < 768
+  const touch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+  return smal || (touch && coarse)
+}
+function detekterMobilOS() {
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+  const erIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
+  const erAndroid = /android/i.test(ua)
+  return { erIOS, erAndroid }
+}
+function harSettInstallGuide() {
+  try { return localStorage.getItem('ep-install-guide-seen') === 'done' } catch (_) { return false }
+}
+function markerInstallGuideSett() {
+  try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
+}
+
+// iOS Del-ikon (firkant med pil opp) — gjør instruksjonen tydelig.
+function DelIkon({ size = 22, color = '#059669' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M12 3v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 6.5 12 3l3.5 3.5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v7A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 18.5 10H17" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function InstallGuide({ aktivSide }) {
+  const [synlig, setSynlig] = React.useState(false)
+  const [visInstruks, setVisInstruks] = React.useState(false)
+  const [promptTilgjengelig, setPromptTilgjengelig] = React.useState(!!epDeferredInstallPrompt)
+  const turAktivRef = React.useRef(false)
+  const { erIOS, erAndroid } = detekterMobilOS()
+
+  const visGuide = React.useCallback((tvunget = false) => {
+    if (erPwaStandalone()) return
+    if (!tvunget) {
+      if (!erMobilEnhet()) return
+      if (harSettInstallGuide()) return
+      markerInstallGuideSett()               // mirror turen: marker som sett straks den vises
+    }
+    setVisInstruks(false)
+    setSynlig(true)
+  }, [])
+
+  // Koblingsbuss: lytt på dashbord-turen og på manuell åpning fra menyen.
+  React.useEffect(() => {
+    const paaTurAktiv = () => { turAktivRef.current = true }
+    const paaTurFerdig = () => {
+      turAktivRef.current = false
+      // Kort forsinkelse så turens overlegg rekker å forsvinne først (aldri overlapp).
+      setTimeout(() => visGuide(false), 450)
+    }
+    const paaVisManuelt = () => visGuide(true)
+    const paaTilgjengelig = () => setPromptTilgjengelig(true)
+    const paaInstallert = () => setSynlig(false)
+    window.addEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
+    window.addEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
+    window.addEventListener('ep-install-guide-vis', paaVisManuelt)
+    window.addEventListener('ep-install-available', paaTilgjengelig)
+    window.addEventListener('ep-installed', paaInstallert)
+    return () => {
+      window.removeEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
+      window.removeEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
+      window.removeEventListener('ep-install-guide-vis', paaVisManuelt)
+      window.removeEventListener('ep-install-available', paaTilgjengelig)
+      window.removeEventListener('ep-installed', paaInstallert)
+    }
+  }, [visGuide])
+
+  // Tilbakevendende brukere: dashbord-turen er allerede sett og starter ikke på
+  // nytt, så onSteg-signalet kommer aldri. Vis guiden direkte på dashbordet hvis
+  // den ikke er vist før — men kun hvis turen ikke er i gang denne økten.
+  React.useEffect(() => {
+    if (aktivSide !== 'dashboard') return
+    if (harSettInstallGuide()) return
+    if (!erMobilEnhet() || erPwaStandalone()) return
+    const t = setTimeout(() => { if (!turAktivRef.current) visGuide(false) }, 1600)
+    return () => clearTimeout(t)
+  }, [aktivSide, visGuide])
+
+  if (!synlig) return null
+
+  const installer = async () => {
+    const dp = epDeferredInstallPrompt
+    if (!dp) { setVisInstruks(true); return }
+    try { dp.prompt(); await dp.userChoice } catch (_) {}
+    epDeferredInstallPrompt = null
+    setPromptTilgjengelig(false)
+    setSynlig(false)
+  }
+  const lukk = () => setSynlig(false)
+
+  // Android/Chrome med fanget event → native prompt. iOS støtter aldri prompt.
+  const kanNativInstallere = !erIOS && promptTilgjengelig
+
+  const primaryStil = { flex: 1, padding: '12px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }
+  const sekundaerStil = { padding: '12px 16px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }
+  const instruksBoks = { marginTop: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px', fontSize: '13.5px', color: '#166534', lineHeight: 1.6 }
+
+  return (
+    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', padding: '12px', pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
+      <style>{`@keyframes epInstallOpp { from { transform: translateY(120%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }`}</style>
+      <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: '460px', background: 'white', borderRadius: '18px', boxShadow: '0 -8px 40px rgba(15,23,42,0.22)', border: '1px solid #f1f5f9', padding: '18px 20px 20px', animation: 'epInstallOpp 0.3s ease-out' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+          <img src="/icon-192.png" alt="En Plattform" style={{ width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Få En Plattform som app</h3>
+            <p style={{ margin: 0, fontSize: '13.5px', color: '#64748b', lineHeight: 1.5 }}>Logg inn med ett trykk hver gang — legg appen på startskjermen.</p>
+          </div>
+          <button onClick={lukk} aria-label="Lukk" style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', width: '28px', height: '28px', cursor: 'pointer', color: '#94a3b8', fontSize: '15px', lineHeight: 1, flexShrink: 0 }}>×</button>
+        </div>
+
+        {visInstruks && erIOS && (
+          <div style={instruksBoks}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontWeight: '700' }}>
+              <DelIkon /> <span>Slik legger du appen til på iPhone/iPad:</span>
+            </div>
+            <div>1. Trykk <strong>Del</strong>-ikonet (firkant med pil opp) i Safari.</div>
+            <div>2. Bla ned og trykk <strong>«Legg til på Hjem-skjerm»</strong>.</div>
+            <div>3. Trykk <strong>«Legg til»</strong> øverst til høyre.</div>
+          </div>
+        )}
+        {visInstruks && !erIOS && (
+          <div style={instruksBoks}>
+            <div style={{ fontWeight: '700', marginBottom: '8px' }}>Slik legger du appen til:</div>
+            <div>1. Trykk <strong>⋮</strong>-menyen øverst til høyre i nettleseren.</div>
+            <div>2. Velg <strong>«Legg til på startskjerm»</strong> (eller «Installer app»).</div>
+            <div>3. Bekreft med <strong>«Legg til»</strong>.</div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', marginTop: '16px', alignItems: 'center' }}>
+          {kanNativInstallere ? (
+            <button onClick={installer} style={primaryStil}>📲 Installer</button>
+          ) : (
+            <button onClick={() => setVisInstruks(v => !v)} style={primaryStil}>{visInstruks ? 'Skjul' : 'Vis meg hvordan'}</button>
+          )}
+          <button onClick={lukk} style={sekundaerStil}>Ikke nå</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const DASHBOARD_TOUR = [
   { tittel: '👋 Velkommen', tekst: 'Velkommen til En Plattform! Her er en rask omvisning av forsiden. Du kan gå frem og tilbake, eller hoppe over når som helst.' },
   { target: 'hovedmeny', tittel: 'Hovedmenyen', tekst: 'Til venstre finner du alle modulene — prosjekter, sjekklister, avvik, befaring og mer. På mobil åpner du menyen med knappen øverst til venstre.' },
@@ -2991,7 +3196,8 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kan
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR} />
+      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR}
+        onSteg={(i) => window.dispatchEvent(new Event(i === -1 ? 'ep-dashboard-tur-ferdig' : 'ep-dashboard-tur-aktiv'))} />
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: mob ? '16px' : '24px 32px' }}>
         <div style={{ display: 'flex', alignItems: mob ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: mob ? 'column' : 'row', gap: mob ? '10px' : '0' }}>
           <div>
@@ -37215,6 +37421,59 @@ function CrmStatusBadge({ status }) {
 
 function fmtVal(n) { return n ? (Math.round(parseFloat(n)||0)).toLocaleString('nb-NO')+' kr' : '—' }
 
+// Norsk dato + klokkeslett i Oslo-tid, f.eks. «23.07.2026 kl. 14:32».
+// Faller tilbake til rå-verdi hvis parsing feiler, og '' hvis ingenting.
+function fmtCrmTidspunkt(ts) {
+  if (!ts) return ''
+  const d = new Date(ts)
+  if (isNaN(d.getTime())) return String(ts)
+  try {
+    const dato = d.toLocaleDateString('nb-NO', { timeZone:'Europe/Oslo', day:'2-digit', month:'2-digit', year:'numeric' })
+    const kl = d.toLocaleTimeString('nb-NO', { timeZone:'Europe/Oslo', hour:'2-digit', minute:'2-digit' })
+    return `${dato} kl. ${kl}`
+  } catch(_) { return d.toISOString().split('T')[0] }
+}
+
+// Visningsnavn fra user_profiles (navnet ligger i full_name), fallback e-post-prefiks, så «Ukjent».
+function crmBrukerNavn(usersById, userId) {
+  if (!userId) return 'Ukjent'
+  const u = usersById && usersById[userId]
+  if (!u) return 'Ukjent'
+  const navn = (u.full_name || '').trim()
+  if (navn) return navn
+  const epost = (u.email || '').trim()
+  if (epost) return epost.split('@')[0]
+  return 'Ukjent'
+}
+
+// Farge-skala for kjøpspotensial-score (høyere = varmere/grønnere)
+function crmScoreColor(score) {
+  const s = parseFloat(score) || 0
+  if (s >= 75) return { bg:'#f0fdf4', color:'#16a34a', border:'#bbf7d0' }
+  if (s >= 50) return { bg:'#fffbeb', color:'#d97706', border:'#fde68a' }
+  if (s >= 25) return { bg:'#fff7ed', color:'#ea580c', border:'#fed7aa' }
+  return { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0' }
+}
+function CrmScoreBadge({ score }) {
+  const c = crmScoreColor(score)
+  return <span title="Kjøpspotensial (score)" style={{ background:c.bg, color:c.color, border:`1px solid ${c.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'700' }}>🎯 {Math.round(parseFloat(score)||0)}</span>
+}
+
+// Sorteringsvalg for CRM-lista. Sortering skjer i DB-spørringen (order by),
+// ikke i frontend — kritisk med ~1000 leads. nullsFirst:false = tomme verdier bakerst.
+const CRM_SORT = {
+  score_desc:    { label:'🎯 Score (høyest først)',        col:'score',            asc:false },
+  neste_asc:     { label:'📅 Neste oppfølging (tidligst)', col:'neste_oppfolging', asc:true  },
+  kontaktet_asc: { label:'📞 Sist kontaktet (eldst først)',col:'sist_kontaktet',   asc:true  },
+  navn_asc:      { label:'🔤 Navn (A–Å)',                   col:'name',             asc:true  },
+  nyeste:        { label:'🆕 Nyeste først',                 col:'created_at',       asc:false },
+}
+const CRM_SORT_DEFAULT = 'score_desc'
+function readCrmSort() {
+  try { const v = window.localStorage.getItem('crm_sort'); if (v && CRM_SORT[v]) return v } catch(_) {}
+  return CRM_SORT_DEFAULT
+}
+
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function CRMPage() {
   const alert = useAppAlert()
@@ -37230,28 +37489,123 @@ function CRMPage() {
   const [filterStatus, setFilterStatus] = useState('alle')
   const [filterType, setFilterType] = useState('alle')
   const [filterIndustry, setFilterIndustry] = useState('alle')
+  const [filterKilde, setFilterKilde] = useState('alle')
+  const [filterKommune, setFilterKommune] = useState('alle')
+  const [kilder, setKilder] = useState([])       // distinkte kilder (fra DB)
+  const [kommuner, setKommuner] = useState([])   // distinkte kommuner/steder (fra DB, city-feltet)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(null)
   const [showNew, setShowNew] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [showImportQuotes, setShowImportQuotes] = useState(false)
+  const [sortBy, setSortBy] = useState(readCrmSort)
+  const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [debSearch, setDebSearch] = useState('')       // debouncet søk (går til DB)
+  const [listCount, setListCount] = useState(0)        // antall rader som matcher filteret (DB count)
+  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, pipeline:0 })
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 100
+  const initedRef = React.useRef(false)
 
-  const load = async () => {
-    try {
-      const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
-      const [c, ct, act, proj, q, inv] = await Promise.all([
-        safeQuery('customers',{order:'updated_at'}),
-        supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
-        safeQuery('crm_activities'),
-        supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
-        safeQuery('quotes'),
-        safeQuery('invoices'),
-      ])
-      setCustomers(c); setContacts(ct); setActivities(act)
-      setProjects(proj); setQuotes(q); setInvoices(inv)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+  // PostgREST-or() bruker komma/parentes som skilletegn — fjern dem fra søket så filteret ikke brekker
+  const sanitizeSearch = (s) => (s||'').trim().replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim()
+
+  // Bygg lista-spørring: filter + søk + sortering skjer i DB, ikke på et 1000-raders uttrekk.
+  const buildListQuery = (withCount) => {
+    let q = supabase.from('customers').select('*', withCount ? { count:'exact' } : undefined)
+    if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
+    if (filterType !== 'alle') q = q.eq('type', filterType)
+    if (filterIndustry !== 'alle') q = q.eq('industry', filterIndustry)
+    if (filterKilde !== 'alle') q = q.eq('kilde', filterKilde)
+    if (filterKommune !== 'alle') q = q.eq('city', filterKommune) // geografi ligger i city (poststed)
+    const term = sanitizeSearch(debSearch)
+    if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,city.ilike.%${term}%,orgnr.ilike.%${term}%`)
+    const so = CRM_SORT[sortBy] || CRM_SORT[CRM_SORT_DEFAULT]
+    q = q.order(so.col, { ascending: so.asc, nullsFirst: false })
+    if (so.col !== 'updated_at') q = q.order('updated_at', { ascending: false })
+    if (so.col !== 'id') q = q.order('id', { ascending: true }) // deterministisk paginering
+    return q
   }
-  useEffect(()=>{ load() },[])
+
+  // Last første (reset) eller neste side av lista via .range() — ikke begrenset til 1000.
+  const loadList = async (reset = true) => {
+    reset ? setListBusy(true) : setLoadingMore(true)
+    try {
+      const nextPage = reset ? 0 : page + 1
+      const from = nextPage * PAGE_SIZE, to = from + PAGE_SIZE - 1
+      const { data, count } = await buildListQuery(true).range(from, to)
+      const fetched = data || []
+      setCustomers(prev => reset ? fetched : [...prev, ...fetched])
+      if (typeof count === 'number') setListCount(count)
+      setPage(nextPage)
+    } catch(e) { console.error('[CRM] loadList', e); if (reset) { setCustomers([]); setListCount(0) } }
+    finally {
+      if (!initedRef.current) { initedRef.current = true; setLoading(false) }
+      reset ? setListBusy(false) : setLoadingMore(false)
+    }
+  }
+
+  // KPI-tall via egne count-spørringer — korrekte uansett 1000-grensen, uavhengig av lista-filteret.
+  const loadKpis = async () => {
+    try {
+      const base = () => supabase.from('customers').select('id', { count:'exact', head:true })
+      const [tot, lead, akt, vun] = await Promise.all([
+        base(),
+        base().eq('status', 'lead'),
+        base().in('status', ['kontaktet', 'tilbud_sendt']),
+        base().eq('status', 'vunnet'),
+      ])
+      let pipeline = 0
+      try {
+        // Aggregert sum i DB (ikke basert på hentede rader). Faller til 0 hvis aggregat ikke er tilgjengelig.
+        const { data } = await supabase.from('customers').select('estimated_value.sum()').not('status', 'in', '(vunnet,tapt,inaktiv)')
+        pipeline = Number(data?.[0]?.sum) || 0
+      } catch(_) {}
+      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, pipeline })
+    } catch(e) { console.error('[CRM] loadKpis', e) }
+  }
+
+  // Hjelpedata (kontakter/aktiviteter/prosjekter/tilbud/faktura) — brukes til badges/kort.
+  const loadAux = async () => {
+    const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
+    const [ct, act, proj, q, inv] = await Promise.all([
+      supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
+      safeQuery('crm_activities'),
+      supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
+      safeQuery('quotes'),
+      safeQuery('invoices'),
+    ])
+    setContacts(ct); setActivities(act); setProjects(proj); setQuotes(q); setInvoices(inv)
+  }
+
+  // Distinkte kilder + kommuner til filter-nedtrekkene. Bruker DB-aggregat (grupperer
+  // på kolonnen) så vi får unike verdier uten å hente alle 14 500 radene. Fallback: uttrekk + dedup.
+  const loadFacets = async () => {
+    const hentDistinkt = async (col) => {
+      try {
+        const { data, error } = await supabase.from('customers').select(`${col}, n:id.count()`).not(col, 'is', null).order(col, { ascending: true })
+        if (error) throw error
+        return (data || []).map(r => r[col]).filter(v => v != null && String(v).trim() !== '')
+      } catch(_) {
+        // Fallback (kappet på 1000) hvis aggregat ikke er tilgjengelig
+        const { data } = await supabase.from('customers').select(col).not(col, 'is', null).order(col, { ascending: true })
+        return Array.from(new Set((data || []).map(r => r[col]).filter(v => v != null && String(v).trim() !== '')))
+      }
+    }
+    const [ks, kom] = await Promise.all([hentDistinkt('kilde'), hentDistinkt('city')])
+    setKilder(ks); setKommuner(kom)
+  }
+
+  // Full oppfriskning etter endringer (ny/rediger/import/status).
+  const refreshAll = async () => { await Promise.all([ loadList(true), loadKpis(), loadAux(), loadFacets() ]) }
+
+  // Debounce søk så vi ikke spør DB per tastetrykk
+  useEffect(()=>{ const t = setTimeout(()=>setDebSearch(search), 350); return ()=>clearTimeout(t) },[search])
+  // Init: KPI + hjelpedata + facetter én gang
+  useEffect(()=>{ loadKpis(); loadAux(); loadFacets() },[])
+  // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
+  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, debSearch])
 
   // Check overdue tasks and create notifications
   useEffect(()=>{
@@ -37266,28 +37620,24 @@ function CRMPage() {
     })
   },[activities])
 
-  const filtered = customers.filter(c=>{
-    if (filterStatus!=='alle'&&c.status!==filterStatus) return false
-    if (filterType!=='alle'&&c.type!==filterType) return false
-    if (filterIndustry!=='alle'&&c.industry!==filterIndustry) return false
-    if (search&&![c.name,c.email,c.phone,c.city,c.orgnr].some(v=>v?.toLowerCase().includes(search.toLowerCase()))) return false
-    return true
-  })
-
-  const stats = {
-    total: customers.length,
-    leads: customers.filter(c=>c.status==='lead').length,
-    active: customers.filter(c=>['kontaktet','tilbud_sendt'].includes(c.status)).length,
-    vunnet: customers.filter(c=>c.status==='vunnet').length,
-    pipeline: customers.filter(c=>!['vunnet','tapt','inaktiv'].includes(c.status)).reduce((a,c)=>a+(parseFloat(c.estimated_value)||0),0),
-  }
-
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle'
   const overdueTasks = activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<new Date().toISOString().split('T')[0])
 
-  const exportCSV = () => {
+  const exportCSV = async () => {
+    // Eksporterer HELE det filtrerte datasettet (paginert henting), ikke bare det som er lastet i lista.
+    let all = [], from = 0
+    try {
+      while (true) {
+        const { data } = await buildListQuery(false).range(from, from + 999)
+        const chunk = data || []
+        all = all.concat(chunk)
+        if (chunk.length < 1000) break
+        from += 1000
+      }
+    } catch(e) { console.error('[CRM] exportCSV', e) }
     const rows = [
       ['Navn','Type','Status','Bransje','E-post','Telefon','By','Org.nr','Estimert verdi','Opprettet'],
-      ...filtered.map(c=>[c.name,CRM_TYPE[c.type]?.label||'',CRM_STATUS[c.status]?.label||'',c.industry||'',c.email||'',c.phone||'',c.city||'',c.orgnr||'',c.estimated_value||'',c.created_at?.split('T')[0]||''])
+      ...all.map(c=>[c.name,CRM_TYPE[c.type]?.label||'',CRM_STATUS[c.status]?.label||'',c.industry||'',c.email||'',c.phone||'',c.city||'',c.orgnr||'',c.estimated_value||'',c.created_at?.split('T')[0]||''])
     ]
     const csv = rows.map(r=>r.join(';')).join('\n')
     const blob = new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'})
@@ -37297,7 +37647,7 @@ function CRMPage() {
 
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
-  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);load()}} />
+  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -37310,6 +37660,7 @@ function CRMPage() {
           </div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
             <CsvButton kind="export" size="md" onClick={exportCSV} />
+            <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
               {quotes.length > 0 ? <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📋 Fra tilbud ({quotes.length})</button> : <span style={{ fontSize:'11px',color:'#94a3b8',padding:'10px' }}>({quotes.length} tilbud)</span>}
           </div>
@@ -37318,11 +37669,11 @@ function CRMPage() {
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns: mob ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap:'10px' }}>
           {[
-            { label:'Totalt', value:stats.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
-            { label:'Leads', value:stats.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
-            { label:'Aktive', value:stats.active, emoji:'📋', color:'#d97706', bg:'#fffbeb' },
-            { label:'Vunnet', value:stats.vunnet, emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
-            { label:'Pipeline', value:fmtVal(stats.pipeline), emoji:'💰', color:'#2563eb', bg:'#eff6ff' },
+            { label:'Totalt', value:kpi.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
+            { label:'Leads', value:kpi.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
+            { label:'Aktive', value:kpi.active, emoji:'📋', color:'#d97706', bg:'#fffbeb' },
+            { label:'Vunnet', value:kpi.vunnet, emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
+            { label:'Pipeline', value:fmtVal(kpi.pipeline), emoji:'💰', color:'#2563eb', bg:'#eff6ff' },
           ].map(s=>(
             <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px 16px', border:'1px solid #f1f5f9' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
@@ -37346,7 +37697,7 @@ function CRMPage() {
 
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth: mob?'none':'240px', flex: mob?'1 1 100%':'1' }} />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, minWidth: mob?'auto':'260px', maxWidth: mob?'none':'360px', flex: mob?'1 1 100%':'1 1 260px' }} />
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
@@ -37359,26 +37710,37 @@ function CRMPage() {
             <option value="alle">Alle bransjer</option>
             {INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}
           </select>
-          {(search||filterStatus!=='alle'||filterType!=='alle'||filterIndustry!=='alle')&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          <select value={filterKilde} onChange={e=>setFilterKilde(e.target.value)} title="Kilde" style={{ ...crmInp, maxWidth: mob?'none':'170px', flex: mob?'1 1 45%':'none' }}>
+            <option value="alle">Alle kilder</option>
+            {kilder.map(k=><option key={k} value={k}>{k}</option>)}
+          </select>
+          <select value={filterKommune} onChange={e=>setFilterKommune(e.target.value)} title="Kommune / sted" style={{ ...crmInp, maxWidth: mob?'none':'170px', flex: mob?'1 1 45%':'none' }}>
+            <option value="alle">Alle kommuner</option>
+            {kommuner.map(k=><option key={k} value={k}>{k}</option>)}
+          </select>
+          <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth: mob?'none':'200px', flex: mob?'1 1 45%':'none' }}>
+            {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+          </select>
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#0f172a':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
             ))}
           </div>
-          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kunder</span>
+          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{listCount.toLocaleString('nb-NO')} kunder{listBusy?' …':''}</span>
         </div>
 
         {/* LISTE VIEW */}
         {view==='liste' && (
-          filtered.length===0 ? (
+          customers.length===0 ? (
             <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'60px 20px', textAlign:'center' }}>
               <div style={{ fontSize:'40px', marginBottom:'12px' }}>🤝</div>
               <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen kunder funnet</h3>
-              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{customers.length===0?'Legg til din første kunde eller lead.':'Prøv å endre søk eller filter.'}</p>
+              <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>{noFilters?'Legg til din første kunde eller lead.':'Prøv å endre søk eller filter.'}</p>
             </div>
           ) : (
             <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-              {filtered.map(c=>{
+              {customers.map(c=>{
                 const custContacts=contacts.filter(ct=>ct.customer_id===c.id)
                 const custActivities=activities.filter(a=>a.customer_id===c.id)
                 const openTasks=custActivities.filter(a=>a.type==='task'&&!a.completed)
@@ -37393,7 +37755,9 @@ function CRMPage() {
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
                         <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
                         <CrmStatusBadge status={c.status} />
+                        {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
                         {c.industry&&<span style={{ fontSize:'12px', color:'#94a3b8', background:'#f8fafc', padding:'2px 8px', borderRadius:'999px', border:'1px solid #f1f5f9' }}>{c.industry}</span>}
+                        {c.kilde&&<span title="Kilde" style={{ fontSize:'12px', color:'#64748b', background:'#f1f5f9', padding:'2px 8px', borderRadius:'999px' }}>📥 {c.kilde}</span>}
                         {openTasks.length>0&&<span style={{ background:'#fffbeb', color:'#d97706', fontSize:'11px', fontWeight:'700', padding:'2px 8px', borderRadius:'999px', border:'1px solid #fde68a' }}>⏰ {openTasks.length} oppgave{openTasks.length>1?'r':''}</span>}
                       </div>
                       <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
@@ -37412,6 +37776,13 @@ function CRMPage() {
                   </div>
                 )
               })}
+              {customers.length < listCount && (
+                <div style={{ textAlign:'center', paddingTop:'8px' }}>
+                  <button onClick={()=>loadList(false)} disabled={loadingMore} style={{ padding:'10px 24px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:loadingMore?'wait':'pointer', fontSize:'14px', fontWeight:'700' }}>
+                    {loadingMore ? 'Laster…' : `Last inn flere (${(listCount - customers.length).toLocaleString('nb-NO')} igjen)`}
+                  </button>
+                </div>
+              )}
             </div>
           )
         )}
@@ -37422,7 +37793,7 @@ function CRMPage() {
             <div style={{ display:'grid', gridTemplateColumns:'repeat(5,280px)', gap:'14px', minWidth:'max-content' }}>
               {['lead','kontaktet','tilbud_sendt','vunnet','tapt'].map(status=>{
                 const cfg=CRM_STATUS[status]
-                const cols=filtered.filter(c=>c.status===status)
+                const cols=customers.filter(c=>c.status===status)
                 const colVal=cols.reduce((a,c)=>a+(parseFloat(c.estimated_value)||0),0)
                 return (
                   <div key={status}>
@@ -37470,7 +37841,9 @@ function CRMPage() {
         )}
       </div>
 
-      {showNew&&<CRMEditorModal user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);load()}} />}
+      {showNew&&<CRMEditorModal user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);refreshAll()}} />}
+
+      {showImport&&<CRMImportModal user={user} onClose={()=>setShowImport(false)} onDone={()=>{setShowImport(false);refreshAll()}} />}
 
       {/* Import fra tilbud modal */}
       {showImportQuotes && (()=>{
@@ -37541,7 +37914,7 @@ function CRMPage() {
           }
           if (errors.length > 0) alert(`Importert ${imported} av ${customersToImport.length}.\n\nFeil:\n${errors.join('\n')}`)
           setShowImportQuotes(false)
-          load()
+          refreshAll()
         }
 
         return (
@@ -37616,6 +37989,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const alert = useAppAlert()
   const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
+  const { erAdmin } = useAuth()
   const [c, setC] = useState(init)
   const [cts, setCts] = useState(contacts)
   const [acts, setActs] = useState(activities)
@@ -37624,7 +37998,20 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [editing, setEditing] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewActivity, setShowNewActivity] = useState(false)
+  const [editAct, setEditAct] = useState(null) // aktivitet under redigering
   const [showQuotePicker, setShowQuotePicker] = useState(false)
+  const [usersById, setUsersById] = useState({})
+
+  // TILGANG (delt CRM, 2 brukere): rediger = alle (audit-spor holder historikken ærlig).
+  // Slett = kun egen + admin (sletting er uopprettelig og etterlater ikke audit-spor).
+  // Vil du at begge skal kunne slette hverandres? Endre kanSletteAktivitet til å returnere true.
+  const kanEndreAktivitet = (_a) => true
+  const kanSletteAktivitet = (a) => erAdmin || !a?.created_by || a.created_by === user?.id
+  const slettAktivitet = async (a) => {
+    if (!(await confirm({ message:'Slett aktivitet?', subMessage: a.title, danger:true, confirmLabel:'Slett' }))) return
+    try { const { error } = await supabase.from('crm_activities').delete().eq('id', a.id); if (error) throw error; loadDetails() }
+    catch(e) { alert('Kunne ikke slette: ' + e.message) }
+  }
   const fileInputRef = React.useRef(null)
   const cfg = CRM_STATUS[c.status] || CRM_STATUS.lead
 
@@ -37637,6 +38024,17 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
     setCts(ct); setActs(act); setDocs(doc)
   }
   useEffect(()=>{ loadDetails() },[c.id])
+
+  // Bygg id→bruker-oppslag for å vise hvem som opprettet aktiviteter.
+  // user_profiles er den ekte brukertabellen; navnet ligger i full_name (ikke first_name/last_name).
+  useEffect(()=>{
+    (async ()=>{
+      const { data, error } = await supabase.from('user_profiles').select('id, full_name, email')
+      if (error) { console.error('[CRM] Kunne ikke laste brukernavn fra user_profiles:', error.message, error); setUsersById({}); return }
+      if (!data || !data.length) console.warn('[CRM] user_profiles-oppslag returnerte 0 rader — mulig RLS-lesetilgang mangler for andre brukere i bedriften')
+      const map = {}; (data||[]).forEach(u=>{ map[u.id]=u }); setUsersById(map)
+    })().catch(e=>{ console.error('[CRM] Uventet feil ved brukeroppslag:', e); setUsersById({}) })
+  },[])
 
   const refresh = async () => { const {data}=await supabase.from('customers').select('*').eq('id',c.id).single(); if(data) setC(data) }
 
@@ -37754,7 +38152,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null]].filter(r=>r[1]).map(([k,v])=>(
+                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null],['Neste oppfølging',c.neste_oppfolging||null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null]].filter(r=>r[1]).map(([k,v])=>(
                     <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
                       <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
                       <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
@@ -37762,6 +38160,19 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                   ))}
                 </div>
                 {c.notes&&<div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Notater</div><p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{c.notes}</p></div>}
+                {c.ekstra_felt&&typeof c.ekstra_felt==='object'&&!Array.isArray(c.ekstra_felt)&&Object.keys(c.ekstra_felt).length>0&&(
+                  <div style={{ marginTop:'12px' }}>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'6px' }}>Ekstra felt</div>
+                    <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px' }}>
+                      {Object.entries(c.ekstra_felt).map(([k,v])=>(
+                        <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
+                          <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600' }}>{k}</div>
+                          <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px', wordBreak:'break-word' }}>{v==null||v===''?'—':String(v)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               {openTasks.length>0&&(
                 <div style={{ ...crmCard, background:'#fffbeb', border:'1px solid #fde68a' }}>
@@ -37802,10 +38213,14 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                             <span style={{ background:atCfg?.color+'18', color:atCfg?.color, fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px' }}>{atCfg?.label}</span>
                           </div>
                           {a.description&&<p style={{ margin:'0 0 4px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>{a.description}</p>}
-                          <div style={{ display:'flex', gap:'10px', fontSize:'11px', color:'#94a3b8' }}>
-                            <span>📅 {a.date}</span>
+                          <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', color:'#94a3b8' }}>
+                            <span>👤 {crmBrukerNavn(usersById, a.created_by)} — {fmtCrmTidspunkt(a.created_at) || a.date}{a.redigert_at ? <span title={`Redigert av ${crmBrukerNavn(usersById, a.redigert_av)} ${fmtCrmTidspunkt(a.redigert_at)}`} style={{ fontStyle:'italic' }}> (redigert)</span> : ''}</span>
                             {a.due_date&&<span style={{ color:a.due_date<today&&!a.completed?'#dc2626':'#64748b', fontWeight:a.due_date<today&&!a.completed?'700':'400' }}>Frist: {a.due_date}</span>}
                           </div>
+                        </div>
+                        <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'flex-start' }}>
+                          {kanEndreAktivitet(a)&&<button onClick={()=>setEditAct(a)} title="Rediger" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', padding:'2px 4px', color:'#64748b' }}>✏️</button>}
+                          {kanSletteAktivitet(a)&&<button onClick={()=>slettAktivitet(a)} title="Slett" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', padding:'2px 4px', color:'#dc2626' }}>🗑️</button>}
                         </div>
                       </div>
                     )
@@ -37948,6 +38363,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
       {editing&&<CRMEditorModal user={user} initial={c} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);refresh()}} />}
       {showNewContact&&<ContactModal customerId={c.id} onClose={()=>setShowNewContact(false)} onSaved={()=>{setShowNewContact(false);loadDetails()}} />}
       {showNewActivity&&<ActivityModal customerId={c.id} defaultType={typeof showNewActivity==='object'?showNewActivity.defaultType:'note'} user={user} onClose={()=>setShowNewActivity(false)} onSaved={()=>{setShowNewActivity(false);loadDetails()}} />}
+      {editAct&&<ActivityModal customerId={c.id} initial={editAct} user={user} onClose={()=>setEditAct(null)} onSaved={()=>{setEditAct(null);loadDetails()}} />}
       {showQuotePicker&&<QuotePickerModal quotes={quotes} customer={c} onClose={()=>setShowQuotePicker(false)} onLink={linkQuote} />}
     </div>
   )
@@ -37956,16 +38372,34 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 function CRMEditorModal({ user, initial, onClose, onSaved }) {
   const alert = useAppAlert()
   const isEdit=!!initial
-  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'' })
+  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', kontaktperson:initial?.kontaktperson||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'', score:initial?.score??'', neste_oppfolging:initial?.neste_oppfolging||'', kontaktet_av:initial?.kontaktet_av||'' })
   const [saving, setSaving] = useState(false)
+  // Ekstra felt (JSONB) som frie etikett/verdi-par
+  const [ekstraFelt, setEkstraFelt] = useState(() => {
+    const o = initial?.ekstra_felt
+    if (o && typeof o === 'object' && !Array.isArray(o)) return Object.entries(o).map(([label, value]) => ({ label, value: value == null ? '' : String(value) }))
+    return []
+  })
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const setEkstra=(i,k,v)=>setEkstraFelt(l=>l.map((x,idx)=>idx===i?{...x,[k]:v}:x))
+  const addEkstra=()=>setEkstraFelt(l=>[...l,{label:'',value:''}])
+  const removeEkstra=(i)=>setEkstraFelt(l=>l.filter((_,idx)=>idx!==i))
   const lbl=t=><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>{t}</label>
 
   const handleSave = async () => {
     if (!form.name.trim()) return alert('Navn er påkrevd')
     setSaving(true)
     try {
-      const payload={...form,estimated_value:form.estimated_value?parseFloat(form.estimated_value):null,updated_at:new Date().toISOString()}
+      // Bygg ekstra_felt-objekt fra ikke-tomme etiketter
+      const ekstraObj = {}
+      ekstraFelt.forEach(e => { const l = (e.label||'').trim(); if (l) ekstraObj[l] = (e.value ?? '') })
+      const payload={...form,
+        estimated_value:form.estimated_value?parseFloat(form.estimated_value):null,
+        score:(form.score===''||form.score==null)?null:(parseInt(form.score,10)||0),
+        neste_oppfolging:form.neste_oppfolging||null,
+        kontaktet_av:form.kontaktet_av?.trim()||null,
+        ekstra_felt:Object.keys(ekstraObj).length?ekstraObj:null,
+        updated_at:new Date().toISOString()}
       if (isEdit) { const {error}=await supabase.from('customers').update(payload).eq('id',initial.id); if(error) throw error }
       else {
         // Autogenerer K-NNNN for nye kunder opprettet via CRM
@@ -38015,6 +38449,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={crmInp}>{Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
           <div>{lbl('Bransje')}<select value={form.industry} onChange={e=>set('industry',e.target.value)} style={crmInp}><option value="">Velg...</option>{INDUSTRIES.map(i=><option key={i} value={i}>{i}</option>)}</select></div>
           <div>{lbl('Org.nr')}<input value={form.orgnr} onChange={e=>set('orgnr',e.target.value)} placeholder="123 456 789" style={crmInp} /></div>
+          <div>{lbl('Kontaktperson')}<input value={form.kontaktperson} onChange={e=>set('kontaktperson',e.target.value)} placeholder="Navn på kontaktperson" style={crmInp} /></div>
           <div>{lbl('Estimert verdi (kr)')}<input type="number" value={form.estimated_value} onChange={e=>set('estimated_value',e.target.value)} placeholder="0" style={crmInp} /></div>
           <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="kontakt@firma.no" style={crmInp} /></div>
           <div>{lbl('Telefon')}<input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={crmInp} /></div>
@@ -38022,9 +38457,608 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div style={{ gridColumn:'1/-1' }}>{lbl('Adresse')}<input value={form.address} onChange={e=>set('address',e.target.value)} placeholder="Gateadresse" style={crmInp} /></div>
           <div>{lbl('Postnr')}<input value={form.postal_code} onChange={e=>set('postal_code',e.target.value)} placeholder="0000" style={crmInp} /></div>
           <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
+          <div>{lbl('Score (kjøpspotensial)')}<input type="number" min="0" max="100" value={form.score} onChange={e=>set('score',e.target.value)} placeholder="0–100" style={crmInp} /></div>
+          <div>{lbl('Neste oppfølging')}<input type="date" value={form.neste_oppfolging||''} onChange={e=>set('neste_oppfolging',e.target.value)} style={crmInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}>{lbl('Kontaktet av')}<input value={form.kontaktet_av} onChange={e=>set('kontaktet_av',e.target.value)} placeholder="Hvem hos oss som sist hadde kontakt" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
+          <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'8px' }}>
+              <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>Ekstra felt</label>
+              <button type="button" onClick={addEkstra} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
+            </div>
+            {ekstraFelt.length===0 ? <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>Ingen ekstra felt. Legg til egne etikett/verdi-par.</p> : (
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {ekstraFelt.map((e,i)=>(
+                  <div key={i} style={{ display:'flex', gap:'8px', alignItems:'center' }}>
+                    <input value={e.label} onChange={ev=>setEkstra(i,'label',ev.target.value)} placeholder="Etikett" style={{ ...crmInp, flex:'0 0 38%' }} />
+                    <input value={e.value} onChange={ev=>setEkstra(i,'value',ev.target.value)} placeholder="Verdi" style={{ ...crmInp, flex:1 }} />
+                    <button type="button" onClick={()=>removeEkstra(i)} title="Fjern" style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'8px', padding:'8px 11px', fontSize:'13px', fontWeight:'700', cursor:'pointer', flexShrink:0 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
+      </div>
+    </div>
+  )
+}
+
+// ─── CRM CSV/XLSX-IMPORT ──────────────────────────────────────────────────────
+// Målfelt i systemet som en filkolonne kan kobles til.
+const CRM_IMPORT_FIELDS = [
+  { key:'name',             label:'Bedriftsnavn *',            required:true },
+  { key:'orgnr',            label:'Organisasjonsnummer *',     required:true },
+  { key:'kontaktperson',    label:'Kontaktperson' },
+  { key:'email',            label:'E-post' },
+  { key:'phone',            label:'Telefon' },
+  { key:'website',          label:'Nettside' },
+  { key:'address',          label:'Adresse' },
+  { key:'postal_code',      label:'Postnummer' },
+  { key:'city',             label:'Kommune / Poststed / By' },
+  { key:'industry',         label:'Bransje' },
+  { key:'status',           label:'Status (tekst → mappes)' },
+  { key:'estimated_value',  label:'Estimert verdi (kr)' },
+  { key:'score',            label:'Score (kjøpspotensial)' },
+  { key:'neste_oppfolging', label:'Neste oppfølging (dato)' },
+  { key:'sist_kontaktet',   label:'Sist kontaktet / Første kontakt (dato)' },
+  { key:'kontaktet_av',     label:'Kontaktet av' },
+  { key:'customer_number',  label:'Kundenummer (valgfritt)' },
+  { key:'notes',            label:'Notat' },
+]
+
+// Systemets statuser en tekstverdi fra fila kan mappes til.
+const CRM_IMPORT_STATUS_CHOICES = Object.keys(CRM_STATUS) // lead, kontaktet, tilbud_sendt, vunnet, tapt, inaktiv
+// Gjett systemstatus ut fra tekstverdien i fila.
+function crmGuessStatus(raw) {
+  const s = (raw == null ? '' : String(raw)).toLowerCase().trim()
+  if (!s) return 'lead'
+  if (/vunnet|kunde|won|signert|avtale/.test(s)) return 'vunnet'
+  if (/tapt|lost|avslag|nei takk/.test(s)) return 'tapt'
+  if (/ikke aktuell|inaktiv|død|daud|arkiv|not relevant/.test(s)) return 'inaktiv'
+  if (/tilbud|pris|offer|quote/.test(s)) return 'tilbud_sendt'
+  if (/kontakt|forsøkt|forsokt|ringt|purret|dialog|oppfølg|oppfoelg/.test(s)) return 'kontaktet'
+  if (/ny|new|lead|prospekt|emne/.test(s)) return 'lead'
+  return 'lead'
+}
+
+// Foreslå automatisk kobling ut fra kolonnenavnet.
+function crmAutoMapHeader(h) {
+  const s = (h == null ? '' : String(h)).toLowerCase().replace(/[\s._\-]/g, '')
+  const t = (re) => re.test(s)
+  if (t(/kundenr|kundenummer|customernumber|knr/)) return 'customer_number'
+  if (t(/orgnr|orgnummer|organisasjonsnummer|organisasjon|foretaksnr|orgno/)) return 'orgnr'
+  if (t(/epost|email|mail/)) return 'email'
+  if (t(/tlf|telefon|mobil|phone|^mob|tel$/)) return 'phone'
+  if (t(/postnr|postnummer|postkode|zip/)) return 'postal_code'
+  if (t(/poststed|kommune/) || t(/^sted$/) || t(/^by$/) || t(/city/)) return 'city'
+  if (t(/nettside|hjemmeside|nettadresse|www|url|web/)) return 'website'
+  if (t(/adresse|address|gateadresse|besoksadresse|postadresse|^gate/)) return 'address'
+  if (t(/bransje|industri|sektor|naering/)) return 'industry'
+  if (t(/estimertverdi|omsetning|verdikr/) || t(/^verdi/) || t(/value/)) return 'estimated_value'
+  if (t(/nesteoppfolging|nesteoppfoelging|nestekontakt|oppfolging|oppfoelging|followup/)) return 'neste_oppfolging'
+  if (t(/sistkontaktet|sistkontakt|sistekontakt|lastcontact|forstekontakt|foerstekontakt|firstcontact/)) return 'sist_kontaktet'
+  if (t(/kontaktperson|kontaktnavn|contactperson|contactname/)) return 'kontaktperson'
+  if (t(/kontaktetav|ansvarlig|selger|saksbehandler|kontoeier|^eier/)) return 'kontaktet_av'
+  if (t(/score|kjopspotensial|kjoepspotensial|potensial|leadscore/)) return 'score'
+  if (t(/^status$|leadstatus|kundestatus|stadium|fase/)) return 'status'
+  if (t(/bedriftsnavn|firmanavn|selskapsnavn|bedrift|firma|selskap|company/) || t(/^navn/) || t(/kundenavn/) || t(/^kunde$/)) return 'name'
+  if (t(/notat|merknad|kommentar|note/)) return 'notes'
+  return ''
+}
+
+// Dato → 'YYYY-MM-DD' (håndterer Date-objekt fra Excel, ISO og dd.mm.yyyy).
+function crmToISODate(v) {
+  if (v == null || v === '') return null
+  if (v instanceof Date && !isNaN(v)) {
+    const y = v.getFullYear(), m = String(v.getMonth()+1).padStart(2,'0'), d = String(v.getDate()).padStart(2,'0')
+    return `${y}-${m}-${d}`
+  }
+  const s = String(v).trim()
+  let m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)
+  if (m) return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`
+  m = s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/)
+  if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`
+  return null
+}
+function crmToNumber(v) {
+  if (v == null || v === '') return null
+  const n = parseFloat(String(v).replace(/[^\d,.-]/g,'').replace(/\s/g,'').replace(',', '.'))
+  return isNaN(n) ? null : n
+}
+function crmToInt(v) {
+  const n = crmToNumber(v)
+  return n == null ? null : Math.round(n)
+}
+function crmTxt(v) {
+  if (v == null) return null
+  const s = String(v).trim()
+  return s === '' ? null : s
+}
+function crmNormOrgnr(v) {
+  if (v == null) return ''
+  return String(v).replace(/\D/g, '')
+}
+
+function CRMImportModal({ user, onClose, onDone }) {
+  const alert = useAppAlert()
+  const confirm = useConfirm()
+  const [step, setStep] = useState(1)
+  const [fileName, setFileName] = useState('')
+  const [headers, setHeaders] = useState([])
+  const [rows, setRows] = useState([])
+  const [mapping, setMapping] = useState([]) // per filkolonne: målfelt-key, '__extra__' eller ''
+  const [extraLabels, setExtraLabels] = useState([]) // per filkolonne: etikett når mapping==='__extra__'
+  const [kilde, setKilde] = useState('') // kilde for hele importen (påkrevd), settes på alle rader
+  const [existingOrgnr, setExistingOrgnr] = useState(null) // Set med normaliserte orgnr fra DB
+  const [busy, setBusy] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [importTotal, setImportTotal] = useState(0)
+  const [summary, setSummary] = useState(null)
+  const [wbSheets, setWbSheets] = useState([])       // [{name, aoa, cols, rowCount}] — alle ark i fila
+  const [activeSheetIdx, setActiveSheetIdx] = useState(0)
+  const [headerRowIdx, setHeaderRowIdx] = useState(0) // hvilken rad i valgt ark som er overskrift
+  const [statusMap, setStatusMap] = useState({})     // {råtekst(lowercase): systemstatus}
+  const fileRef = React.useRef(null)
+
+  const firstNonEmptyRowIdx = (aoa) => { const i = (aoa||[]).findIndex(r => r.some(c => String(c).trim() !== '')); return i < 0 ? 0 : i }
+
+  // ── Steg 1: les fil — parse ALLE ark, foreslå arket med flest kolonner ──
+  const handleFile = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setBusy(true)
+    try {
+      const XLSX = await _loadSheetJs()
+      const wb = XLSX.read(await file.arrayBuffer(), { type:'array', cellDates:true })
+      const sheets = wb.SheetNames.map(name => {
+        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header:1, blankrows:false, defval:'' })
+        const cols = aoa.reduce((m, r) => Math.max(m, r.length), 0)
+        return { name, aoa, cols, rowCount: aoa.length }
+      }).filter(s => s.rowCount > 0)
+      if (!sheets.length) { alert({ message:'Fila er tom', kind:'warning' }); return }
+      // Foreslå arket med flest kolonner
+      const defIdx = sheets.reduce((best, s, i, arr) => s.cols > arr[best].cols ? i : best, 0)
+      setFileName(file.name)
+      setWbSheets(sheets)
+      setActiveSheetIdx(defIdx)
+      setHeaderRowIdx(firstNonEmptyRowIdx(sheets[defIdx].aoa))
+      setKilde(prev => prev || file.name.replace(/\.[^.]+$/, '')) // foreslå filnavn som kilde
+      setStep(1) // bli i steg 1 — nå vises ark-/overskriftsvalg
+    } catch (err) {
+      console.error('[CRM-import] Kunne ikke lese fil:', err)
+      alert({ message:'Kunne ikke lese fila: ' + (err?.message || err), kind:'error' })
+    } finally {
+      setBusy(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  // Bytt aktivt ark — nullstill overskriftsrad til første ikke-tomme rad i arket
+  const velgArk = (idx) => { setActiveSheetIdx(idx); setHeaderRowIdx(firstNonEmptyRowIdx(wbSheets[idx]?.aoa)) }
+
+  // Bekreft ark + overskriftsrad → bygg headers/rader og gå til kolonnemapping
+  const applySheetHeader = () => {
+    const aoa = wbSheets[activeSheetIdx]?.aoa || []
+    const hdr = (aoa[headerRowIdx] || []).map(h => String(h).trim())
+    if (!hdr.some(h => h !== '')) { alert({ message:'Valgt overskriftsrad er tom — velg en annen rad', kind:'warning' }); return }
+    // Hopp over tomme rader midt i arket
+    const dataRows = aoa.slice(headerRowIdx + 1).filter(r => r.some(c => String(c).trim() !== ''))
+    setHeaders(hdr)
+    setRows(dataRows)
+    setMapping(hdr.map(crmAutoMapHeader))
+    setExtraLabels(hdr.map(h => h))
+    setStep(2)
+  }
+
+  const mappedFields = new Set(mapping.filter(Boolean))
+  const missingRequired = CRM_IMPORT_FIELDS.filter(f => f.required && !mappedFields.has(f.key))
+
+  // Statusmapping: distinkte tekstverdier i status-kolonnen → systemstatus
+  const statusColIdx = mapping.indexOf('status')
+  const statusRawValues = React.useMemo(() => {
+    if (statusColIdx < 0) return []
+    const set = new Set()
+    rows.forEach(r => { const s = (r[statusColIdx] == null ? '' : String(r[statusColIdx])).trim(); if (s) set.add(s) })
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'nb'))
+  }, [rows, statusColIdx])
+  // Foreslå statusmapping automatisk for nye tekstverdier
+  useEffect(() => {
+    if (!statusRawValues.length) return
+    setStatusMap(prev => {
+      const next = { ...prev }
+      statusRawValues.forEach(v => { const k = v.toLowerCase(); if (!(k in next)) next[k] = crmGuessStatus(v) })
+      return next
+    })
+  }, [statusRawValues])
+  const resolveStatus = (raw) => {
+    const v = (raw == null ? '' : String(raw)).trim().toLowerCase()
+    if (!v) return 'lead'
+    return statusMap[v] || 'lead'
+  }
+
+  // Bygg én rå-post fra en filrad ut fra mapping (første ikke-tomme vinner ved dublett-kobling).
+  // Kolonner mappet til '__extra__' samles i extra-objektet {etikett: verdi}.
+  const recordFromRow = (row) => {
+    const rec = {}, extra = {}
+    mapping.forEach((field, i) => {
+      if (!field) return
+      const val = row[i]
+      if (val == null || String(val).trim() === '') return
+      if (field === '__extra__') {
+        const label = (extraLabels[i] || headers[i] || '').trim()
+        if (!label) return
+        if (extra[label] == null || String(extra[label]).trim() === '') extra[label] = String(val).trim()
+        return
+      }
+      if (rec[field] != null && String(rec[field]).trim() !== '') return
+      rec[field] = val
+    })
+    return { rec, extra }
+  }
+
+  // ── Klassifiser alle rader (ny / duplikat / feilet) ──
+  const classified = React.useMemo(() => {
+    if (step < 3) return []
+    const seen = new Set() // orgnr sett i denne fila
+    return rows.map((row) => {
+      const { rec, extra } = recordFromRow(row)
+      const name = crmTxt(rec.name)
+      const orgnrNorm = crmNormOrgnr(rec.orgnr)
+      if (!name || !orgnrNorm) {
+        return { status:'feilet', reason: !name ? 'Mangler bedriftsnavn' : 'Mangler org.nr', display:{ name: name || '(uten navn)', orgnr: orgnrNorm || '—' } }
+      }
+      const payload = {
+        status: resolveStatus(rec.status), type:'bedrift',
+        name,
+        orgnr: orgnrNorm,
+        kontaktperson: crmTxt(rec.kontaktperson),
+        customer_number: crmTxt(rec.customer_number),
+        email: crmTxt(rec.email),
+        phone: crmTxt(rec.phone),
+        website: crmTxt(rec.website),
+        address: crmTxt(rec.address),
+        postal_code: crmTxt(rec.postal_code),
+        city: crmTxt(rec.city),
+        industry: crmTxt(rec.industry),
+        estimated_value: crmToNumber(rec.estimated_value),
+        score: crmToInt(rec.score),
+        neste_oppfolging: crmToISODate(rec.neste_oppfolging),
+        sist_kontaktet: crmToISODate(rec.sist_kontaktet),
+        kontaktet_av: crmTxt(rec.kontaktet_av),
+        notes: crmTxt(rec.notes),
+        ekstra_felt: Object.keys(extra).length ? extra : null,
+      }
+      const dupDb = existingOrgnr && existingOrgnr.has(orgnrNorm)
+      const dupFile = seen.has(orgnrNorm)
+      seen.add(orgnrNorm)
+      if (dupDb || dupFile) return { status:'duplikat', reason: dupDb ? 'Org.nr finnes allerede' : 'Duplikat i fila', payload, display:{ name, orgnr: orgnrNorm } }
+      return { status:'ny', payload, display:{ name, orgnr: orgnrNorm } }
+    })
+  }, [step, rows, mapping, extraLabels, headers, existingOrgnr, statusMap])
+
+  const counts = React.useMemo(() => ({
+    total: classified.length,
+    ny: classified.filter(r => r.status === 'ny').length,
+    duplikat: classified.filter(r => r.status === 'duplikat').length,
+    feilet: classified.filter(r => r.status === 'feilet').length,
+  }), [classified])
+
+  // ── Gå til forhåndsvisning: hent eksisterende orgnr fra DB (RLS scoper til egen bedrift) ──
+  const goToPreview = async () => {
+    if (missingRequired.length) { alert({ message:'Koble påkrevde felt først: ' + missingRequired.map(f=>f.label.replace(' *','')).join(', '), kind:'warning' }); return }
+    if (!kilde.trim()) { alert({ message:'Kilde for importen er påkrevd', kind:'warning' }); return }
+    setBusy(true)
+    try {
+      const { data } = await supabase.from('customers').select('orgnr')
+      setExistingOrgnr(new Set((data || []).map(r => crmNormOrgnr(r.orgnr)).filter(Boolean)))
+      setStep(3)
+    } catch (err) {
+      console.error('[CRM-import] Kunne ikke hente eksisterende kunder:', err)
+      setExistingOrgnr(new Set())
+      setStep(3)
+    } finally { setBusy(false) }
+  }
+
+  // ── Steg 4: kjør import i batcher på 100 ──
+  const runImport = async () => {
+    const toImport = classified.filter(r => r.status === 'ny')
+    const preInvalid = classified.filter(r => r.status === 'feilet')
+    if (!toImport.length) { alert({ message:'Ingen nye rader å importere', kind:'warning' }); return }
+    const ok = await confirm({ message:`Importere ${toImport.length} nye leads?`, subMessage: counts.duplikat ? `${counts.duplikat} duplikat(er) hoppes over.` : undefined, confirmLabel:'Importer' })
+    if (!ok) return
+    setImporting(true); setStep(4); setProgress(0); setImportTotal(toImport.length)
+    // company_id fra profilen — settes eksplisitt så RLS/synlighet er garantert
+    let companyId = null
+    try { const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single(); companyId = prof?.company_id || null } catch(_) {}
+    let imported = 0
+    const errors = []
+    const kildeVal = kilde.trim() // settes på alle rader i importen
+    for (let i = 0; i < toImport.length; i += 100) {
+      const batch = toImport.slice(i, i + 100)
+      const payloads = batch.map(r => ({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id }))
+      const { error } = await supabase.from('customers').insert(payloads)
+      if (error) {
+        // Én rad i batchen feilet — insert én og én for å isolere, ikke avbryt
+        for (const r of batch) {
+          const { error: e2 } = await supabase.from('customers').insert({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id })
+          if (e2) errors.push({ name: r.payload.name, orgnr: r.payload.orgnr, reason: e2.message })
+          else imported++
+        }
+      } else imported += batch.length
+      setProgress(Math.min(i + batch.length, toImport.length))
+    }
+    invalidateCustomerCache()
+    setSummary({
+      imported,
+      duplikat: counts.duplikat,
+      feilet: preInvalid.length + errors.length,
+      errors: [
+        ...preInvalid.map(r => ({ name: r.display.name, orgnr: r.display.orgnr, reason: r.reason })),
+        ...errors,
+      ],
+    })
+    setImporting(false)
+  }
+
+  const stepLabels = ['Fil & ark', 'Koble kolonner', 'Forhåndsvis', 'Importer']
+  const badge = (s) => {
+    const c = s === 'ny' ? { bg:'#f0fdf4', color:'#16a34a', t:'Ny' } : s === 'duplikat' ? { bg:'#fffbeb', color:'#d97706', t:'Duplikat' } : { bg:'#fef2f2', color:'#dc2626', t:'Feil' }
+    return <span style={{ background:c.bg, color:c.color, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700' }}>{c.t}</span>
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e)=>{ if (e.target === e.currentTarget && !importing) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'820px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+        {/* Header + steg-indikator */}
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px' }}>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📥 Importer kunder / leads</h2>
+            <button onClick={onClose} disabled={importing} style={{ background:'none', border:'none', fontSize:'22px', cursor: importing?'not-allowed':'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            {stepLabels.map((l, i) => (
+              <div key={l} style={{ flex:1, display:'flex', alignItems:'center', gap:'6px' }}>
+                <span style={{ width:'22px', height:'22px', borderRadius:'50%', background: step >= i+1 ? '#059669' : '#e2e8f0', color: step >= i+1 ? 'white' : '#94a3b8', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</span>
+                <span style={{ fontSize:'12px', fontWeight: step === i+1 ? '700' : '500', color: step === i+1 ? '#0f172a' : '#94a3b8' }}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
+          {/* STEG 1 — filvalg + ark + overskriftsrad */}
+          {step === 1 && wbSheets.length === 0 && (
+            <div style={{ textAlign:'center', padding:'30px 0' }}>
+              <div style={{ fontSize:'44px', marginBottom:'12px' }}>📄</div>
+              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Velg CSV- eller Excel-fil</h3>
+              <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>Org.nr og bedriftsnavn er påkrevd. Ark og overskriftsrad velger du i neste steg.</p>
+              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display:'none' }} />
+              <button onClick={()=>fileRef.current?.click()} disabled={busy} style={{ padding:'12px 28px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor: busy?'wait':'pointer', fontSize:'15px', fontWeight:'700' }}>
+                {busy ? 'Leser fil...' : 'Velg fil'}
+              </button>
+            </div>
+          )}
+          {step === 1 && wbSheets.length > 0 && (
+            <div>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>Fil: <b>{fileName}</b></p>
+              {wbSheets.length > 1 && (
+                <div style={{ marginBottom:'18px' }}>
+                  <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Velg ark</label>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'8px' }}>
+                    {wbSheets.map((s, i) => (
+                      <button key={i} onClick={()=>velgArk(i)} style={{ padding:'8px 12px', borderRadius:'10px', border:`2px solid ${i===activeSheetIdx?'#059669':'#e2e8f0'}`, background: i===activeSheetIdx?'#f0fdf4':'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color: i===activeSheetIdx?'#059669':'#64748b', textAlign:'left' }}>
+                        <div style={{ fontWeight:'700' }}>{s.name}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8' }}>{s.rowCount} rader · {s.cols} kolonner{s.cols === Math.max(...wbSheets.map(x=>x.cols)) ? ' · flest kolonner' : ''}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Velg overskriftsrad <span style={{ fontWeight:'400', color:'#94a3b8' }}>(klikk raden som inneholder kolonnenavnene)</span></label>
+              <div style={{ overflowX:'auto', border:'1px solid #f1f5f9', borderRadius:'10px' }}>
+                <table style={{ borderCollapse:'collapse', fontSize:'12px', width:'100%' }}>
+                  <tbody>
+                    {(wbSheets[activeSheetIdx]?.aoa || []).slice(0, 10).map((r, ri) => (
+                      <tr key={ri} onClick={()=>setHeaderRowIdx(ri)} style={{ cursor:'pointer', background: ri===headerRowIdx ? '#ecfdf5' : (ri<headerRowIdx?'#f8fafc':'white'), borderTop: ri?'1px solid #f1f5f9':'none' }}>
+                        <td style={{ padding:'6px 8px', whiteSpace:'nowrap', color: ri===headerRowIdx?'#059669':'#cbd5e1', fontWeight:'700' }}>{ri===headerRowIdx ? '✓ overskrift' : `rad ${ri+1}`}</td>
+                        {(r.length ? r : ['']).slice(0, 12).map((c, ci) => (
+                          <td key={ci} style={{ padding:'6px 10px', whiteSpace:'nowrap', maxWidth:'160px', overflow:'hidden', textOverflow:'ellipsis', fontWeight: ri===headerRowIdx?'700':'400', color: ri===headerRowIdx?'#0f172a':'#64748b' }}>{String(c ?? '')}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p style={{ margin:'8px 0 0', fontSize:'11px', color:'#94a3b8' }}>Rader over overskriften hoppes over. Tomme rader midt i arket hoppes automatisk over.</p>
+            </div>
+          )}
+
+          {/* STEG 2 — kolonnemapping */}
+          {step === 2 && (
+            <div>
+              <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>
+                Fil: <b>{fileName}</b> · {rows.length} rader · {headers.length} kolonner. Koble hver filkolonne til et felt.
+              </p>
+              {missingRequired.length > 0 && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
+                  ⚠️ Påkrevd felt mangler kobling: {missingRequired.map(f=>f.label.replace(' *','')).join(', ')}
+                </div>
+              )}
+              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
+                <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#065f46', marginBottom:'6px' }}>Kilde for denne importen <span style={{ color:'#dc2626' }}>*</span></label>
+                <input value={kilde} onChange={e=>setKilde(e.target.value)} placeholder="F.eks. «Proff.no bygg mai 2026»" style={{ ...crmInp, borderColor: kilde.trim() ? '#bbf7d0' : '#fca5a5' }} />
+                <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#059669' }}>Settes som kilde på alle {rows.length} radene i denne importen.</p>
+              </div>
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {headers.map((h, i) => (
+                  <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h || <span style={{ color:'#cbd5e1' }}>(uten navn)</span>}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{rows[0] ? String(rows[0][i] ?? '') : ''}</div>
+                    </div>
+                    <span style={{ color:'#cbd5e1' }}>→</span>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'6px', minWidth:0 }}>
+                      <select value={mapping[i] || ''} onChange={e=>{ const v=e.target.value; setMapping(m => m.map((x,idx)=> idx===i ? v : x)) }} style={crmInp}>
+                        <option value="">— ikke importer —</option>
+                        {CRM_IMPORT_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                        <option value="__extra__">➕ Behold som ekstra felt</option>
+                      </select>
+                      {mapping[i] === '__extra__' && (
+                        <input value={extraLabels[i] ?? ''} onChange={e=>{ const v=e.target.value; setExtraLabels(l => l.map((x,idx)=> idx===i ? v : x)) }}
+                          placeholder="Etikett for ekstra felt" style={{ ...crmInp, fontSize:'12px', padding:'7px 10px' }} />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              {statusColIdx >= 0 && statusRawValues.length > 0 && (
+                <div style={{ marginTop:'16px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
+                  <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'4px' }}>Statusmapping</label>
+                  <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>Koble tekstverdiene i status-kolonnen til systemets statuser. Umappet → lead.</p>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                    {statusRawValues.map(v => (
+                      <div key={v} style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'8px 14px' }}>
+                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>«{v}»</span>
+                        <span style={{ color:'#cbd5e1' }}>→</span>
+                        <select value={statusMap[v.toLowerCase()] || 'lead'} onChange={e=>{ const val=e.target.value; setStatusMap(m => ({ ...m, [v.toLowerCase()]: val })) }} style={crmInp}>
+                          {CRM_IMPORT_STATUS_CHOICES.map(k => <option key={k} value={k}>{CRM_STATUS[k].emoji} {CRM_STATUS[k].label}</option>)}
+                        </select>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STEG 3 — forhåndsvisning */}
+          {step === 3 && (
+            <div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'16px' }}>
+                {[
+                  { label:'Totalt', value:counts.total, color:'#0f172a', bg:'#f8fafc' },
+                  { label:'Nye', value:counts.ny, color:'#16a34a', bg:'#f0fdf4' },
+                  { label:'Duplikat (hoppes over)', value:counts.duplikat, color:'#d97706', bg:'#fffbeb' },
+                  { label:'Feil (mangler data)', value:counts.feilet, color:'#dc2626', bg:'#fef2f2' },
+                ].map(s => (
+                  <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'12px 14px' }}>
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{s.label}</div>
+                    <div style={{ fontSize:'24px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+              <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b' }}>Første 10 rader slik de lagres{statusColIdx < 0 ? <> (alle blir <b>lead</b>)</> : ''}:</p>
+              <div style={{ overflowX:'auto', border:'1px solid #f1f5f9', borderRadius:'10px' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                  <thead>
+                    <tr style={{ background:'#f8fafc', textAlign:'left' }}>
+                      {['#','Rad','Navn','Org.nr','Lead-status','E-post','Tlf','Poststed','Score','Neste oppf.'].map(h => <th key={h} style={{ padding:'8px 10px', color:'#64748b', fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {classified.slice(0, 10).map((r, i) => (
+                      <tr key={i} style={{ borderTop:'1px solid #f1f5f9', opacity: r.status==='ny' ? 1 : 0.6 }}>
+                        <td style={{ padding:'8px 10px', color:'#94a3b8' }}>{i+1}</td>
+                        <td style={{ padding:'8px 10px' }}>{badge(r.status)}</td>
+                        <td style={{ padding:'8px 10px', fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{r.display?.name}</td>
+                        <td style={{ padding:'8px 10px', fontFamily:'ui-monospace,monospace' }}>{r.display?.orgnr}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b', whiteSpace:'nowrap' }}>{r.payload?.status ? (CRM_STATUS[r.payload.status]?.label || r.payload.status) : ''}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.email || ''}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.phone || ''}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b' }}>{[r.payload?.postal_code, r.payload?.city].filter(Boolean).join(' ')}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.score ?? ''}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.neste_oppfolging || ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {counts.total > 10 && <p style={{ margin:'8px 0 0', fontSize:'12px', color:'#94a3b8' }}>… og {counts.total - 10} rader til.</p>}
+            </div>
+          )}
+
+          {/* STEG 4 — import / oppsummering */}
+          {step === 4 && (
+            <div style={{ padding:'10px 0' }}>
+              {!summary ? (
+                <div style={{ textAlign:'center', padding:'30px 0' }}>
+                  <div style={{ fontSize:'40px', marginBottom:'14px' }}>⏳</div>
+                  <h3 style={{ margin:'0 0 16px', color:'#0f172a' }}>Importerer…</h3>
+                  <div style={{ maxWidth:'420px', margin:'0 auto' }}>
+                    <div style={{ height:'12px', background:'#e2e8f0', borderRadius:'999px', overflow:'hidden' }}>
+                      <div style={{ height:'100%', width: importTotal ? `${Math.round(progress/importTotal*100)}%` : '0%', background:'#059669', transition:'width 0.2s' }} />
+                    </div>
+                    <p style={{ margin:'10px 0 0', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>{progress} / {importTotal}</p>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ textAlign:'center', marginBottom:'20px' }}>
+                    <div style={{ fontSize:'40px', marginBottom:'8px' }}>✅</div>
+                    <h3 style={{ margin:0, color:'#0f172a' }}>Import fullført</h3>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px', marginBottom:'18px' }}>
+                    {[
+                      { label:'Importert', value:summary.imported, color:'#16a34a', bg:'#f0fdf4' },
+                      { label:'Hoppet over (duplikat)', value:summary.duplikat, color:'#d97706', bg:'#fffbeb' },
+                      { label:'Feilet', value:summary.feilet, color:'#dc2626', bg:'#fef2f2' },
+                    ].map(s => (
+                      <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px' }}>
+                        <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{s.label}</div>
+                        <div style={{ fontSize:'26px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {summary.errors.length > 0 && (
+                    <div>
+                      <p style={{ margin:'0 0 8px', fontSize:'13px', fontWeight:'700', color:'#dc2626' }}>Feilede rader ({summary.errors.length}):</p>
+                      <div style={{ maxHeight:'200px', overflowY:'auto', border:'1px solid #fecaca', borderRadius:'10px' }}>
+                        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
+                          <tbody>
+                            {summary.errors.map((e, i) => (
+                              <tr key={i} style={{ borderTop: i ? '1px solid #fee2e2' : 'none' }}>
+                                <td style={{ padding:'7px 10px', fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{e.name}</td>
+                                <td style={{ padding:'7px 10px', fontFamily:'ui-monospace,monospace', color:'#64748b' }}>{e.orgnr}</td>
+                                <td style={{ padding:'7px 10px', color:'#dc2626' }}>{e.reason}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer-navigasjon */}
+        <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <div>
+            {step > 1 && step < 4 && !importing && (
+              <button onClick={()=>setStep(step-1)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>← Tilbake</button>
+            )}
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            {step === 1 && wbSheets.length > 0 && (
+              <button onClick={applySheetHeader} style={{ padding:'9px 22px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>Fortsett til kolonnemapping →</button>
+            )}
+            {step === 2 && (
+              <button onClick={goToPreview} disabled={busy || missingRequired.length>0 || !kilde.trim()} style={{ padding:'9px 22px', background: (busy || missingRequired.length>0 || !kilde.trim())?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: (busy || missingRequired.length>0 || !kilde.trim())?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{busy?'Laster…':'Forhåndsvis →'}</button>
+            )}
+            {step === 3 && (
+              <button onClick={runImport} disabled={counts.ny===0} style={{ padding:'9px 22px', background: counts.ny===0?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: counts.ny===0?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>Importer {counts.ny} leads</button>
+            )}
+            {step === 4 && summary && (
+              <button onClick={onDone} style={{ padding:'9px 22px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>Ferdig</button>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -38067,15 +39101,39 @@ function ContactModal({ customerId, onClose, onSaved }) {
   )
 }
 
-function ActivityModal({ customerId, defaultType, user, onClose, onSaved }) {
+function ActivityModal({ customerId, defaultType, initial, user, onClose, onSaved }) {
   const alert = useAppAlert()
-  const [form, setForm] = useState({ type:defaultType||'note', title:'', description:'', date:new Date().toISOString().split('T')[0], due_date:'' })
+  const isEdit = !!initial
+  const [form, setForm] = useState(initial
+    ? { type:initial.type||'note', title:initial.title||'', description:initial.description||'', date:initial.date||new Date().toISOString().split('T')[0], due_date:initial.due_date||'' }
+    : { type:defaultType||'note', title:'', description:'', date:new Date().toISOString().split('T')[0], due_date:'' })
   const [saving, setSaving] = useState(false)
   const set=(k,v)=>setForm(f=>({...f,[k]:v}))
   const handleSave = async () => {
     if (!form.title.trim()) return alert('Tittel er påkrevd')
     setSaving(true)
-    try { const {error}=await supabase.from('crm_activities').insert({...form,customer_id:customerId,created_by:user?.id,due_date:form.due_date||null}); if(error) throw error; onSaved() }
+    try {
+      if (isEdit) {
+        // Redigering: lagre hvem som redigerte og når (for «(redigert)»-merket). created_by røres ikke.
+        const { error } = await supabase.from('crm_activities').update({
+          type:form.type, title:form.title, description:form.description, date:form.date, due_date:form.due_date||null,
+          redigert_av:user?.id, redigert_at:new Date().toISOString(),
+        }).eq('id', initial.id)
+        if (error) throw error
+        onSaved(); return
+      }
+      const {error}=await supabase.from('crm_activities').insert({...form,customer_id:customerId,created_by:user?.id,due_date:form.due_date||null}); if(error) throw error
+      // Auto-oppdater kunden: "sist kontaktet" (sortering) + "kontaktet av" (innlogget bruker).
+      // kontaktet_av kan fortsatt overstyres manuelt i kundekortet etterpå.
+      try {
+        const upd = { sist_kontaktet: form.date || new Date().toISOString().split('T')[0] }
+        const { data: p, error: pErr } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single()
+        if (pErr) console.error('[CRM] Kunne ikke hente full_name for kontaktet_av:', pErr.message)
+        const navn = (p?.full_name || '').trim()
+        if (navn) upd.kontaktet_av = navn
+        await supabase.from('customers').update(upd).eq('id', customerId)
+      } catch(_) {}
+      onSaved() }
     catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
   }
   return (
@@ -38083,7 +39141,7 @@ function ActivityModal({ customerId, defaultType, user, onClose, onSaved }) {
       <div style={{ position:'absolute',inset:0,background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative',background:'white',borderRadius:'20px',width:'100%',maxWidth:'480px',boxShadow:'0 20px 60px rgba(0,0,0,0.2)',fontFamily:'system-ui,sans-serif',overflow:'hidden' }}>
         <div style={{ padding:'18px 22px',borderBottom:'1px solid #f1f5f9',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
-          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 Ny aktivitet</h2>
+          <h2 style={{ margin:0,fontSize:'17px',fontWeight:'700',color:'#0f172a' }}>📋 {isEdit ? 'Rediger aktivitet' : 'Ny aktivitet'}</h2>
           <button onClick={onClose} style={{ background:'none',border:'none',fontSize:'22px',cursor:'pointer',color:'#94a3b8' }}>×</button>
         </div>
         <div style={{ padding:'20px 22px',display:'flex',flexDirection:'column',gap:'12px' }}>
@@ -46344,50 +47402,50 @@ function SuperAdminPage() {
                   <div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
                       <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>📁 Fillagring</span>
-                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.fileSizeGB > 0.8 ? '#dc2626' : storageInfo.fileSizeGB > 0.5 ? '#d97706' : '#059669' }}>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.fileSizeGB > 80 ? '#dc2626' : storageInfo.fileSizeGB > 50 ? '#d97706' : '#059669' }}>
                         {storageInfo.fileSizeMB > 1000 ? `${storageInfo.fileSizeGB} GB` : `${storageInfo.fileSizeMB} MB`}
                       </span>
                     </div>
                     <div style={{ height:'10px', background:'#f1f5f9', borderRadius:'5px', overflow:'hidden', marginBottom:'6px' }}>
                       <div style={{ height:'100%', borderRadius:'5px', transition:'width 0.5s',
-                        width: `${Math.min(100, storageInfo.fileSizeGB / 1 * 100)}%`,
-                        background: storageInfo.fileSizeGB > 0.8 ? '#dc2626' : storageInfo.fileSizeGB > 0.5 ? '#d97706' : '#059669'
+                        width: `${Math.min(100, storageInfo.fileSizeGB / 100 * 100)}%`,
+                        background: storageInfo.fileSizeGB > 80 ? '#dc2626' : storageInfo.fileSizeGB > 50 ? '#d97706' : '#059669'
                       }}/>
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8' }}>
                       <span>{storageInfo.fileCount} filer</span>
-                      <span>1 GB inkludert (Free)</span>
+                      <span>100 GB inkludert (Pro)</span>
                     </div>
                   </div>
                   {/* Database */}
                   <div>
                     <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'8px' }}>
                       <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>🗃️ Database</span>
-                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.dbSizeMB > 400 ? '#dc2626' : storageInfo.dbSizeMB > 250 ? '#d97706' : '#059669' }}>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: storageInfo.dbSizeMB > 6400 ? '#dc2626' : storageInfo.dbSizeMB > 4000 ? '#d97706' : '#059669' }}>
                         ~{storageInfo.dbSizeMB} MB
                       </span>
                     </div>
                     <div style={{ height:'10px', background:'#f1f5f9', borderRadius:'5px', overflow:'hidden', marginBottom:'6px' }}>
                       <div style={{ height:'100%', borderRadius:'5px', transition:'width 0.5s',
-                        width: `${Math.min(100, storageInfo.dbSizeMB / 500 * 100)}%`,
-                        background: storageInfo.dbSizeMB > 400 ? '#dc2626' : storageInfo.dbSizeMB > 250 ? '#d97706' : '#059669'
+                        width: `${Math.min(100, storageInfo.dbSizeMB / 8000 * 100)}%`,
+                        background: storageInfo.dbSizeMB > 6400 ? '#dc2626' : storageInfo.dbSizeMB > 4000 ? '#d97706' : '#059669'
                       }}/>
                     </div>
                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:'11px', color:'#94a3b8' }}>
                       <span>~{storageInfo.dbRows.toLocaleString('nb-NO')} rader</span>
-                      <span>500 MB inkludert (Free)</span>
+                      <span>8 GB inkludert (Pro)</span>
                     </div>
                   </div>
                 </div>
-                {(storageInfo.fileSizeGB > 0.7 || storageInfo.dbSizeMB > 350) && (
+                {(storageInfo.fileSizeGB > 80 || storageInfo.dbSizeMB > 6400) && (
                   <div style={{ marginTop:'12px', padding:'10px 14px', background:'#fffbeb', borderRadius:'10px', border:'1px solid #fde68a', display:'flex', alignItems:'center', gap:'8px' }}>
                     <span style={{ fontSize:'16px' }}>⚠️</span>
                     <div style={{ fontSize:'12px', color:'#92400e' }}>
-                      <strong>Nærmer seg grensen!</strong> Vurder å oppgradere til Supabase Pro (25 USD/mnd) for 8 GB database + 100 GB fillagring.
+                      <strong>Nærmer seg grensen!</strong> Databasen nærmer seg Pro-grensen på 8 GB. Vurder opprydning (VACUUM) eller å kontakte Supabase for større plan.
                     </div>
                   </div>
                 )}
-                {storageInfo.fileSizeGB <= 0.7 && storageInfo.dbSizeMB <= 350 && (
+                {storageInfo.fileSizeGB <= 80 && storageInfo.dbSizeMB <= 6400 && (
                   <div style={{ marginTop:'12px', padding:'10px 14px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0', display:'flex', alignItems:'center', gap:'8px' }}>
                     <span style={{ fontSize:'16px' }}>✅</span>
                     <span style={{ fontSize:'12px', color:'#059669', fontWeight:'600' }}>Lagring OK — god kapasitet tilgjengelig</span>
@@ -48230,10 +49288,15 @@ function BrukeradminPage() {
     const syncProfile = async () => {
       const { data } = await supabase.from('user_profiles').select('id').eq('id',user.id).single()
       if (!data) {
+        // VIKTIG: 'superadmin' er SYSTEMEIER-rollen (kun plattformeier av En Plattform).
+        // Den skal ALDRI deles ut automatisk. Mangler en bruker profil, får de 'admin'
+        // — full tilgang i sin EGEN bedrift, ingenting på tvers av bedrifter.
+        // Plattformeiers tilgang går uansett via platform_role='platform_owner'
+        // (det er den is_platform_owner() sjekker i RLS), ikke via role.
         await supabase.from('user_profiles').insert({
           id: user.id,
           email: user.email,
-          role: 'superadmin',
+          role: 'admin',
           status: 'aktiv',
           module_access: ALL_MODULES_LIST.map(m=>m.id)
         })
@@ -48324,7 +49387,8 @@ function BrukeradminPage() {
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk..." style={{ ...baInp,maxWidth: isMobBA ? '100%' : '220px',flex: isMobBA ? '1 1 100%' : '1' }} />
           <select value={filterRole} onChange={e=>setFilterRole(e.target.value)} style={{ ...baInp,maxWidth: isMobBA ? '100%' : '160px',flex: isMobBA ? '1 1 100%' : 'none' }}>
             <option value="alle">Alle roller</option>
-            {Object.entries(USER_ROLES).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+            {/* Superadmin er en intern eier-rolle — skal ikke være et valg for kunder */}
+            {Object.entries(USER_ROLES).filter(([k])=>k!=='superadmin').map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
           {(search||filterRole!=='alle')&&<button onClick={()=>{setSearch('');setFilterRole('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <span style={{ marginLeft:'auto',fontSize:'13px',color:'#94a3b8' }}>{filtered.length} brukere</span>
@@ -49305,6 +50369,99 @@ const FAGGRUPPER = [
 const getFaggruppe = (id) => FAGGRUPPER.find(f => f.id === id) || FAGGRUPPER[0]
 
 // Default kalkulasjonsfaktorer for en faggruppe
+// ─── GRUNNTID-JUSTERING: navngitte påslagsposter ─────────────────────────────
+// Popupen bak «Grunntid-just.» lar kalkulatøren bygge tidsfaktoren av flere
+// forståelige poster i stedet for å gjette på ett tall. Summen av postene (%)
+// gir faktoren:  grunntid_justering = 1 + sum/100.  Tekstene er skrevet i
+// klarspråk for håndverkere (bevisst IKKE regnskapssjargong).
+const GRUNNTID_POSTER = [
+  { key: 'rehab',     label: 'Rehabilitering – arbeid i eksisterende bygg', maks: 10, hjelp: 'Riving, tilpasning og uforutsett arbeid tar mer tid enn nybygg.' },
+  { key: 'transport', label: 'Bæring og transport på bygget',                maks: 13, hjelp: 'Lang vei til materialene, trapper, trange forhold, flere etasjer.' },
+  { key: 'kompleks',  label: 'Vanskelig bygg – form og løsninger',           maks: 20, hjelp: 'Kompliserte vinkler, buer og spesialløsninger som krever mer tilpasning.' },
+  { key: 'gjentak',   label: 'Lite gjentakelse i jobben',                    maks: 20, hjelp: 'Få like oppgaver – du kommer aldri «inn i flyten» slik serieproduksjon gir.' },
+  { key: 'kort',      label: 'Korte oppdrag – under 20 dager',               maks: 20, hjelp: 'Rigg, opp- og nedpakking utgjør en større del av småjobber.' },
+  { key: 'tempo',     label: 'Justering for eget arbeidstempo',             maks: 60, hjelp: 'Tilpass normtidene til hvor raskt ditt lag faktisk jobber.' },
+]
+
+// Sum av alle poster (%) → faktor. Tom/ingen poster = 1.0 (nøytralt).
+function grunntidFaktorFraPoster(poster) {
+  if (!poster || typeof poster !== 'object') return null
+  const sum = GRUNNTID_POSTER.reduce((s, p) => s + (parseFloat(poster[p.key]) || 0), 0)
+  return Math.round((1 + sum / 100) * 100) / 100
+}
+
+function tommeGrunntidPoster() {
+  const o = {}
+  GRUNNTID_POSTER.forEach(p => { o[p.key] = 0 })
+  return o
+}
+
+// Popup for å bygge grunntid-justeringen av navngitte poster.
+// onLagre(nyFaktor, nyePoster) kalles når brukeren lagrer.
+function GrunntidJusteringModal({ startPoster, startFaktor, fagNavn, onLagre, onLukk }) {
+  const [poster, setPoster] = React.useState(() => ({ ...tommeGrunntidPoster(), ...(startPoster || {}) }))
+  const sum = GRUNNTID_POSTER.reduce((s, p) => s + (parseFloat(poster[p.key]) || 0), 0)
+  const faktor = Math.round((1 + sum / 100) * 100) / 100
+  const settVerdi = (key, maks, raw) => {
+    let v = parseFloat(raw)
+    if (isNaN(v)) v = 0
+    v = Math.max(0, Math.min(maks, v))
+    setPoster(p => ({ ...p, [key]: v }))
+  }
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.55)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:2000, padding:'16px' }}
+         onMouseDown={(e)=>{ if(e.target===e.currentTarget) onLukk() }}>
+      <div style={{ background:'white', borderRadius:'18px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+        <div style={{ background:'linear-gradient(135deg,#059669,#047857)', padding:'18px 22px', color:'white', flexShrink:0 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+            <div>
+              <div style={{ fontSize:'17px', fontWeight:'800' }}>⏱️ Juster grunntiden</div>
+              <div style={{ fontSize:'12px', opacity:0.9, marginTop:'2px' }}>
+                {fagNavn ? `${fagNavn} · ` : ''}Legg til påslag for det som gjør jobben tregere enn normtiden
+              </div>
+            </div>
+            <button onClick={onLukk} style={{ background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'30px', height:'30px', cursor:'pointer', color:'white', fontSize:'17px' }}>×</button>
+          </div>
+        </div>
+        <div style={{ padding:'14px 22px', overflowY:'auto', flex:1 }}>
+          {GRUNNTID_POSTER.map(p => (
+            <div key={p.key} style={{ display:'flex', alignItems:'flex-start', gap:'12px', padding:'12px 0', borderBottom:'1px solid #f1f5f9' }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{p.label}</div>
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', lineHeight:1.4 }}>{p.hjelp}</div>
+              </div>
+              <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+                <input type="number" min="0" max={p.maks} step="1" value={poster[p.key] ?? 0}
+                  onChange={e=>settVerdi(p.key, p.maks, e.target.value)}
+                  style={{ width:'62px', padding:'7px 8px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'14px', textAlign:'right', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a' }} />
+                <span style={{ fontSize:'12px', color:'#64748b', width:'52px' }}>% <span style={{ color:'#cbd5e1' }}>/ {p.maks}</span></span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div style={{ padding:'14px 22px', borderTop:'1px solid #f1f5f9', background:'#f8fafc', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap: isMob ? 'wrap' : 'nowrap' }}>
+          <div style={{ display:'flex', gap:'18px', alignItems:'center' }}>
+            <div>
+              <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.4px' }}>Sum påslag</div>
+              <div style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>{sum} %</div>
+            </div>
+            <div style={{ fontSize:'22px', color:'#cbd5e1' }}>→</div>
+            <div>
+              <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase', letterSpacing:'0.4px' }}>Tidsfaktor</div>
+              <div style={{ fontSize:'18px', fontWeight:'800', color:'#059669' }}>{faktor.toFixed(2)} ×</div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:'8px' }}>
+            <button onClick={onLukk} style={{ padding:'10px 16px', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#64748b' }}>Avbryt</button>
+            <button onClick={()=>onLagre(faktor, poster)} style={{ padding:'10px 20px', background:'#059669', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700', color:'white' }}>Bruk {faktor.toFixed(2)} ×</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function getDefaultFaktorer(fagId) {
   const fag = getFaggruppe(fagId)
   return {
@@ -49315,6 +50472,7 @@ function getDefaultFaktorer(fagId) {
     fortjeneste_innkjop_prosent: fag.defaultFortjenesteInnkjop,
     mat_justering_prosent: fag.defaultMatJustering,
     grunntid_justering: fag.defaultGrunntidJustering,
+    grunntid_poster: tommeGrunntidPoster(),
   }
 }
 
@@ -49372,7 +50530,7 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
         {/* Gradient header */}
         <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
-          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <button onClick={lukkMedBekreftelse} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
           <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
           <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
@@ -49466,6 +50624,8 @@ const BIM_DEFAULTS = {
   ytterdor_default: 1,        // 1 hovedytterdør per bolig
   innerdor_per_rom: 1,        // 1 dør per rom
   rom_per_m2_bra: 0.025,      // 1 rom per 40 m² BRA (estimat for boliger)
+  port_areal: 5.0,            // m² per garasjeport (typisk 2,4×2,1m = 5,0 m²)
+  port_default: 0,            // ingen port som default (settes til 1 for garasje)
 }
 
 // Beregn antall åpningstillegg per tømrertariffen (samme regler som beregnBygningsdel)
@@ -49551,7 +50711,15 @@ function beregnMengderFraMaal(input) {
   const totalYtterdorAreal = antallYtterdorer * BIM_DEFAULTS.dor_ytre_areal
   const ytterdorAapningstillegg = antallYtterdorer * bimAapningstilleggForAreal(BIM_DEFAULTS.dor_ytre_areal, baerendeYV)
 
-  const nettoYtterveggAreal = Math.max(0, bruttoYtterveggAreal - totalVinduAreal - totalYtterdorAreal)
+  // Porter (garasjeport o.l.) — regnes som åpning i yttervegg
+  const antallPorter = parseInt(input.antallPorter) >= 0
+    ? parseInt(input.antallPorter)
+    : BIM_DEFAULTS.port_default
+  const portAreal = parseFloat(input.portAreal) || BIM_DEFAULTS.port_areal
+  const totalPortAreal = antallPorter * portAreal
+  const portAapningstillegg = antallPorter * bimAapningstilleggForAreal(portAreal, baerendeYV)
+
+  const nettoYtterveggAreal = Math.max(0, bruttoYtterveggAreal - totalVinduAreal - totalYtterdorAreal - totalPortAreal)
 
   // ── Innervegg (estimat fra BRA) ──────────────────────────────────────────
   const innerveggLm = bra * BIM_DEFAULTS.innervegg_per_m2_bra
@@ -49624,6 +50792,12 @@ function beregnMengderFraMaal(input) {
       totalAreal: Math.round(totalInnerdorAreal * 10) / 10,
       aapningstillegg: innerdorAapningstillegg,
     },
+    porter: {
+      antall: antallPorter,
+      arealPerStk: portAreal,
+      totalAreal: Math.round(totalPortAreal * 10) / 10,
+      aapningstillegg: portAapningstillegg,
+    },
     // Input som ble brukt (sporbarhet for brukeren)
     input: { lengde, bredde, etasjer, etasjehoyde, taktype, takvinkel, baerendeYttervegg: baerendeYV, baerendeInnervegg: baerendeIV },
   }
@@ -49654,7 +50828,7 @@ function beregnTekniskRundsum(input) {
   const bra = parseFloat(input.bra) || 0
   const antallBad = parseInt(input.antallBad) || 0
   const antallBadMedBadekar = parseInt(input.antallBadMedBadekar) || 0
-  const antallKjokken = parseInt(input.antallKjokken) || 1
+  const antallKjokken = parseInt(input.antallKjokken) || 0
   const antallVaskerom = parseInt(input.antallVaskerom) || 0
   const elektroNiva = input.elektroNiva || 'standard'    // 'standard' | 'utvidet'
   const ventilasjonType = input.ventilasjonType || 'balansert' // 'balansert' | 'avtrekk' | 'ingen'
@@ -49828,9 +51002,10 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
       takvinkel: parseFloat(veiviserData.takvinkel) || 30,
       antallVinduer: veiviserData.antallVinduer === '' ? undefined : parseInt(veiviserData.antallVinduer),
       antallYtterdorer: veiviserData.antallYtterdorer === '' ? undefined : parseInt(veiviserData.antallYtterdorer),
+      antallPorter: veiviserData.antallPorter === '' ? undefined : parseInt(veiviserData.antallPorter),
       baerendeYttervegg: veiviserData.baerendeYttervegg !== false,
     })
-  }, [veiviserData.lengde, veiviserData.bredde, veiviserData.etasjer, veiviserData.etasjehoyde, veiviserData.taktype, veiviserData.takvinkel, veiviserData.antallVinduer, veiviserData.antallYtterdorer, veiviserData.baerendeYttervegg])
+  }, [veiviserData.lengde, veiviserData.bredde, veiviserData.etasjer, veiviserData.etasjehoyde, veiviserData.taktype, veiviserData.takvinkel, veiviserData.antallVinduer, veiviserData.antallYtterdorer, veiviserData.antallPorter, veiviserData.baerendeYttervegg])
 
   // Lagre beregnede mengder i veiviserData så de er tilgjengelige i steg 3+
   React.useEffect(() => {
@@ -49916,12 +51091,13 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
           {/* Åpninger */}
           <div>
             <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.5px', marginBottom:'10px', textTransform:'uppercase' }}>Åpninger</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'10px' }}>
               <InputFelt label="Vinduer" suffix="stk" value={veiviserData.antallVinduer} onChange={(v) => update('antallVinduer', v)} placeholder={mengder ? String(Math.round(mengder.bra * 0.10)) : 'auto'} step="1" min="0" />
               <InputFelt label="Ytterdører" suffix="stk" value={veiviserData.antallYtterdorer} onChange={(v) => update('antallYtterdorer', v)} placeholder="1" step="1" min="0" />
+              <InputFelt label="Porter" suffix="stk" value={veiviserData.antallPorter} onChange={(v) => update('antallPorter', v)} placeholder="0" step="1" min="0" />
             </div>
             <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#94a3b8' }}>
-              ℹ️ La feltene stå tomme for automatisk estimat (TEK17 lyskrav: ca 10% av BRA i vindusareal)
+              ℹ️ La feltene stå tomme for automatisk estimat (TEK17 lyskrav: ca 10% av BRA i vindusareal). Porter = garasjeport/industriport — legger til egen kategori i neste steg.
             </p>
           </div>
 
@@ -49965,7 +51141,7 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
                 {/* Detaljerte mengder */}
                 <div style={{ background:'white', borderRadius:'10px', padding:'10px 12px', fontSize:'12px' }}>
                   {[
-                    { label: 'Yttervegg (netto)', value: mengder.nettoYtterveggAreal, enhet: 'm²', tooltip: `Brutto ${mengder.bruttoYtterveggAreal} m² minus ${mengder.vinduer.totalAreal + mengder.ytterdorer.totalAreal} m² åpninger` },
+                    { label: 'Yttervegg (netto)', value: mengder.nettoYtterveggAreal, enhet: 'm²', tooltip: `Brutto ${mengder.bruttoYtterveggAreal} m² minus ${Math.round((mengder.vinduer.totalAreal + mengder.ytterdorer.totalAreal + (mengder.porter?.totalAreal || 0)) * 10) / 10} m² åpninger` },
                     { label: 'Innervegg', value: mengder.innerveggAreal, enhet: 'm²' },
                     { label: 'Tak', value: mengder.takAreal, enhet: 'm²' },
                     { label: 'Gulv', value: mengder.gulvAreal, enhet: 'm²' },
@@ -49990,9 +51166,15 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
                     <span>🚪 {mengder.ytterdorer.antall} ytterdører</span>
                     <strong style={{ color:'#0f172a' }}>{mengder.ytterdorer.totalAreal} m²</strong>
                   </div>
+                  {mengder.porter && mengder.porter.antall > 0 && (
+                    <div style={{ display:'flex', justifyContent:'space-between', padding:'3px 0', color:'#475569' }}>
+                      <span>🏗️ {mengder.porter.antall} porter</span>
+                      <strong style={{ color:'#0f172a' }}>{mengder.porter.totalAreal} m²</strong>
+                    </div>
+                  )}
                   <div style={{ borderTop:'1px solid #f1f5f9', marginTop:'4px', paddingTop:'6px', display:'flex', justifyContent:'space-between', color:'#64748b', fontSize:'11px' }}>
                     <span>Åpningstillegg (tømrertariff)</span>
-                    <strong style={{ color:'#8b5cf6' }}>{mengder.vinduer.aapningstillegg + mengder.ytterdorer.aapningstillegg} stk</strong>
+                    <strong style={{ color:'#8b5cf6' }}>{mengder.vinduer.aapningstillegg + mengder.ytterdorer.aapningstillegg + (mengder.porter?.aapningstillegg || 0)} stk</strong>
                   </div>
                 </div>
 
@@ -50019,18 +51201,99 @@ function BimVeiviserSteg2({ veiviserData, update, isMob }) {
 //   fordele mengden mellom dem (per prosent eller direkte m²/stk).
 // Rekkefølge følger naturlig byggeprosess: grunnmur → råbygg → utvendig → innvendig
 const BIM_KONSTRUKSJON_KATEGORIER = [
-  { id: 'grunnmur',     label: 'Grunnmur',     icon: '🟪', obligatorisk: false, bibliotekKategorier: ['Fundament', 'Betongdekke', 'Drenering'], mengdeFelt: 'grunnmurAreal' },
-  { id: 'yttervegg',    label: 'Yttervegg',    icon: '🧱', obligatorisk: true,  bibliotekKategorier: ['Yttervegg', 'Fasade'], mengdeFelt: 'nettoYtterveggAreal' },
-  { id: 'etasjeskille', label: 'Etasjeskille', icon: '🟦', obligatorisk: false, bibliotekKategorier: ['Etasjeskille'], mengdeFelt: 'etasjeskilleAreal', kunHvisFlerEtasjes: true },
-  { id: 'tak',          label: 'Tak',          icon: '🏠', obligatorisk: true,  bibliotekKategorier: ['Yttertak', 'Tekking'], mengdeFelt: 'takAreal' },
+  { id: 'grunnmur',     label: 'Grunnmur',     icon: '🟪', obligatorisk: false, bibliotekKategorier: ['Fundament', 'Betongdekke', 'Drenering'], mengdeFelt: 'grunnmurAreal', flerVarianter: true },
+  { id: 'yttervegg',    label: 'Yttervegg',    icon: '🧱', obligatorisk: true,  bibliotekKategorier: ['Yttervegg', 'Fasade'], mengdeFelt: 'nettoYtterveggAreal', flerVarianter: true },
+  { id: 'etasjeskille', label: 'Etasjeskille', icon: '🟦', obligatorisk: false, bibliotekKategorier: ['Etasjeskille'], mengdeFelt: 'etasjeskilleAreal', kunHvisFlerEtasjes: true, flerVarianter: true },
+  { id: 'tak',          label: 'Tak',          icon: '🏠', obligatorisk: true,  bibliotekKategorier: ['Yttertak', 'Tekking'], mengdeFelt: 'takAreal', flerVarianter: true },
   { id: 'innervegg',    label: 'Innervegg',    icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Innervegg', 'Vegg innvendig'], mengdeFelt: 'innerveggAreal', flerVarianter: true },
-  { id: 'gulv',         label: 'Gulv',         icon: '🟫', obligatorisk: true,  bibliotekKategorier: ['Gulv', 'Gulvplate'], mengdeFelt: 'gulvAreal' },
-  // Vinduer/dører — egne underkategorier av "Dører/vinduer" filtrert på navn
-  { id: 'vinduer',      label: 'Vinduer',      icon: '🪟', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /vindu/i.test(bd.name), mengdeFelt: 'vinduer.antall' },
-  { id: 'innerdorer',   label: 'Innerdører',   icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /innerdør|skyvedør/i.test(bd.name), mengdeFelt: 'innerdorer.antall' },
-  { id: 'ytterdorer',   label: 'Ytterdører',   icon: '🚪', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /ytterdør/i.test(bd.name), mengdeFelt: 'ytterdorer.antall' },
-  { id: 'innvendig_trapp', label: 'Innvendig trapp', icon: '🪜', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Trapper'], mengdeFelt: '__antall_trapp', kunHvisFlerEtasjes: true },
+  { id: 'gulv',         label: 'Gulv',         icon: '🟫', obligatorisk: true,  bibliotekKategorier: ['Gulv', 'Gulvplate'], mengdeFelt: 'gulvAreal', flerVarianter: true },
+  // Vinduer/dører/porter — egne underkategorier av "Dører/vinduer" filtrert på navn
+  { id: 'vinduer',      label: 'Vinduer',      icon: '🪟', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /vindu/i.test(bd.name), mengdeFelt: 'vinduer.antall', flerVarianter: true, enhet: 'stk' },
+  { id: 'innerdorer',   label: 'Innerdører',   icon: '🚪', obligatorisk: false, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /innerdør|skyvedør/i.test(bd.name), mengdeFelt: 'innerdorer.antall', flerVarianter: true, enhet: 'stk' },
+  { id: 'ytterdorer',   label: 'Ytterdører',   icon: '🚪', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /ytterdør/i.test(bd.name), mengdeFelt: 'ytterdorer.antall', flerVarianter: true, enhet: 'stk' },
+  { id: 'porter',       label: 'Porter',       icon: '🏗️', obligatorisk: false, bibliotekKategorier: ['Dører/vinduer'], bibliotekFilter: (bd) => /port/i.test(bd.name), mengdeFelt: 'porter.antall', flerVarianter: true, enhet: 'stk', kunHvisPorter: true },
+  { id: 'innvendig_trapp', label: 'Innvendig trapp', icon: '🪜', obligatorisk: false, anbefalt: true, bibliotekKategorier: ['Trapper'], mengdeFelt: '__antall_trapp', kunHvisFlerEtasjes: true, flerVarianter: true, enhet: 'stk' },
 ]
+
+// Enheten mengden fordeles i for en kategori ('stk' for antalls-kategorier, ellers m²)
+function kategoriEnhet(kat) {
+  return kat?.enhet || 'm²'
+}
+
+// Normaliser enhets-tekst fra biblioteket ('m2', 'M²', 'lm', 'stk' ...)
+function normEnhet(e) {
+  const t = (e || '').toString().toLowerCase().trim()
+  if (t === 'lm' || t === 'm') return 'lm'
+  if (t === 'stk' || t === 'pk' || t === 'sett') return 'stk'
+  return 'm²'
+}
+
+// Enheten en KONKRET bygningsdel regnes i (kan avvike fra kategoriens enhet).
+// Grunnmur er det viktige tilfellet: stripefundament er per lm, plasstøpt dekke
+// per m², punktfundament per stk — alle i samme kategori.
+function enhetForBd(kat, bd) {
+  if (kat?.enhet) return kat.enhet          // antalls-kategorier (vinduer, dører, porter, trapp)
+  return normEnhet(bd?.enhet)
+}
+
+// Mengdegrunnlaget for én bygningsdel, styrt av dens egen enhet.
+//   lm  → omkrets/fundamentlengde
+//   m²  → kategoriens arealfelt (BYA for grunnmur)
+//   stk → antall (grunnmur: punktfundamenter estimert c/c 2,4 m rundt bygget)
+function mengdeForBd(kat, mengder, bd) {
+  const katMengde = getMengdeFraPath(mengder, kat.mengdeFelt)
+  if (kat?.enhet) return katMengde          // antalls-kategorier: alltid kategoriens antall
+  const e = normEnhet(bd?.enhet)
+  if (e === 'lm') return getMengdeFraPath(mengder, 'fundamentLm') || getMengdeFraPath(mengder, 'omkrets') || katMengde
+  if (e === 'stk') {
+    const omkrets = getMengdeFraPath(mengder, 'omkrets') || 0
+    return omkrets > 0 ? Math.max(4, Math.round(omkrets / 2.4)) : 1
+  }
+  return katMengde
+}
+
+// Fordel mengden på flere valgte bygningsdeler — hver bygningsdel får sitt eget
+// mengdegrunnlag ut fra sin enhet, og prosenten brukes på DET grunnlaget.
+function fordelMengdePerBd(kat, mengder, valgtArray) {
+  if (!Array.isArray(valgtArray) || valgtArray.length === 0) return []
+  if (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return []
+  // Antalls-kategorier: alle deler har samme grunnlag → bruk hele-tall-fordeling
+  if (kat?.enhet === 'stk') {
+    const total = getMengdeFraPath(mengder, kat.mengdeFelt)
+    return fordelMengde(total, valgtArray, 'stk').map(v => ({ ...v, enhet: 'stk' }))
+  }
+  return valgtArray.map(v => {
+    const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === v.id)
+    if (!bd) return { ...v, mengde: 0, enhet: 'm²' }
+    const e = enhetForBd(kat, bd)
+    const grunnlag = mengdeForBd(kat, mengder, bd)
+    const raa = grunnlag * ((v.prosent || 100) / 100)
+    const mengde = e === 'stk' ? Math.max(1, Math.round(raa)) : raa
+    return { ...v, mengde, enhet: e }
+  })
+}
+
+// Fordel en totalmengde på flere valgte konstruksjoner.
+// For m²-kategorier brukes rene prosenter. For stk-kategorier fordeles hele
+// enheter med største-rest-metoden slik at summen alltid blir riktig antall
+// (f.eks. 19 vinduer 50/50 → 10 + 9, ikke 9,5 + 9,5).
+function fordelMengde(totalMengde, valgtArray, enhet) {
+  if (!Array.isArray(valgtArray) || valgtArray.length === 0) return []
+  if (enhet !== 'stk') {
+    return valgtArray.map(v => ({ ...v, mengde: totalMengde * ((v.prosent || 100) / 100) }))
+  }
+  const total = Math.round(totalMengde)
+  const raa = valgtArray.map(v => ({ ...v, eksakt: total * ((v.prosent || 100) / 100) }))
+  const gulv = raa.map(v => ({ ...v, mengde: Math.floor(v.eksakt), rest: v.eksakt - Math.floor(v.eksakt) }))
+  let rest = total - gulv.reduce((s, v) => s + v.mengde, 0)
+  gulv.sort((a, b) => b.rest - a.rest)
+  for (let i = 0; i < gulv.length && rest > 0; i++) { gulv[i].mengde += 1; rest -= 1 }
+  // Behold opprinnelig rekkefølge
+  return valgtArray.map(v => {
+    const t = gulv.find(g => g.id === v.id)
+    return { ...v, mengde: t ? t.mengde : 0 }
+  })
+}
 
 // Hjelper: hent verdi fra mengder-objektet via mengdeFelt-string ('a' eller 'a.b')
 // Spesialtilfelle: '__antall_trapp' → fast verdi 1 (én trapp per prosjekt som default)
@@ -50139,6 +51402,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKatego
   // Skjul etasjeskille hvis kun 1 etasje
   const tilgjengeligeKategorier = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
     if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+    if (k.kunHvisPorter && !(parseInt(veiviserData.antallPorter) > 0)) return false
     return true
   })
 
@@ -50148,9 +51412,11 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKatego
 
   // Antall enheter som kommer fra steg 2 — vises i tabben for vinduer/dører/trapp
   const aktivMengde = aktivKat ? getMengdeFraPath(veiviserData.mengder, aktivKat.mengdeFelt) : 0
-  const erMulti = !!aktivKat?.flerVarianter
+  const erMulti = aktivKat?.flerVarianter !== false
+  const aktivEnhet = kategoriEnhet(aktivKat)
   const valgtListe = erMultiVerdi(valgtVerdi) ? valgtVerdi : (valgtVerdi ? [{ id: valgtVerdi, prosent: 100 }] : [])
   const totalProsent = summerProsent(valgtVerdi)
+  const fordelt = fordelMengdePerBd(aktivKat, veiviserData.mengder, valgtListe)
 
   // Klikk på et bygningsdel-kort
   const handleBdKlikk = (bdId) => {
@@ -50222,7 +51488,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKatego
             )}
           </h4>
           <span style={{ fontSize:'11px', color:'#94a3b8' }}>
-            {erMulti ? '✨ Du kan velge flere — fordel mengden i prosent' : `${tilgjengeligeBd.length} alternativer`}
+            {erMulti ? `✨ Du kan velge flere — fordel mengden i prosent · ${tilgjengeligeBd.length} alternativer` : `${tilgjengeligeBd.length} alternativer`}
           </span>
         </div>
 
@@ -50242,7 +51508,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKatego
         {erMulti && valgtListe.length > 0 && (
           <div style={{ background:'linear-gradient(135deg, #faf5ff, #eff6ff)', border:'1px solid #ddd6fe', borderRadius:'12px', padding:'14px 16px', marginBottom:'14px' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'10px' }}>
-              <strong style={{ fontSize:'13px', color:'#0f172a' }}>📊 Fordeling av {aktivMengde > 0 ? `${aktivMengde.toFixed(0)} m²` : aktivKat.label.toLowerCase()}</strong>
+              <strong style={{ fontSize:'13px', color:'#0f172a' }}>📊 Fordeling av {aktivMengde > 0 ? `${aktivMengde.toFixed(aktivEnhet === 'stk' ? 0 : 0)} ${aktivEnhet}` : aktivKat.label.toLowerCase()}</strong>
               <span style={{
                 fontSize:'12px',
                 fontWeight:'700',
@@ -50257,7 +51523,9 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKatego
             {valgtListe.map(v => {
               const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === v.id)
               if (!bd) return null
-              const m2 = aktivMengde * (v.prosent / 100)
+              const fRad = fordelt.find(f => f.id === v.id)
+              const m2 = fRad ? fRad.mengde : aktivMengde * (v.prosent / 100)
+              const radEnhet = fRad?.enhet || aktivEnhet
               return (
                 <div key={v.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid rgba(196,181,253,0.3)' }}>
                   <span style={{ fontSize:'13px', color:'#0f172a', flex:1, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bd.name}</span>
@@ -50265,7 +51533,7 @@ function BimVeiviserSteg3({ veiviserData, updateKonstruksjon, isMob, aktivKatego
                     onChange={(e) => handleProsentEndring(v.id, parseFloat(e.target.value))}
                     style={{ width: isMob ? '90px' : '120px', accentColor:'#8b5cf6', cursor:'pointer', flexShrink:0 }} />
                   <strong style={{ fontSize:'12px', color:'#8b5cf6', minWidth:'40px', textAlign:'right' }}>{Math.round(v.prosent)}%</strong>
-                  <span style={{ fontSize:'11px', color:'#64748b', minWidth:'60px', textAlign:'right' }}>{m2.toFixed(1)} m²</span>
+                  <span style={{ fontSize:'11px', color:'#64748b', minWidth:'70px', textAlign:'right' }}>{radEnhet === 'stk' ? `${Math.round(m2)} stk` : `${m2.toFixed(1)} ${radEnhet}`}</span>
                   <button onClick={() => handleBdKlikk(v.id)}
                     style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', width:'24px', height:'24px', cursor:'pointer', fontSize:'14px', fontWeight:'700', flexShrink:0 }}>×</button>
                 </div>
@@ -50650,16 +51918,16 @@ function BimVeiviserSteg6Oppsummering({ veiviserData, isMob, manglendeObligatori
       const verdi = veiviserData.valgteKonstruksjoner[kat.id]
       if (!verdi) return
       if (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return
-      const totalMengde = totalMengdeForKategori(kat)
-      if (totalMengde <= 0) return
 
       // Normaliser til array slik at vi behandler single og multi likt
       const valgtArray = erMultiVerdi(verdi) ? verdi : [{ id: verdi, prosent: 100 }]
+      // Hver bygningsdel får mengde ut fra SIN egen enhet (lm/m²/stk)
+      const fordeltArray = fordelMengdePerBd(kat, veiviserData.mengder, valgtArray)
 
-      valgtArray.forEach(v => {
+      fordeltArray.forEach(v => {
         const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === v.id)
         if (!bd) return
-        const mengde = totalMengde * ((v.prosent || 100) / 100)
+        const mengde = v.mengde
         if (mengde <= 0) return
         const arbeidstimer = (bd.arbeidsarter || []).reduce((s, a) => s + (parseFloat(a.grunntid) || 0), 0) * mengde
         const arbeidskostnad = arbeidstimer * 380
@@ -50873,6 +52141,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
     takvinkel: 30,
     antallVinduer: '',
     antallYtterdorer: 1,
+    antallPorter: 0,
     // Steg 3: Konstruksjonsvalg (bibliotek-IDer eller arrays for multi-select)
     valgteKonstruksjoner: {
       yttervegg: null,
@@ -50885,6 +52154,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
       vinduer: null,
       ytterdorer: null,
       innerdorer: null,
+      porter: null,
     },
     // Steg 4: Tekniske fag
     antallBad: 1,
@@ -50917,6 +52187,26 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
     return () => window.removeEventListener('resize', handler)
   }, [])
 
+  const confirm = useConfirm()
+
+  // Lukking krever bekreftelse hvis brukeren har begynt å fylle ut noe.
+  // Klikk utenfor modalen lukker ikke — kun X eller Avbryt.
+  const harPaabegyntArbeid = () => (
+    !!veiviserData.bygningstype || !!veiviserData.lengde || !!veiviserData.bredde
+  )
+  const lukkMedBekreftelse = async () => {
+    if (harPaabegyntArbeid()) {
+      const ok = await confirm({
+        message: 'Lukke hurtigstart?',
+        subMessage: 'Det du har fylt ut blir ikke lagret.',
+        danger: true,
+        confirmLabel: 'Lukk uten å lagre',
+      })
+      if (!ok) return
+    }
+    onClose()
+  }
+
   // Aktiv kategori i steg 3 — styres her slik at Neste/Tilbake kan navigere
   // sekvensielt mellom kategoriene uten å forlate steg 3.
   // Default er første kategori i den naturlige byggesekvensen (grunnmur).
@@ -50933,6 +52223,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   const tilgjengeligeKategorierISteg3 = () => {
     return BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
       if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+      if (k.kunHvisPorter && !(parseInt(veiviserData.antallPorter) > 0)) return false
       return true
     })
   }
@@ -50971,6 +52262,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
   const manglendeObligatoriskeKonstruksjoner = () => {
     const obligatoriske = BIM_KONSTRUKSJON_KATEGORIER.filter(k => {
       if (k.kunHvisFlerEtasjes && (parseInt(veiviserData.etasjer) || 1) <= 1) return false
+      if (k.kunHvisPorter && !(parseInt(veiviserData.antallPorter) > 0)) return false
       return k.obligatorisk
     })
     return obligatoriske.filter(k => {
@@ -50981,7 +52273,14 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
     })
   }
 
-  const update = (key, value) => setVeiviserData(d => ({ ...d, [key]: value }))
+  const update = (key, value) => setVeiviserData(d => {
+    const ny = { ...d, [key]: value }
+    // Garasje: foreslå 1 port automatisk (kan overstyres i steg 2)
+    if (key === 'bygningstype' && value === 'garasje' && !(parseInt(d.antallPorter) > 0)) {
+      ny.antallPorter = 1
+    }
+    return ny
+  })
   const updateKonstruksjon = (kategori, bdId) => setVeiviserData(d => ({ ...d, valgteKonstruksjoner: { ...d.valgteKonstruksjoner, [kategori]: bdId } }))
 
   // Sekvensiell navigasjon:
@@ -51041,7 +52340,9 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
 
   return (
     <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMob ? '8px' : '5vh 16px', overflowY:'auto' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      {/* Bakgrunn — bevisst UTEN klikk-for-å-lukke: hurtigstarten inneholder
+          arbeid som ikke er lagret, og skal kun lukkes via X eller Avbryt. */}
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} />
       <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'1280px', maxHeight: isMob ? '95vh' : '93vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden' }}>
 
         {/* Gradient header med fremgangsindikator */}
@@ -51130,7 +52431,7 @@ function KalkHurtigstartModal({ onClose, onComplete }) {
             </div>
           )}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px' }}>
-            <button onClick={steg === 1 ? onClose : tilbake}
+            <button onClick={steg === 1 ? lukkMedBekreftelse : tilbake}
               style={{ padding: isMob ? '10px 14px' : '11px 20px', background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', cursor:'pointer', fontSize: isMob ? '12px' : '13px', fontWeight:'600' }}>
               {steg === 1 ? 'Avbryt' : '← Tilbake'}
             </button>
@@ -54822,45 +56123,35 @@ async function utforPrisbokSoek({
   const soekeOrd = renTerm.split(/\s+/).filter(w => w.length >= 2)
   if (soekeOrd.length === 0) return []
 
-  // Hent aktiv prisliste fra cache
-  const prislisteId = await hentAktivPrislisteCached(userId)
+  // Strategi: databasen finner kandidatene (indeksert, alle søkeord),
+  // JavaScript rangerer dem etter relevans.
 
-  // Strategi: hent rikelig med kandidater på første søkeord (trigram-indeks gjør det raskt),
-  // så ranger og filtrer i JavaScript. Dette er pålitelig og rask.
-  const forsteOrd = soekeOrd[0]
-  const erNumerisk = /^\d+$/.test(forsteOrd)
-
-  // Bygg PRIMÆR-spørring (med prisliste eller user-filter)
-  const byggQuery = (medFilter) => {
-    let q = supabase.from('prisbok')
-      .select('id, varenummer, varenavn, enhet, pris_per_enhet, kategori')
-    if (medFilter) {
-      if (prislisteId) q = q.eq('prisliste_id', prislisteId)
-      else q = q.eq('user_id', userId)
-    }
-    if (erNumerisk) {
-      // NOBB-søk: leter både i varenummer og varenavn
-      q = q.or(`varenummer.ilike.${forsteOrd}%,varenavn.ilike.%${forsteOrd}%`)
-    } else {
-      q = q.ilike('varenavn', `%${forsteOrd}%`)
-    }
-    if (kategoriFilter) q = q.eq('kategori', kategoriFilter)
-    return q.limit(100)  // hent rikelig med kandidater for å kunne ranger
-  }
-
+  // ── SØK VIA SECURITY DEFINER-FUNKSJON (sok_prisbok) ────────────────────────
+  // VIKTIG: direkte ILIKE-spørringer mot prisbok fra klienten kan IKKE bruke
+  // trigram-indeksen når RLS er aktiv (ILIKE er ikke leakproof → Postgres
+  // tvinger Seq Scan over 305k rader → statement timeout → HTTP 500).
+  // sok_prisbok() er SECURITY DEFINER, gjør sin egen bedriftssjekk og låser
+  // søket til bedriftens aktive prisliste. Da brukes indeksen, og søket tar ms.
+  // Funksjonen sender ALLE søkeordene til databasen (ikke bare første ord).
   let rader = []
   try {
-    const { data, error } = await byggQuery(true)
+    const { data, error } = await supabase.rpc('sok_prisbok', {
+      p_term: renTerm,
+      p_maks: 100,
+    })
     if (error) {
-      console.warn('[prisbok] søk med filter feilet, prøver uten filter:', error.message)
-      const { data: fbData } = await byggQuery(false)
-      rader = fbData || []
-    } else {
-      rader = data || []
+      console.warn('[prisbok] sok_prisbok feilet:', error.message)
+      return []
     }
+    rader = data || []
   } catch (e) {
     console.warn('[prisbok] søk-exception:', e)
     return []
+  }
+
+  // Valgfritt kategori-filter (brukes av produktsøk-modalen)
+  if (kategoriFilter) {
+    rader = rader.filter(r => r.kategori === kategoriFilter)
   }
 
   // Dedupliser på varenummer (samme NOBB-kode kan finnes i flere prislister)
@@ -54927,6 +56218,44 @@ function usePrisbokSoek() {
 //   - Viser opp til 8 treff med fokuserings-styling
 //   - Auto-foreslag når feltet får fokus uten tekst (basert på materialgruppe)
 //   - Klikk utenfor lukker dropdown
+
+// Åpner NOBB (Norsk Byggevarebase) og søker opp varen på NAVN.
+// Vi søker bevisst på navn og ikke NOBB-nummer: numrene i den opplastede
+// prislisten er delvis utdaterte (7-sifrede gamle numre gir ofte null treff),
+// mens et navnesøk alltid finner den aktive varen med gyldig dokumentasjon.
+// Renser bort pakningsdetaljer (f.eks. "95 PAK") som gjør søket for strengt.
+function aapneNobbSok(varenavn) {
+  const rensket = String(varenavn || '')
+    .replace(/\b\d+\s*(PAK|PK|STK|PALL|BUNT)\b/gi, '') // dropp "95 PAK" o.l.
+    .trim()
+    .split(/\s+/)
+    .slice(0, 5)          // merke + hoveddimensjon holder for et treff
+    .join(' ')
+    .trim()
+  if (!rensket) return
+  const term = encodeURIComponent(rensket)
+  window.open(`https://nobb.no/items/search?searchTerm=${term}`, '_blank', 'noopener')
+}
+
+// Liten knapp som slår opp et materiale i NOBB (produktinfo, datablad, FDV).
+function NobbKnapp({ varenavn, isMob, style }) {
+  if (!varenavn || !String(varenavn).trim()) return null
+  return (
+    <button
+      type="button"
+      title="Slå opp produktinfo og dokumentasjon i NOBB"
+      onClick={(e) => { e.stopPropagation(); aapneNobbSok(varenavn) }}
+      style={{
+        flexShrink: 0, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#059669',
+        borderRadius: isMob ? '8px' : '6px', cursor: 'pointer', fontWeight: '700',
+        fontSize: isMob ? '12px' : '10px', padding: isMob ? '6px 10px' : '3px 7px',
+        display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap',
+        ...style,
+      }}>
+      🔍 NOBB
+    </button>
+  )
+}
 
 function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) {
   const { sok } = usePrisbokSoek()
@@ -55031,9 +56360,14 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
           background: 'white', color: '#0f172a', boxSizing: 'border-box', minHeight: isMob ? '46px' : undefined,
         }}
       />
-      {value?.nobb && !aapenDropdown && (
-        <div style={{ fontSize: '9px', color: '#10b981', fontWeight: '700', marginTop: '2px' }}>
-          ✓ NOBB {value.nobb} · {value.enhetspris} kr/{value.enhet}
+      {!aapenDropdown && (value?.nobb || value?.varenavn) && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '3px', flexWrap: 'wrap' }}>
+          {value?.nobb && (
+            <span style={{ fontSize: '9px', color: '#10b981', fontWeight: '700' }}>
+              ✓ NOBB {value.nobb} · {value.enhetspris} kr/{value.enhet}
+            </span>
+          )}
+          <NobbKnapp varenavn={value.varenavn} isMob={isMob} />
         </div>
       )}
       {aapenDropdown && (
@@ -55068,17 +56402,21 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
               style={{
                 padding: isMob ? '12px 14px' : '8px 12px', cursor: 'pointer', borderBottom: '1px solid #f8fafc',
                 fontSize: isMob ? '14px' : '11px',
+                display: 'flex', alignItems: 'center', gap: '10px',
               }}
               onMouseEnter={(e) => e.currentTarget.style.background = '#eff6ff'}
               onMouseLeave={(e) => e.currentTarget.style.background = 'white'}>
-              <div style={{ color: '#0f172a', fontWeight: '600', marginBottom: isMob ? '3px' : '1px' }}>
-                {rad.varenavn}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ color: '#0f172a', fontWeight: '600', marginBottom: isMob ? '3px' : '1px' }}>
+                  {rad.varenavn}
+                </div>
+                <div style={{ color: '#64748b', fontSize: isMob ? '12px' : '10px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                  {rad.varenummer && <span>NOBB: {rad.varenummer}</span>}
+                  {rad.pris_per_enhet > 0 && <span><strong>{Number(rad.pris_per_enhet).toFixed(2)} kr/{rad.enhet || 'stk'}</strong></span>}
+                  {rad.kategori && <span>· {rad.kategori}</span>}
+                </div>
               </div>
-              <div style={{ color: '#64748b', fontSize: isMob ? '12px' : '10px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                {rad.varenummer && <span>NOBB: {rad.varenummer}</span>}
-                {rad.pris_per_enhet > 0 && <span><strong>{Number(rad.pris_per_enhet).toFixed(2)} kr/{rad.enhet || 'stk'}</strong></span>}
-                {rad.kategori && <span>· {rad.kategori}</span>}
-              </div>
+              <NobbKnapp varenavn={rad.varenavn} isMob={isMob} />
             </div>
           ))}
         </div>
@@ -61996,19 +63334,35 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
+    // Fallback: slett direkte mot databasen + best-effort Storage når Edge
+    // Function-en er uncåbar (ikke deployet, nettverk/CORS). Databaseraden er
+    // det brukeren faktisk ser; eventuell foreldreløs Storage-fil ryddes senere.
+    const slettDirekte = async (aarsak) => {
+      console.warn('[bim-sesjon] faller tilbake til direkte sletting:', aarsak)
+      const { error: direkteFeil } = await bimSlettSesjon(sesjonId)
+      if (direkteFeil) {
+        console.warn('[bim-sesjon] direkte sletting feilet også:', direkteFeil)
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (direkteFeil.message || 'ukjent feil'))
+        return false
+      }
+      setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
+      return true
+    }
+
     try {
       // Steg 5: Bruk Edge Function (service_role) som omgår RLS-quirken på Storage
       const { data, error } = await supabase.functions.invoke('bim-sesjon-rydd', {
         body: { action: 'slett', sesjonId },
       })
       if (error) {
-        console.warn('[bim-sesjon] sletting via edge function feilet:', error)
-        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
+        // Edge Function uncåbar (f.eks. "Failed to send a request to the Edge
+        // Function") — la ikke sletting stoppe på det; slett direkte i stedet.
+        await slettDirekte(error.message || 'edge function feilet')
         return
       }
       if (data && !data.ok) {
         console.warn('[bim-sesjon] edge function returnerte feil:', data.error)
-        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (data.error || 'ukjent feil'))
+        await slettDirekte(data.error || 'edge function returnerte feil')
         return
       }
       // Logg om Storage-fil ble slettet (informasjon, ikke feil)
@@ -62019,8 +63373,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       }
       setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
     } catch (e) {
-      console.warn('[bim-sesjon] sletting kastet:', e)
-      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (e.message || 'ukjent feil'))
+      // Uventet kast (typisk nettverksfeil mot Edge Function) — prøv direkte.
+      await slettDirekte(e.message || 'sletting kastet')
     }
   }
 
@@ -64056,73 +65410,73 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Etasjeskille
   { id: 'tom_etasje_tre_200', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille trebjelkelag 200mm', beskrivelse: 'Standard trebjelkelag 48×198 c/c 600 med isolasjon, undergulv og himling under',
     arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 198mm', grunntid: 0.40 }, { beskrivelse: 'Isolering 200mm (lyd/brann)', grunntid: 0.15 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.18 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling himling', grunntid: 0.12 }],
-    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '7083223', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5 gulv', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'OSB3-plate 22mm', nobb: '101502180', mengde: 1.05, enhet: 'm²', enhetspris: 244.7 }, { varenavn: 'Gipsplate 13mm himling', nobb: '101249233', mengde: 1.05, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_tre_250', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille trebjelkelag 250mm', beskrivelse: 'Forsterket trebjelkelag 48×248 for større spenn eller tyngre belastning',
     arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 248mm', grunntid: 0.45 }, { beskrivelse: 'Isolering 250mm', grunntid: 0.18 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.18 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling himling', grunntid: 0.12 }],
-    materialer: [{ varenavn: 'Bjelker 48×248 c/c 600', nobb: '7144305', mengde: 2, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Lydisolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Sponplate 22mm P5 gulv', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm himling', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    materialer: [{ varenavn: 'Bjelker 48×248 c/c 600', nobb: '', mengde: 2, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Lydisolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'OSB3-plate 22mm', nobb: '101502180', mengde: 1.05, enhet: 'm²', enhetspris: 244.7 }, { varenavn: 'Gipsplate 13mm himling', nobb: '101249233', mengde: 1.05, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Spiker og skruer', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_i_bjelke', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille I-bjelker (konstruksjonsvirke)', beskrivelse: 'Etasjeskille med I-bjelker for lange spenn, lett og stivt',
     arbeidsarter: [{ beskrivelse: 'Montering I-bjelker', grunntid: 0.30 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.18 }, { beskrivelse: 'Undergulv sponplate 22mm', grunntid: 0.18 }, { beskrivelse: 'Himling under (gips)', grunntid: 0.25 }, { beskrivelse: 'Sparkling', grunntid: 0.12 }],
-    materialer: [{ varenavn: 'I-bjelker 300mm c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 95 }, { varenavn: 'Lydisolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 135 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'I-bjelker 300mm c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 95 }, { varenavn: 'Lydisolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 135 }, { varenavn: 'OSB3-plate 22mm', nobb: '101502180', mengde: 1.05, enhet: 'm²', enhetspris: 244.7 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 1.05, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_lim_tre', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille limtrebjelker', beskrivelse: 'Limtrebjelker for synlig konstruksjon eller ekstra lange spenn',
     arbeidsarter: [{ beskrivelse: 'Montering limtrebjelker', grunntid: 0.35 }, { beskrivelse: 'Isolering mellom bjelker', grunntid: 0.15 }, { beskrivelse: 'Undergulv', grunntid: 0.15 }, { beskrivelse: 'Himling/synlig bjelkelag finish', grunntid: 0.20 }],
-    materialer: [{ varenavn: 'Limtrebjelker 66×270 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 145 }, { varenavn: 'Isolasjon mellom bjelker', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Bjelkesko og beslag', mengde: 2, enhet: 'stk/m²', enhetspris: 45 }],
+    materialer: [{ varenavn: 'Limtrebjelker 66×270 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 145 }, { varenavn: 'Isolasjon mellom bjelker', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'OSB3-plate 22mm', nobb: '101502180', mengde: 1.05, enhet: 'm²', enhetspris: 244.7 }, { varenavn: 'Bjelkesko og beslag', mengde: 2, enhet: 'stk/m²', enhetspris: 45 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_dobbel_gips', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille m/lydkrav (dobbel gips)', beskrivelse: 'Etasjeskille som tilfredsstiller lydkrav mellom boenheter — dobbel gips under og lydbånd',
     arbeidsarter: [{ beskrivelse: 'Montering bjelkelag 198mm', grunntid: 0.40 }, { beskrivelse: 'Lydbånd og isolering 200mm', grunntid: 0.20 }, { beskrivelse: 'Undergulv m/flytende sjikt', grunntid: 0.20 }, { beskrivelse: 'Dobbel gips himling', grunntid: 0.35 }, { beskrivelse: 'Sparkling', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '7083223', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydbånd for bjelker', mengde: 2, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Trinnlyddempende matte', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm (dobbel)', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
+    materialer: [{ varenavn: 'Bjelker 48×198 c/c 600', nobb: '', mengde: 2, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Lydbånd for bjelker', mengde: 2, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Lydisolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 95 }, { varenavn: 'OSB3-plate 22mm', nobb: '101502180', mengde: 1.05, enhet: 'm²', enhetspris: 244.7 }, { varenavn: 'Trinnlyddempende matte', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm (dobbel)', nobb: '101249233', mengde: 2.1, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 20 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_etasje_betong_pabygg', prosjektType: 'rehab', fag: 'tomrer', kategori: 'Etasjeskille', name: 'Etasjeskille over betong (påbygg)', beskrivelse: 'Trebjelkelag oppå eksisterende betongdekke — typisk ved påbygg/rehabilitering',
     arbeidsarter: [{ beskrivelse: 'Montering svill og bjelkelag', grunntid: 0.30 }, { beskrivelse: 'Isolering 100mm', grunntid: 0.10 }, { beskrivelse: 'Undergulv sponplate', grunntid: 0.15 }, { beskrivelse: 'Fuktsperre mot betong', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Fuktsperre 0.2mm', mengde: 1.1, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Svillebjelker 48×98', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Sponplate 22mm P5', nobb: '7012736', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Festemateriell betong', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Fuktsperre 0.2mm', mengde: 1.1, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Svillebjelker 48×98', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'OSB3-plate 22mm', nobb: '101502180', mengde: 1.05, enhet: 'm²', enhetspris: 244.7 }, { varenavn: 'Festemateriell betong', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Yttervegger
   { id: 'tom_yv_148_kled', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/trekledning', beskrivelse: 'Standard bindingsverk 48×148, isolasjon 150mm, vindsperre, utlekting og stående trekledning',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.55 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.10 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.40 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148 stående', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148 stående', nobb: '101115941', mengde: 1.1, enhet: 'lm', enhetspris: 29.48 }, { varenavn: 'Dampsperre 0.2mm', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_198_kled', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 198mm m/trekledning', beskrivelse: 'Bindingsverk 36×198 for økt isolasjon, vindsperre, utlekting og kledning',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 198mm', grunntid: 0.60 }, { beskrivelse: 'Isolering 200mm', grunntid: 0.22 }, { beskrivelse: 'Vindsperre montering', grunntid: 0.10 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.40 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Stenderverk 36×198 c/c 600', nobb: '7083218', mengde: 3.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 110 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 36×198 c/c 600', nobb: '', mengde: 3.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 110 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '101115941', mengde: 1.1, enhet: 'lm', enhetspris: 29.48 }, { varenavn: 'Dampsperre 0.2mm', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_148_tillegg', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148+48mm m/påforing', beskrivelse: '148mm bindingsverk + 48mm påforing innvendig = 200mm total isolasjon',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.55 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre', grunntid: 0.10 }, { beskrivelse: 'Påforing 48mm innvendig', grunntid: 0.20 }, { beskrivelse: 'Isolering påforing 50mm', grunntid: 0.08 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Påforing 48×48', mengde: 2.5, enhet: 'lm/m²', enhetspris: 15 }, { varenavn: 'Isolasjon 50mm', mengde: 1.05, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Påforing 48×48', mengde: 2.5, enhet: 'lm/m²', enhetspris: 15 }, { varenavn: 'Isolasjon 50mm', mengde: 1.05, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Dampsperre 0.2mm', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Utlekting 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '101115941', mengde: 1.1, enhet: 'lm', enhetspris: 29.48 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_248_passiv', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 250mm passivhus', beskrivelse: 'Passivhus-vegg med 250mm isolasjon, dampsperre og vindtett sjikt',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 248mm', grunntid: 0.55 }, { beskrivelse: 'Isolering 250mm', grunntid: 0.22 }, { beskrivelse: 'Vindsperre med teipede skjøter', grunntid: 0.12 }, { beskrivelse: 'Dampsperre med tetting', grunntid: 0.12 }, { beskrivelse: 'Utlekting og kledning', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Stenderverk 48×248 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Isolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Vindsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 38 }, { varenavn: 'Dampsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '7083182', mengde: 1.1, enhet: 'm²', enhetspris: 145 }],
+    materialer: [{ varenavn: 'Stenderverk 48×248 c/c 600', mengde: 3.5, enhet: 'lm/m²', enhetspris: 72 }, { varenavn: 'Isolasjon 250mm', mengde: 1.05, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Vindsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 38 }, { varenavn: 'Dampsperre m/teip', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning 19×148', nobb: '101115941', mengde: 1.1, enhet: 'lm', enhetspris: 29.48 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_148_mur', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/murpuss', beskrivelse: 'Bindingsverk 148mm med vindsperre og utvendig murpuss på nett',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.55 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre', grunntid: 0.10 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Dampsperre 0.2mm', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [{ navn: 'Murpuss UE', beskrivelse: 'Utvendig pussarbeid', kostnad: 450 }], enhet: 'm²'
   },
   { id: 'tom_yv_148_plate', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg 148mm m/fasadeplater', beskrivelse: 'Bindingsverk 148mm med fasadeplater (Cembrit, Eternit e.l.)',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 148mm', grunntid: 0.55 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre', grunntid: 0.10 }, { beskrivelse: 'Utlekting', grunntid: 0.12 }, { beskrivelse: 'Montering fasadeplater', grunntid: 0.30 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '7083221', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Fasadeplater fibercement', mengde: 1.08, enhet: 'm²', enhetspris: 285 }, { varenavn: 'Dampsperre 0.2mm', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Stenderverk 48×148 c/c 600', nobb: '', mengde: 3.5, enhet: 'lm/m²', enhetspris: 42 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Utlekting 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Fasadeplater fibercement', mengde: 1.08, enhet: 'm²', enhetspris: 285 }, { varenavn: 'Dampsperre 0.2mm', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_staal', fag: 'tomrer', kategori: 'Yttervegg', name: 'Yttervegg stålstendere m/gips', beskrivelse: 'Stålstenderverk med isolasjon og gipsplater begge sider',
     arbeidsarter: [{ beskrivelse: 'Montering stålstendere', grunntid: 0.35 }, { beskrivelse: 'Isolering 150mm', grunntid: 0.18 }, { beskrivelse: 'Vindsperre', grunntid: 0.10 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.45 }, { beskrivelse: 'Dampsperre', grunntid: 0.08 }],
-    materialer: [{ varenavn: 'Stålstendere 150mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stålstendere 150mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 150mm', mengde: 1.05, enhet: 'm²', enhetspris: 85 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 2.1, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Dampsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_rehabilitering', prosjektType: 'rehab', fag: 'tomrer', kategori: 'Yttervegg', name: 'Etterisolering yttervegg utvendig', beskrivelse: 'Etterisolering av eksisterende vegg utvendig med 50-100mm, vindsperre og ny kledning',
     arbeidsarter: [{ beskrivelse: 'Demontering gammel kledning', grunntid: 0.20 }, { beskrivelse: 'Utlekting og isolering 100mm', grunntid: 0.25 }, { beskrivelse: 'Vindsperre', grunntid: 0.10 }, { beskrivelse: 'Sløyfer og ny kledning', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Utlekting 48×98', mengde: 3, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Vindsperre', nobb: '7002305', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning ny', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Utlekting 48×98', mengde: 3, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Vindsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 28 }, { varenavn: 'Sløyfer 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Trekledning ny', mengde: 1.1, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_yv_element', fag: 'tomrer', kategori: 'Yttervegg', name: 'Prefab veggelement', beskrivelse: 'Montering av prefabrikkerte veggelementer levert fra fabrikk',
@@ -64133,58 +65487,58 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Innervegger
   { id: 'tom_iv_bind_70', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 70mm gips begge sider', beskrivelse: 'Standard innervegg 70mm med lydisolasjon og gips',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.35 }, { beskrivelse: 'Isolering 70mm (lyd)', grunntid: 0.08 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.45 }],
-    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '7523437', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '101207115', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 2.1, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_bind_98', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 98mm gips begge sider', beskrivelse: 'Innervegg 98mm for VVS-rør eller bedre lydisolering',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 98mm', grunntid: 0.38 }, { beskrivelse: 'Isolering 100mm (lyd)', grunntid: 0.10 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.45 }],
-    materialer: [{ varenavn: 'Stenderverk 36×98 c/c 600', nobb: '7217502', mengde: 3.5, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Lydisolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stenderverk 36×98 c/c 600', nobb: '', mengde: 3.5, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Lydisolasjon 100mm', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 2.1, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_70_panel', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 70mm m/trepanel', beskrivelse: 'Innervegg med trepanel på én side og gips på den andre',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.35 }, { beskrivelse: 'Isolering 70mm', grunntid: 0.08 }, { beskrivelse: 'Gipsplate 1 side', grunntid: 0.20 }, { beskrivelse: 'Trepanel 1 side', grunntid: 0.30 }],
-    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '7523437', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Trepanel 14×120 SPS', mengde: 1.1, enhet: 'm²', enhetspris: 165 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '101207115', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 1.05, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Trepanel 14×120 SPS', nobb: '101115810', mengde: 1.1, enhet: 'lm', enhetspris: 14.58 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_staal_70', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg stålstender 70mm', beskrivelse: 'Stålstendervegg 70mm med gips begge sider',
     arbeidsarter: [{ beskrivelse: 'Montering stålstendere', grunntid: 0.25 }, { beskrivelse: 'Isolering 70mm', grunntid: 0.08 }, { beskrivelse: 'Gipsplater 2 sider', grunntid: 0.45 }],
-    materialer: [{ varenavn: 'Stålstendere 70mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 32 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 2.1, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stålstendere 70mm c/c 600', mengde: 3, enhet: 'lm/m²', enhetspris: 32 }, { varenavn: 'Lydisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 2.1, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_iv_dobbel_gips', fag: 'tomrer', kategori: 'Innervegg', name: 'Innervegg 70mm dobbel gips (brann/lyd)', beskrivelse: 'Innervegg med doble gipsplater begge sider for brann- og lydkrav',
     arbeidsarter: [{ beskrivelse: 'Oppsetting bindingsverk 70mm', grunntid: 0.35 }, { beskrivelse: 'Isolering 70mm (brann)', grunntid: 0.08 }, { beskrivelse: 'Gipsplater dobbel 2 sider', grunntid: 0.65 }],
-    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '7523437', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Brannisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 4.2, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Stenderverk 36×70 c/c 600', nobb: '101207115', mengde: 3.5, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Brannisolasjon 70mm', mengde: 1.05, enhet: 'm²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 4.2, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Yttertak
   { id: 'tom_tak_salt', fag: 'tomrer', kategori: 'Yttertak', name: 'Salttak med sperrer', beskrivelse: 'Salttak med taksperrer, isolasjon, undertak og takstein',
     arbeidsarter: [{ beskrivelse: 'Montering taksperrer', grunntid: 0.55 }, { beskrivelse: 'Isolering tak 300mm', grunntid: 0.28 }, { beskrivelse: 'Undertak/vindsperre', grunntid: 0.12 }, { beskrivelse: 'Lekting og sløyfer', grunntid: 0.20 }, { beskrivelse: 'Dampsperre innvendig', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer 48×198 c/c 900', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak/vindsperre', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198 c/c 900', nobb: '', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak/vindsperre', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_pult', fag: 'tomrer', kategori: 'Yttertak', name: 'Pulttak med sperrer', beskrivelse: 'Pulttak med ensidig fall, isolasjon og tekking',
     arbeidsarter: [{ beskrivelse: 'Montering taksperrer pulttak', grunntid: 0.45 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak', grunntid: 0.12 }, { beskrivelse: 'Lekting', grunntid: 0.15 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer pulttak 48×248', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer pulttak 48×248', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Dampsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_flat', fag: 'tomrer', kategori: 'Yttertak', name: 'Flatt tak m/membran', beskrivelse: 'Flatt tak med bæring, isolasjon, fall og takmembran',
     arbeidsarter: [{ beskrivelse: 'Bærekonstruksjon', grunntid: 0.40 }, { beskrivelse: 'Isolering og fall', grunntid: 0.30 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Bjelkelag 48×248', nobb: '7144305', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon m/fall EPS', mengde: 1, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'OSB-plate 18mm', nobb: '7214523', mengde: 1.05, enhet: 'm²', enhetspris: 95 }],
+    materialer: [{ varenavn: 'Bjelkelag 48×248', nobb: '', mengde: 1.5, enhet: 'lm/m²', enhetspris: 68 }, { varenavn: 'Isolasjon m/fall EPS', mengde: 1, enhet: 'm²', enhetspris: 280 }, { varenavn: 'Dampsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }, { varenavn: 'OSB-plate 18mm', nobb: '101432915', mengde: 1.05, enhet: 'm²', enhetspris: 145.42 }],
     underleverandorer: [{ navn: 'Taktekkerfirma', beskrivelse: 'Membranarbeid', kostnad: 350 }], enhet: 'm²'
   },
   { id: 'tom_tak_takstein', fag: 'tomrer', kategori: 'Yttertak', name: 'Salttak m/betongtakstein', beskrivelse: 'Salttak med lekting og betongtakstein',
     arbeidsarter: [{ beskrivelse: 'Montering taksperrer', grunntid: 0.55 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak', grunntid: 0.12 }, { beskrivelse: 'Lekting', grunntid: 0.15 }, { beskrivelse: 'Legging takstein', grunntid: 0.30 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Betongtakstein', mengde: 10, enhet: 'stk/m²', enhetspris: 18 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Betongtakstein', mengde: 10, enhet: 'stk/m²', enhetspris: 18 }, { varenavn: 'Dampsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_staal', fag: 'tomrer', kategori: 'Yttertak', name: 'Tak m/stålplater (profilplater)', beskrivelse: 'Tak med profilerte stålplater på lekting',
     arbeidsarter: [{ beskrivelse: 'Montering sperrer/bæring', grunntid: 0.45 }, { beskrivelse: 'Isolering 300mm', grunntid: 0.25 }, { beskrivelse: 'Undertak', grunntid: 0.12 }, { beskrivelse: 'Lekting og stålplater', grunntid: 0.25 }, { beskrivelse: 'Dampsperre', grunntid: 0.10 }],
-    materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '7083223', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Lekter', mengde: 3, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Stålplater profilerte', mengde: 1.1, enhet: 'm²', enhetspris: 195 }, { varenavn: 'Dampsperre', nobb: '7739065', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
+    materialer: [{ varenavn: 'Taksperrer 48×198', nobb: '', mengde: 1.5, enhet: 'lm/m²', enhetspris: 55 }, { varenavn: 'Isolasjon 300mm', mengde: 1.05, enhet: 'm²', enhetspris: 150 }, { varenavn: 'Undertak', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Lekter', mengde: 3, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Stålplater profilerte', mengde: 1.1, enhet: 'm²', enhetspris: 195 }, { varenavn: 'Dampsperre', nobb: '', mengde: 1.05, enhet: 'm²', enhetspris: 18 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_omtekking', prosjektType: 'rehab', fag: 'tomrer', kategori: 'Yttertak', name: 'Omtekking tak (rehabilitering)', beskrivelse: 'Riving gammel tekking, ny undertak, lekting og takstein',
     arbeidsarter: [{ beskrivelse: 'Riving gammel tekking', grunntid: 0.20 }, { beskrivelse: 'Ny undertak', grunntid: 0.12 }, { beskrivelse: 'Ny lekting', grunntid: 0.15 }, { beskrivelse: 'Legging ny takstein', grunntid: 0.25 }],
-    materialer: [{ varenavn: 'Undertak', nobb: '7002305', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Takstein ny', mengde: 10, enhet: 'stk/m²', enhetspris: 22 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 30 }],
+    materialer: [{ varenavn: 'Undertak', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 35 }, { varenavn: 'Sløyfer og lekter', mengde: 4, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Takstein ny', mengde: 10, enhet: 'stk/m²', enhetspris: 22 }, { varenavn: 'Avfallshåndtering', mengde: 1, enhet: 'rs/m²', enhetspris: 30 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_tak_takvindu', fag: 'tomrer', kategori: 'Yttertak', name: 'Takvindu montering', beskrivelse: 'Montering av takvindu (Velux e.l.) inkl. innforingskasse',
@@ -64195,7 +65549,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Gulv
   { id: 'tom_gulv_tre', fag: 'tomrer', kategori: 'Gulv', name: 'Tregulv på strø', beskrivelse: 'Tregulv med strø, isolasjon og heltre gulvbord',
     arbeidsarter: [{ beskrivelse: 'Legging av strø og isolering', grunntid: 0.30 }, { beskrivelse: 'Legging av gulvbord', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Strø 48×98 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm (gulv)', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gulvbord furu 22×120', mengde: 1.1, enhet: 'm²', enhetspris: 185 }],
+    materialer: [{ varenavn: 'Strø 48×98 c/c 600', mengde: 2, enhet: 'lm/m²', enhetspris: 28 }, { varenavn: 'Isolasjon 100mm (gulv)', mengde: 1.05, enhet: 'm²', enhetspris: 55 }, { varenavn: 'Gulvbord furu 22×120', nobb: '101148585', mengde: 1.1, enhet: 'm²', enhetspris: 41.13 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Dører og vinduer
@@ -64240,6 +65594,27 @@ const BYGNINGSDEL_BIBLIOTEK = [
     materialer: [{ varenavn: 'Passivhus-ytterdør m/karm', mengde: 1, enhet: 'stk', enhetspris: 28500 }, { varenavn: 'Foring og listverk sett', mengde: 1, enhet: 'sett', enhetspris: 850 }, { varenavn: 'Tetningsbånd og tape', mengde: 1, enhet: 'rs', enhetspris: 450 }, { varenavn: 'Skruer og skum', mengde: 1, enhet: 'rs', enhetspris: 250 }],
     underleverandorer: [], enhet: 'stk'
   },
+  // Porter (garasje/industri) — Patch 21
+  { id: 'tom_port_ledd_std', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Garasjeport leddport 2,4×2,1 m', beskrivelse: 'Isolert leddport med karm, fjærsystem og manuell betjening — montering og justering',
+    arbeidsarter: [{ beskrivelse: 'Montering karm og skinner', grunntid: 2.5 }, { beskrivelse: 'Montering portblad og fjærsystem', grunntid: 2.5 }, { beskrivelse: 'Justering, tetting og listverk', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Leddport 2,4×2,1 m isolert m/karm', mengde: 1, enhet: 'stk', enhetspris: 16500 }, { varenavn: 'Tetningslister og beslag', mengde: 1, enhet: 'sett', enhetspris: 950 }, { varenavn: 'Skruer, skum, festemateriell', mengde: 1, enhet: 'rs', enhetspris: 450 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_port_ledd_motor', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Garasjeport leddport 3,0×2,1 m m/motor', beskrivelse: 'Isolert leddport med elektrisk portåpner, fjernkontroll og sikkerhetsfotocelle',
+    arbeidsarter: [{ beskrivelse: 'Montering karm og skinner', grunntid: 2.8 }, { beskrivelse: 'Montering portblad og fjærsystem', grunntid: 2.7 }, { beskrivelse: 'Montering og innkjøring av motor', grunntid: 2.0 }, { beskrivelse: 'Justering, tetting og listverk', grunntid: 1.5 }],
+    materialer: [{ varenavn: 'Leddport 3,0×2,1 m isolert m/karm', mengde: 1, enhet: 'stk', enhetspris: 21500 }, { varenavn: 'Portåpner m/fjernkontroll og fotocelle', mengde: 1, enhet: 'stk', enhetspris: 6500 }, { varenavn: 'Tetningslister og beslag', mengde: 1, enhet: 'sett', enhetspris: 1100 }, { varenavn: 'Skruer, skum, festemateriell', mengde: 1, enhet: 'rs', enhetspris: 550 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_port_vippe', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Garasjeport vippeport 2,4×2,1 m', beskrivelse: 'Vippeport i stål med karm og fjærsystem — enkel og rimelig løsning',
+    arbeidsarter: [{ beskrivelse: 'Montering karm', grunntid: 2.0 }, { beskrivelse: 'Montering portblad og fjærer', grunntid: 2.0 }, { beskrivelse: 'Justering og listverk', grunntid: 1.2 }],
+    materialer: [{ varenavn: 'Vippeport 2,4×2,1 m m/karm', mengde: 1, enhet: 'stk', enhetspris: 11500 }, { varenavn: 'Tetningslister og beslag', mengde: 1, enhet: 'sett', enhetspris: 750 }, { varenavn: 'Skruer, skum, festemateriell', mengde: 1, enhet: 'rs', enhetspris: 400 }],
+    underleverandorer: [], enhet: 'stk'
+  },
+  { id: 'tom_port_industri', prosjektType: 'blandet', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Industriport 4,0×3,5 m m/motor', beskrivelse: 'Isolert industriport med kraftig motor, fotocelle og nødåpning — for hall/lager',
+    arbeidsarter: [{ beskrivelse: 'Montering karm og skinner', grunntid: 4.5 }, { beskrivelse: 'Montering portblad og fjærsystem', grunntid: 4.5 }, { beskrivelse: 'Montering og innkjøring av motor', grunntid: 3.0 }, { beskrivelse: 'Justering, tetting og innfesting', grunntid: 2.5 }],
+    materialer: [{ varenavn: 'Industriport 4,0×3,5 m isolert m/karm', mengde: 1, enhet: 'stk', enhetspris: 48000 }, { varenavn: 'Industri-portåpner m/fotocelle', mengde: 1, enhet: 'stk', enhetspris: 14500 }, { varenavn: 'Tetningslister og beslag', mengde: 1, enhet: 'sett', enhetspris: 1800 }, { varenavn: 'Innfesting og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 1200 }],
+    underleverandorer: [], enhet: 'stk'
+  },
   { id: 'tom_dor_inner_eik', fag: 'tomrer', kategori: 'Dører/vinduer', name: 'Innerdør eik/finer', beskrivelse: 'Innerdør i eik eller finer for høyere finish — montering m/karm og listverk',
     arbeidsarter: [{ beskrivelse: 'Montering karm', grunntid: 1.3 }, { beskrivelse: 'Montering dørblad og beslag', grunntid: 0.6 }, { beskrivelse: 'Listverk og finish', grunntid: 0.6 }],
     materialer: [{ varenavn: 'Innerdør eik/finer m/karm', mengde: 1, enhet: 'stk', enhetspris: 5800 }, { varenavn: 'Listverk eik/finer', mengde: 1, enhet: 'sett', enhetspris: 550 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 180 }],
@@ -64248,17 +65623,17 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Himling
   { id: 'tom_him_gips', fag: 'tomrer', kategori: 'Himling', name: 'Himling gipsplater på lekter', beskrivelse: 'Gipshimling på trelekter med sparkling',
     arbeidsarter: [{ beskrivelse: 'Montering lekter c/c 400', grunntid: 0.20 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.28 }, { beskrivelse: 'Sparkling og sliping', grunntid: 0.20 }],
-    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Skruer gips', mengde: 15, enhet: 'stk/m²', enhetspris: 0.8 }],
+    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 1.05, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }, { varenavn: 'Skruer gips', mengde: 15, enhet: 'stk/m²', enhetspris: 0.8 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_him_panel', fag: 'tomrer', kategori: 'Himling', name: 'Himling trepanel', beskrivelse: 'Trepanelhimling på lekter',
     arbeidsarter: [{ beskrivelse: 'Montering lekter', grunntid: 0.20 }, { beskrivelse: 'Montering panel', grunntid: 0.35 }],
-    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Trepanel furu 14×120 SPS', mengde: 1.1, enhet: 'm²', enhetspris: 165 }, { varenavn: 'Dykkert og lim', mengde: 1, enhet: 'rs/m²', enhetspris: 10 }],
+    materialer: [{ varenavn: 'Lekter 36×48 c/c 400', mengde: 2.5, enhet: 'lm/m²', enhetspris: 14 }, { varenavn: 'Trepanel furu 14×120 SPS', nobb: '101115810', mengde: 1.1, enhet: 'lm', enhetspris: 14.58 }, { varenavn: 'Dykkert og lim', mengde: 1, enhet: 'rs/m²', enhetspris: 10 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_him_nedforet', fag: 'tomrer', kategori: 'Himling', name: 'Nedforet himling med stålprofil', beskrivelse: 'Nedforet himling med stålstendere og gips',
     arbeidsarter: [{ beskrivelse: 'Montering stålprofil og oppheng', grunntid: 0.25 }, { beskrivelse: 'Montering gipsplater', grunntid: 0.28 }, { beskrivelse: 'Sparkling', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Stålprofil himling komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', nobb: '7003292', mengde: 1.05, enhet: 'm²', enhetspris: 52 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Stålprofil himling komplett', mengde: 1, enhet: 'rs/m²', enhetspris: 65 }, { varenavn: 'Gipsplate 13mm', nobb: '101249233', mengde: 1.05, enhet: 'm²', enhetspris: 35.83 }, { varenavn: 'Sparkelmasse og fugebånd', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Trapper
@@ -64291,7 +65666,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Garderobe/innredning
   { id: 'tom_garderobe', fag: 'tomrer', kategori: 'Innredning', name: 'Garderobeskap innebygd', beskrivelse: 'Bygge innebygd garderobe med hyller og stang',
     arbeidsarter: [{ beskrivelse: 'Oppsetting ramme og sider', grunntid: 3.0 }, { beskrivelse: 'Hyller og stang', grunntid: 2.0 }, { beskrivelse: 'Dører/fronter', grunntid: 2.0 }],
-    materialer: [{ varenavn: 'Sponplate/MDF sider', mengde: 4, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Hyller', mengde: 4, enhet: 'stk', enhetspris: 85 }, { varenavn: 'Klesstang', mengde: 1, enhet: 'stk', enhetspris: 120 }, { varenavn: 'Skyvedører 2 stk', mengde: 1, enhet: 'sett', enhetspris: 4500 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 350 }],
+    materialer: [{ varenavn: 'Sponplate/MDF sider', nobb: '101116211', mengde: 4, enhet: 'm²', enhetspris: 92.86 }, { varenavn: 'Hyller', mengde: 4, enhet: 'stk', enhetspris: 85 }, { varenavn: 'Klesstang', mengde: 1, enhet: 'stk', enhetspris: 120 }, { varenavn: 'Skyvedører 2 stk', mengde: 1, enhet: 'sett', enhetspris: 4500 }, { varenavn: 'Beslag og festemateriell', mengde: 1, enhet: 'rs', enhetspris: 350 }],
     underleverandorer: [], enhet: 'stk'
   },
   { id: 'tom_kjokken_mont', fag: 'tomrer', kategori: 'Innredning', name: 'Kjøkkenmontering', beskrivelse: 'Montering av kjøkkeninnredning (kunde leverer kjøkken)',
@@ -64302,12 +65677,12 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Kledning
   { id: 'tom_kledning_staaende', fag: 'tomrer', kategori: 'Kledning', name: 'Stående kledning utvendig', beskrivelse: 'Utvendig stående trekledning på lekter',
     arbeidsarter: [{ beskrivelse: 'Montering sløyfer og lekter', grunntid: 0.15 }, { beskrivelse: 'Montering stående kledning', grunntid: 0.35 }],
-    materialer: [{ varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Stående kledning 19×148', mengde: 1.15, enhet: 'm²', enhetspris: 145 }, { varenavn: 'Spiker/skruer rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Sløyfer 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Stående kledning 19×148', nobb: '101115941', mengde: 1.15, enhet: 'lm', enhetspris: 29.48 }, { varenavn: 'Spiker/skruer rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'tom_kledning_liggende', fag: 'tomrer', kategori: 'Kledning', name: 'Liggende kledning utvendig', beskrivelse: 'Utvendig liggende trekledning med underligger',
     arbeidsarter: [{ beskrivelse: 'Montering sløyfer og lekter', grunntid: 0.15 }, { beskrivelse: 'Montering liggende kledning', grunntid: 0.40 }],
-    materialer: [{ varenavn: 'Sløyfer 23×48', nobb: '7083167', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Underligger 19×98', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Overligger 19×123', mengde: 1.1, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Spiker rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Sløyfer 23×48', nobb: '', mengde: 3, enhet: 'lm/m²', enhetspris: 12 }, { varenavn: 'Underligger 19×98', mengde: 1.1, enhet: 'm²', enhetspris: 75 }, { varenavn: 'Overligger 19×123', mengde: 1.1, enhet: 'm²', enhetspris: 95 }, { varenavn: 'Spiker rustfri', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   // Gulv
@@ -64455,7 +65830,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
   { id: 'mur_isoblokk', fag: 'murer', kategori: 'Oppmuring', name: 'Isoblokk yttervegg', beskrivelse: 'Oppmuring med Isoblokk (EPS-forskaling) med armering og betongfyll — komplett yttervegg',
     arbeidsarter: [{ beskrivelse: 'Oppsetting Isoblokk', grunntid: 0.50 }, { beskrivelse: 'Armering vertikal og horisontal', grunntid: 0.20 }, { beskrivelse: 'Utstøping betong', grunntid: 0.15 }],
-    materialer: [{ varenavn: 'Isoblokk 25cm (EPS)', nobb: '7460471', mengde: 4, enhet: 'stk/m²', enhetspris: 95 }, { varenavn: 'Armering Ø10mm', mengde: 4, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Betong B30', mengde: 0.06, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindeledd og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Isoblokk 25cm (EPS)', nobb: '', mengde: 4, enhet: 'stk/m²', enhetspris: 95 }, { varenavn: 'Armering Ø10mm', mengde: 4, enhet: 'lm/m²', enhetspris: 22 }, { varenavn: 'Betong B30', mengde: 0.06, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Bindeledd og festemateriell', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'mur_isoblokk_30', fag: 'murer', kategori: 'Oppmuring', name: 'Isoblokk yttervegg 30cm (passivhus)', beskrivelse: 'Tykkere Isoblokk for økte isolasjonskrav, passivhusnivå',
@@ -64746,17 +66121,17 @@ const BYGNINGSDEL_BIBLIOTEK = [
   // Gulvplate/såle
   { id: 'bet_plate_100', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate på grunn 100mm', beskrivelse: 'Plate på mark — radonmembran, isolasjon, armering (nett) og støp 100mm',
     arbeidsarter: [{ beskrivelse: 'Legging radonmembran', grunntid: 0.05 }, { beskrivelse: 'Legging isolasjon', grunntid: 0.08 }, { beskrivelse: 'Forskaling kant', grunntid: 0.12 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Støp og avretting', grunntid: 0.25 }],
-    materialer: [{ varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett K500 Ø8 150×150', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser og diverse', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
+    materialer: [{ varenavn: 'Radonmembran', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett K500 Ø8 150×150', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser og diverse', mengde: 1, enhet: 'rs/m²', enhetspris: 12 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'bet_plate_150', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate på grunn 150mm', beskrivelse: 'Plate på mark — forsterket 150mm for garasje/næringsbygg',
     arbeidsarter: [{ beskrivelse: 'Legging radonmembran', grunntid: 0.05 }, { beskrivelse: 'Legging isolasjon', grunntid: 0.08 }, { beskrivelse: 'Forskaling', grunntid: 0.15 }, { beskrivelse: 'Armering dobbelt nett', grunntid: 0.15 }, { beskrivelse: 'Støp og avretting', grunntid: 0.25 }],
-    materialer: [{ varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8 150×150 (dobbelt)', mengde: 2.2, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (150mm)', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
+    materialer: [{ varenavn: 'Radonmembran', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8 150×150 (dobbelt)', mengde: 2.2, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (150mm)', mengde: 0.15, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }, { varenavn: 'Distanser', mengde: 1, enhet: 'rs/m²', enhetspris: 15 }],
     underleverandorer: [], enhet: 'm²'
   },
   { id: 'bet_plate_varme', fag: 'betong', kategori: 'Gulvplate', name: 'Betongplate m/gulvvarme', beskrivelse: 'Plate på mark med innstøpt vannbåren gulvvarme',
     arbeidsarter: [{ beskrivelse: 'Legging radonmembran og isolasjon', grunntid: 0.12 }, { beskrivelse: 'Forskaling', grunntid: 0.12 }, { beskrivelse: 'Armering nett', grunntid: 0.10 }, { beskrivelse: 'Legging varmeslanger', grunntid: 0.15 }, { beskrivelse: 'Støp og avretting', grunntid: 0.22 }],
-    materialer: [{ varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }],
+    materialer: [{ varenavn: 'Radonmembran', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 25 }, { varenavn: 'EPS isolasjon 200mm', mengde: 1.05, enhet: 'm²', enhetspris: 120 }, { varenavn: 'Armeringsnett Ø8', mengde: 1.1, enhet: 'm²', enhetspris: 45 }, { varenavn: 'Betong B30 (100mm)', mengde: 0.10, enhet: 'm³/m²', enhetspris: 1400 }, { varenavn: 'Forskalingsmateriell', mengde: 0.3, enhet: 'lm/m²', enhetspris: 65 }],
     underleverandorer: [{ navn: 'Rørlegger', beskrivelse: 'Legging varmeslanger', kostnad: 180 }], enhet: 'm²'
   },
   // Fundamenter
@@ -64948,7 +66323,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
   },
   { id: 'gru_radon', fag: 'grunnarbeid', kategori: 'Fylling', name: 'Radonbrønn og membran', beskrivelse: 'Radonbrønn med sugeledning og radonmembran under plate',
     arbeidsarter: [{ beskrivelse: 'Montering radonbrønn', grunntid: 2.0 }, { beskrivelse: 'Legging sugerør', grunntid: 0.5 }, { beskrivelse: 'Legging radonmembran', grunntid: 0.05 }],
-    materialer: [{ varenavn: 'Radonbrønn komplett', mengde: 1, enhet: 'stk', enhetspris: 2500 }, { varenavn: 'Sugerør Ø110', mengde: 5, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Radonmembran', nobb: '7879760', mengde: 1.1, enhet: 'm²', enhetspris: 25 }],
+    materialer: [{ varenavn: 'Radonbrønn komplett', mengde: 1, enhet: 'stk', enhetspris: 2500 }, { varenavn: 'Sugerør Ø110', mengde: 5, enhet: 'lm', enhetspris: 55 }, { varenavn: 'Radonmembran', nobb: '', mengde: 1.1, enhet: 'm²', enhetspris: 25 }],
     underleverandorer: [], enhet: 'stk'
   },
   // VA (vann og avløp i grunn)
@@ -65016,7 +66391,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Bjelkesko og festemiddel', grunntid: 0.15 },
     ],
     materialer: [
-      { varenavn: 'Limtrebjelke gran 115×270 GL30c', nobb: '7026010', mengde: 1, enhet: 'lm', enhetspris: 892 },
+      { varenavn: 'Limtrebjelke gran 115×270 GL30c', nobb: '101201709', mengde: 1, enhet: 'stk', enhetspris: 2384.56 },
       { varenavn: 'Bjelkesko og festemiddel', mengde: 0.4, enhet: 'stk/lm', enhetspris: 145 },
     ],
     underleverandorer: [], enhet: 'lm'
@@ -65029,7 +66404,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Bjelkesko og festemiddel', grunntid: 0.15 },
     ],
     materialer: [
-      { varenavn: 'Limtrebjelke gran 140×270 GL30c', nobb: '7026019', mengde: 1, enhet: 'lm', enhetspris: 1140 },
+      { varenavn: 'Limtrebjelke gran 140×270 GL30c', nobb: '101104111', mengde: 1, enhet: 'lm', enhetspris: 793.1 },
       { varenavn: 'Bjelkesko og festemiddel', mengde: 0.4, enhet: 'stk/lm', enhetspris: 165 },
     ],
     underleverandorer: [], enhet: 'lm'
@@ -65042,7 +66417,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Bjelkesko og festemiddel', grunntid: 0.20 },
     ],
     materialer: [
-      { varenavn: 'Limtrebjelke gran 140×360 GL30c', nobb: '7025924', mengde: 1, enhet: 'lm', enhetspris: 1367 },
+      { varenavn: 'Limtrebjelke gran 140×360 GL30c', nobb: '101201324', mengde: 1, enhet: 'stk', enhetspris: 5280.8 },
       { varenavn: 'Forsterket bjelkesko', mengde: 0.4, enhet: 'stk/lm', enhetspris: 245 },
     ],
     underleverandorer: [], enhet: 'lm'
@@ -65055,7 +66430,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Forsterket innfesting', grunntid: 0.25 },
     ],
     materialer: [
-      { varenavn: 'Limtrebjelke gran 140×405 GL30c', nobb: '7026021', mengde: 1, enhet: 'lm', enhetspris: 1460 },
+      { varenavn: 'Limtrebjelke gran 140×405 GL30c', nobb: '101104113', mengde: 1, enhet: 'lm', enhetspris: 993.84 },
       { varenavn: 'Forsterket bjelkesko og bolter', mengde: 0.4, enhet: 'stk/lm', enhetspris: 320 },
     ],
     underleverandorer: [], enhet: 'lm'
@@ -65069,7 +66444,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Innfesting topp/bunn (sko, ankerbolt)', grunntid: 0.50 },
     ],
     materialer: [
-      { varenavn: 'Limtresøyle gran 115×115 GL30c (3m)', nobb: '7026006', mengde: 3, enhet: 'lm/stk', enhetspris: 427 },
+      { varenavn: 'Limtresøyle gran 115×115 GL30c (3m)', nobb: '101201705', mengde: 3, enhet: 'stk', enhetspris: 1826.96 },
       { varenavn: 'Søylesko og ankerbolt sett', mengde: 1, enhet: 'sett', enhetspris: 425 },
     ],
     underleverandorer: [], enhet: 'stk'
@@ -65081,7 +66456,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Innfesting topp/bunn', grunntid: 0.55 },
     ],
     materialer: [
-      { varenavn: 'Limtresøyle gran 140×140 GL30c (3m)', nobb: '7025901', mengde: 3, enhet: 'lm/stk', enhetspris: 690 },
+      { varenavn: 'Limtresøyle gran 140×140 GL30c (3m)', nobb: '101201324', mengde: 3, enhet: 'stk', enhetspris: 5280.8 },
       { varenavn: 'Søylesko og ankerbolt sett', mengde: 1, enhet: 'sett', enhetspris: 525 },
     ],
     underleverandorer: [], enhet: 'stk'
@@ -65093,7 +66468,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Innfesting topp/bunn', grunntid: 0.60 },
     ],
     materialer: [
-      { varenavn: 'Limtresøyle gran 140×200 GL30c (3m)', nobb: '7224308', mengde: 3, enhet: 'lm/stk', enhetspris: 1063 },
+      { varenavn: 'Limtresøyle gran 140×200 GL30c (3m)', nobb: '101106883', mengde: 3, enhet: 'lm', enhetspris: 1111.92 },
       { varenavn: 'Søylesko og ankerbolt sett', mengde: 1, enhet: 'sett', enhetspris: 625 },
     ],
     underleverandorer: [], enhet: 'stk'
@@ -65105,7 +66480,7 @@ const BYGNINGSDEL_BIBLIOTEK = [
       { beskrivelse: 'Innfesting topp/bunn (forsterket)', grunntid: 0.70 },
     ],
     materialer: [
-      { varenavn: 'Limtresøyle gran 140×270 GL30c (3m)', nobb: '7026019', mengde: 3, enhet: 'lm/stk', enhetspris: 1140 },
+      { varenavn: 'Limtresøyle gran 140×270 GL30c (3m)', nobb: '101104111', mengde: 3, enhet: 'lm', enhetspris: 793.1 },
       { varenavn: 'Søylesko og bolter (forsterket)', mengde: 1, enhet: 'sett', enhetspris: 825 },
     ],
     underleverandorer: [], enhet: 'stk'
@@ -65283,16 +66658,16 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
   BIM_KONSTRUKSJON_KATEGORIER.forEach(kat => {
     const verdi = veiviserData.valgteKonstruksjoner[kat.id]
     if (!verdi) return
-    const totalMengde = getMengdeFraPath(mengder, kat.mengdeFelt) || 1
-    if (totalMengde <= 0) return
 
     // Normaliser: alltid jobb med array av { id, prosent }
     const valgtArray = erMultiVerdi(verdi) ? verdi : [{ id: verdi, prosent: 100 }]
+    // Enhets-styrt mengde per bygningsdel (stripefundament=lm, dekke=m², punktfundament=stk)
+    const fordeltArray = fordelMengdePerBd(kat, mengder, valgtArray)
 
-    valgtArray.forEach(v => {
+    fordeltArray.forEach(v => {
       const bd = BYGNINGSDEL_BIBLIOTEK.find(b => b.id === v.id)
       if (!bd) return
-      const mengde = totalMengde * ((v.prosent || 100) / 100)
+      const mengde = v.mengde
       if (mengde <= 0) return
       const fag = bd.fag
 
@@ -65320,6 +66695,16 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
             beskrivelse: `${mengder.ytterdorer.antall} ytterdører`,
             antall: mengder.ytterdorer.antall,
             areal: mengder.ytterdorer.arealPerStk,
+            baerende: veiviserData.baerendeYttervegg !== false,
+            timer_per_tillegg: 0.5,
+          })
+        }
+        if (mengder.porter && mengder.porter.antall > 0) {
+          apningstillegg.push({
+            id: Date.now() + 1200,
+            beskrivelse: `${mengder.porter.antall} porter`,
+            antall: mengder.porter.antall,
+            areal: mengder.porter.arealPerStk,
             baerende: veiviserData.baerendeYttervegg !== false,
             timer_per_tillegg: 0.5,
           })
@@ -66574,14 +67959,12 @@ function PrisbokPage({ onBack }) {
   const searchPrisbok = async () => {
     if (!search.trim()) { setPrisbok([]); return }
     try {
-      let query = supabase.from('prisbok').select('*')
-      if (aktivPrisliste) query = query.eq('prisliste_id', aktivPrisliste.id)
-      else query = query.eq('user_id', user?.id)
-      const { data, error } = await query.or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
+      // Bruker sok_prisbok (SECURITY DEFINER) — direkte ILIKE mot prisbok kan ikke
+      // bruke trigram-indeksen under RLS og gir statement timeout på 305k rader.
+      const { data, error } = await supabase.rpc('sok_prisbok', { p_term: search.trim(), p_maks: 50 })
       if (error) {
-        // Fallback without prisliste filter
-        const { data: fb } = await supabase.from('prisbok').select('*').or(`varenummer.ilike.%${search.trim()}%,varenavn.ilike.%${search.trim()}%,kategori.ilike.%${search.trim()}%`).order('varenavn').limit(50)
-        setPrisbok(fb || [])
+        console.warn('[prisbok] sok_prisbok feilet:', error.message)
+        setPrisbok([])
       } else {
         setPrisbok(data || [])
       }
@@ -66780,6 +68163,7 @@ function KalkFaktorerPage({ onBack }) {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [settingsId, setSettingsId] = useState(null)
+  const [grunntidModalFag, setGrunntidModalFag] = useState(null)  // fag-id når popupen er åpen
 
   useEffect(() => {
     supabase.from('company_settings').select('id, kalk_faktorer').limit(1).single()
@@ -66895,7 +68279,14 @@ function KalkFaktorerPage({ onBack }) {
                 <div>{lbl('Prod.lønn kr/t')}<input type="number" value={fakt.produksjonslonn} onChange={e=>updateF(fag.id,'produksjonslonn',e.target.value)} style={qInp} /></div>
                 <div>{lbl('Sosiale %')}<input type="number" value={fakt.sosiale_prosent} onChange={e=>updateF(fag.id,'sosiale_prosent',e.target.value)} style={qInp} /></div>
                 <div>{lbl('Faste kostn. %')}<input type="number" value={fakt.faste_prosent} onChange={e=>updateF(fag.id,'faste_prosent',e.target.value)} style={qInp} /></div>
-                <div>{lbl('Grunntid-just.')}<input type="number" step="0.1" value={fakt.grunntid_justering} onChange={e=>updateF(fag.id,'grunntid_justering',e.target.value)} style={qInp} /></div>
+                <div>{lbl('Grunntid-just.')}
+                  <button type="button" onClick={()=>setGrunntidModalFag(fag.id)}
+                    style={{ ...qInp, cursor:'pointer', textAlign:'left', display:'flex', alignItems:'center', justifyContent:'space-between', background:'white' }}
+                    title="Klikk for å bygge tidsjusteringen av navngitte poster">
+                    <span style={{ fontWeight:'700', color:'#0f172a' }}>{(parseFloat(fakt.grunntid_justering)||1).toFixed(2)} ×</span>
+                    <span style={{ fontSize:'11px', color:'#059669' }}>Juster ▸</span>
+                  </button>
+                </div>
                 <div>{lbl('Fortj. lønn %')}<input type="number" value={fakt.fortjeneste_lonn_prosent} onChange={e=>updateF(fag.id,'fortjeneste_lonn_prosent',e.target.value)} style={qInp} /></div>
                 <div>{lbl('Fortj. innkjøp %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateF(fag.id,'fortjeneste_innkjop_prosent',e.target.value)} style={qInp} /></div>
                 <div>{lbl('Mat.justering %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateF(fag.id,'mat_justering_prosent',e.target.value)} style={qInp} /></div>
@@ -66903,6 +68294,22 @@ function KalkFaktorerPage({ onBack }) {
             </div>
           )
         })}
+        {grunntidModalFag && (() => {
+          const fag = getFaggruppe(grunntidModalFag)
+          const fakt = faktorer[grunntidModalFag] || getDefaultFaktorer(grunntidModalFag)
+          return (
+            <GrunntidJusteringModal
+              fagNavn={fag.name}
+              startPoster={fakt.grunntid_poster}
+              startFaktor={fakt.grunntid_justering}
+              onLukk={()=>setGrunntidModalFag(null)}
+              onLagre={(nyFaktor, nyePoster)=>{
+                setFaktorer(f => ({ ...f, [grunntidModalFag]: { ...(f[grunntidModalFag]||getDefaultFaktorer(grunntidModalFag)), grunntid_justering: nyFaktor, grunntid_poster: nyePoster } }))
+                setGrunntidModalFag(null)
+              }}
+            />
+          )
+        })()}
 
         {/* Underleverandør */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
@@ -66967,8 +68374,41 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
   const [saving, setSaving] = useState(false)
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
+  // Punkt 3 (Proresult-stil): to-stegs opprettelse.
+  //   steg 1 = prosjektinfo + faggrupper (som før)
+  //   steg 2 = kontroller/juster faktorene for DETTE prosjektet før opprettelse
+  const [steg, setSteg] = useState(1)
+  const [projFaktorer, setProjFaktorer] = useState(null)  // { [fag]: {...} } — kopi som justeres i steg 2
+  const [bedriftFaktorerLoaded, setBedriftFaktorerLoaded] = useState({})
+  const [grunntidModalFag, setGrunntidModalFag] = useState(null)  // fag-id når popup åpen i steg 2
+
   const toggleFag = (fagId) => {
     setSelectedFag(f => f.includes(fagId) ? f.filter(x => x !== fagId) : [...f, fagId])
+  }
+
+  // Gå fra steg 1 → steg 2: hent bedriftens standardfaktorer og lag en justerbar kopi
+  const gaaTilFaktorer = async () => {
+    if (!form.title.trim()) { await appAlert({ message: 'Prosjektnavn er påkrevd', kind: 'warn' }); return }
+    if (selectedFag.length === 0) { await appAlert({ message: 'Velg minst én faggruppe', kind: 'warn' }); return }
+    let bedriftFaktorer = {}
+    try {
+      const { data } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+      bedriftFaktorer = data?.kalk_faktorer || {}
+    } catch(e) {}
+    setBedriftFaktorerLoaded(bedriftFaktorer)
+    const start = {}
+    selectedFag.forEach(fagId => {
+      start[fagId] = { ...(bedriftFaktorer[fagId] || getDefaultFaktorer(fagId)) }
+    })
+    setProjFaktorer(start)
+    setSteg(2)
+  }
+
+  const oppdaterProjFaktor = (fagId, field, value) => {
+    setProjFaktorer(f => ({ ...f, [fagId]: { ...f[fagId], [field]: value } }))
+  }
+  const tilbakestillFagFaktor = (fagId) => {
+    setProjFaktorer(f => ({ ...f, [fagId]: { ...(bedriftFaktorerLoaded[fagId] || getDefaultFaktorer(fagId)) } }))
   }
 
   const handleSave = async () => {
@@ -66992,9 +68432,9 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
           const fag = getFaggruppe(fagId)
           return { id: Date.now() + i, fag: fagId, name: fag.name, description: '', bygningsdeler: [] }
         })
-        // Set faktorer from bedrift defaults
+        // Faktorer: bruk de prosjekt-justerte fra steg 2 hvis satt, ellers bedrift/standard
         selectedFag.forEach(fagId => {
-          faktorer[fagId] = bedriftFaktorer[fagId] || getDefaultFaktorer(fagId)
+          faktorer[fagId] = (projFaktorer && projFaktorer[fagId]) || bedriftFaktorer[fagId] || getDefaultFaktorer(fagId)
         })
       } else {
         // When editing, add new fag and remove deselected
@@ -67046,13 +68486,20 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
         {/* Header */}
         <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger prosjekt' : 'Nytt kalkulasjonsprosjekt'}</h2>
+            <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🧮 {isEdit ? 'Rediger prosjekt' : (steg === 2 ? 'Kontroller faktorene' : 'Nytt kalkulasjonsprosjekt')}</h2>
             <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
           </div>
+          {!isEdit && (
+            <div style={{ display:'flex', gap:'6px', marginTop:'12px' }}>
+              <div style={{ flex:1, height:'4px', borderRadius:'2px', background: steg >= 1 ? '#059669' : '#e2e8f0' }} />
+              <div style={{ flex:1, height:'4px', borderRadius:'2px', background: steg >= 2 ? '#059669' : '#e2e8f0' }} />
+            </div>
+          )}
         </div>
 
         {/* Body */}
         <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'16px', maxHeight:'70vh', overflowY:'auto' }}>
+          {(isEdit || steg === 1) && <>
           {/* Prosjektinfo */}
           <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }}>
             <div style={{ gridColumn:'1/-1' }}>{lbl('Prosjektnavn *')}<input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilbygg Strandveien 12" style={qInp} /></div>
@@ -67099,14 +68546,109 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
             </div>
             {selectedFag.length > 0 && <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>{selectedFag.length} faggruppe{selectedFag.length !== 1 ? 'r' : ''} valgt</div>}
           </div>
+          </>}
+
+          {/* STEG 2 (kun ved nyopprettelse): kontroller/juster faktorene for dette prosjektet */}
+          {!isEdit && steg === 2 && projFaktorer && (
+            <div>
+              <div style={{ background:'#f0f9ff', border:'1px solid #bae6fd', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0c4a6e', marginBottom:'2px' }}>Kontroller at faktorene stemmer</div>
+                <div style={{ fontSize:'12px', color:'#0369a1', lineHeight:1.5 }}>
+                  Faktorene er hentet fra bedriftens standardsatser. Er du fornøyd, trykk «Opprett kalkulasjon». Vil du justere noe for akkurat dette prosjektet, gjør det her — det påvirker ikke bedriftens standard.
+                </div>
+              </div>
+              {selectedFag.map(fagId => {
+                const fag = getFaggruppe(fagId)
+                const fakt = projFaktorer[fagId] || getDefaultFaktorer(fagId)
+                const bedriftF = bedriftFaktorerLoaded[fagId] || getDefaultFaktorer(fagId)
+                const endret = JSON.stringify(fakt) !== JSON.stringify(bedriftF)
+                return (
+                  <div key={fagId} style={{ border:'1px solid #f1f5f9', borderRadius:'12px', padding:'14px', marginBottom:'10px' }}>
+                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+                      <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                        <span style={{ fontSize:'16px' }}>{fag.emoji}</span>
+                        <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fag.name}</span>
+                      </div>
+                      {endret && (
+                        <button type="button" onClick={()=>tilbakestillFagFaktor(fagId)} style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#94a3b8' }} title="Tilbakestill til bedriftsstandard">↺ Tilbakestill</button>
+                      )}
+                    </div>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(3, 1fr)', gap:'8px' }}>
+                      {[
+                        { key:'produksjonslonn', label:'Lønn', unit:'kr/t' },
+                        { key:'sosiale_prosent', label:'Sosiale', unit:'%' },
+                        { key:'faste_prosent', label:'Faste', unit:'%' },
+                        { key:'fortjeneste_lonn_prosent', label:'Fortj.lønn', unit:'%' },
+                        { key:'fortjeneste_innkjop_prosent', label:'Fortj.mat', unit:'%' },
+                        { key:'grunntid_justering', label:'Tidsjust.', unit:'×' },
+                      ].map(field => {
+                        if (field.key === 'grunntid_justering') {
+                          return (
+                            <div key={field.key}>
+                              <div style={{ fontSize:'9px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{field.label}</div>
+                              <button type="button" onClick={()=>setGrunntidModalFag(fagId)}
+                                style={{ width:'100%', padding:'6px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', boxSizing:'border-box', background:'white', color:'#0f172a', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between' }}
+                                title="Klikk for å bygge tidsjusteringen av navngitte poster">
+                                <span style={{ fontWeight:'700' }}>{(parseFloat(fakt.grunntid_justering)||1).toFixed(2)} ×</span>
+                                <span style={{ fontSize:'10px', color:'#059669' }}>▸</span>
+                              </button>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div key={field.key}>
+                            <div style={{ fontSize:'9px', color:'#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{field.label} <span style={{ color:'#cbd5e1' }}>{field.unit}</span></div>
+                            <input type="number" value={fakt[field.key] ?? ''}
+                              onChange={e=>oppdaterProjFaktor(fagId, field.key, e.target.value)}
+                              style={{ width:'100%', padding:'6px 8px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', outline:'none', boxSizing:'border-box', color:'#0f172a', fontFamily:'system-ui,sans-serif' }} />
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px' }}>
-          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':isEdit?'Lagre endringer':'Opprett kalkulasjon'}</button>
+        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', gap:'10px' }}>
+          <div>
+            {!isEdit && steg === 2 && (
+              <button onClick={()=>setSteg(1)} style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>← Tilbake</button>
+            )}
+          </div>
+          <div style={{ display:'flex', gap:'10px' }}>
+            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+            {isEdit ? (
+              <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Lagre endringer'}</button>
+            ) : steg === 1 ? (
+              <button onClick={gaaTilFaktorer} style={{ padding:'10px 24px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>Neste: faktorer →</button>
+            ) : (
+              <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Opprett kalkulasjon'}</button>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Grunntid-justering popup (delt komponent) — brukes i steg 2 */}
+      {grunntidModalFag && projFaktorer && (() => {
+        const fag = getFaggruppe(grunntidModalFag)
+        const fakt = projFaktorer[grunntidModalFag] || getDefaultFaktorer(grunntidModalFag)
+        return (
+          <GrunntidJusteringModal
+            fagNavn={fag.name}
+            startPoster={fakt.grunntid_poster}
+            startFaktor={fakt.grunntid_justering}
+            onLukk={()=>setGrunntidModalFag(null)}
+            onLagre={(nyFaktor, nyePoster)=>{
+              setProjFaktorer(f => ({ ...f, [grunntidModalFag]: { ...f[grunntidModalFag], grunntid_justering: nyFaktor, grunntid_poster: nyePoster } }))
+              setGrunntidModalFag(null)
+            }}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -67130,6 +68672,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [ueSug, setUeSug] = useState({})  // UE-register autocomplete-forslag, keyet på uf.id (transient, lagres IKKE)
   const [visBedriftsatser, setVisBedriftsatser] = useState(false)  // åpner KalkFaktorerPage (bedriftens standardsatser)
   const [expandedUeTilbud, setExpandedUeTilbud] = useState(null)
+  // Materialvarsel-popup: { type: 'byttet' | 'lagt_til' } — vises midt på skjermen
+  // slik at brukeren ikke glemmer å vurdere arbeidstiden når et materiale endres.
+  const [materialVarsel, setMaterialVarsel] = useState(null)
   // Approval-historikk fra approval_tokens-tabellen for aktivitetsloggen.
   // Inneholder signert_name og recipient_email for godkjent/avslag-hendelser.
   const [approvalData, setApprovalData] = useState({ approved: null, rejected: null })
@@ -67169,6 +68714,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
   const hasCustomFaktorer = Object.keys(alleFaktorer).length > 0
   const [showProjFaktorer, setShowProjFaktorer] = useState(false)
+  const [grunntidModalProj, setGrunntidModalProj] = useState(null)  // { fag } når popup åpen i prosjektsatser
   const hasCustomProjFaktorer = kalkyler.some(kl => {
     const fakt = alleFaktorer[kl.fag]
     if (!fakt) return false
@@ -67303,12 +68849,29 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).filter(at => at.id !== atId) } : b) } : kl))
   }
 
-  // Material update
+  // Material update. Endring av varenavn/nobb = annet produkt → påminnelse om arbeidstid.
+  // En nyopprettet, fortsatt navnløs rad (_ny) teller som «lagt til», ikke «byttet» —
+  // selv om brukeren skriver navnet inn via NOBB-søket etterpå. Popupen vises kun
+  // FØRSTE gang raden får et navn, så man ikke får den på hvert tastetrykk.
   const updateMaterial = (kalId, bdId, mId, field, value) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(m => m.id === mId ? { ...m, [field]: value } : m) } : b) } : kl))
+    let varselType = null
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(m => {
+      if (m.id !== mId) return m
+      const endrerVare = (field === 'varenavn' || field === 'nobb')
+      const haddeNavnFor = !!(m.varenavn && String(m.varenavn).trim())
+      const nyRad = { ...m, [field]: value }
+      const harNavnEtter = !!(nyRad.varenavn && String(nyRad.varenavn).trim())
+      if (endrerVare && harNavnEtter && !m._varselVist) {
+        varselType = m._ny ? 'lagt_til' : (haddeNavnFor ? 'byttet' : 'lagt_til')
+        nyRad._varselVist = true
+        nyRad._ny = false
+      }
+      return nyRad
+    }) } : b) } : kl))
+    if (varselType) setMaterialVarsel({ type: varselType })
   }
   const addMaterial = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: Date.now(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0 }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: Date.now(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
   }
   const removeMaterial = (kalId, bdId, mId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : kl))
@@ -68472,11 +70035,17 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                     if (plData) query = query.eq('prisliste_id', plData.id)
                                                     const { data } = await query.limit(1).single()
                                                     if (data) {
-                                                      updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb } : mt) } : b) } : kl))
+                                                      const haddeNavn = !!(m.varenavn && String(m.varenavn).trim())
+                                                      const vType = (m._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
+                                                      updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb, _ny: false, _varselVist: true } : mt) } : b) } : kl))
+                                                      if (!m._varselVist) setMaterialVarsel({ type: vType })
                                                     }
                                                   } catch(err) {}
                                                 }} placeholder="NOBB" style={{ ...qInp, width:'58px', fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
                                                 <button onClick={() => setShowProduktSok({ kalkId: kalk.id, bdId: bd.id, matId: m.id })} title="Søk i prisliste" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', width:'22px', height:'22px', cursor:'pointer', fontSize:'11px', padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔍</button>
+                                                {m.varenavn && String(m.varenavn).trim() && (
+                                                  <button onClick={() => aapneNobbSok(m.varenavn)} title="Slå opp produktinfo og dokumentasjon i NOBB" style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'4px', height:'22px', cursor:'pointer', fontSize:'9px', fontWeight:'700', padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, whiteSpace:'nowrap' }}>NOBB</button>
+                                                )}
                                               </div>
                                             </td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
@@ -68632,7 +70201,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         📥 Importer fra annen kalkyle
                       </button>
                       <button onClick={() => addEmptyBd(kalk.id)}
-                        style={{ flex:1, background:'white', border:'2px dashed #e2e8f0', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#94a3b8', fontWeight:'600', fontSize:'13px' }}>
+                        style={{ flex:1, background:'#f0fdf4', border:'2px dashed #bbf7d0', borderRadius:'10px', padding:'12px', cursor:'pointer', color:'#059669', fontWeight:'600', fontSize:'13px' }}>
                         + Ny tom bygningsdel
                       </button>
                     </div>
@@ -69058,6 +70627,19 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                           const val = fakt[field.key] ?? ''
                           const defVal = defFakt[field.key] ?? ''
                           const isDiff = String(val) !== String(defVal)
+                          if (field.key === 'grunntid_justering') {
+                            return (
+                              <div key={field.key}>
+                                <div style={{ fontSize:'9px', color: isDiff ? '#2563eb' : '#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{field.label}</div>
+                                <button type="button" onClick={()=>setGrunntidModalProj({ fag: kl.fag })}
+                                  style={{ width:'100%', padding:'5px 6px', border:`1px solid ${isDiff ? '#bfdbfe' : '#e2e8f0'}`, borderRadius:'6px', fontSize:'12px', boxSizing:'border-box', background: isDiff ? '#eff6ff' : 'white', color:'#0f172a', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between', fontFamily:'system-ui,sans-serif' }}
+                                  title="Klikk for å bygge tidsjusteringen av navngitte poster">
+                                  <span style={{ fontWeight:'700' }}>{(parseFloat(val)||1).toFixed(2)} ×</span>
+                                  <span style={{ fontSize:'10px', color:'#059669' }}>▸</span>
+                                </button>
+                              </div>
+                            )
+                          }
                           return (
                             <div key={field.key}>
                               <div style={{ fontSize:'9px', color: isDiff ? '#2563eb' : '#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{field.label}</div>
@@ -69088,6 +70670,25 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               </div>
             )}
           </div>
+
+          {grunntidModalProj && (() => {
+            const kl = kalkyler.find(x => x.fag === grunntidModalProj.fag)
+            const fag = getFaggruppe(grunntidModalProj.fag)
+            const fakt = alleFaktorer[grunntidModalProj.fag] || getDefaultFaktorer(grunntidModalProj.fag)
+            return (
+              <GrunntidJusteringModal
+                fagNavn={fag.name}
+                startPoster={fakt.grunntid_poster}
+                startFaktor={fakt.grunntid_justering}
+                onLukk={()=>setGrunntidModalProj(null)}
+                onLagre={(nyFaktor, nyePoster)=>{
+                  const newFaktorer = { ...alleFaktorer, [grunntidModalProj.fag]: { ...fakt, grunntid_justering: nyFaktor, grunntid_poster: nyePoster } }
+                  saveProject({ ...k, faktorer: newFaktorer })
+                  setGrunntidModalProj(null)
+                }}
+              />
+            )
+          })()}
 
           {/* Mottatte UE-tilbud */}
           {ueTilbud.length > 0 && (
@@ -70807,7 +72408,14 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           }, [q, activeKat])
 
           const selectProduct = (p) => {
-            updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === ctx.matId ? { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet } : mt) } : b) } : kl))
+            let vType = null
+            updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => {
+              if (mt.id !== ctx.matId) return mt
+              const haddeNavn = !!(mt.varenavn && String(mt.varenavn).trim())
+              if (!mt._varselVist) vType = (mt._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
+              return { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet, _ny: false, _varselVist: true }
+            }) } : b) } : kl))
+            if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
             onClose()
           }
 
@@ -70855,6 +72463,13 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       </div>
                       <span style={{ fontSize:'11px', color:'#64748b', flexShrink:0, width:'28px', textAlign:'center' }}>{p.enhet}</span>
                       <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
+                      <span role="button" tabIndex={0}
+                        onClick={(e) => { e.stopPropagation(); aapneNobbSok(p.varenavn) }}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); aapneNobbSok(p.varenavn) } }}
+                        title="Slå opp produktinfo og dokumentasjon i NOBB"
+                        style={{ flexShrink:0, border:'1px solid #bbf7d0', background:'#f0fdf4', color:'#059669', borderRadius:'6px', fontSize:'10px', fontWeight:'700', padding:'4px 8px', whiteSpace:'nowrap', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px' }}>
+                        🔍 NOBB
+                      </span>
                     </button>
                   ))}
                   {res.length >= 40 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 40 treff — skriv mer spesifikt</div>}
@@ -70865,6 +72480,44 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         }
         return <PS ctx={showProduktSok} onClose={() => setShowProduktSok(null)} />
       })()}
+
+      {/* Materialvarsel: sentrert popup ved bytte/tillegg av materiale.
+          Prisen følger materialet automatisk, men arbeidstiden gjør ikke — derfor
+          denne aktive påminnelsen midt på skjermen som brukeren må lukke selv. */}
+      {materialVarsel && (
+        <div style={{ position:'fixed', inset:0, zIndex:160, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={() => setMaterialVarsel(null)} />
+          <div style={{ position:'relative', background:'white', borderRadius:'18px', width:'100%', maxWidth:'440px', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', overflow:'hidden', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ background:'linear-gradient(135deg,#f59e0b,#d97706)', padding:'18px 22px', color:'white' }}>
+              <div style={{ fontSize:'32px', marginBottom:'4px' }}>⏱️</div>
+              <div style={{ fontSize:'17px', fontWeight:'800' }}>
+                {materialVarsel.type === 'byttet' ? 'Du byttet et materiale' : 'Du la til et materiale'}
+              </div>
+            </div>
+            <div style={{ padding:'20px 22px' }}>
+              <p style={{ margin:'0 0 12px', fontSize:'14px', color:'#334155', lineHeight:1.55 }}>
+                {materialVarsel.type === 'byttet'
+                  ? 'Materialprisen er oppdatert automatisk — men arbeidstiden er ikke. Et nytt materiale monteres ofte annerledes.'
+                  : 'Materialet er lagt til, men det kommer ikke med noen arbeidstid av seg selv.'}
+              </p>
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'12px 14px' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', marginBottom:'2px' }}>Husk å sjekke arbeidsartene</div>
+                <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
+                  {materialVarsel.type === 'byttet'
+                    ? 'Se om grunntiden på arbeidsartene fortsatt stemmer for det nye materialet, og juster om nødvendig.'
+                    : 'Trenger dette egen arbeidstid? Legg eventuelt til en arbeidsart. Er det bare festemateriell (skruer, skum o.l.), kan du la det stå.'}
+                </div>
+              </div>
+            </div>
+            <div style={{ padding:'0 22px 20px', display:'flex', justifyContent:'flex-end' }}>
+              <button onClick={() => setMaterialVarsel(null)}
+                style={{ padding:'10px 22px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>
+                OK, forstått
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* UE ekstra poster confirmation */}
       {showUEExtraPoster && (
@@ -73923,7 +75576,10 @@ function AppContent() {
   // Patch 21: Tilbakemelding-system state
   const [showFeedbackModal, setShowFeedbackModal] = React.useState(false)
   const [uleseTilbakemeldinger, setUleseTilbakemeldinger] = React.useState(0)
-  const erTilbakemeldingAdmin = user?.email?.endsWith('@enplattform.no')
+  // Tilbakemeldings-ADMIN (leser innkomne tilbakemeldinger fra alle kunder) er en
+  // PLATTFORM-funksjon. Tidligere gate var e-postdomene (@enplattform.no), som gjorde
+  // at test-/demobrukere på samme domene så menypunktet. Nå: kun platform_owner.
+  const erTilbakemeldingAdmin = !!isPlatformOwner
 
   // Hent antall uleste tilbakemeldinger for admin
   React.useEffect(() => {
@@ -74102,6 +75758,9 @@ function AppContent() {
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
       <TilkoblingsIndikator isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} />
 
+      {/* ── PWA installasjonsguide (mobil, koblet til dashbord-turen) ── */}
+      <InstallGuide aktivSide={activePage} />
+
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
         <>
@@ -74142,6 +75801,15 @@ function AppContent() {
             </nav>
             {/* Patch 21: Tilbakemelding-knapp (mobil) */}
             <div style={{ padding:'8px', borderTop:'1px solid #f1f5f9' }}>
+              {!erPwaStandalone() && (
+                <button onClick={() => { setMobileMenuOpen(false); window.dispatchEvent(new Event('ep-install-guide-vis')) }}
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
+                    borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
+                    color:'#475569', fontSize:'15px', textAlign:'left', marginBottom:'2px' }}>
+                  <span style={{ fontSize:'18px', flexShrink:0 }}>📲</span>
+                  <span style={{ flex:1 }}>Installer app</span>
+                </button>
+              )}
               <button onClick={() => { setShowFeedbackModal(true); setMobileMenuOpen(false) }}
                 style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
                   borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
@@ -74241,6 +75909,17 @@ function AppContent() {
         </nav>
         {/* Patch 21: Tilbakemelding-knapp */}
         <div style={{ padding: '8px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+          {!erPwaStandalone() && (
+            <button onClick={() => window.dispatchEvent(new Event('ep-install-guide-vis'))} aria-label="Installer app"
+              onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Installer app')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
+                cursor: 'pointer', background: 'transparent', color: '#475569', fontSize: '14px',
+                justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '2px' }}>
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>📲</span>
+              {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Installer app</span>}
+            </button>
+          )}
           <button onClick={() => setShowFeedbackModal(true)} aria-label="Tilbakemelding"
             onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Tilbakemelding')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
@@ -74544,7 +76223,7 @@ function AppContent() {
         {page === 'varsler' && <VarslerPage onNavigate={navigate} />}
         {page === 'bildedok' && <BildedokPage />}
         {page === 'fdv' && <FDVPage />}
-        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'bim_kalkyle' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'varsler' && (
+        {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'bim_kalkyle' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'feedback-admin' && page !== 'varsler' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
         </>)}
