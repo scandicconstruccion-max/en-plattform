@@ -2848,6 +2848,182 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
   )
 }
 
+// ─── PWA INSTALLASJONSGUIDE («Legg til på startskjerm») ───────────────────────
+// Hjelper mobilbrukere som logger inn i nettleseren med å legge appen på
+// startskjermen, så de slipper å logge inn på nytt hver gang. Vises kun på
+// mobil, kun når appen IKKE allerede kjører installert, og kun én gang
+// (localStorage). Koblet til dashbord-turen: guiden vises FØRST når turen er
+// fullført/hoppet over — de to overlapper aldri. Modul-turer trigger den ikke.
+
+let epDeferredInstallPrompt = null
+if (typeof window !== 'undefined') {
+  // beforeinstallprompt fyres tidlig ved app-last (Android/Chrome). Fang og lagre
+  // den, så vi kan trigge den native prompten senere når guiden faktisk vises.
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault()
+    epDeferredInstallPrompt = e
+    window.dispatchEvent(new Event('ep-install-available'))
+  })
+  window.addEventListener('appinstalled', () => {
+    epDeferredInstallPrompt = null
+    try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
+    window.dispatchEvent(new Event('ep-installed'))
+  })
+}
+
+function erPwaStandalone() {
+  if (typeof window === 'undefined') return false
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
+}
+function erMobilEnhet() {
+  if (typeof window === 'undefined') return false
+  const smal = window.innerWidth < 768
+  const touch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
+  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
+  return smal || (touch && coarse)
+}
+function detekterMobilOS() {
+  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+  const erIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
+  const erAndroid = /android/i.test(ua)
+  return { erIOS, erAndroid }
+}
+function harSettInstallGuide() {
+  try { return localStorage.getItem('ep-install-guide-seen') === 'done' } catch (_) { return false }
+}
+function markerInstallGuideSett() {
+  try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
+}
+
+// iOS Del-ikon (firkant med pil opp) — gjør instruksjonen tydelig.
+function DelIkon({ size = 22, color = '#059669' }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
+      <path d="M12 3v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M8.5 6.5 12 3l3.5 3.5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v7A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 18.5 10H17" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  )
+}
+
+function InstallGuide({ aktivSide }) {
+  const [synlig, setSynlig] = React.useState(false)
+  const [visInstruks, setVisInstruks] = React.useState(false)
+  const [promptTilgjengelig, setPromptTilgjengelig] = React.useState(!!epDeferredInstallPrompt)
+  const turAktivRef = React.useRef(false)
+  const { erIOS, erAndroid } = detekterMobilOS()
+
+  const visGuide = React.useCallback((tvunget = false) => {
+    if (erPwaStandalone()) return
+    if (!tvunget) {
+      if (!erMobilEnhet()) return
+      if (harSettInstallGuide()) return
+      markerInstallGuideSett()               // mirror turen: marker som sett straks den vises
+    }
+    setVisInstruks(false)
+    setSynlig(true)
+  }, [])
+
+  // Koblingsbuss: lytt på dashbord-turen og på manuell åpning fra menyen.
+  React.useEffect(() => {
+    const paaTurAktiv = () => { turAktivRef.current = true }
+    const paaTurFerdig = () => {
+      turAktivRef.current = false
+      // Kort forsinkelse så turens overlegg rekker å forsvinne først (aldri overlapp).
+      setTimeout(() => visGuide(false), 450)
+    }
+    const paaVisManuelt = () => visGuide(true)
+    const paaTilgjengelig = () => setPromptTilgjengelig(true)
+    const paaInstallert = () => setSynlig(false)
+    window.addEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
+    window.addEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
+    window.addEventListener('ep-install-guide-vis', paaVisManuelt)
+    window.addEventListener('ep-install-available', paaTilgjengelig)
+    window.addEventListener('ep-installed', paaInstallert)
+    return () => {
+      window.removeEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
+      window.removeEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
+      window.removeEventListener('ep-install-guide-vis', paaVisManuelt)
+      window.removeEventListener('ep-install-available', paaTilgjengelig)
+      window.removeEventListener('ep-installed', paaInstallert)
+    }
+  }, [visGuide])
+
+  // Tilbakevendende brukere: dashbord-turen er allerede sett og starter ikke på
+  // nytt, så onSteg-signalet kommer aldri. Vis guiden direkte på dashbordet hvis
+  // den ikke er vist før — men kun hvis turen ikke er i gang denne økten.
+  React.useEffect(() => {
+    if (aktivSide !== 'dashboard') return
+    if (harSettInstallGuide()) return
+    if (!erMobilEnhet() || erPwaStandalone()) return
+    const t = setTimeout(() => { if (!turAktivRef.current) visGuide(false) }, 1600)
+    return () => clearTimeout(t)
+  }, [aktivSide, visGuide])
+
+  if (!synlig) return null
+
+  const installer = async () => {
+    const dp = epDeferredInstallPrompt
+    if (!dp) { setVisInstruks(true); return }
+    try { dp.prompt(); await dp.userChoice } catch (_) {}
+    epDeferredInstallPrompt = null
+    setPromptTilgjengelig(false)
+    setSynlig(false)
+  }
+  const lukk = () => setSynlig(false)
+
+  // Android/Chrome med fanget event → native prompt. iOS støtter aldri prompt.
+  const kanNativInstallere = !erIOS && promptTilgjengelig
+
+  const primaryStil = { flex: 1, padding: '12px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }
+  const sekundaerStil = { padding: '12px 16px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }
+  const instruksBoks = { marginTop: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px', fontSize: '13.5px', color: '#166534', lineHeight: 1.6 }
+
+  return (
+    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', padding: '12px', pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
+      <style>{`@keyframes epInstallOpp { from { transform: translateY(120%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }`}</style>
+      <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: '460px', background: 'white', borderRadius: '18px', boxShadow: '0 -8px 40px rgba(15,23,42,0.22)', border: '1px solid #f1f5f9', padding: '18px 20px 20px', animation: 'epInstallOpp 0.3s ease-out' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+          <img src="/icon-192.png" alt="En Plattform" style={{ width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Få En Plattform som app</h3>
+            <p style={{ margin: 0, fontSize: '13.5px', color: '#64748b', lineHeight: 1.5 }}>Logg inn med ett trykk hver gang — legg appen på startskjermen.</p>
+          </div>
+          <button onClick={lukk} aria-label="Lukk" style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', width: '28px', height: '28px', cursor: 'pointer', color: '#94a3b8', fontSize: '15px', lineHeight: 1, flexShrink: 0 }}>×</button>
+        </div>
+
+        {visInstruks && erIOS && (
+          <div style={instruksBoks}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontWeight: '700' }}>
+              <DelIkon /> <span>Slik legger du appen til på iPhone/iPad:</span>
+            </div>
+            <div>1. Trykk <strong>Del</strong>-ikonet (firkant med pil opp) i Safari.</div>
+            <div>2. Bla ned og trykk <strong>«Legg til på Hjem-skjerm»</strong>.</div>
+            <div>3. Trykk <strong>«Legg til»</strong> øverst til høyre.</div>
+          </div>
+        )}
+        {visInstruks && !erIOS && (
+          <div style={instruksBoks}>
+            <div style={{ fontWeight: '700', marginBottom: '8px' }}>Slik legger du appen til:</div>
+            <div>1. Trykk <strong>⋮</strong>-menyen øverst til høyre i nettleseren.</div>
+            <div>2. Velg <strong>«Legg til på startskjerm»</strong> (eller «Installer app»).</div>
+            <div>3. Bekreft med <strong>«Legg til»</strong>.</div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '10px', marginTop: '16px', alignItems: 'center' }}>
+          {kanNativInstallere ? (
+            <button onClick={installer} style={primaryStil}>📲 Installer</button>
+          ) : (
+            <button onClick={() => setVisInstruks(v => !v)} style={primaryStil}>{visInstruks ? 'Skjul' : 'Vis meg hvordan'}</button>
+          )}
+          <button onClick={lukk} style={sekundaerStil}>Ikke nå</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const DASHBOARD_TOUR = [
   { tittel: '👋 Velkommen', tekst: 'Velkommen til En Plattform! Her er en rask omvisning av forsiden. Du kan gå frem og tilbake, eller hoppe over når som helst.' },
   { target: 'hovedmeny', tittel: 'Hovedmenyen', tekst: 'Til venstre finner du alle modulene — prosjekter, sjekklister, avvik, befaring og mer. På mobil åpner du menyen med knappen øverst til venstre.' },
@@ -3020,7 +3196,8 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kan
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR} />
+      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR}
+        onSteg={(i) => window.dispatchEvent(new Event(i === -1 ? 'ep-dashboard-tur-ferdig' : 'ep-dashboard-tur-aktiv'))} />
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: mob ? '16px' : '24px 32px' }}>
         <div style={{ display: 'flex', alignItems: mob ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: mob ? 'column' : 'row', gap: mob ? '10px' : '0' }}>
           <div>
@@ -75581,6 +75758,9 @@ function AppContent() {
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
       <TilkoblingsIndikator isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} />
 
+      {/* ── PWA installasjonsguide (mobil, koblet til dashbord-turen) ── */}
+      <InstallGuide aktivSide={activePage} />
+
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
         <>
@@ -75621,6 +75801,15 @@ function AppContent() {
             </nav>
             {/* Patch 21: Tilbakemelding-knapp (mobil) */}
             <div style={{ padding:'8px', borderTop:'1px solid #f1f5f9' }}>
+              {!erPwaStandalone() && (
+                <button onClick={() => { setMobileMenuOpen(false); window.dispatchEvent(new Event('ep-install-guide-vis')) }}
+                  style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
+                    borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
+                    color:'#475569', fontSize:'15px', textAlign:'left', marginBottom:'2px' }}>
+                  <span style={{ fontSize:'18px', flexShrink:0 }}>📲</span>
+                  <span style={{ flex:1 }}>Installer app</span>
+                </button>
+              )}
               <button onClick={() => { setShowFeedbackModal(true); setMobileMenuOpen(false) }}
                 style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
                   borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
@@ -75720,6 +75909,17 @@ function AppContent() {
         </nav>
         {/* Patch 21: Tilbakemelding-knapp */}
         <div style={{ padding: '8px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
+          {!erPwaStandalone() && (
+            <button onClick={() => window.dispatchEvent(new Event('ep-install-guide-vis'))} aria-label="Installer app"
+              onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Installer app')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
+                padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
+                cursor: 'pointer', background: 'transparent', color: '#475569', fontSize: '14px',
+                justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '2px' }}>
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>📲</span>
+              {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Installer app</span>}
+            </button>
+          )}
           <button onClick={() => setShowFeedbackModal(true)} aria-label="Tilbakemelding"
             onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Tilbakemelding')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
