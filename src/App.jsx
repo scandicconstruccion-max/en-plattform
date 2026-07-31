@@ -37517,8 +37517,8 @@ function CRMPage() {
             <h1 style={{ fontSize: mob?'19px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🤝 CRM</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize: mob?'13px':'14px', marginBottom:0 }}>Kunder, leads og salgspipeline</p>
           </div>
-          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-            <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#0f172a', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
+          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+            <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
             <CsvButton kind="export" size="md" onClick={exportCSV} />
             <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
@@ -37584,7 +37584,7 @@ function CRMPage() {
           {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
-              <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#0f172a':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
+              <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
             ))}
           </div>
           <span style={{ fontSize:'13px', color:'#94a3b8' }}>{listCount.toLocaleString('nb-NO')} kunder{listBusy?' …':''}</span>
