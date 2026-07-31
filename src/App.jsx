@@ -37348,6 +37348,7 @@ function CRMPage() {
   const [filterIndustry, setFilterIndustry] = useState('alle')
   const [filterKilde, setFilterKilde] = useState('alle')
   const [filterKommune, setFilterKommune] = useState('alle')
+  const [visOppfolging, setVisOppfolging] = useState(false) // KPI-kort «Til oppfølging i dag» aktivt
   const [kilder, setKilder] = useState([])       // distinkte kilder (fra DB)
   const [kommuner, setKommuner] = useState([])   // distinkte kommuner/steder (fra DB, city-feltet)
   const [search, setSearch] = useState('')
@@ -37361,7 +37362,8 @@ function CRMPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [debSearch, setDebSearch] = useState('')       // debouncet søk (går til DB)
   const [listCount, setListCount] = useState(0)        // antall rader som matcher filteret (DB count)
-  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, pipeline:0 })
+  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, oppfolging:0 })
+  const idag = new Date().toISOString().split('T')[0] // for oppfølging ≤ i dag
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 100
   const initedRef = React.useRef(false)
@@ -37372,17 +37374,25 @@ function CRMPage() {
   // Bygg lista-spørring: filter + søk + sortering skjer i DB, ikke på et 1000-raders uttrekk.
   const buildListQuery = (withCount) => {
     let q = supabase.from('customers').select('*', withCount ? { count:'exact' } : undefined)
-    if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
+    // Statusfilter: 'aktive' = kontaktet + tilbud_sendt (samme definisjon som KPI-kortet)
+    if (filterStatus === 'aktive') q = q.in('status', ['kontaktet', 'tilbud_sendt'])
+    else if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
     if (filterType !== 'alle') q = q.eq('type', filterType)
     if (filterIndustry !== 'alle') q = q.eq('industry', filterIndustry)
     if (filterKilde !== 'alle') q = q.eq('kilde', filterKilde)
     if (filterKommune !== 'alle') q = q.eq('city', filterKommune) // geografi ligger i city (poststed)
+    if (visOppfolging) q = q.not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag) // forfalt eller i dag
     const term = sanitizeSearch(debSearch)
     if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,city.ilike.%${term}%,orgnr.ilike.%${term}%`)
-    const so = CRM_SORT[sortBy] || CRM_SORT[CRM_SORT_DEFAULT]
-    q = q.order(so.col, { ascending: so.asc, nullsFirst: false })
-    if (so.col !== 'updated_at') q = q.order('updated_at', { ascending: false })
-    if (so.col !== 'id') q = q.order('id', { ascending: true }) // deterministisk paginering
+    if (visOppfolging) {
+      // «Til oppfølging»-kortet: eldste oppfølgingsdato først
+      q = q.order('neste_oppfolging', { ascending: true, nullsFirst: false }).order('id', { ascending: true })
+    } else {
+      const so = CRM_SORT[sortBy] || CRM_SORT[CRM_SORT_DEFAULT]
+      q = q.order(so.col, { ascending: so.asc, nullsFirst: false })
+      if (so.col !== 'updated_at') q = q.order('updated_at', { ascending: false })
+      if (so.col !== 'id') q = q.order('id', { ascending: true }) // deterministisk paginering
+    }
     return q
   }
 
@@ -37408,19 +37418,14 @@ function CRMPage() {
   const loadKpis = async () => {
     try {
       const base = () => supabase.from('customers').select('id', { count:'exact', head:true })
-      const [tot, lead, akt, vun] = await Promise.all([
+      const [tot, lead, akt, vun, oppf] = await Promise.all([
         base(),
         base().eq('status', 'lead'),
         base().in('status', ['kontaktet', 'tilbud_sendt']),
         base().eq('status', 'vunnet'),
+        base().not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag), // forfalt eller i dag
       ])
-      let pipeline = 0
-      try {
-        // Aggregert sum i DB (ikke basert på hentede rader). Faller til 0 hvis aggregat ikke er tilgjengelig.
-        const { data } = await supabase.from('customers').select('estimated_value.sum()').not('status', 'in', '(vunnet,tapt,inaktiv)')
-        pipeline = Number(data?.[0]?.sum) || 0
-      } catch(_) {}
-      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, pipeline })
+      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, oppfolging: oppf.count||0 })
     } catch(e) { console.error('[CRM] loadKpis', e) }
   }
 
@@ -37463,7 +37468,26 @@ function CRMPage() {
   // Init: KPI + hjelpedata + facetter én gang
   useEffect(()=>{ loadKpis(); loadAux(); loadFacets() },[])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
-  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, debSearch])
+  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
+
+  // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
+  const activeKpi = visOppfolging ? 'oppfolging'
+    : filterStatus === 'lead' ? 'leads'
+    : filterStatus === 'aktive' ? 'aktive'
+    : filterStatus === 'vunnet' ? 'vunnet'
+    : filterStatus === 'alle' ? 'total' : null
+  // Klikk på KPI-kort → styrer SAMME filter-state som «Alle statuser»-nedtrekket (ikke parallell filtrering)
+  const klikkKpi = (target) => {
+    if (target === 'total') { setVisOppfolging(false); setFilterStatus('alle'); return }
+    if (target === 'oppfolging') {
+      if (visOppfolging) { setVisOppfolging(false) }
+      else { setVisOppfolging(true); setFilterStatus('alle') }
+      return
+    }
+    const val = target === 'leads' ? 'lead' : target === 'aktive' ? 'aktive' : 'vunnet'
+    setVisOppfolging(false)
+    setFilterStatus(prev => prev === val ? 'alle' : val) // klikk samme kort igjen → nullstill
+  }
 
   // Check overdue tasks and create notifications
   useEffect(()=>{
@@ -37478,7 +37502,7 @@ function CRMPage() {
     })
   },[activities])
 
-  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle'
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !visOppfolging
   const overdueTasks = activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<new Date().toISOString().split('T')[0])
 
   const exportCSV = async () => {
@@ -37518,31 +37542,40 @@ function CRMPage() {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize: mob?'13px':'14px', marginBottom:0 }}>Kunder, leads og salgspipeline</p>
           </div>
           <div style={{ display:'flex', gap:'12px', flexWrap:'wrap' }}>
+            {/* Eksporter + Importer holdes sammen som et par */}
+            <div style={{ display:'flex', gap:'8px' }}>
+              <CsvButton kind="export" size="md" onClick={exportCSV} />
+              <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
+            </div>
+            {quotes.length > 0 ? <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📋 Fra tilbud ({quotes.length})</button> : <span style={{ fontSize:'11px',color:'#94a3b8',padding:'10px' }}>({quotes.length} tilbud)</span>}
             <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
-            <CsvButton kind="export" size="md" onClick={exportCSV} />
-            <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
-              {quotes.length > 0 ? <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📋 Fra tilbud ({quotes.length})</button> : <span style={{ fontSize:'11px',color:'#94a3b8',padding:'10px' }}>({quotes.length} tilbud)</span>}
           </div>
         </div>
 
         {/* Stats */}
         <div style={{ display:'grid', gridTemplateColumns: mob ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap:'10px' }}>
           {[
-            { label:'Totalt', value:kpi.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
-            { label:'Leads', value:kpi.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
-            { label:'Aktive', value:kpi.active, emoji:'📋', color:'#d97706', bg:'#fffbeb' },
-            { label:'Vunnet', value:kpi.vunnet, emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
-            { label:'Pipeline', value:fmtVal(kpi.pipeline), emoji:'💰', color:'#2563eb', bg:'#eff6ff' },
-          ].map(s=>(
-            <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px 16px', border:'1px solid #f1f5f9' }}>
+            { key:'total',      label:'Totalt', value:kpi.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
+            { key:'leads',      label:'Leads', value:kpi.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
+            { key:'aktive',     label:'Aktive', value:kpi.active, emoji:'📋', color:'#d97706', bg:'#fffbeb' },
+            { key:'vunnet',     label:'Vunnet', value:kpi.vunnet, emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
+            { key:'oppfolging', label:'Til oppfølging i dag', value:kpi.oppfolging, emoji:'📅', color:'#dc2626', bg:'#fef2f2' },
+          ].map(s=>{
+            const valgt = activeKpi === s.key
+            return (
+            <button key={s.key} onClick={()=>klikkKpi(s.key)} title={valgt ? 'Klikk for å nullstille' : 'Klikk for å filtrere'}
+              style={{ textAlign:'left', background: valgt ? '#f0fdf4' : s.bg, borderRadius:'12px', padding:'14px 16px', cursor:'pointer',
+                border: valgt ? '2px solid #059669' : '1px solid #f1f5f9', boxShadow: valgt ? '0 0 0 3px rgba(5,150,105,0.12)' : 'none',
+                fontFamily:'inherit', transition:'border-color 0.12s, box-shadow 0.12s' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
                 <span style={{ fontSize:'16px' }}>{s.emoji}</span>
-                <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{s.label}</span>
+                <span style={{ fontSize:'11px', fontWeight:'700', color: valgt ? '#059669' : '#94a3b8', textTransform:'uppercase' }}>{s.label}</span>
               </div>
-              <div style={{ fontSize:typeof s.value==='number'?'22px':'16px', fontWeight:'800', color:s.color }}>{s.value}</div>
-            </div>
-          ))}
+              <div style={{ fontSize:'22px', fontWeight:'800', color:s.color }}>{s.value}</div>
+            </button>
+            )
+          })}
         </div>
       </div>
 
@@ -37558,8 +37591,9 @@ function CRMPage() {
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth: mob?'none':'240px', flex: mob?'1 1 100%':'1' }} />
-          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
+          <select value={filterStatus} onChange={e=>{ setVisOppfolging(false); setFilterStatus(e.target.value) }} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
+            <option value="aktive">📋 Aktive (kontaktet + tilbud)</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'140px', flex: mob?'1 1 45%':'none' }}>
@@ -37581,7 +37615,7 @@ function CRMPage() {
           <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth: mob?'none':'200px', flex: mob?'1 1 45%':'none' }}>
             {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
-          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
