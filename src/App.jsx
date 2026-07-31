@@ -37355,6 +37355,7 @@ function CRMPage() {
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showImportQuotes, setShowImportQuotes] = useState(false)
+  const [visAssistent, setVisAssistent] = useState(false)
   const [sortBy, setSortBy] = useState(readCrmSort)
   const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -37504,6 +37505,7 @@ function CRMPage() {
 
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
+  if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
   if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
 
   return (
@@ -37516,6 +37518,7 @@ function CRMPage() {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize: mob?'13px':'14px', marginBottom:0 }}>Kunder, leads og salgspipeline</p>
           </div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+            <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#0f172a', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
             <CsvButton kind="export" size="md" onClick={exportCSV} />
             <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
@@ -38219,6 +38222,216 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
       {showNewActivity&&<ActivityModal customerId={c.id} defaultType={typeof showNewActivity==='object'?showNewActivity.defaultType:'note'} user={user} onClose={()=>setShowNewActivity(false)} onSaved={()=>{setShowNewActivity(false);loadDetails()}} />}
       {editAct&&<ActivityModal customerId={c.id} initial={editAct} user={user} onClose={()=>setEditAct(null)} onSaved={()=>{setEditAct(null);loadDetails()}} />}
       {showQuotePicker&&<QuotePickerModal quotes={quotes} customer={c} onClose={()=>setShowQuotePicker(false)} onLink={linkQuote} />}
+    </div>
+  )
+}
+
+// ─── KONTAKT-ASSISTENT ────────────────────────────────────────────────────────
+// «Dagens kontakter»: jobb gjennom lead-lista uten klipp-og-lim.
+// VIKTIG: systemet sender ALDRI e-post selv — mailto: åpner kun et utkast i
+// brukerens egen e-postklient. All sending skjer manuelt derfra.
+const CRM_MAIL_DEFAULT_EMNE = 'En Plattform – av håndverkern, for håndverkern'
+const CRM_MAIL_DEFAULT_TEKST = `Hei {bedriftsnavn},
+
+Det skal ikke være behov for flere systemer for å komme fra befaring til betalt faktura.
+
+Ett for kalkulasjon, ett for timer, en KS-perm og ett for anbudskontroll.
+
+Nå er det ett. Modulbasert system der du velger akkurat de verktøyene du trenger — fra kalkulasjon og BIM til maskinoversikt, FDV og ressursplanlegging.
+
+Prøv gratis i 15 dager: https://app.enplattform.no/registrer`
+
+// Fyll flettefelt fra kontaktens data. Signatur legges IKKE inn — den kommer fra Outlook.
+function crmFlett(mal, c) {
+  return (mal || '')
+    .replace(/\{bedriftsnavn\}/g, c.name || '')
+    .replace(/\{poststed\}/g, c.city || '')
+    .replace(/\{bransje\}/g, c.industry || '')
+}
+
+function KontaktAssistent({ user, kilder, kommuner, onBack }) {
+  const alert = useAppAlert()
+  const mob = typeof window !== 'undefined' && window.innerWidth < 768
+  const [n, setN] = useState(20)
+  const [kilde, setKilde] = useState('alle')
+  const [kommune, setKommune] = useState('alle')
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [behandler, setBehandler] = useState({}) // id -> pågår
+  const [mailEmne, setMailEmne] = useState(CRM_MAIL_DEFAULT_EMNE)
+  const [mailTekst, setMailTekst] = useState(CRM_MAIL_DEFAULT_TEKST)
+  const [settingsId, setSettingsId] = useState(null)
+  const [visMalRed, setVisMalRed] = useState(false)
+
+  // Hent dagens kontakter via RPC (DB-side: status='lead', ingen aktivitet, filter, score-sort, limit N)
+  const load = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('crm_dagens_kontakter', {
+        p_limit: n,
+        p_kilde: kilde === 'alle' ? null : kilde,
+        p_kommune: kommune === 'alle' ? null : kommune,
+      })
+      if (error) throw error
+      setLeads(data || [])
+    } catch (e) {
+      console.error('[CRM-assistent] load', e)
+      alert({ message: 'Kunne ikke hente dagens kontakter: ' + e.message, kind: 'error' })
+      setLeads([])
+    } finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [n, kilde, kommune])
+
+  // Last mailmal fra company_settings (fallback til standardmal)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from('company_settings').select('id, crm_mail_emne, crm_mail_tekst').limit(1).single()
+        if (data) {
+          setSettingsId(data.id)
+          if (data.crm_mail_emne) setMailEmne(data.crm_mail_emne)
+          if (data.crm_mail_tekst) setMailTekst(data.crm_mail_tekst)
+        }
+      } catch (_) {}
+    })()
+  }, [])
+
+  // Åpner mailto: i brukerens e-postklient — sender ALDRI selv
+  const apneMail = (c) => {
+    if (!c.email) { alert({ message: 'Kontakten mangler e-postadresse', kind: 'warning' }); return }
+    const emne = crmFlett(mailEmne, c)
+    const tekst = crmFlett(mailTekst, c)
+    const url = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(emne)}&body=${encodeURIComponent(tekst)}`
+    const a = document.createElement('a'); a.href = url; a.click()
+  }
+
+  // Marker sendt: status=kontaktet, aktivitet, neste_oppfolging +7 dager, fjern fra lista
+  const markerSendt = async (c) => {
+    setBehandler(b => ({ ...b, [c.id]: true }))
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const neste = new Date(); neste.setDate(neste.getDate() + 7)
+      const nesteISO = neste.toISOString().split('T')[0]
+      let navn = null
+      try { const { data: p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name || '').trim() || null } catch (_) {}
+      const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id: c.id, type: 'email', title: 'Introduksjonsmail sendt', date: today, created_by: user?.id })
+      if (aErr) throw aErr
+      const upd = { status: 'kontaktet', neste_oppfolging: nesteISO, sist_kontaktet: today, updated_at: new Date().toISOString() }
+      if (navn) upd.kontaktet_av = navn
+      const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
+      if (cErr) throw cErr
+      invalidateCustomerCache()
+      setLeads(l => l.filter(x => x.id !== c.id))
+    } catch (e) {
+      console.error('[CRM-assistent] markerSendt', e)
+      alert({ message: 'Kunne ikke markere sendt: ' + e.message, kind: 'error' })
+    } finally { setBehandler(b => { const nn = { ...b }; delete nn[c.id]; return nn }) }
+  }
+
+  const lagreMal = async () => {
+    try {
+      let id = settingsId
+      if (!id) { const { data } = await supabase.from('company_settings').select('id').limit(1).single(); id = data?.id; setSettingsId(id) }
+      if (!id) throw new Error('Fant ikke company_settings')
+      const { error } = await supabase.from('company_settings').update({ crm_mail_emne: mailEmne, crm_mail_tekst: mailTekst, updated_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw error
+      setVisMalRed(false)
+      alert({ message: 'Mailmal lagret', kind: 'success' })
+    } catch (e) { alert({ message: 'Kunne ikke lagre mal: ' + e.message, kind: 'error' }) }
+  }
+
+  const knapp = { padding:'8px 12px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700', whiteSpace:'nowrap' }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: mob?'14px':'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
+          <button onClick={onBack} style={{ ...knapp, background:'#f1f5f9', color:'#64748b' }}>← Tilbake</button>
+          <div>
+            <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Dagens kontakter</h1>
+            <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Leads uten aktivitet, høyest score først. E-post åpnes som utkast i din klient — sendes aldri automatisk.</p>
+          </div>
+          <button onClick={()=>setVisMalRed(true)} style={{ ...knapp, marginLeft:'auto', background:'white', color:'#0f172a', border:'1px solid #e2e8f0' }}>✏️ Rediger mal</button>
+        </div>
+        {/* Kontroller */}
+        <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[10,20,30].map(v=>(
+              <button key={v} onClick={()=>setN(v)} style={{ padding:'8px 14px', border:'none', background: n===v?'#0f172a':'white', color: n===v?'white':'#64748b', fontWeight: n===v?'700':'500', fontSize:'13px', cursor:'pointer' }}>{v}</button>
+            ))}
+          </div>
+          <select value={kilde} onChange={e=>setKilde(e.target.value)} style={{ ...crmInp, maxWidth:'190px' }}>
+            <option value="alle">Alle kilder</option>
+            {(kilder||[]).map(k=><option key={k} value={k}>{k}</option>)}
+          </select>
+          <select value={kommune} onChange={e=>setKommune(e.target.value)} style={{ ...crmInp, maxWidth:'190px' }}>
+            <option value="alle">Alle kommuner</option>
+            {(kommuner||[]).map(k=><option key={k} value={k}>{k}</option>)}
+          </select>
+          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{loading?'Laster…':`${leads.length} kontakter`}</span>
+        </div>
+      </div>
+
+      <div style={{ padding: mob?'14px':'20px 32px' }}>
+        {loading ? (
+          <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>Laster…</div>
+        ) : leads.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'50px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🎉</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen ubehandlede leads</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen leads uten aktivitet med gjeldende filter.</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {leads.map(c=>(
+              <div key={c.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
+                <div style={{ flex:'1 1 220px', minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
+                    <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
+                    {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
+                    {c.city&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {c.city}</span>}
+                  </div>
+                  <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                    {c.email ? <span>📧 {c.email}</span> : <span style={{ color:'#dc2626' }}>📧 mangler</span>}
+                    {c.phone&&<span>📞 {c.phone}</span>}
+                    {c.industry&&<span>🏷️ {c.industry}</span>}
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+                  <button onClick={()=>apneMail(c)} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
+                  <button onClick={()=>markerSendt(c)} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Mal-redigering */}
+      {visMalRed && (
+        <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e)=>{ if(e.target===e.currentTarget) setVisMalRed(false) }} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'620px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>✏️ Rediger mailmal</h2>
+              <button onClick={()=>setVisMalRed(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ padding:'20px 24px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'12px' }}>
+              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>Flettefelt: <code>{'{bedriftsnavn}'}</code>, <code>{'{poststed}'}</code>, <code>{'{bransje}'}</code>. Signatur legges IKKE inn her — den kommer automatisk fra Outlook.</p>
+              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Emne</label><input value={mailEmne} onChange={e=>setMailEmne(e.target.value)} style={crmInp} /></div>
+              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Brødtekst</label><textarea value={mailTekst} onChange={e=>setMailTekst(e.target.value)} rows={12} style={{ ...crmInp, resize:'vertical', lineHeight:1.5 }} /></div>
+            </div>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <button onClick={()=>{ setMailEmne(CRM_MAIL_DEFAULT_EMNE); setMailTekst(CRM_MAIL_DEFAULT_TEKST) }} style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>Tilbakestill til standard</button>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={()=>setVisMalRed(false)} style={{ ...knapp, background:'white', color:'#374151', border:'1px solid #e2e8f0' }}>Avbryt</button>
+                <button onClick={lagreMal} style={{ ...knapp, background:'#059669', color:'white' }}>Lagre mal</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
