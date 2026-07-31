@@ -2848,182 +2848,6 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
   )
 }
 
-// ─── PWA INSTALLASJONSGUIDE («Legg til på startskjerm») ───────────────────────
-// Hjelper mobilbrukere som logger inn i nettleseren med å legge appen på
-// startskjermen, så de slipper å logge inn på nytt hver gang. Vises kun på
-// mobil, kun når appen IKKE allerede kjører installert, og kun én gang
-// (localStorage). Koblet til dashbord-turen: guiden vises FØRST når turen er
-// fullført/hoppet over — de to overlapper aldri. Modul-turer trigger den ikke.
-
-let epDeferredInstallPrompt = null
-if (typeof window !== 'undefined') {
-  // beforeinstallprompt fyres tidlig ved app-last (Android/Chrome). Fang og lagre
-  // den, så vi kan trigge den native prompten senere når guiden faktisk vises.
-  window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault()
-    epDeferredInstallPrompt = e
-    window.dispatchEvent(new Event('ep-install-available'))
-  })
-  window.addEventListener('appinstalled', () => {
-    epDeferredInstallPrompt = null
-    try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
-    window.dispatchEvent(new Event('ep-installed'))
-  })
-}
-
-function erPwaStandalone() {
-  if (typeof window === 'undefined') return false
-  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true
-}
-function erMobilEnhet() {
-  if (typeof window === 'undefined') return false
-  const smal = window.innerWidth < 768
-  const touch = ('ontouchstart' in window) || (typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0)
-  const coarse = typeof window.matchMedia === 'function' && window.matchMedia('(pointer: coarse)').matches
-  return smal || (touch && coarse)
-}
-function detekterMobilOS() {
-  const ua = (typeof navigator !== 'undefined' && navigator.userAgent) || ''
-  const erIOS = /iphone|ipad|ipod/i.test(ua) || (/Macintosh/i.test(ua) && typeof navigator !== 'undefined' && navigator.maxTouchPoints > 1)
-  const erAndroid = /android/i.test(ua)
-  return { erIOS, erAndroid }
-}
-function harSettInstallGuide() {
-  try { return localStorage.getItem('ep-install-guide-seen') === 'done' } catch (_) { return false }
-}
-function markerInstallGuideSett() {
-  try { localStorage.setItem('ep-install-guide-seen', 'done') } catch (_) {}
-}
-
-// iOS Del-ikon (firkant med pil opp) — gjør instruksjonen tydelig.
-function DelIkon({ size = 22, color = '#059669' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ flexShrink: 0 }}>
-      <path d="M12 3v13" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M8.5 6.5 12 3l3.5 3.5" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M7 10H5.5A1.5 1.5 0 0 0 4 11.5v7A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5v-7A1.5 1.5 0 0 0 18.5 10H17" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
-}
-
-function InstallGuide({ aktivSide }) {
-  const [synlig, setSynlig] = React.useState(false)
-  const [visInstruks, setVisInstruks] = React.useState(false)
-  const [promptTilgjengelig, setPromptTilgjengelig] = React.useState(!!epDeferredInstallPrompt)
-  const turAktivRef = React.useRef(false)
-  const { erIOS, erAndroid } = detekterMobilOS()
-
-  const visGuide = React.useCallback((tvunget = false) => {
-    if (erPwaStandalone()) return
-    if (!tvunget) {
-      if (!erMobilEnhet()) return
-      if (harSettInstallGuide()) return
-      markerInstallGuideSett()               // mirror turen: marker som sett straks den vises
-    }
-    setVisInstruks(false)
-    setSynlig(true)
-  }, [])
-
-  // Koblingsbuss: lytt på dashbord-turen og på manuell åpning fra menyen.
-  React.useEffect(() => {
-    const paaTurAktiv = () => { turAktivRef.current = true }
-    const paaTurFerdig = () => {
-      turAktivRef.current = false
-      // Kort forsinkelse så turens overlegg rekker å forsvinne først (aldri overlapp).
-      setTimeout(() => visGuide(false), 450)
-    }
-    const paaVisManuelt = () => visGuide(true)
-    const paaTilgjengelig = () => setPromptTilgjengelig(true)
-    const paaInstallert = () => setSynlig(false)
-    window.addEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
-    window.addEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
-    window.addEventListener('ep-install-guide-vis', paaVisManuelt)
-    window.addEventListener('ep-install-available', paaTilgjengelig)
-    window.addEventListener('ep-installed', paaInstallert)
-    return () => {
-      window.removeEventListener('ep-dashboard-tur-aktiv', paaTurAktiv)
-      window.removeEventListener('ep-dashboard-tur-ferdig', paaTurFerdig)
-      window.removeEventListener('ep-install-guide-vis', paaVisManuelt)
-      window.removeEventListener('ep-install-available', paaTilgjengelig)
-      window.removeEventListener('ep-installed', paaInstallert)
-    }
-  }, [visGuide])
-
-  // Tilbakevendende brukere: dashbord-turen er allerede sett og starter ikke på
-  // nytt, så onSteg-signalet kommer aldri. Vis guiden direkte på dashbordet hvis
-  // den ikke er vist før — men kun hvis turen ikke er i gang denne økten.
-  React.useEffect(() => {
-    if (aktivSide !== 'dashboard') return
-    if (harSettInstallGuide()) return
-    if (!erMobilEnhet() || erPwaStandalone()) return
-    const t = setTimeout(() => { if (!turAktivRef.current) visGuide(false) }, 1600)
-    return () => clearTimeout(t)
-  }, [aktivSide, visGuide])
-
-  if (!synlig) return null
-
-  const installer = async () => {
-    const dp = epDeferredInstallPrompt
-    if (!dp) { setVisInstruks(true); return }
-    try { dp.prompt(); await dp.userChoice } catch (_) {}
-    epDeferredInstallPrompt = null
-    setPromptTilgjengelig(false)
-    setSynlig(false)
-  }
-  const lukk = () => setSynlig(false)
-
-  // Android/Chrome med fanget event → native prompt. iOS støtter aldri prompt.
-  const kanNativInstallere = !erIOS && promptTilgjengelig
-
-  const primaryStil = { flex: 1, padding: '12px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }
-  const sekundaerStil = { padding: '12px 16px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '12px', fontSize: '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }
-  const instruksBoks = { marginTop: '14px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px', fontSize: '13.5px', color: '#166534', lineHeight: 1.6 }
-
-  return (
-    <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, zIndex: 2000, display: 'flex', justifyContent: 'center', padding: '12px', pointerEvents: 'none', fontFamily: 'system-ui, sans-serif' }}>
-      <style>{`@keyframes epInstallOpp { from { transform: translateY(120%); opacity: 0 } to { transform: translateY(0); opacity: 1 } }`}</style>
-      <div style={{ pointerEvents: 'auto', width: '100%', maxWidth: '460px', background: 'white', borderRadius: '18px', boxShadow: '0 -8px 40px rgba(15,23,42,0.22)', border: '1px solid #f1f5f9', padding: '18px 20px 20px', animation: 'epInstallOpp 0.3s ease-out' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-          <img src="/icon-192.png" alt="En Plattform" style={{ width: '46px', height: '46px', borderRadius: '12px', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.12)' }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h3 style={{ margin: '0 0 4px', fontSize: '16px', fontWeight: '800', color: '#0f172a' }}>Få En Plattform som app</h3>
-            <p style={{ margin: 0, fontSize: '13.5px', color: '#64748b', lineHeight: 1.5 }}>Logg inn med ett trykk hver gang — legg appen på startskjermen.</p>
-          </div>
-          <button onClick={lukk} aria-label="Lukk" style={{ border: 'none', background: '#f1f5f9', borderRadius: '8px', width: '28px', height: '28px', cursor: 'pointer', color: '#94a3b8', fontSize: '15px', lineHeight: 1, flexShrink: 0 }}>×</button>
-        </div>
-
-        {visInstruks && erIOS && (
-          <div style={instruksBoks}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', fontWeight: '700' }}>
-              <DelIkon /> <span>Slik legger du appen til på iPhone/iPad:</span>
-            </div>
-            <div>1. Trykk <strong>Del</strong>-ikonet (firkant med pil opp) i Safari.</div>
-            <div>2. Bla ned og trykk <strong>«Legg til på Hjem-skjerm»</strong>.</div>
-            <div>3. Trykk <strong>«Legg til»</strong> øverst til høyre.</div>
-          </div>
-        )}
-        {visInstruks && !erIOS && (
-          <div style={instruksBoks}>
-            <div style={{ fontWeight: '700', marginBottom: '8px' }}>Slik legger du appen til:</div>
-            <div>1. Trykk <strong>⋮</strong>-menyen øverst til høyre i nettleseren.</div>
-            <div>2. Velg <strong>«Legg til på startskjerm»</strong> (eller «Installer app»).</div>
-            <div>3. Bekreft med <strong>«Legg til»</strong>.</div>
-          </div>
-        )}
-
-        <div style={{ display: 'flex', gap: '10px', marginTop: '16px', alignItems: 'center' }}>
-          {kanNativInstallere ? (
-            <button onClick={installer} style={primaryStil}>📲 Installer</button>
-          ) : (
-            <button onClick={() => setVisInstruks(v => !v)} style={primaryStil}>{visInstruks ? 'Skjul' : 'Vis meg hvordan'}</button>
-          )}
-          <button onClick={lukk} style={sekundaerStil}>Ikke nå</button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 const DASHBOARD_TOUR = [
   { tittel: '👋 Velkommen', tekst: 'Velkommen til En Plattform! Her er en rask omvisning av forsiden. Du kan gå frem og tilbake, eller hoppe over når som helst.' },
   { target: 'hovedmeny', tittel: 'Hovedmenyen', tekst: 'Til venstre finner du alle modulene — prosjekter, sjekklister, avvik, befaring og mer. På mobil åpner du menyen med knappen øverst til venstre.' },
@@ -3196,8 +3020,7 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kan
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
-      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR}
-        onSteg={(i) => window.dispatchEvent(new Event(i === -1 ? 'ep-dashboard-tur-ferdig' : 'ep-dashboard-tur-aktiv'))} />
+      <Produktomvisning tourKey="dashboard" steps={DASHBOARD_TOUR} />
       <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: mob ? '16px' : '24px 32px' }}>
         <div style={{ display: 'flex', alignItems: mob ? 'flex-start' : 'center', justifyContent: 'space-between', flexDirection: mob ? 'column' : 'row', gap: mob ? '10px' : '0' }}>
           <div>
@@ -37446,6 +37269,40 @@ function crmBrukerNavn(usersById, userId) {
   return 'Ukjent'
 }
 
+// Ett felt i CRM-kundekortets «Informasjon»-grid. Kopierbare felt får et
+// diskret kopier-ikon som vises på hover (permanent, lavmælt, på touch-enheter).
+function CrmInfoFelt({ label, value, copyValue }) {
+  const [hover, setHover] = useState(false)
+  const [kopiert, setKopiert] = useState(false)
+  const kopierbar = copyValue != null && String(copyValue).trim() !== ''
+  const ingenHover = typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(hover: none)').matches : false
+  const kopier = async (e) => {
+    e.stopPropagation()
+    try {
+      await navigator.clipboard.writeText(String(copyValue))
+      setKopiert(true)
+      setTimeout(() => setKopiert(false), 1500)
+    } catch (err) { console.error('[CRM] Kopiering feilet:', err) }
+  }
+  const synlig = kopiert || hover || ingenHover
+  return (
+    <div onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)}
+      style={{ position:'relative', background:'#f8fafc', borderRadius:'8px', padding: kopierbar ? '9px 30px 9px 12px' : '9px 12px' }}>
+      <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{label}</div>
+      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{value}</div>
+      {kopierbar && (
+        <button onClick={kopier} title={kopiert ? 'Kopiert' : 'Kopier'} aria-label={`Kopier ${label}`}
+          style={{ position:'absolute', top:'7px', right:'7px', background:'none', border:'none', cursor:'pointer', padding:'2px', lineHeight:0,
+            opacity: synlig ? (ingenHover && !hover && !kopiert ? 0.4 : 1) : 0, transition:'opacity 0.15s' }}>
+          {kopiert
+            ? <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            : <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#64748b" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>}
+        </button>
+      )}
+    </div>
+  )
+}
+
 // Farge-skala for kjøpspotensial-score (høyere = varmere/grønnere)
 function crmScoreColor(score) {
   const s = parseFloat(score) || 0
@@ -37498,6 +37355,7 @@ function CRMPage() {
   const [showNew, setShowNew] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [showImportQuotes, setShowImportQuotes] = useState(false)
+  const [visAssistent, setVisAssistent] = useState(false)
   const [sortBy, setSortBy] = useState(readCrmSort)
   const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -37647,6 +37505,7 @@ function CRMPage() {
 
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
+  if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
   if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
 
   return (
@@ -37659,6 +37518,7 @@ function CRMPage() {
             <p style={{ color:'#64748b', marginTop:'4px', fontSize: mob?'13px':'14px', marginBottom:0 }}>Kunder, leads og salgspipeline</p>
           </div>
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+            <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#0f172a', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
             <CsvButton kind="export" size="md" onClick={exportCSV} />
             <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
@@ -37697,7 +37557,7 @@ function CRMPage() {
 
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, minWidth: mob?'auto':'260px', maxWidth: mob?'none':'360px', flex: mob?'1 1 100%':'1 1 260px' }} />
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth: mob?'none':'240px', flex: mob?'1 1 100%':'1' }} />
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
@@ -38152,11 +38012,8 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry],['E-post',c.email],['Telefon',c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null],['Neste oppfølging',c.neste_oppfolging||null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null]].filter(r=>r[1]).map(([k,v])=>(
-                    <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'9px 12px' }}>
-                      <div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600' }}>{k}</div>
-                      <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px' }}>{v}</div>
-                    </div>
+                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging||null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
+                    <CrmInfoFelt key={k} label={k} value={v} copyValue={cv} />
                   ))}
                 </div>
                 {c.notes&&<div style={{ marginTop:'12px', background:'#f8fafc', borderRadius:'8px', padding:'10px 12px' }}><div style={{ fontSize:'11px', color:'#94a3b8', textTransform:'uppercase', fontWeight:'600', marginBottom:'4px' }}>Notater</div><p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{c.notes}</p></div>}
@@ -38365,6 +38222,216 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
       {showNewActivity&&<ActivityModal customerId={c.id} defaultType={typeof showNewActivity==='object'?showNewActivity.defaultType:'note'} user={user} onClose={()=>setShowNewActivity(false)} onSaved={()=>{setShowNewActivity(false);loadDetails()}} />}
       {editAct&&<ActivityModal customerId={c.id} initial={editAct} user={user} onClose={()=>setEditAct(null)} onSaved={()=>{setEditAct(null);loadDetails()}} />}
       {showQuotePicker&&<QuotePickerModal quotes={quotes} customer={c} onClose={()=>setShowQuotePicker(false)} onLink={linkQuote} />}
+    </div>
+  )
+}
+
+// ─── KONTAKT-ASSISTENT ────────────────────────────────────────────────────────
+// «Dagens kontakter»: jobb gjennom lead-lista uten klipp-og-lim.
+// VIKTIG: systemet sender ALDRI e-post selv — mailto: åpner kun et utkast i
+// brukerens egen e-postklient. All sending skjer manuelt derfra.
+const CRM_MAIL_DEFAULT_EMNE = 'En Plattform – av håndverkern, for håndverkern'
+const CRM_MAIL_DEFAULT_TEKST = `Hei {bedriftsnavn},
+
+Det skal ikke være behov for flere systemer for å komme fra befaring til betalt faktura.
+
+Ett for kalkulasjon, ett for timer, en KS-perm og ett for anbudskontroll.
+
+Nå er det ett. Modulbasert system der du velger akkurat de verktøyene du trenger — fra kalkulasjon og BIM til maskinoversikt, FDV og ressursplanlegging.
+
+Prøv gratis i 15 dager: https://app.enplattform.no/registrer`
+
+// Fyll flettefelt fra kontaktens data. Signatur legges IKKE inn — den kommer fra Outlook.
+function crmFlett(mal, c) {
+  return (mal || '')
+    .replace(/\{bedriftsnavn\}/g, c.name || '')
+    .replace(/\{poststed\}/g, c.city || '')
+    .replace(/\{bransje\}/g, c.industry || '')
+}
+
+function KontaktAssistent({ user, kilder, kommuner, onBack }) {
+  const alert = useAppAlert()
+  const mob = typeof window !== 'undefined' && window.innerWidth < 768
+  const [n, setN] = useState(20)
+  const [kilde, setKilde] = useState('alle')
+  const [kommune, setKommune] = useState('alle')
+  const [leads, setLeads] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [behandler, setBehandler] = useState({}) // id -> pågår
+  const [mailEmne, setMailEmne] = useState(CRM_MAIL_DEFAULT_EMNE)
+  const [mailTekst, setMailTekst] = useState(CRM_MAIL_DEFAULT_TEKST)
+  const [settingsId, setSettingsId] = useState(null)
+  const [visMalRed, setVisMalRed] = useState(false)
+
+  // Hent dagens kontakter via RPC (DB-side: status='lead', ingen aktivitet, filter, score-sort, limit N)
+  const load = async () => {
+    setLoading(true)
+    try {
+      const { data, error } = await supabase.rpc('crm_dagens_kontakter', {
+        p_limit: n,
+        p_kilde: kilde === 'alle' ? null : kilde,
+        p_kommune: kommune === 'alle' ? null : kommune,
+      })
+      if (error) throw error
+      setLeads(data || [])
+    } catch (e) {
+      console.error('[CRM-assistent] load', e)
+      alert({ message: 'Kunne ikke hente dagens kontakter: ' + e.message, kind: 'error' })
+      setLeads([])
+    } finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [n, kilde, kommune])
+
+  // Last mailmal fra company_settings (fallback til standardmal)
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from('company_settings').select('id, crm_mail_emne, crm_mail_tekst').limit(1).single()
+        if (data) {
+          setSettingsId(data.id)
+          if (data.crm_mail_emne) setMailEmne(data.crm_mail_emne)
+          if (data.crm_mail_tekst) setMailTekst(data.crm_mail_tekst)
+        }
+      } catch (_) {}
+    })()
+  }, [])
+
+  // Åpner mailto: i brukerens e-postklient — sender ALDRI selv
+  const apneMail = (c) => {
+    if (!c.email) { alert({ message: 'Kontakten mangler e-postadresse', kind: 'warning' }); return }
+    const emne = crmFlett(mailEmne, c)
+    const tekst = crmFlett(mailTekst, c)
+    const url = `mailto:${encodeURIComponent(c.email)}?subject=${encodeURIComponent(emne)}&body=${encodeURIComponent(tekst)}`
+    const a = document.createElement('a'); a.href = url; a.click()
+  }
+
+  // Marker sendt: status=kontaktet, aktivitet, neste_oppfolging +7 dager, fjern fra lista
+  const markerSendt = async (c) => {
+    setBehandler(b => ({ ...b, [c.id]: true }))
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const neste = new Date(); neste.setDate(neste.getDate() + 7)
+      const nesteISO = neste.toISOString().split('T')[0]
+      let navn = null
+      try { const { data: p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name || '').trim() || null } catch (_) {}
+      const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id: c.id, type: 'email', title: 'Introduksjonsmail sendt', date: today, created_by: user?.id })
+      if (aErr) throw aErr
+      const upd = { status: 'kontaktet', neste_oppfolging: nesteISO, sist_kontaktet: today, updated_at: new Date().toISOString() }
+      if (navn) upd.kontaktet_av = navn
+      const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
+      if (cErr) throw cErr
+      invalidateCustomerCache()
+      setLeads(l => l.filter(x => x.id !== c.id))
+    } catch (e) {
+      console.error('[CRM-assistent] markerSendt', e)
+      alert({ message: 'Kunne ikke markere sendt: ' + e.message, kind: 'error' })
+    } finally { setBehandler(b => { const nn = { ...b }; delete nn[c.id]; return nn }) }
+  }
+
+  const lagreMal = async () => {
+    try {
+      let id = settingsId
+      if (!id) { const { data } = await supabase.from('company_settings').select('id').limit(1).single(); id = data?.id; setSettingsId(id) }
+      if (!id) throw new Error('Fant ikke company_settings')
+      const { error } = await supabase.from('company_settings').update({ crm_mail_emne: mailEmne, crm_mail_tekst: mailTekst, updated_at: new Date().toISOString() }).eq('id', id)
+      if (error) throw error
+      setVisMalRed(false)
+      alert({ message: 'Mailmal lagret', kind: 'success' })
+    } catch (e) { alert({ message: 'Kunne ikke lagre mal: ' + e.message, kind: 'error' }) }
+  }
+
+  const knapp = { padding:'8px 12px', borderRadius:'10px', border:'none', cursor:'pointer', fontSize:'13px', fontWeight:'700', whiteSpace:'nowrap' }
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      {/* Header */}
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: mob?'14px':'20px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'14px' }}>
+          <button onClick={onBack} style={{ ...knapp, background:'#f1f5f9', color:'#64748b' }}>← Tilbake</button>
+          <div>
+            <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📋 Dagens kontakter</h1>
+            <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Leads uten aktivitet, høyest score først. E-post åpnes som utkast i din klient — sendes aldri automatisk.</p>
+          </div>
+          <button onClick={()=>setVisMalRed(true)} style={{ ...knapp, marginLeft:'auto', background:'white', color:'#0f172a', border:'1px solid #e2e8f0' }}>✏️ Rediger mal</button>
+        </div>
+        {/* Kontroller */}
+        <div style={{ display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+          <div style={{ display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
+            {[10,20,30].map(v=>(
+              <button key={v} onClick={()=>setN(v)} style={{ padding:'8px 14px', border:'none', background: n===v?'#0f172a':'white', color: n===v?'white':'#64748b', fontWeight: n===v?'700':'500', fontSize:'13px', cursor:'pointer' }}>{v}</button>
+            ))}
+          </div>
+          <select value={kilde} onChange={e=>setKilde(e.target.value)} style={{ ...crmInp, maxWidth:'190px' }}>
+            <option value="alle">Alle kilder</option>
+            {(kilder||[]).map(k=><option key={k} value={k}>{k}</option>)}
+          </select>
+          <select value={kommune} onChange={e=>setKommune(e.target.value)} style={{ ...crmInp, maxWidth:'190px' }}>
+            <option value="alle">Alle kommuner</option>
+            {(kommuner||[]).map(k=><option key={k} value={k}>{k}</option>)}
+          </select>
+          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{loading?'Laster…':`${leads.length} kontakter`}</span>
+        </div>
+      </div>
+
+      <div style={{ padding: mob?'14px':'20px 32px' }}>
+        {loading ? (
+          <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>Laster…</div>
+        ) : leads.length === 0 ? (
+          <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'50px 20px', textAlign:'center' }}>
+            <div style={{ fontSize:'40px', marginBottom:'12px' }}>🎉</div>
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Ingen ubehandlede leads</h3>
+            <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen leads uten aktivitet med gjeldende filter.</p>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+            {leads.map(c=>(
+              <div key={c.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
+                <div style={{ flex:'1 1 220px', minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
+                    <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
+                    {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
+                    {c.city&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {c.city}</span>}
+                  </div>
+                  <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                    {c.email ? <span>📧 {c.email}</span> : <span style={{ color:'#dc2626' }}>📧 mangler</span>}
+                    {c.phone&&<span>📞 {c.phone}</span>}
+                    {c.industry&&<span>🏷️ {c.industry}</span>}
+                  </div>
+                </div>
+                <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+                  <button onClick={()=>apneMail(c)} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
+                  <button onClick={()=>markerSendt(c)} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Mal-redigering */}
+      {visMalRed && (
+        <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e)=>{ if(e.target===e.currentTarget) setVisMalRed(false) }} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'620px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>✏️ Rediger mailmal</h2>
+              <button onClick={()=>setVisMalRed(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ padding:'20px 24px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'12px' }}>
+              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>Flettefelt: <code>{'{bedriftsnavn}'}</code>, <code>{'{poststed}'}</code>, <code>{'{bransje}'}</code>. Signatur legges IKKE inn her — den kommer automatisk fra Outlook.</p>
+              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Emne</label><input value={mailEmne} onChange={e=>setMailEmne(e.target.value)} style={crmInp} /></div>
+              <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>Brødtekst</label><textarea value={mailTekst} onChange={e=>setMailTekst(e.target.value)} rows={12} style={{ ...crmInp, resize:'vertical', lineHeight:1.5 }} /></div>
+            </div>
+            <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <button onClick={()=>{ setMailEmne(CRM_MAIL_DEFAULT_EMNE); setMailTekst(CRM_MAIL_DEFAULT_TEKST) }} style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>Tilbakestill til standard</button>
+              <div style={{ display:'flex', gap:'8px' }}>
+                <button onClick={()=>setVisMalRed(false)} style={{ ...knapp, background:'white', color:'#374151', border:'1px solid #e2e8f0' }}>Avbryt</button>
+                <button onClick={lagreMal} style={{ ...knapp, background:'#059669', color:'white' }}>Lagre mal</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -63334,35 +63401,19 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
 
   // Steg 4: Slett en lagret sesjon (med bekreftelse håndtert av kaller)
   const slettLagretSesjon = async (sesjonId) => {
-    // Fallback: slett direkte mot databasen + best-effort Storage når Edge
-    // Function-en er uncåbar (ikke deployet, nettverk/CORS). Databaseraden er
-    // det brukeren faktisk ser; eventuell foreldreløs Storage-fil ryddes senere.
-    const slettDirekte = async (aarsak) => {
-      console.warn('[bim-sesjon] faller tilbake til direkte sletting:', aarsak)
-      const { error: direkteFeil } = await bimSlettSesjon(sesjonId)
-      if (direkteFeil) {
-        console.warn('[bim-sesjon] direkte sletting feilet også:', direkteFeil)
-        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (direkteFeil.message || 'ukjent feil'))
-        return false
-      }
-      setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
-      return true
-    }
-
     try {
       // Steg 5: Bruk Edge Function (service_role) som omgår RLS-quirken på Storage
       const { data, error } = await supabase.functions.invoke('bim-sesjon-rydd', {
         body: { action: 'slett', sesjonId },
       })
       if (error) {
-        // Edge Function uncåbar (f.eks. "Failed to send a request to the Edge
-        // Function") — la ikke sletting stoppe på det; slett direkte i stedet.
-        await slettDirekte(error.message || 'edge function feilet')
+        console.warn('[bim-sesjon] sletting via edge function feilet:', error)
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (error.message || 'ukjent feil'))
         return
       }
       if (data && !data.ok) {
         console.warn('[bim-sesjon] edge function returnerte feil:', data.error)
-        await slettDirekte(data.error || 'edge function returnerte feil')
+        if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (data.error || 'ukjent feil'))
         return
       }
       // Logg om Storage-fil ble slettet (informasjon, ikke feil)
@@ -63373,8 +63424,8 @@ function BimImportPage({ onTilbake, onAlert, onKalkyleOpprettet, user, eksistere
       }
       setLagredeSesjoner(prev => prev.filter(s => s.id !== sesjonId))
     } catch (e) {
-      // Uventet kast (typisk nettverksfeil mot Edge Function) — prøv direkte.
-      await slettDirekte(e.message || 'sletting kastet')
+      console.warn('[bim-sesjon] sletting kastet:', e)
+      if (onAlert) await onAlert('Kunne ikke slette sesjonen: ' + (e.message || 'ukjent feil'))
     }
   }
 
@@ -75758,9 +75809,6 @@ function AppContent() {
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
       <TilkoblingsIndikator isMobile={isMobile} mobileMenuOpen={mobileMenuOpen} />
 
-      {/* ── PWA installasjonsguide (mobil, koblet til dashbord-turen) ── */}
-      <InstallGuide aktivSide={activePage} />
-
       {/* ── MOBIL: Hamburgermeny overlay ── */}
       {isMobile && mobileMenuOpen && (
         <>
@@ -75801,15 +75849,6 @@ function AppContent() {
             </nav>
             {/* Patch 21: Tilbakemelding-knapp (mobil) */}
             <div style={{ padding:'8px', borderTop:'1px solid #f1f5f9' }}>
-              {!erPwaStandalone() && (
-                <button onClick={() => { setMobileMenuOpen(false); window.dispatchEvent(new Event('ep-install-guide-vis')) }}
-                  style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
-                    borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
-                    color:'#475569', fontSize:'15px', textAlign:'left', marginBottom:'2px' }}>
-                  <span style={{ fontSize:'18px', flexShrink:0 }}>📲</span>
-                  <span style={{ flex:1 }}>Installer app</span>
-                </button>
-              )}
               <button onClick={() => { setShowFeedbackModal(true); setMobileMenuOpen(false) }}
                 style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px',
                   borderRadius:'10px', border:'none', cursor:'pointer', background:'transparent',
@@ -75909,17 +75948,6 @@ function AppContent() {
         </nav>
         {/* Patch 21: Tilbakemelding-knapp */}
         <div style={{ padding: '8px', borderTop: '1px solid #f1f5f9', flexShrink: 0 }}>
-          {!erPwaStandalone() && (
-            <button onClick={() => window.dispatchEvent(new Event('ep-install-guide-vis'))} aria-label="Installer app"
-              onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Installer app')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
-                padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none',
-                cursor: 'pointer', background: 'transparent', color: '#475569', fontSize: '14px',
-                justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '2px' }}>
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>📲</span>
-              {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>Installer app</span>}
-            </button>
-          )}
           <button onClick={() => setShowFeedbackModal(true)} aria-label="Tilbakemelding"
             onMouseEnter={(e) => collapsed && visSidebarTip(e, 'Tilbakemelding')} onMouseLeave={skjulSidebarTip} onClickCapture={skjulSidebarTip}
             style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px',
