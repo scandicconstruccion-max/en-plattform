@@ -37243,6 +37243,20 @@ const CRM_OPPFOLGING_TYPER = {
 }
 // Dagens dato + n dager frem som 'YYYY-MM-DD' (lokal)
 function crmDatoPlussDager(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0] }
+// Varsle CRM-badgen om at oppfølging er endret (fullført/satt) — badgen henter da på nytt
+function crmVarsleOppfolging() { try { window.dispatchEvent(new CustomEvent('crm-oppfolging-endret')) } catch(_) {} }
+// Valgbart tidsvindu for «Mine oppgaver»
+const CRM_OPPGAVE_VINDUER = [
+  { dager:0,  label:'I dag' },
+  { dager:3,  label:'Neste 3 dager' },
+  { dager:7,  label:'Neste 7 dager' },
+  { dager:14, label:'Neste 14 dager' },
+  { dager:30, label:'Neste 30 dager' },
+]
+function crmLesOppgaveVindu() {
+  try { const v = parseInt(window.localStorage.getItem('crm_oppgave_vindu'), 10); if (CRM_OPPGAVE_VINDUER.some(o=>o.dager===v)) return v } catch(_) {}
+  return 7
+}
 
 const crmInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const crmCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
@@ -38373,6 +38387,7 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
       const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
       if (cErr) throw cErr
       invalidateCustomerCache()
+      crmVarsleOppfolging()
       setLeads(l => l.filter(x => x.id !== c.id))
     } catch (e) {
       console.error('[CRM-assistent] markerSendt', e)
@@ -38545,6 +38560,7 @@ function CRMHurtigRedigerModal({ customer, user, onClose, onSaved }) {
       const { error } = await supabase.from('customers').update(upd).eq('id', customer.id)
       if (error) throw error
       invalidateCustomerCache()
+      crmVarsleOppfolging()
       onSaved()
     } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
   }
@@ -38582,15 +38598,17 @@ function MineOppgaver({ user, onBack }) {
   const [loading, setLoading] = useState(true)
   const [behandler, setBehandler] = useState({})
   const [hurtig, setHurtig] = useState(null)
+  const [vindu, setVindu] = useState(crmLesOppgaveVindu) // dager frem (0 = kun i dag)
   const idag = new Date().toISOString().split('T')[0]
 
   const load = async () => {
     setLoading(true)
     try {
-      // DB-side: kun leads med oppfølging satt, t.o.m. 7 dager frem. Eldste først.
+      // DB-side: leads med oppfølging satt, t.o.m. valgt vindu frem. Overdue (< i dag) er
+      // alltid inkludert siden grensen ≥ i dag. Eldste først.
       const { data, error } = await supabase.from('customers').select('*')
         .not('neste_oppfolging', 'is', null)
-        .lte('neste_oppfolging', crmDatoPlussDager(7))
+        .lte('neste_oppfolging', crmDatoPlussDager(vindu))
         .order('neste_oppfolging', { ascending: true })
         .limit(500)
       if (error) throw error
@@ -38598,7 +38616,7 @@ function MineOppgaver({ user, onBack }) {
     } catch (e) { console.error('[CRM-oppgaver] load', e); alert({ message:'Kunne ikke hente oppgaver: '+e.message, kind:'error' }); setOppgaver([]) }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [vindu])
 
   const apneMail = (c) => { if (!c.email) { alert({ message:'Kontakten mangler e-postadresse', kind:'warning' }); return } const a=document.createElement('a'); a.href='mailto:'+encodeURIComponent(c.email); a.click() }
   const ring = (c) => { if (!c.phone) { alert({ message:'Kontakten mangler telefonnummer', kind:'warning' }); return } const a=document.createElement('a'); a.href='tel:'+String(c.phone).replace(/\s/g,''); a.click() }
@@ -38617,6 +38635,7 @@ function MineOppgaver({ user, onBack }) {
       const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
       if (cErr) throw cErr
       invalidateCustomerCache()
+      crmVarsleOppfolging()
       setOppgaver(o => o.filter(x => x.id !== c.id))
     } catch (e) { console.error('[CRM-oppgaver] fullfor', e); alert({ message:'Kunne ikke fullføre: '+e.message, kind:'error' }) }
     finally { setBehandler(b => { const n={...b}; delete n[c.id]; return n }) }
@@ -38672,15 +38691,20 @@ function MineOppgaver({ user, onBack }) {
         <button onClick={onBack} style={{ padding:'8px 12px', borderRadius:'10px', border:'none', background:'#f1f5f9', color:'#64748b', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>← Tilbake</button>
         <div>
           <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>✅ Mine oppgaver</h1>
-          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Forfalte øverst.</p>
+          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Forfalte vises alltid øverst.</p>
         </div>
-        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{loading?'Laster…':`${oppgaver.length} oppgaver`}</span>
+        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+          <select value={vindu} onChange={e=>{ const v=parseInt(e.target.value,10); setVindu(v); try{ window.localStorage.setItem('crm_oppgave_vindu', String(v)) }catch(_){} }} title="Tidsvindu" style={{ ...crmInp, maxWidth:'170px' }}>
+            {CRM_OPPGAVE_VINDUER.map(o=><option key={o.dager} value={o.dager}>{o.label}</option>)}
+          </select>
+          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{loading?'Laster…':`${oppgaver.length} oppgaver`}</span>
+        </div>
       </div>
       <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'22px' }}>
         {loading ? <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>Laster…</div> : (<>
           {seksjon('Forfalt', '🚨', grupper.overdue, true, 'Ingen forfalte oppgaver.')}
           {seksjon('I dag', '📅', grupper.idag, false, 'Ingen oppgaver i dag.')}
-          {seksjon('Kommende (7 dager)', '🗓️', grupper.kommende, false, 'Ingen kommende oppgaver denne uka.')}
+          {vindu > 0 && seksjon(`Kommende (${vindu} dager)`, '🗓️', grupper.kommende, false, 'Ingen kommende oppgaver i valgt vindu.')}
         </>)}
       </div>
       {hurtig&&<CRMHurtigRedigerModal customer={hurtig} user={user} onClose={()=>setHurtig(null)} onSaved={()=>{ setHurtig(null); load() }} />}
@@ -38733,6 +38757,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
       }
       // Invaliderer cache så CustomerSelect reflekterer endringen umiddelbart
       invalidateCustomerCache()
+      crmVarsleOppfolging()
       onSaved()
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSaving(false) }
@@ -75879,18 +75904,22 @@ function AppContent() {
 
   // CRM-oppfølging: antall forfalte + dagens oppgaver, for badge på CRM i menyen (kun in-app teller)
   const [crmOppfCount, setCrmOppfCount] = React.useState(0)
-  React.useEffect(() => {
+  const hentCrmOppf = React.useCallback(async () => {
     if (!user) return
-    let avbrutt = false
-    ;(async () => {
-      try {
-        const idag = new Date().toISOString().split('T')[0]
-        const { count } = await supabase.from('customers').select('id', { count:'exact', head:true }).not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag)
-        if (!avbrutt) setCrmOppfCount(count || 0)
-      } catch(_) {}
-    })()
-    return () => { avbrutt = true }
-  }, [user, page]) // oppdater ved navigasjon (bl.a. når man forlater/åpner CRM)
+    try {
+      const idag = new Date().toISOString().split('T')[0]
+      const { count } = await supabase.from('customers').select('id', { count:'exact', head:true }).not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag)
+      setCrmOppfCount(count || 0)
+    } catch(_) {}
+  }, [user, supabase])
+  // Hent ved navigasjon (bl.a. når man forlater/åpner CRM)
+  React.useEffect(() => { hentCrmOppf() }, [hentCrmOppf, page])
+  // Live-oppdatering: fullført oppgave / satt ny oppfølging sender 'crm-oppfolging-endret'
+  React.useEffect(() => {
+    const h = () => hentCrmOppf()
+    window.addEventListener('crm-oppfolging-endret', h)
+    return () => window.removeEventListener('crm-oppfolging-endret', h)
+  }, [hentCrmOppf])
 
   // Patch 23: Modul-upsell state — holder navId for valgt låst modul
   const [upsellModul, setUpsellModul] = React.useState(null)
