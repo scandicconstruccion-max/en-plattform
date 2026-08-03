@@ -37234,6 +37234,16 @@ const ACTIVITY_TYPES = {
 
 const INDUSTRIES = ['Bygg & Anlegg','Eiendom','Industri','Handel','Transport','Offentlig','Helse','IT','Finans','Annet']
 
+// Type oppfølging som avtales på en lead (lagres i customers.oppfolging_type)
+const CRM_OPPFOLGING_TYPER = {
+  ring:   { label:'Ring',        emoji:'📞', aktivitet:'call' },
+  epost:  { label:'Send e-post', emoji:'✉️', aktivitet:'email' },
+  tilbud: { label:'Send tilbud', emoji:'📄', aktivitet:'note' },
+  annet:  { label:'Annet',       emoji:'📌', aktivitet:'note' },
+}
+// Dagens dato + n dager frem som 'YYYY-MM-DD' (lokal)
+function crmDatoPlussDager(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0] }
+
 const crmInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const crmCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
@@ -37357,6 +37367,8 @@ function CRMPage() {
   const [showImport, setShowImport] = useState(false)
   const [showImportQuotes, setShowImportQuotes] = useState(false)
   const [visAssistent, setVisAssistent] = useState(false)
+  const [visOppgaver, setVisOppgaver] = useState(false)
+  const [hurtigRediger, setHurtigRediger] = useState(null) // lead for hurtigredigering fra lista
   const [sortBy, setSortBy] = useState(readCrmSort)
   const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -37530,6 +37542,7 @@ function CRMPage() {
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
   if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
+  if (visOppgaver) return <MineOppgaver user={user} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
   if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
 
   return (
@@ -37548,6 +37561,7 @@ function CRMPage() {
               <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             </div>
             {quotes.length > 0 ? <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📋 Fra tilbud ({quotes.length})</button> : <span style={{ fontSize:'11px',color:'#94a3b8',padding:'10px' }}>({quotes.length} tilbud)</span>}
+            <button onClick={()=>setVisOppgaver(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>✅ Mine oppgaver{kpi.oppfolging>0?` (${kpi.oppfolging})`:''}</button>
             <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
           </div>
@@ -37666,6 +37680,7 @@ function CRMPage() {
                       <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtVal(c.estimated_value)}</div>
                       <div style={{ fontSize:'11px', color:'#94a3b8' }}>est. verdi</div>
                     </div>}
+                    <button onClick={(e)=>{ e.stopPropagation(); setHurtigRediger(c) }} title="Rediger raskt" style={{ flexShrink:0, background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'9px', padding:'7px 10px', fontSize:'13px', cursor:'pointer' }}>✏️</button>
                     <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
                   </div>
                 )
@@ -37738,6 +37753,8 @@ function CRMPage() {
       {showNew&&<CRMEditorModal user={user} onClose={()=>setShowNew(false)} onSaved={()=>{setShowNew(false);refreshAll()}} />}
 
       {showImport&&<CRMImportModal user={user} onClose={()=>setShowImport(false)} onDone={()=>{setShowImport(false);refreshAll()}} />}
+
+      {hurtigRediger&&<CRMHurtigRedigerModal customer={hurtigRediger} user={user} onClose={()=>setHurtigRediger(null)} onSaved={()=>{setHurtigRediger(null);refreshAll()}} />}
 
       {/* Import fra tilbud modal */}
       {showImportQuotes && (()=>{
@@ -38046,7 +38063,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging||null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
+                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging?`${c.neste_oppfolging}${c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}${c.oppfolging_type&&CRM_OPPFOLGING_TYPER[c.oppfolging_type]?` · ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].emoji} ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].label}`:''}${c.oppfolging_notat?` — ${c.oppfolging_notat}`:''}`:null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
                     <CrmInfoFelt key={k} label={k} value={v} copyValue={cv} />
                   ))}
                 </div>
@@ -38296,6 +38313,7 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
   const [mailTekst, setMailTekst] = useState(CRM_MAIL_DEFAULT_TEKST)
   const [settingsId, setSettingsId] = useState(null)
   const [visMalRed, setVisMalRed] = useState(false)
+  const [hurtig, setHurtig] = useState(null) // lead under hurtigredigering
 
   // Hent dagens kontakter via RPC (DB-side: status='lead', ingen aktivitet, filter, score-sort, limit N)
   const load = async () => {
@@ -38433,6 +38451,7 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
                   </div>
                 </div>
                 <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
+                  <button onClick={()=>setHurtig(c)} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️ Rediger</button>
                   <button onClick={()=>apneMail(c)} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
                   <button onClick={()=>markerSendt(c)} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
                 </div>
@@ -38441,6 +38460,8 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
           </div>
         )}
       </div>
+
+      {hurtig&&<CRMHurtigRedigerModal customer={hurtig} user={user} onClose={()=>setHurtig(null)} onSaved={()=>{ setHurtig(null); load() }} />}
 
       {/* Mal-redigering */}
       {visMalRed && (
@@ -38470,10 +38491,207 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
   )
 }
 
+// Gjenbrukbar felt-gruppe for «Neste oppfølging» (dato/tid/type/notat). Bruker form-keys:
+// neste_oppfolging, oppfolging_tid, oppfolging_type, oppfolging_notat.
+function CrmOppfolgingFelter({ form, set }) {
+  const lbl = (t) => <label style={{ display:'block', fontSize:'12px', fontWeight:'600', color:'#374151', marginBottom:'4px' }}>{t}</label>
+  return (
+    <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', display:'flex', flexDirection:'column', gap:'10px' }}>
+      <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>📅 Neste oppfølging</div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
+        <div>{lbl('Dato')}<input type="date" value={form.neste_oppfolging||''} onChange={e=>set('neste_oppfolging', e.target.value)} style={crmInp} /></div>
+        <div>{lbl('Klokkeslett (valgfritt)')}<input type="time" value={form.oppfolging_tid||''} onChange={e=>set('oppfolging_tid', e.target.value)} style={crmInp} /></div>
+      </div>
+      <div>
+        {lbl('Type')}
+        <div style={{ display:'flex', gap:'6px', flexWrap:'wrap' }}>
+          {Object.entries(CRM_OPPFOLGING_TYPER).map(([k,v])=>(
+            <button key={k} type="button" onClick={()=>set('oppfolging_type', k)} style={{ padding:'7px 12px', borderRadius:'8px', border:`2px solid ${form.oppfolging_type===k?'#059669':'#e2e8f0'}`, background: form.oppfolging_type===k?'#f0fdf4':'white', color: form.oppfolging_type===k?'#059669':'#64748b', fontWeight: form.oppfolging_type===k?'700':'500', fontSize:'12px', cursor:'pointer' }}>{v.emoji} {v.label}</button>
+          ))}
+        </div>
+      </div>
+      <div>{lbl('Kort notat')}<input value={form.oppfolging_notat||''} onChange={e=>set('oppfolging_notat', e.target.value)} placeholder="F.eks. «avtalt å ringe fredag om tilbud»" style={crmInp} /></div>
+      {form.neste_oppfolging && <button type="button" onClick={()=>{ set('neste_oppfolging',''); set('oppfolging_tid',''); set('oppfolging_notat','') }} style={{ alignSelf:'flex-start', background:'none', border:'none', color:'#dc2626', fontSize:'12px', fontWeight:'600', cursor:'pointer', padding:0 }}>Fjern oppfølging</button>}
+    </div>
+  )
+}
+
+// Rask redigering av en lead uten å navigere til kundekortet (status/tlf/e-post/notat/oppfølging)
+function CRMHurtigRedigerModal({ customer, user, onClose, onSaved }) {
+  const alert = useAppAlert()
+  const [form, setForm] = useState({
+    status: customer.status||'lead', phone: customer.phone||'', email: customer.email||'', notes: customer.notes||'',
+    neste_oppfolging: customer.neste_oppfolging||'', oppfolging_tid: customer.oppfolging_tid||'',
+    oppfolging_type: customer.oppfolging_type||'ring', oppfolging_notat: customer.oppfolging_notat||'',
+  })
+  const [saving, setSaving] = useState(false)
+  const set=(k,v)=>setForm(f=>({...f,[k]:v}))
+  const lbl=(t)=><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'5px' }}>{t}</label>
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const harOppf = !!form.neste_oppfolging
+      const upd = {
+        status: form.status,
+        phone: form.phone?.trim()||null,
+        email: form.email?.trim()||null,
+        notes: form.notes?.trim()||null,
+        neste_oppfolging: form.neste_oppfolging||null,
+        oppfolging_tid: harOppf ? (form.oppfolging_tid||null) : null,
+        oppfolging_type: harOppf ? form.oppfolging_type : null,
+        oppfolging_notat: harOppf ? (form.oppfolging_notat?.trim()||null) : null,
+        updated_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('customers').update(upd).eq('id', customer.id)
+      if (error) throw error
+      invalidateCustomerCache()
+      onSaved()
+    } catch(e) { alert('Feil: '+e.message) } finally { setSaving(false) }
+  }
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:140, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e)=>{ if(e.target===e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'520px', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+        <div style={{ padding:'16px 22px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+          <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>✏️ {customer.name}</h2>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+        </div>
+        <div style={{ padding:'18px 22px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'12px' }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'10px' }}>
+            <div>{lbl('Status')}<select value={form.status} onChange={e=>set('status',e.target.value)} style={crmInp}>{Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}</select></div>
+            <div>{lbl('Telefon')}<input value={form.phone} onChange={e=>set('phone',e.target.value)} placeholder="+47 xxx xx xxx" style={crmInp} /></div>
+          </div>
+          <div>{lbl('E-post')}<input type="email" value={form.email} onChange={e=>set('email',e.target.value)} placeholder="kontakt@firma.no" style={crmInp} /></div>
+          <div>{lbl('Notat')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={2} placeholder="Interne notater..." style={{ ...crmInp, resize:'none' }} /></div>
+          <CrmOppfolgingFelter form={form} set={set} />
+        </div>
+        <div style={{ padding:'14px 22px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'8px', flexShrink:0 }}>
+          <button onClick={onClose} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button onClick={handleSave} disabled={saving} style={{ padding:'9px 22px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'wait':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Lagrer…':'Lagre'}</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// «Mine oppgaver»: alle leads med neste_oppfolging satt, gruppert overdue / i dag / kommende (7 dager)
+function MineOppgaver({ user, onBack }) {
+  const alert = useAppAlert()
+  const mob = typeof window !== 'undefined' && window.innerWidth < 768
+  const [oppgaver, setOppgaver] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [behandler, setBehandler] = useState({})
+  const [hurtig, setHurtig] = useState(null)
+  const idag = new Date().toISOString().split('T')[0]
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      // DB-side: kun leads med oppfølging satt, t.o.m. 7 dager frem. Eldste først.
+      const { data, error } = await supabase.from('customers').select('*')
+        .not('neste_oppfolging', 'is', null)
+        .lte('neste_oppfolging', crmDatoPlussDager(7))
+        .order('neste_oppfolging', { ascending: true })
+        .limit(500)
+      if (error) throw error
+      setOppgaver(data || [])
+    } catch (e) { console.error('[CRM-oppgaver] load', e); alert({ message:'Kunne ikke hente oppgaver: '+e.message, kind:'error' }); setOppgaver([]) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { load() }, [])
+
+  const apneMail = (c) => { if (!c.email) { alert({ message:'Kontakten mangler e-postadresse', kind:'warning' }); return } const a=document.createElement('a'); a.href='mailto:'+encodeURIComponent(c.email); a.click() }
+  const ring = (c) => { if (!c.phone) { alert({ message:'Kontakten mangler telefonnummer', kind:'warning' }); return } const a=document.createElement('a'); a.href='tel:'+String(c.phone).replace(/\s/g,''); a.click() }
+
+  const fullfor = async (c) => {
+    setBehandler(b => ({ ...b, [c.id]: true }))
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+      let navn = null
+      try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
+      const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:c.id, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: c.oppfolging_notat||null, date: today, created_by: user?.id })
+      if (aErr) throw aErr
+      const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
+      if (navn) upd.kontaktet_av = navn
+      const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
+      if (cErr) throw cErr
+      invalidateCustomerCache()
+      setOppgaver(o => o.filter(x => x.id !== c.id))
+    } catch (e) { console.error('[CRM-oppgaver] fullfor', e); alert({ message:'Kunne ikke fullføre: '+e.message, kind:'error' }) }
+    finally { setBehandler(b => { const n={...b}; delete n[c.id]; return n }) }
+  }
+
+  const grupper = {
+    overdue: oppgaver.filter(o => o.neste_oppfolging < idag),
+    idag:    oppgaver.filter(o => o.neste_oppfolging === idag),
+    kommende: oppgaver.filter(o => o.neste_oppfolging > idag),
+  }
+  const knapp = { padding:'7px 11px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }
+
+  const rad = (c, forfalt) => {
+    const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+    return (
+      <div key={c.id} style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap' }}>
+        <div style={{ flex:'1 1 220px', minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
+            <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{c.name}</span>
+            {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
+            <span style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#64748b' }}>📅 {c.neste_oppfolging}{c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}</span>
+            {t&&<span style={{ fontSize:'11px', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'1px 8px', fontWeight:'700' }}>{t.emoji} {t.label}</span>}
+          </div>
+          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+            {c.city&&<span>📍 {c.city}</span>}
+            {c.email&&<span>📧 {c.email}</span>}
+            {c.phone&&<span>📞 {c.phone}</span>}
+          </div>
+          {c.oppfolging_notat&&<div style={{ marginTop:'4px', fontSize:'12px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>}
+        </div>
+        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap' }}>
+          <button onClick={()=>setHurtig(c)} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
+          <button onClick={()=>ring(c)} disabled={!c.phone} style={{ ...knapp, background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
+          <button onClick={()=>apneMail(c)} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
+          <button onClick={()=>fullfor(c)} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
+        </div>
+      </div>
+    )
+  }
+  const seksjon = (tittel, emoji, liste, forfalt, tomtekst) => (
+    <div>
+      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'0 0 8px' }}>
+        <h3 style={{ margin:0, fontSize:'14px', fontWeight:'800', color: forfalt?'#dc2626':'#0f172a' }}>{emoji} {tittel}</h3>
+        <span style={{ fontSize:'12px', fontWeight:'700', color:'white', background: forfalt?'#dc2626':'#64748b', borderRadius:'999px', padding:'1px 9px' }}>{liste.length}</span>
+      </div>
+      {liste.length===0 ? <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{tomtekst}</p> : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(c=>rad(c, forfalt))}</div>}
+    </div>
+  )
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: mob?'14px':'20px 32px', display:'flex', alignItems:'center', gap:'12px' }}>
+        <button onClick={onBack} style={{ padding:'8px 12px', borderRadius:'10px', border:'none', background:'#f1f5f9', color:'#64748b', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>← Tilbake</button>
+        <div>
+          <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>✅ Mine oppgaver</h1>
+          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Forfalte øverst.</p>
+        </div>
+        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{loading?'Laster…':`${oppgaver.length} oppgaver`}</span>
+      </div>
+      <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'22px' }}>
+        {loading ? <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>Laster…</div> : (<>
+          {seksjon('Forfalt', '🚨', grupper.overdue, true, 'Ingen forfalte oppgaver.')}
+          {seksjon('I dag', '📅', grupper.idag, false, 'Ingen oppgaver i dag.')}
+          {seksjon('Kommende (7 dager)', '🗓️', grupper.kommende, false, 'Ingen kommende oppgaver denne uka.')}
+        </>)}
+      </div>
+      {hurtig&&<CRMHurtigRedigerModal customer={hurtig} user={user} onClose={()=>setHurtig(null)} onSaved={()=>{ setHurtig(null); load() }} />}
+    </div>
+  )
+}
+
 function CRMEditorModal({ user, initial, onClose, onSaved }) {
   const alert = useAppAlert()
   const isEdit=!!initial
-  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', kontaktperson:initial?.kontaktperson||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'', score:initial?.score??'', neste_oppfolging:initial?.neste_oppfolging||'', kontaktet_av:initial?.kontaktet_av||'' })
+  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', kontaktperson:initial?.kontaktperson||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'', score:initial?.score??'', neste_oppfolging:initial?.neste_oppfolging||'', oppfolging_tid:initial?.oppfolging_tid||'', oppfolging_type:initial?.oppfolging_type||'ring', oppfolging_notat:initial?.oppfolging_notat||'', kontaktet_av:initial?.kontaktet_av||'' })
   const [saving, setSaving] = useState(false)
   // Ekstra felt (JSONB) som frie etikett/verdi-par
   const [ekstraFelt, setEkstraFelt] = useState(() => {
@@ -38494,10 +38712,14 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
       // Bygg ekstra_felt-objekt fra ikke-tomme etiketter
       const ekstraObj = {}
       ekstraFelt.forEach(e => { const l = (e.label||'').trim(); if (l) ekstraObj[l] = (e.value ?? '') })
+      const harOppf = !!form.neste_oppfolging
       const payload={...form,
         estimated_value:form.estimated_value?parseFloat(form.estimated_value):null,
         score:(form.score===''||form.score==null)?null:(parseInt(form.score,10)||0),
         neste_oppfolging:form.neste_oppfolging||null,
+        oppfolging_tid:harOppf ? (form.oppfolging_tid||null) : null,
+        oppfolging_type:harOppf ? form.oppfolging_type : null,
+        oppfolging_notat:harOppf ? (form.oppfolging_notat?.trim()||null) : null,
         kontaktet_av:form.kontaktet_av?.trim()||null,
         ekstra_felt:Object.keys(ekstraObj).length?ekstraObj:null,
         updated_at:new Date().toISOString()}
@@ -38559,7 +38781,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div>{lbl('Postnr')}<input value={form.postal_code} onChange={e=>set('postal_code',e.target.value)} placeholder="0000" style={crmInp} /></div>
           <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
           <div>{lbl('Score (kjøpspotensial)')}<input type="number" min="0" max="100" value={form.score} onChange={e=>set('score',e.target.value)} placeholder="0–100" style={crmInp} /></div>
-          <div>{lbl('Neste oppfølging')}<input type="date" value={form.neste_oppfolging||''} onChange={e=>set('neste_oppfolging',e.target.value)} style={crmInp} /></div>
+          <div style={{ gridColumn:'1/-1' }}><CrmOppfolgingFelter form={form} set={set} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Kontaktet av')}<input value={form.kontaktet_av} onChange={e=>set('kontaktet_av',e.target.value)} placeholder="Hvem hos oss som sist hadde kontakt" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
           <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>
@@ -75655,6 +75877,21 @@ function AppContent() {
   const [subPage, setSubPage] = React.useState(null) // tracks detail views within modules
   const detailCleanupRef = React.useRef(null) // callback to close current detail view
 
+  // CRM-oppfølging: antall forfalte + dagens oppgaver, for badge på CRM i menyen (kun in-app teller)
+  const [crmOppfCount, setCrmOppfCount] = React.useState(0)
+  React.useEffect(() => {
+    if (!user) return
+    let avbrutt = false
+    ;(async () => {
+      try {
+        const idag = new Date().toISOString().split('T')[0]
+        const { count } = await supabase.from('customers').select('id', { count:'exact', head:true }).not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag)
+        if (!avbrutt) setCrmOppfCount(count || 0)
+      } catch(_) {}
+    })()
+    return () => { avbrutt = true }
+  }, [user, page]) // oppdater ved navigasjon (bl.a. når man forlater/åpner CRM)
+
   // Patch 23: Modul-upsell state — holder navId for valgt låst modul
   const [upsellModul, setUpsellModul] = React.useState(null)
 
@@ -75874,6 +76111,7 @@ function AppContent() {
                         style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', borderRadius:'10px', border:'none', cursor:'pointer', background:isActive?'#ecfdf5':'transparent', color:locked?'#94a3b8':isActive?'#059669':'#475569', fontWeight:isActive?'700':'400', fontSize:'15px', textAlign:'left', marginBottom:'2px', opacity:locked?0.65:1 }}>
                         <span style={{ fontSize:'18px', flexShrink:0 }}>{item.emoji}</span>
                         <span style={{ flex:1 }}>{item.label}</span>
+                        {item.id==='crm' && crmOppfCount>0 && <span title="Oppfølging: forfalt + i dag" style={{ background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'11px', fontWeight:'800', minWidth:'18px', height:'18px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 5px', flexShrink:0 }}>{crmOppfCount>99?'99+':crmOppfCount}</span>}
                         {locked && kanBestilleModuler && <span style={{ fontSize:'11px', color:'#2563eb', fontStyle:'italic' }}>bestill her</span>}
                       </button>
                     )
@@ -75970,9 +76208,12 @@ function AppContent() {
                     onMouseEnter={(e) => collapsed && visSidebarTip(e, item.label + (locked && kanBestilleModuler ? ' · bestill her' : ''))}
                     onMouseLeave={skjulSidebarTip}
                     onClickCapture={skjulSidebarTip}
-                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#94a3b8' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.65 : 1 }}>
+                    style={{ position: 'relative', width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: collapsed ? '10px' : '9px 12px', borderRadius: '10px', border: 'none', cursor: 'pointer', background: isActive ? '#ecfdf5' : 'transparent', color: locked ? '#94a3b8' : isActive ? '#059669' : '#475569', fontWeight: isActive ? '600' : '400', fontSize: '14px', justifyContent: collapsed ? 'center' : 'flex-start', marginBottom: '1px', opacity: locked ? 0.65 : 1 }}>
                     <span style={{ fontSize: '16px', flexShrink: 0 }}>{item.emoji}</span>
                     {!collapsed && <span style={{ flex: 1, textAlign: 'left' }}>{item.label}</span>}
+                    {item.id==='crm' && crmOppfCount>0 && (!collapsed
+                      ? <span title="Oppfølging: forfalt + i dag" style={{ background:'#dc2626', color:'white', borderRadius:'999px', fontSize:'10px', fontWeight:'800', minWidth:'16px', height:'16px', display:'flex', alignItems:'center', justifyContent:'center', padding:'0 4px', flexShrink:0 }}>{crmOppfCount>99?'99+':crmOppfCount}</span>
+                      : <span style={{ position:'absolute', top:'6px', right:'6px', width:'8px', height:'8px', borderRadius:'999px', background:'#dc2626' }} />)}
                     {!collapsed && locked && kanBestilleModuler && <span style={{ fontSize: '10px', color: '#2563eb', fontStyle: 'italic', flexShrink: 0 }}>bestill her</span>}
                   </button>
                 )
