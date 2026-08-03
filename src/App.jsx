@@ -37555,9 +37555,11 @@ function CRMPage() {
 
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
-  if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
-  if (visOppgaver) return <MineOppgaver user={user} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
+  // Detaljsiden har forrang: klikk på en lead i assistent/oppgaver setter `selected`,
+  // og «Tilbake» derfra returnerer til undervisningen (som fortsatt er aktiv under).
   if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
+  if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
+  if (visOppgaver) return <MineOppgaver user={user} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -38314,7 +38316,7 @@ function crmFlett(mal, c) {
     .replace(/\{bransje\}/g, c.industry || '')
 }
 
-function KontaktAssistent({ user, kilder, kommuner, onBack }) {
+function KontaktAssistent({ user, kilder, kommuner, onOpenKunde, onBack }) {
   const alert = useAppAlert()
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   const [n, setN] = useState(20)
@@ -38452,7 +38454,9 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {leads.map(c=>(
-              <div key={c.id} style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap' }}>
+              <div key={c.id} onClick={()=>onOpenKunde&&onOpenKunde(c)} title="Åpne kundekort"
+                style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap', cursor:'pointer', transition:'background 0.12s' }}
+                onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
                 <div style={{ flex:'1 1 220px', minWidth:0 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
                     <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
@@ -38465,10 +38469,10 @@ function KontaktAssistent({ user, kilder, kommuner, onBack }) {
                     {c.industry&&<span>🏷️ {c.industry}</span>}
                   </div>
                 </div>
-                <div style={{ display:'flex', gap:'8px', flexShrink:0 }}>
-                  <button onClick={()=>setHurtig(c)} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️ Rediger</button>
-                  <button onClick={()=>apneMail(c)} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
-                  <button onClick={()=>markerSendt(c)} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
+                <div style={{ display:'flex', gap:'8px', flexShrink:0 }} onClick={e=>e.stopPropagation()}>
+                  <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️ Rediger</button>
+                  <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
+                  <button onClick={(e)=>{e.stopPropagation();markerSendt(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
                 </div>
               </div>
             ))}
@@ -38591,7 +38595,7 @@ function CRMHurtigRedigerModal({ customer, user, onClose, onSaved }) {
 }
 
 // «Mine oppgaver»: alle leads med neste_oppfolging satt, gruppert overdue / i dag / kommende (7 dager)
-function MineOppgaver({ user, onBack }) {
+function MineOppgaver({ user, onOpenKunde, onBack }) {
   const alert = useAppAlert()
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
   const [oppgaver, setOppgaver] = useState([])
@@ -38651,7 +38655,9 @@ function MineOppgaver({ user, onBack }) {
   const rad = (c, forfalt) => {
     const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
     return (
-      <div key={c.id} style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap' }}>
+      <div key={c.id} onClick={()=>onOpenKunde&&onOpenKunde(c)} title="Åpne kundekort"
+        style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap', cursor:'pointer', transition:'background 0.12s' }}
+        onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
         <div style={{ flex:'1 1 220px', minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
             <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{c.name}</span>
@@ -38666,11 +38672,11 @@ function MineOppgaver({ user, onBack }) {
           </div>
           {c.oppfolging_notat&&<div style={{ marginTop:'4px', fontSize:'12px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>}
         </div>
-        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap' }}>
-          <button onClick={()=>setHurtig(c)} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
-          <button onClick={()=>ring(c)} disabled={!c.phone} style={{ ...knapp, background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
-          <button onClick={()=>apneMail(c)} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
-          <button onClick={()=>fullfor(c)} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
+        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap' }} onClick={e=>e.stopPropagation()}>
+          <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
+          <button onClick={(e)=>{e.stopPropagation();ring(c)}} disabled={!c.phone} style={{ ...knapp, background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
+          <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
+          <button onClick={(e)=>{e.stopPropagation();fullfor(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
         </div>
       </div>
     )
