@@ -38430,11 +38430,11 @@ function KontaktAssistent({ user, kilder, kommuner, onOpenKunde, onBack }) {
               <button key={v} onClick={()=>setN(v)} style={{ padding:'8px 14px', border:'none', background: n===v?'#0f172a':'white', color: n===v?'white':'#64748b', fontWeight: n===v?'700':'500', fontSize:'13px', cursor:'pointer' }}>{v}</button>
             ))}
           </div>
-          <select value={kilde} onChange={e=>setKilde(e.target.value)} style={{ ...crmInp, maxWidth:'190px' }}>
+          <select value={kilde} onChange={e=>setKilde(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'190px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle kilder</option>
             {(kilder||[]).map(k=><option key={k} value={k}>{k}</option>)}
           </select>
-          <select value={kommune} onChange={e=>setKommune(e.target.value)} style={{ ...crmInp, maxWidth:'190px' }}>
+          <select value={kommune} onChange={e=>setKommune(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'190px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle kommuner</option>
             {(kommuner||[]).map(k=><option key={k} value={k}>{k}</option>)}
           </select>
@@ -38457,22 +38457,22 @@ function KontaktAssistent({ user, kilder, kommuner, onOpenKunde, onBack }) {
               <div key={c.id} onClick={()=>onOpenKunde&&onOpenKunde(c)} title="Åpne kundekort"
                 style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', alignItems:'center', gap:'16px', flexWrap:'wrap', cursor:'pointer', transition:'background 0.12s' }}
                 onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-                <div style={{ flex:'1 1 220px', minWidth:0 }}>
+                <div style={{ flex: mob?'1 1 100%':'1 1 220px', minWidth:0 }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
                     <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
                     {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
                     {c.city&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {c.city}</span>}
                   </div>
-                  <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+                  <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
                     {c.email ? <span>📧 {c.email}</span> : <span style={{ color:'#dc2626' }}>📧 mangler</span>}
                     {c.phone&&<span>📞 {c.phone}</span>}
                     {c.industry&&<span>🏷️ {c.industry}</span>}
                   </div>
                 </div>
-                <div style={{ display:'flex', gap:'8px', flexShrink:0 }} onClick={e=>e.stopPropagation()}>
-                  <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️ Rediger</button>
-                  <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
-                  <button onClick={(e)=>{e.stopPropagation();markerSendt(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
+                <div style={{ display:'flex', gap:'8px', flexShrink:0, width: mob?'100%':'auto', flexWrap: mob?'wrap':'nowrap' }} onClick={e=>e.stopPropagation()}>
+                  <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, flex: mob?'1 1 100%':'none', padding: mob?'12px 14px':'8px 12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️ Rediger</button>
+                  <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, flex: mob?'1 1 100%':'none', padding: mob?'12px 14px':'8px 12px', background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ Åpne e-post</button>
+                  <button onClick={(e)=>{e.stopPropagation();markerSendt(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, flex: mob?'1 1 100%':'none', padding: mob?'12px 14px':'8px 12px', background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Markér sendt'}</button>
                 </div>
               </div>
             ))}
@@ -38658,25 +38658,25 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
       <div key={c.id} onClick={()=>onOpenKunde&&onOpenKunde(c)} title="Åpne kundekort"
         style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap', cursor:'pointer', transition:'background 0.12s' }}
         onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-        <div style={{ flex:'1 1 220px', minWidth:0 }}>
+        <div style={{ flex: mob?'1 1 100%':'1 1 220px', minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
             <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{c.name}</span>
             {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
             <span style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#64748b' }}>📅 {c.neste_oppfolging}{c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}</span>
             {t&&<span style={{ fontSize:'11px', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'1px 8px', fontWeight:'700' }}>{t.emoji} {t.label}</span>}
           </div>
-          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b' }}>
+          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
             {c.city&&<span>📍 {c.city}</span>}
             {c.email&&<span>📧 {c.email}</span>}
             {c.phone&&<span>📞 {c.phone}</span>}
           </div>
           {c.oppfolging_notat&&<div style={{ marginTop:'4px', fontSize:'12px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>}
         </div>
-        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap' }} onClick={e=>e.stopPropagation()}>
-          <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
-          <button onClick={(e)=>{e.stopPropagation();ring(c)}} disabled={!c.phone} style={{ ...knapp, background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
-          <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
-          <button onClick={(e)=>{e.stopPropagation();fullfor(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
+        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap', width: mob?'100%':'auto' }} onClick={e=>e.stopPropagation()}>
+          <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
+          <button onClick={(e)=>{e.stopPropagation();ring(c)}} disabled={!c.phone} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
+          <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
+          <button onClick={(e)=>{e.stopPropagation();fullfor(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
         </div>
       </div>
     )
