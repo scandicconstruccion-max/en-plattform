@@ -2725,6 +2725,56 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
   )
 }
 
+// ─── KILDESPORING («Hvor fant du oss?») ──────────────────────────────────────
+// Kanaler (STEG 1). id lagres i user_profiles.kilde_kanal (stabil nøkkel),
+// label/ikon brukes i popup + kontrollpanel. Endre aldri id-ene i ettertid —
+// da mister historiske svar sin merkelapp i statistikken.
+const KILDE_KANALER = [
+  { id: 'kollega',      ikon: '👥', label: 'Tips / anbefaling fra kollega' },
+  { id: 'google',       ikon: '🔍', label: 'Google / søk' },
+  { id: 'ai',           ikon: '🤖', label: 'ChatGPT eller annen AI-assistent' },
+  { id: 'facebook',     ikon: '📘', label: 'Facebook' },
+  { id: 'instagram',    ikon: '📸', label: 'Instagram' },
+  { id: 'linkedin',     ikon: '💼', label: 'LinkedIn' },
+  { id: 'youtube',      ikon: '▶️', label: 'YouTube' },
+  { id: 'annonse_meta', ikon: '📢', label: 'Annonse på Facebook/Instagram' },
+  { id: 'epost',        ikon: '✉️', label: 'E-post fra En Plattform' },
+  { id: 'ringt',        ikon: '📞', label: 'Ringt av En Plattform' },
+  { id: 'fagpresse',    ikon: '📰', label: 'Artikkel i fagpresse (f.eks. Byggindustrien)' },
+  { id: 'invitert',     ikon: '🏢', label: 'Invitert av min egen bedrift' },
+  { id: 'annet',        ikon: '✏️', label: 'Annet' },
+]
+const KILDE_DAGENS_SYSTEM = ['Excel/papir', 'Fiken', 'Tripletex', 'Cordel', 'SmartDok', 'Svenn', 'Annet', 'Ingenting']
+const KILDE_HOVEDBEHOV = ['Kalkulasjon', 'Dokumentasjon/KS', 'Timelister', 'Faktura', 'Ressursplanlegging']
+const kildeKanalLabel = (id) => (KILDE_KANALER.find(k => k.id === id)?.label) || id || '—'
+
+// Fanger UTM/attribusjon ved FØRSTE landing i appen (kjøres én gang per økt).
+// Lagres i sessionStorage slik at svaret senere kan lagres sammen med kilde-valget,
+// selv om URL-parametrene er strippet bort etter navigasjon/reload.
+function fangKildeUtm() {
+  try {
+    if (typeof window === 'undefined') return
+    if (sessionStorage.getItem('ep_kilde_utm')) return
+    const p = new URLSearchParams(window.location.search || '')
+    const utm = {}
+    ;['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'gclid', 'fbclid'].forEach(k => {
+      const v = p.get(k); if (v) utm[k] = v
+    })
+    const ref = (typeof document !== 'undefined' && document.referrer) || ''
+    if (ref) utm.referrer = ref
+    sessionStorage.setItem('ep_kilde_utm', JSON.stringify(utm))
+  } catch (_) { /* stille — attribusjon skal aldri stoppe appen */ }
+}
+function lesKildeUtm() {
+  try { return JSON.parse(sessionStorage.getItem('ep_kilde_utm') || '{}') } catch (_) { return {} }
+}
+
+// Tur-sperre: mens denne er `true` skal Produktomvisning IKKE auto-starte
+// (og dermed ikke markere seg 'done' i localStorage). Settes true mens
+// kilde-popupen er åpen / ubesvart-sjekken pågår. Default false → alle andre
+// bruk av Produktomvisning (f.eks. anonym UE-portal) er upåvirket.
+const KildeGateContext = React.createContext(false)
+
 // ─── PRODUKTOMVISNING (guided tour / coach marks) ────────────────────────────
 // Gjenbrukbar motor: tar en liste med steg. Hvert steg peker (valgfritt) på et
 // element via data-tour="<key>", med tittel + tekst. Viser mørkt overlegg med
@@ -2733,6 +2783,7 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
 // på nytt ved å dispatche window-eventet `ep-tour:<tourKey>`.
 function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon = false }) {
   const { user } = useAuth()
+  const kildeGate = React.useContext(KildeGateContext)   // true = hold igjen auto-start (kilde-popup åpen/ubesvart)
   const [aktiv, setAktiv] = React.useState(false)
   const [idx, setIdx] = React.useState(0)
   const [rect, setRect] = React.useState(null)
@@ -2762,6 +2813,7 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
 
   React.useEffect(() => {
     if (!autoStart) return
+    if (kildeGate) return                                     // kilde-popup åpen/ubesvart → ikke start (og ikke marker 'done')
     if (!tillatAnon && (!user || !user.id)) return            // vent til ekte bruker er lastet (unngå 'anon'-nøkkel)
     let sett = false
     try { sett = localStorage.getItem(nokkel) === 'done' } catch (_) {}
@@ -2773,7 +2825,7 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
       try { localStorage.setItem(nokkel, 'done') } catch (_) {}
     }, 650)
     return () => clearTimeout(t)
-  }, [nokkel, autoStart, user])
+  }, [nokkel, autoStart, user, kildeGate])
 
   React.useEffect(() => {
     const start = () => { setIdx(0); setAktiv(true); setTick(x => x + 1) }
@@ -2845,6 +2897,189 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
         </div>
       </div>
     </>
+  )
+}
+
+// ─── KILDE-POPUP («Hvor fant du oss?») ───────────────────────────────────────
+// Tvungen popup ved innlogging når user_profiles.kilde_besvart_at IS NULL.
+// Kan IKKE lukkes i steg 1–2 (ingen X, ingen klikk-utenfor, ingen ESC).
+// Sikkerhetsventil: feiler lagringen, vis feil i kortet + «Lukk» og la brukeren
+// ut uansett (kilde_besvart_at forblir NULL → spørsmålet kommer igjen).
+// Z-index 200: over app-header (40) og vanlige modaler, under alert/confirm.
+function KildePopup({ user, onFerdig }) {
+  const [steg, setSteg] = React.useState(1)
+  const [kanal, setKanal] = React.useState(null)
+  const [fritekst, setFritekst] = React.useState('')
+  const [dagensSystem, setDagensSystem] = React.useState(null)
+  const [hovedbehov, setHovedbehov] = React.useState(null)
+  const [lagrer, setLagrer] = React.useState(false)
+  const [feil, setFeil] = React.useState(null)
+  const [isMob, setIsMob] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640)
+  React.useEffect(() => {
+    const onResize = () => setIsMob(window.innerWidth < 640)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const GRONN = '#059669'
+
+  const lagre = async () => {
+    setLagrer(true); setFeil(null)
+    try {
+      const patch = {
+        kilde_kanal: kanal,
+        kilde_fritekst: kanal === 'annet' ? (fritekst.trim() || null) : null,
+        kilde_dagens_system: dagensSystem || null,
+        kilde_hovedbehov: hovedbehov || null,
+        kilde_utm: lesKildeUtm(),
+        kilde_besvart_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('user_profiles').update(patch).eq('id', user.id)
+      if (error) throw error
+      setSteg(3)
+      setTimeout(() => onFerdig(true), 1500)
+    } catch (e) {
+      // SIKKERHETSVENTIL — aldri lås brukeren ute.
+      setFeil('Kunne ikke lagre svaret akkurat nå. Du kan lukke og fortsette — vi spør gjerne igjen senere.')
+      setLagrer(false)
+    }
+  }
+
+  const radLabelStil = { fontSize: '14px', fontWeight: '600', color: '#0f172a', lineHeight: 1.3 }
+  const seksjonTittel = { margin: '0 0 10px', fontSize: '13px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }
+
+  // Kompakt valgrad (gjenbrukt i steg 1 og 2)
+  const Valg = ({ valgt, onClick, ikon, tekst }) => (
+    <button type="button" onClick={onClick}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 13px',
+        border: `1.5px solid ${valgt ? GRONN : '#e2e8f0'}`, borderRadius: '12px',
+        background: valgt ? '#ecfdf5' : 'white', cursor: 'pointer', textAlign: 'left',
+        transition: 'border-color 0.12s, background 0.12s' }}>
+      {ikon && <span style={{ fontSize: '18px', flexShrink: 0, lineHeight: 1 }}>{ikon}</span>}
+      <span style={{ flex: 1, ...radLabelStil }}>{tekst}</span>
+      <span style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+        border: `2px solid ${valgt ? GRONN : '#cbd5e1'}`, background: valgt ? GRONN : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {valgt && <span style={{ color: 'white', fontSize: '11px', fontWeight: '900', lineHeight: 1 }}>✓</span>}
+      </span>
+    </button>
+  )
+
+  return createPortal(
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 200,
+        display: 'flex', alignItems: isMob ? 'flex-end' : 'center', justifyContent: 'center',
+        padding: isMob ? '0' : '20px', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: 'white', borderRadius: isMob ? '20px 20px 0 0' : '24px',
+        width: '100%', maxWidth: '460px', maxHeight: isMob ? '92vh' : '88vh',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+
+        {/* ── STEG 3: Takk ── */}
+        {steg === 3 ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
+            <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#ecfdf5',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+              <span style={{ fontSize: '38px', color: GRONN }}>✓</span>
+            </div>
+            <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: '800', color: '#0f172a' }}>Takk!</h2>
+            <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Det hjelper oss å bli bedre.</p>
+          </div>
+        ) : (
+        <>
+          {/* ── Header (fast) ── */}
+          <div style={{ flexShrink: 0, padding: isMob ? '18px 20px 12px' : '22px 26px 14px', borderBottom: '1px solid #f1f5f9' }}>
+            {isMob && <div style={{ width: '40px', height: '4px', background: '#e2e8f0', borderRadius: '2px', margin: '0 auto 14px' }} />}
+            <div style={{ fontSize: '12px', fontWeight: '800', color: GRONN, marginBottom: '4px' }}>{steg} / 2</div>
+            <h2 style={{ margin: 0, fontSize: isMob ? '18px' : '20px', fontWeight: '800', color: '#0f172a' }}>
+              {steg === 1 ? 'Hvor fant du oss?' : 'To korte spørsmål til'}
+            </h2>
+            <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+              {steg === 1
+                ? 'Hjelp oss å forstå hvordan folk finner En Plattform. Velg det som passer best.'
+                : 'Helt valgfritt — men det hjelper oss å lage riktig verktøy for dere.'}
+            </p>
+          </div>
+
+          {/* ── Body (scrollbar) ── */}
+          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+            padding: isMob ? '14px 20px' : '16px 26px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {steg === 1 && KILDE_KANALER.map(k => (
+              <React.Fragment key={k.id}>
+                <Valg valgt={kanal === k.id} onClick={() => setKanal(k.id)} ikon={k.ikon} tekst={k.label} />
+                {k.id === 'annet' && kanal === 'annet' && (
+                  <input autoFocus value={fritekst} onChange={e => setFritekst(e.target.value)}
+                    placeholder="Skriv gjerne hvor…" maxLength={200}
+                    style={{ width: '100%', padding: '11px 13px', border: '1.5px solid #cbd5e1', borderRadius: '12px',
+                      fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginTop: '-2px' }} />
+                )}
+              </React.Fragment>
+            ))}
+
+            {steg === 2 && (
+              <>
+                <div>
+                  <div style={seksjonTittel}>Hva bruker dere i dag?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {KILDE_DAGENS_SYSTEM.map(s => (
+                      <Valg key={s} valgt={dagensSystem === s} onClick={() => setDagensSystem(dagensSystem === s ? null : s)} tekst={s} />
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginTop: '14px' }}>
+                  <div style={seksjonTittel}>Hva vil dere først og fremst løse?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {KILDE_HOVEDBEHOV.map(s => (
+                      <Valg key={s} valgt={hovedbehov === s} onClick={() => setHovedbehov(hovedbehov === s ? null : s)} tekst={s} />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Footer (fast) ── */}
+          <div style={{ flexShrink: 0, padding: isMob ? '12px 20px calc(14px + env(safe-area-inset-bottom))' : '16px 26px 20px', borderTop: '1px solid #f1f5f9' }}>
+            {feil && (
+              <div style={{ marginBottom: '12px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: '10px', fontSize: '13px', color: '#991b1b', lineHeight: 1.5 }}>
+                ⚠️ {feil}
+              </div>
+            )}
+            {feil ? (
+              <button onClick={() => onFerdig(false)}
+                style={{ width: '100%', padding: '13px', background: '#0f172a', color: 'white', border: 'none',
+                  borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}>
+                Lukk
+              </button>
+            ) : steg === 1 ? (
+              <button onClick={() => setSteg(2)} disabled={!kanal}
+                style={{ width: '100%', padding: '13px', background: kanal ? GRONN : '#e2e8f0',
+                  color: kanal ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px',
+                  fontSize: '15px', fontWeight: '700', cursor: kanal ? 'pointer' : 'not-allowed' }}>
+                Send inn
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={lagre} disabled={lagrer}
+                  style={{ flex: 1, padding: '13px', background: 'white', color: '#475569', border: '1px solid #e2e8f0',
+                    borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: lagrer ? 'not-allowed' : 'pointer' }}>
+                  Hopp over
+                </button>
+                <button onClick={lagre} disabled={lagrer}
+                  style={{ flex: 1, padding: '13px', background: GRONN, color: 'white', border: 'none',
+                    borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: lagrer ? 'not-allowed' : 'pointer', opacity: lagrer ? 0.7 : 1 }}>
+                  {lagrer ? 'Lagrer…' : 'Fullfør'}
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+        )}
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -47347,6 +47582,11 @@ function SuperAdminPage() {
   const [mrrSnapshots, setMrrSnapshots] = useState([])
   const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
+  // Kildesporing («Hvor kommer brukerne fra»)
+  const [kildeStat, setKildeStat] = useState(null)      // [{ kilde_kanal, antall }] eller null (laster/feil)
+  const [kildeStatLaster, setKildeStatLaster] = useState(true)
+  const [kildePeriode, setKildePeriode] = useState('30') // '30' | '90' | 'alt'
+  const [kildeMap, setKildeMap] = useState({})          // id → { kanal, fritekst, dagens_system, hovedbehov, utm }
   const [isMobSA, setIsMobSA] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     const onResize = () => setIsMobSA(window.innerWidth < 640)
@@ -47357,6 +47597,28 @@ function SuperAdminPage() {
       window.removeEventListener('orientationchange', onResize)
     }
   }, [])
+
+  // Kildestatistikk — all telling skjer i SQL (RPC kilde_statistikk), aldri i JS.
+  useEffect(() => {
+    let aktiv = true
+    setKildeStatLaster(true)
+    const idag = new Date()
+    let p_fra = null
+    if (kildePeriode !== 'alt') {
+      const d = new Date(idag); d.setDate(d.getDate() - (kildePeriode === '90' ? 90 : 30))
+      p_fra = d.toISOString().split('T')[0]
+    }
+    const p_til = idag.toISOString().split('T')[0]
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.rpc('kilde_statistikk', { p_fra, p_til })
+        if (!aktiv) return
+        setKildeStat(error ? null : (data || []))
+      } catch (_) { if (aktiv) setKildeStat(null) }
+      finally { if (aktiv) setKildeStatLaster(false) }
+    })()
+    return () => { aktiv = false }
+  }, [kildePeriode])
 
   const savePayment = async (companyId, paymentDate) => {
     try {
@@ -47437,6 +47699,14 @@ function SuperAdminPage() {
       ])
       setCompanies(comp); setAllUsers(users); setNotifications(notifs)
 
+      // Per-bruker kildesvar (kryssbedrift, kun eier via SECURITY DEFINER-RPC).
+      // De nye kilde_*-kolonnene finnes ikke i admin_list_users, derfor egen RPC.
+      try {
+        const { data: kb } = await supabase.rpc('kilde_per_bruker')
+        const map = {}
+        ;(kb || []).forEach(r => { map[r.id] = r })
+        setKildeMap(map)
+      } catch (_) { /* ikke kritisk — visning degraderer pent */ }
 
       // Storage check — via admin-funksjon (kryssbedrift, kun eier)
       try {
@@ -47745,6 +48015,54 @@ function SuperAdminPage() {
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'4px' }}>
               <span style={{ fontSize:'12px', fontWeight:'800', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', whiteSpace:'nowrap' }}>📊 Nøkkeltall og analyse</span>
               <div style={{ flex:1, height:'1px', background:'#e2e8f0' }}/>
+            </div>
+
+            {/* Hvor kommer brukerne fra — kildesporing (aggregert i SQL) */}
+            <div style={saCard}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'14px' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', display:'flex', alignItems:'center', gap:'8px' }}>🌐 Hvor kommer brukerne fra</h3>
+                <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', padding:'3px', borderRadius:'10px' }}>
+                  {[['30','30 dager'],['90','90 dager'],['alt','Alt']].map(([id,label])=>(
+                    <button key={id} onClick={()=>setKildePeriode(id)}
+                      style={{ padding:'5px 12px', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700',
+                        background: kildePeriode===id ? 'white' : 'transparent', color: kildePeriode===id ? '#059669' : '#64748b',
+                        boxShadow: kildePeriode===id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              {kildeStatLaster ? (
+                <div style={{ fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>Laster …</div>
+              ) : !kildeStat ? (
+                <div style={{ fontSize:'13px', color:'#dc2626', padding:'8px 0' }}>Kunne ikke hente kildestatistikk.</div>
+              ) : kildeStat.length === 0 ? (
+                <div style={{ fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>Ingen kildesvar i denne perioden ennå.</div>
+              ) : (() => {
+                const total = kildeStat.reduce((s,r)=>s+Number(r.antall||0),0)
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>{total} svar totalt</div>
+                    {kildeStat.map(r=>{
+                      const antall = Number(r.antall||0)
+                      const pst = total>0 ? Math.round(antall/total*100) : 0
+                      const kanal = KILDE_KANALER.find(k=>k.id===r.kilde_kanal)
+                      return (
+                        <div key={r.kilde_kanal||'ukjent'} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                          <span style={{ fontSize:'16px', flexShrink:0, width:'20px', textAlign:'center' }}>{kanal?.ikon||'❓'}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', marginBottom:'3px' }}>
+                              <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{kildeKanalLabel(r.kilde_kanal)}</span>
+                              <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0 }}>{antall} <span style={{ color:'#94a3b8', fontWeight:'500' }}>· {pst}%</span></span>
+                            </div>
+                            <div style={{ height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                              <div style={{ height:'100%', width:`${pst}%`, background:'#059669', borderRadius:'3px' }}/>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Lagringsstatus */}
@@ -48219,6 +48537,32 @@ function SuperAdminPage() {
                           ))}
                         </div>
 
+                        {/* Hvor fant de oss — per bruker i bedriften (selvrapportert + UTM) */}
+                        {(() => {
+                          const cusers = allUsers.filter(u=>u.company_id===c.id).map(u=>({ u, k: kildeMap[u.id] })).filter(x=>x.k?.kilde_kanal)
+                          if (!cusers.length) return null
+                          return (
+                            <div style={{ marginBottom:'12px' }}>
+                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>HVOR FANT DE OSS</div>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                                {cusers.map(({u,k})=>{
+                                  const utm = k.kilde_utm||{}
+                                  const spor = [utm.utm_source,utm.utm_medium,utm.utm_campaign].filter(Boolean).join(' / ')
+                                  let ref=''
+                                  if (utm.referrer) { try { ref = new URL(utm.referrer).hostname.replace(/^www\./,'') } catch(_){ ref='henvisning' } }
+                                  return (
+                                    <div key={u.id} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px', display:'flex', flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
+                                      <span style={{ fontSize:'11px', color:'#64748b' }}>{u.full_name||u.email}:</span>
+                                      <span style={{ fontSize:'11px', fontWeight:'700', color:'#059669', background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'1px 6px' }}>{kildeKanalLabel(k.kilde_kanal)}{k.kilde_kanal==='annet'&&k.kilde_fritekst?`: ${k.kilde_fritekst}`:''}</span>
+                                      {(spor||ref) && <span title={JSON.stringify(utm)} style={{ fontSize:'10px', color:'#64748b', background:'#eef2f7', borderRadius:'6px', padding:'1px 6px' }}>UTM: {spor||ref}</span>}
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
                         {/* Betalingsstatus */}
                         {c.subscription_status==='active' && (
                           <div style={{ marginBottom:'12px' }}>
@@ -48369,6 +48713,20 @@ function SuperAdminPage() {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
                   <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
+                  {kildeMap[u.id]?.kilde_kanal && (
+                    <div style={{ marginTop:'4px', display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center' }}>
+                      <span title="Selvrapportert kilde" style={{ fontSize:'10px', fontWeight:'700', color:'#059669', background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'1px 6px' }}>
+                        {kildeKanalLabel(kildeMap[u.id].kilde_kanal)}{kildeMap[u.id].kilde_kanal==='annet' && kildeMap[u.id].kilde_fritekst ? `: ${kildeMap[u.id].kilde_fritekst}` : ''}
+                      </span>
+                      {(() => {
+                        const utm = kildeMap[u.id].kilde_utm || {}
+                        const spor = [utm.utm_source, utm.utm_medium, utm.utm_campaign].filter(Boolean).join(' / ')
+                        let vis = spor
+                        if (!vis && utm.referrer) { try { vis = new URL(utm.referrer).hostname.replace(/^www\./,'') } catch (_) { vis = 'henvisning' } }
+                        return vis ? <span title={JSON.stringify(utm)} style={{ fontSize:'10px', color:'#64748b', background:'#f1f5f9', borderRadius:'6px', padding:'1px 6px' }}>UTM: {vis}</span> : null
+                      })()}
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right' }}>
                   {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
@@ -75598,6 +75956,31 @@ function AppContent() {
   const [hoverTip, setHoverTip] = useState(null) // { label, top } | null
   const visSidebarTip = (e, label) => setHoverTip({ label, top: e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 })
   const skjulSidebarTip = () => setHoverTip(null)
+
+  // ── Kilde-popup («Hvor fant du oss?») ──
+  // Fanger UTM ved første landing, og sjekker lettvekts om kilde er besvart.
+  // FAIL OPEN: feiler lesingen, vises IKKE popupen — markedsføring skal aldri
+  // kunne stoppe innlogging. Plattformeier holdes helt utenfor.
+  const [kildeSjekket, setKildeSjekket] = useState(false)
+  const [kildePopupVises, setKildePopupVises] = useState(false)
+  React.useEffect(() => { fangKildeUtm() }, [])
+  React.useEffect(() => {
+    if (!user) { setKildeSjekket(false); setKildePopupVises(false); return }
+    if (isPlatformOwner) { setKildeSjekket(true); setKildePopupVises(false); return }
+    let aktiv = true
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.from('user_profiles').select('kilde_besvart_at').eq('id', user.id).maybeSingle()
+        if (!aktiv) return
+        if (!error && data && !data.kilde_besvart_at) setKildePopupVises(true)
+      } catch (_) { /* fail open — ikke vis popup */ }
+      finally { if (aktiv) setKildeSjekket(true) }
+    })()
+    return () => { aktiv = false }
+  }, [user, isPlatformOwner])
+  // Tur-sperre: hold tilbake auto-start av omvisning til kilde-sjekken er ferdig
+  // OG popupen (hvis den vises) er unmountet. Eier er aldri sperret.
+  const kildeGateAktiv = !isPlatformOwner && (!kildeSjekket || kildePopupVises)
   // Registrer service worker (PWA + pushvarsler). Idempotent — trygt å kalle ved hver oppstart.
   React.useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -76110,6 +76493,10 @@ function AppContent() {
   const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer' && page !== 'superadmin' && page !== 'crm'
 
   return (
+    <KildeGateContext.Provider value={kildeGateAktiv}>
+    {kildePopupVises && user && !isPlatformOwner && (
+      <KildePopup user={user} onFerdig={() => setKildePopupVises(false)} />
+    )}
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', '--sidebar-width': sidebarWidth + 'px' }}>
 
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
@@ -76567,6 +76954,7 @@ function AppContent() {
         </>)}
       </main>
     </div>
+    </KildeGateContext.Provider>
   )
 }
 
