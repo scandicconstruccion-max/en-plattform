@@ -2748,25 +2748,35 @@ const KILDE_DAGENS_SYSTEM = ['Excel/papir', 'Fiken', 'Tripletex', 'Cordel', 'Sma
 const KILDE_HOVEDBEHOV = ['Kalkulasjon', 'Dokumentasjon/KS', 'Timelister', 'Faktura', 'Ressursplanlegging']
 const kildeKanalLabel = (id) => (KILDE_KANALER.find(k => k.id === id)?.label) || id || '—'
 
-// Fanger UTM/attribusjon ved FØRSTE landing i appen (kjøres én gang per økt).
-// Lagres i sessionStorage slik at svaret senere kan lagres sammen med kilde-valget,
-// selv om URL-parametrene er strippet bort etter navigasjon/reload.
+// Fanger UTM/attribusjon ved landing i appen. Lagres i localStorage (ikke
+// sessionStorage) — e-postbekreftelseslenken åpnes ofte i ny fane, og
+// sessionStorage dør med fanen. Da mistet vi UTM på nettopp kampanje-brukerne.
+// Skriver KUN når det faktisk finnes UTM-parametre eller (ekstern) referrer, så
+// vi ikke overskriver en ekte kampanjekilde med tomhet ved intern reload.
+// Nye parametre overskriver gammel verdi. Nøkkelen slettes etter vellykket lagring.
+const EP_KILDE_UTM_KEY = 'ep_kilde_utm'
 function fangKildeUtm() {
   try {
     if (typeof window === 'undefined') return
-    if (sessionStorage.getItem('ep_kilde_utm')) return
     const p = new URLSearchParams(window.location.search || '')
     const utm = {}
     ;['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'gclid', 'fbclid'].forEach(k => {
       const v = p.get(k); if (v) utm[k] = v
     })
+    // Kun ekstern henvisning teller — same-origin (intern navigasjon/reload) er støy.
     const ref = (typeof document !== 'undefined' && document.referrer) || ''
-    if (ref) utm.referrer = ref
-    sessionStorage.setItem('ep_kilde_utm', JSON.stringify(utm))
+    if (ref) {
+      try { if (new URL(ref).host !== window.location.host) utm.referrer = ref } catch (_) {}
+    }
+    if (Object.keys(utm).length === 0) return   // ingenting å lagre → ikke rør eksisterende
+    localStorage.setItem(EP_KILDE_UTM_KEY, JSON.stringify(utm))
   } catch (_) { /* stille — attribusjon skal aldri stoppe appen */ }
 }
 function lesKildeUtm() {
-  try { return JSON.parse(sessionStorage.getItem('ep_kilde_utm') || '{}') } catch (_) { return {} }
+  try { return JSON.parse(localStorage.getItem(EP_KILDE_UTM_KEY) || '{}') } catch (_) { return {} }
+}
+function slettKildeUtm() {
+  try { localStorage.removeItem(EP_KILDE_UTM_KEY) } catch (_) {}
 }
 
 // Tur-sperre: mens denne er `true` skal Produktomvisning IKKE auto-starte
@@ -2774,6 +2784,71 @@ function lesKildeUtm() {
 // kilde-popupen er åpen / ubesvart-sjekken pågår. Default false → alle andre
 // bruk av Produktomvisning (f.eks. anonym UE-portal) er upåvirket.
 const KildeGateContext = React.createContext(false)
+
+// ─── KILDE-BRUKERDETALJ (delt komponent — Brukere-fanen + Kunder-detaljen) ────
+// Viser ett brukers kildesvar gruppert. `kilde` = rad fra kilde_per_bruker-RPC,
+// eller null/undefined = ikke besvart. Tre tilstander skilles tydelig.
+function KildeBrukerDetalj({ bruker, kilde, bedriftsnavn }) {
+  const fmtDato = (d) => { try { return d ? new Date(d).toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—' } catch (_) { return '—' } }
+  const Felt = ({ etikett, verdi }) => (
+    <div style={{ display: 'flex', gap: '10px', padding: '3px 0', fontSize: '13px', lineHeight: 1.4 }}>
+      <span style={{ color: '#94a3b8', minWidth: '116px', flexShrink: 0 }}>{etikett}</span>
+      <span style={{ color: '#0f172a', fontWeight: '600', wordBreak: 'break-word', minWidth: 0 }}>{verdi}</span>
+    </div>
+  )
+  const Seksjon = ({ children }) => (
+    <div style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '14px 0 5px' }}>{children}</div>
+  )
+  const merkelapp = { display: 'inline-block', fontSize: '12px', fontWeight: '700', color: '#059669', background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '3px 10px' }
+  const notat = { fontSize: '13px', color: '#94a3b8', fontStyle: 'italic', padding: '3px 0' }
+
+  const besvart = !!(kilde && kilde.kilde_besvart_at)
+  const utm = (kilde && kilde.kilde_utm) || {}
+  const utmFelt = [
+    ['utm_source', utm.utm_source], ['utm_medium', utm.utm_medium], ['utm_campaign', utm.utm_campaign],
+    ['utm_content', utm.utm_content], ['gclid', utm.gclid], ['fbclid', utm.fbclid], ['referrer', utm.referrer],
+  ].filter(([, v]) => v)
+  const hoppetOverSteg2 = besvart && !kilde.kilde_dagens_system && !kilde.kilde_hovedbehov
+
+  return (
+    <div>
+      <Seksjon>Bruker</Seksjon>
+      <Felt etikett="Navn" verdi={bruker?.full_name || '—'} />
+      <Felt etikett="E-post" verdi={bruker?.email || '—'} />
+      <Felt etikett="Rolle" verdi={bruker?.role || '—'} />
+      <Felt etikett="Bedrift" verdi={bedriftsnavn || '—'} />
+      <Felt etikett="Registrert" verdi={fmtDato(bruker?.created_at)} />
+
+      {!besvart ? (
+        <div style={{ marginTop: '12px', padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', fontSize: '13px', color: '#92400e', fontWeight: '600' }}>
+          ⏳ Ikke besvart ennå
+        </div>
+      ) : (
+        <>
+          <Seksjon>Hvor fant de oss</Seksjon>
+          <div style={{ padding: '3px 0' }}><span style={merkelapp}>{kildeKanalLabel(kilde.kilde_kanal)}</span></div>
+          {kilde.kilde_kanal === 'annet' && kilde.kilde_fritekst && <Felt etikett="Utdyping" verdi={kilde.kilde_fritekst} />}
+          <Felt etikett="Besvart" verdi={fmtDato(kilde.kilde_besvart_at)} />
+
+          <Seksjon>Bakgrunn (steg 2)</Seksjon>
+          {hoppetOverSteg2 ? (
+            <div style={notat}>Besvart — hoppet over steg 2</div>
+          ) : (
+            <>
+              <Felt etikett="Bruker i dag" verdi={kilde.kilde_dagens_system || '—'} />
+              <Felt etikett="Vil løse først" verdi={kilde.kilde_hovedbehov || '—'} />
+            </>
+          )}
+
+          <Seksjon>Teknisk kilde</Seksjon>
+          {utmFelt.length === 0
+            ? <div style={notat}>Ingen teknisk kilde registrert</div>
+            : utmFelt.map(([k, v]) => <Felt key={k} etikett={k} verdi={v} />)}
+        </>
+      )}
+    </div>
+  )
+}
 
 // ─── PRODUKTOMVISNING (guided tour / coach marks) ────────────────────────────
 // Gjenbrukbar motor: tar en liste med steg. Hvert steg peker (valgfritt) på et
@@ -2922,26 +2997,43 @@ function KildePopup({ user, onFerdig }) {
   }, [])
   const GRONN = '#059669'
 
-  const lagre = async () => {
+  // STEG 1 — obligatorisk svar. Lagrer kanal + fritekst + UTM + besvart_at i ÉN
+  // skriving. Feiler den: sikkerhetsventil (rød linje i kortet), ingen useAppAlert.
+  const lagreSteg1 = async () => {
     setLagrer(true); setFeil(null)
     try {
       const patch = {
         kilde_kanal: kanal,
         kilde_fritekst: kanal === 'annet' ? (fritekst.trim() || null) : null,
-        kilde_dagens_system: dagensSystem || null,
-        kilde_hovedbehov: hovedbehov || null,
         kilde_utm: lesKildeUtm(),
         kilde_besvart_at: new Date().toISOString(),
       }
       const { error } = await supabase.from('user_profiles').update(patch).eq('id', user.id)
       if (error) throw error
-      setSteg(3)
-      setTimeout(() => onFerdig(true), 1500)
+      slettKildeUtm()            // brukt opp — neste registrering i samme nettleser skal ikke arve
+      setLagrer(false)
+      setSteg(2)
     } catch (e) {
       // SIKKERHETSVENTIL — aldri lås brukeren ute.
       setFeil('Kunne ikke lagre svaret akkurat nå. Du kan lukke og fortsette — vi spør gjerne igjen senere.')
       setLagrer(false)
     }
+  }
+
+  // STEG 2 — valgfritt. Egen skriving for dagens system + hovedbehov. Det
+  // obligatoriske svaret er allerede lagret i steg 1, så en feil her ignoreres
+  // stille og popupen lukkes normalt.
+  const lagreSteg2 = async () => {
+    setLagrer(true)
+    try {
+      await supabase.from('user_profiles').update({
+        kilde_dagens_system: dagensSystem || null,
+        kilde_hovedbehov: hovedbehov || null,
+      }).eq('id', user.id)
+    } catch (_) { /* stille — steg 2 er valgfritt */ }
+    setLagrer(false)
+    setSteg(3)
+    setTimeout(() => onFerdig(true), 1500)
   }
 
   const radLabelStil = { fontSize: '14px', fontWeight: '600', color: '#0f172a', lineHeight: 1.3 }
@@ -3054,20 +3146,20 @@ function KildePopup({ user, onFerdig }) {
                 Lukk
               </button>
             ) : steg === 1 ? (
-              <button onClick={() => setSteg(2)} disabled={!kanal}
-                style={{ width: '100%', padding: '13px', background: kanal ? GRONN : '#e2e8f0',
-                  color: kanal ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px',
-                  fontSize: '15px', fontWeight: '700', cursor: kanal ? 'pointer' : 'not-allowed' }}>
-                Send inn
+              <button onClick={lagreSteg1} disabled={!kanal || lagrer}
+                style={{ width: '100%', padding: '13px', background: (kanal && !lagrer) ? GRONN : '#e2e8f0',
+                  color: (kanal && !lagrer) ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px',
+                  fontSize: '15px', fontWeight: '700', cursor: (kanal && !lagrer) ? 'pointer' : 'not-allowed' }}>
+                {lagrer ? 'Lagrer…' : 'Send inn'}
               </button>
             ) : (
               <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={lagre} disabled={lagrer}
+                <button onClick={lagreSteg2} disabled={lagrer}
                   style={{ flex: 1, padding: '13px', background: 'white', color: '#475569', border: '1px solid #e2e8f0',
                     borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: lagrer ? 'not-allowed' : 'pointer' }}>
                   Hopp over
                 </button>
-                <button onClick={lagre} disabled={lagrer}
+                <button onClick={lagreSteg2} disabled={lagrer}
                   style={{ flex: 1, padding: '13px', background: GRONN, color: 'white', border: 'none',
                     borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: lagrer ? 'not-allowed' : 'pointer', opacity: lagrer ? 0.7 : 1 }}>
                   {lagrer ? 'Lagrer…' : 'Fullfør'}
@@ -47586,7 +47678,13 @@ function SuperAdminPage() {
   const [kildeStat, setKildeStat] = useState(null)      // [{ kilde_kanal, antall }] eller null (laster/feil)
   const [kildeStatLaster, setKildeStatLaster] = useState(true)
   const [kildePeriode, setKildePeriode] = useState('30') // '30' | '90' | 'alt'
-  const [kildeMap, setKildeMap] = useState({})          // id → { kanal, fritekst, dagens_system, hovedbehov, utm }
+  // Kilde hentes ON-DEMAND (ved rad-/bedrifts-ekspansjon), aldri i bulk ved
+  // fane-lasting — unngår 1000-radersgrensen. kildeCache: id→rad (kun besvarte);
+  // kildeHentet: id-er vi har avklart (ikke i cache = ikke besvart).
+  const [selectedUser, setSelectedUser] = useState(null)
+  const [kildeCache, setKildeCache] = useState({})
+  const [kildeHentet, setKildeHentet] = useState(() => new Set())
+  const [kildeLasterId, setKildeLasterId] = useState(null)
   const [isMobSA, setIsMobSA] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     const onResize = () => setIsMobSA(window.innerWidth < 640)
@@ -47619,6 +47717,34 @@ function SuperAdminPage() {
     })()
     return () => { aktiv = false }
   }, [kildePeriode])
+
+  // Hent én brukers kildesvar (ved rad-ekspansjon i Brukere-fanen).
+  const hentBrukerKilde = async (userId) => {
+    if (!userId || kildeHentet.has(userId)) return
+    setKildeLasterId(userId)
+    try {
+      const { data } = await supabase.rpc('kilde_per_bruker', { p_user_id: userId })
+      const rad = Array.isArray(data) ? data[0] : data
+      if (rad) setKildeCache(m => ({ ...m, [userId]: rad }))
+    } catch (_) { /* degraderer til «ikke besvart» */ }
+    finally {
+      setKildeHentet(s => new Set(s).add(userId))
+      setKildeLasterId(id => id === userId ? null : id)
+    }
+  }
+
+  // Hent kildesvar for alle brukere i én bedrift (ved bedrifts-ekspansjon).
+  const hentBedriftKilder = async (companyId, brukerIds) => {
+    if (!companyId) return
+    try {
+      const { data } = await supabase.rpc('kilde_per_bruker', { p_company_id: companyId })
+      const rader = data || []
+      if (rader.length) setKildeCache(m => { const n = { ...m }; rader.forEach(r => { n[r.id] = r }); return n })
+    } catch (_) { /* degraderer til «ikke besvart» */ }
+    finally {
+      setKildeHentet(s => { const n = new Set(s); (brukerIds || []).forEach(id => n.add(id)); return n })
+    }
+  }
 
   const savePayment = async (companyId, paymentDate) => {
     try {
@@ -47676,12 +47802,25 @@ function SuperAdminPage() {
     finally { setSavingNote(false) }
   }
 
-  const exportCSV = () => {
-    const headers = ['Bedrift','Status','E-post','Telefon','Org.nr','Brukere','Moduler','MRR','Registrert','Trial slutt','Notater']
+  const exportCSV = async () => {
+    // Kildesvar pr. bedrift = REGISTRANTENS svar (den som opprettet bedriften),
+    // pluss antall brukere i bedriften som har besvart. Aggregert i SQL.
+    const kildeByComp = {}
+    try {
+      const { data: kb } = await supabase.rpc('kilde_per_bedrift')
+      ;(kb || []).forEach(r => { kildeByComp[r.company_id] = r })
+    } catch (_) { /* CSV leveres uansett — kilde-kolonnene blir tomme */ }
+    const clean = (v) => (''+(v==null?'':v)).replace(/[\n\r"]/g,' ')
+    const headers = ['Bedrift','Status','E-post','Telefon','Org.nr','Brukere','Moduler','MRR','Registrert','Trial slutt','Notater',
+      'Kilde kanal','Kilde utdyping','Bruker i dag','Vil løse først','utm_source','utm_medium','utm_campaign','referrer','Antall besvart']
     const rows = companies.map(c => {
       const mods = c.active_modules||[]
       const mrr = c.subscription_status==='active' ? Math.round(beregnBedriftMrr(c, allUsers)) : 0
-      return [c.name||'', c.subscription_status||'', c.email||'', c.phone||'', c.org_number||'', c.num_users||1, mods.join('; '), mrr, c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'', c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'', (c.admin_notes||'').replace(/[\n,]/g,' ')]
+      const k = kildeByComp[c.id] || {}
+      const utm = k.kilde_utm || {}
+      return [c.name||'', c.subscription_status||'', c.email||'', c.phone||'', c.org_number||'', c.num_users||1, mods.join('; '), mrr, c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'', c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'', (c.admin_notes||'').replace(/[\n,]/g,' '),
+        k.kilde_kanal?kildeKanalLabel(k.kilde_kanal):'', clean(k.kilde_fritekst), clean(k.kilde_dagens_system), clean(k.kilde_hovedbehov),
+        clean(utm.utm_source), clean(utm.utm_medium), clean(utm.utm_campaign), clean(utm.referrer), k.antall_besvart!=null?k.antall_besvart:'']
     })
     const csv = [headers.join(','), ...rows.map(r=>r.map(v=>'"'+v+'"').join(','))].join('\n')
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'})
@@ -47699,14 +47838,7 @@ function SuperAdminPage() {
       ])
       setCompanies(comp); setAllUsers(users); setNotifications(notifs)
 
-      // Per-bruker kildesvar (kryssbedrift, kun eier via SECURITY DEFINER-RPC).
-      // De nye kilde_*-kolonnene finnes ikke i admin_list_users, derfor egen RPC.
-      try {
-        const { data: kb } = await supabase.rpc('kilde_per_bruker')
-        const map = {}
-        ;(kb || []).forEach(r => { map[r.id] = r })
-        setKildeMap(map)
-      } catch (_) { /* ikke kritisk — visning degraderer pent */ }
+      // (Kildesvar hentes on-demand ved ekspansjon — se hentBrukerKilde/hentBedriftKilder.)
 
       // Storage check — via admin-funksjon (kryssbedrift, kun eier)
       try {
@@ -48489,7 +48621,7 @@ function SuperAdminPage() {
                 const mrr = beregnBedriftMrr(c, allUsers)
                 return (
                   <div key={c.id} style={{ ...saCard, cursor:'pointer' }}
-                    onClick={()=>setSelectedCompany(selectedCompany?.id===c.id?null:c)}>
+                    onClick={()=>{ const skalApne = selectedCompany?.id!==c.id; setSelectedCompany(skalApne?c:null); if (skalApne) hentBedriftKilder(c.id, allUsers.filter(x=>x.company_id===c.id).map(x=>x.id)) }}>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap: isMobSA ? '8px' : '12px', flexWrap:'wrap' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
                         <div style={{ width: isMobSA ? '36px' : '40px', height: isMobSA ? '36px' : '40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobSA ? '14px' : '16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
@@ -48537,27 +48669,21 @@ function SuperAdminPage() {
                           ))}
                         </div>
 
-                        {/* Hvor fant de oss — per bruker i bedriften (selvrapportert + UTM) */}
+                        {/* Kilde per bruker i bedriften — samme delte komponent som Brukere-fanen */}
                         {(() => {
-                          const cusers = allUsers.filter(u=>u.company_id===c.id).map(u=>({ u, k: kildeMap[u.id] })).filter(x=>x.k?.kilde_kanal)
+                          const cusers = allUsers.filter(u=>u.company_id===c.id)
                           if (!cusers.length) return null
                           return (
                             <div style={{ marginBottom:'12px' }}>
-                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>HVOR FANT DE OSS</div>
-                              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
-                                {cusers.map(({u,k})=>{
-                                  const utm = k.kilde_utm||{}
-                                  const spor = [utm.utm_source,utm.utm_medium,utm.utm_campaign].filter(Boolean).join(' / ')
-                                  let ref=''
-                                  if (utm.referrer) { try { ref = new URL(utm.referrer).hostname.replace(/^www\./,'') } catch(_){ ref='henvisning' } }
-                                  return (
-                                    <div key={u.id} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px', display:'flex', flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
-                                      <span style={{ fontSize:'11px', color:'#64748b' }}>{u.full_name||u.email}:</span>
-                                      <span style={{ fontSize:'11px', fontWeight:'700', color:'#059669', background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'1px 6px' }}>{kildeKanalLabel(k.kilde_kanal)}{k.kilde_kanal==='annet'&&k.kilde_fritekst?`: ${k.kilde_fritekst}`:''}</span>
-                                      {(spor||ref) && <span title={JSON.stringify(utm)} style={{ fontSize:'10px', color:'#64748b', background:'#eef2f7', borderRadius:'6px', padding:'1px 6px' }}>UTM: {spor||ref}</span>}
-                                    </div>
-                                  )
-                                })}
+                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'8px' }}>KILDE PER BRUKER</div>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                                {cusers.map(u=>(
+                                  <div key={u.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', border:'1px solid #f1f5f9' }}>
+                                    {kildeHentet.has(u.id)
+                                      ? <KildeBrukerDetalj bruker={u} kilde={kildeCache[u.id]} bedriftsnavn={c.name} />
+                                      : <div style={{ fontSize:'13px', color:'#94a3b8', padding:'4px 0' }}>Laster …</div>}
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           )
@@ -48707,32 +48833,34 @@ function SuperAdminPage() {
         {tab==='brukere' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>{allUsers.length} brukere totalt</div>
-            {allUsers.map(u=>(
-              <div key={u.id} style={{ ...saCard, padding: isMobSA ? '10px 12px' : '12px 16px', display:'flex', alignItems:'center', gap: isMobSA ? '10px' : '12px' }}>
-                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
-                  <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
-                  {kildeMap[u.id]?.kilde_kanal && (
-                    <div style={{ marginTop:'4px', display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center' }}>
-                      <span title="Selvrapportert kilde" style={{ fontSize:'10px', fontWeight:'700', color:'#059669', background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'1px 6px' }}>
-                        {kildeKanalLabel(kildeMap[u.id].kilde_kanal)}{kildeMap[u.id].kilde_kanal==='annet' && kildeMap[u.id].kilde_fritekst ? `: ${kildeMap[u.id].kilde_fritekst}` : ''}
-                      </span>
-                      {(() => {
-                        const utm = kildeMap[u.id].kilde_utm || {}
-                        const spor = [utm.utm_source, utm.utm_medium, utm.utm_campaign].filter(Boolean).join(' / ')
-                        let vis = spor
-                        if (!vis && utm.referrer) { try { vis = new URL(utm.referrer).hostname.replace(/^www\./,'') } catch (_) { vis = 'henvisning' } }
-                        return vis ? <span title={JSON.stringify(utm)} style={{ fontSize:'10px', color:'#64748b', background:'#f1f5f9', borderRadius:'6px', padding:'1px 6px' }}>UTM: {vis}</span> : null
-                      })()}
-                    </div>
-                  )}
+            {allUsers.map(u=>{
+              const apen = selectedUser===u.id
+              const avklart = kildeHentet.has(u.id)
+              const bedrift = companies.find(c=>c.id===u.company_id)?.name
+              return (
+              <div key={u.id} style={{ ...saCard, padding: isMobSA ? '10px 12px' : '12px 16px', cursor:'pointer' }}
+                onClick={()=>{ const neste = apen?null:u.id; setSelectedUser(neste); if (neste) hentBrukerKilde(u.id) }}>
+                <div style={{ display:'flex', alignItems:'center', gap: isMobSA ? '10px' : '12px' }}>
+                  <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
+                    <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right', display:'flex', alignItems:'center', gap:'8px' }}>
+                    <span>{u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}</span>
+                    <span style={{ color:'#cbd5e1', fontSize:'13px' }}>{apen?'▾':'▸'}</span>
+                  </div>
                 </div>
-                <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right' }}>
-                  {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
-                </div>
+                {apen && (
+                  <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid #f1f5f9' }} onClick={e=>e.stopPropagation()}>
+                    {avklart
+                      ? <KildeBrukerDetalj bruker={u} kilde={kildeCache[u.id]} bedriftsnavn={bedrift} />
+                      : <div style={{ fontSize:'13px', color:'#94a3b8', padding:'4px 0' }}>Laster …</div>}
+                  </div>
+                )}
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
