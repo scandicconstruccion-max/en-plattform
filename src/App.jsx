@@ -2725,131 +2725,6 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
   )
 }
 
-// ─── KILDESPORING («Hvor fant du oss?») ──────────────────────────────────────
-// Kanaler (STEG 1). id lagres i user_profiles.kilde_kanal (stabil nøkkel),
-// label/ikon brukes i popup + kontrollpanel. Endre aldri id-ene i ettertid —
-// da mister historiske svar sin merkelapp i statistikken.
-const KILDE_KANALER = [
-  { id: 'kollega',      ikon: '👥', label: 'Tips / anbefaling fra kollega' },
-  { id: 'google',       ikon: '🔍', label: 'Google / søk' },
-  { id: 'ai',           ikon: '🤖', label: 'ChatGPT eller annen AI-assistent' },
-  { id: 'facebook',     ikon: '📘', label: 'Facebook' },
-  { id: 'instagram',    ikon: '📸', label: 'Instagram' },
-  { id: 'linkedin',     ikon: '💼', label: 'LinkedIn' },
-  { id: 'youtube',      ikon: '▶️', label: 'YouTube' },
-  { id: 'annonse_meta', ikon: '📢', label: 'Annonse på Facebook/Instagram' },
-  { id: 'epost',        ikon: '✉️', label: 'E-post fra En Plattform' },
-  { id: 'ringt',        ikon: '📞', label: 'Ringt av En Plattform' },
-  { id: 'fagpresse',    ikon: '📰', label: 'Artikkel i fagpresse (f.eks. Byggindustrien)' },
-  { id: 'invitert',     ikon: '🏢', label: 'Invitert av min egen bedrift' },
-  { id: 'annet',        ikon: '✏️', label: 'Annet' },
-]
-const KILDE_DAGENS_SYSTEM = ['Excel/papir', 'Fiken', 'Tripletex', 'Cordel', 'SmartDok', 'Svenn', 'Annet', 'Ingenting']
-const KILDE_HOVEDBEHOV = ['Kalkulasjon', 'Dokumentasjon/KS', 'Timelister', 'Faktura', 'Ressursplanlegging']
-const kildeKanalLabel = (id) => (KILDE_KANALER.find(k => k.id === id)?.label) || id || '—'
-
-// Fanger UTM/attribusjon ved landing i appen. Lagres i localStorage (ikke
-// sessionStorage) — e-postbekreftelseslenken åpnes ofte i ny fane, og
-// sessionStorage dør med fanen. Da mistet vi UTM på nettopp kampanje-brukerne.
-// Skriver KUN når det faktisk finnes UTM-parametre eller (ekstern) referrer, så
-// vi ikke overskriver en ekte kampanjekilde med tomhet ved intern reload.
-// Nye parametre overskriver gammel verdi. Nøkkelen slettes etter vellykket lagring.
-const EP_KILDE_UTM_KEY = 'ep_kilde_utm'
-function fangKildeUtm() {
-  try {
-    if (typeof window === 'undefined') return
-    const p = new URLSearchParams(window.location.search || '')
-    const utm = {}
-    ;['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'gclid', 'fbclid'].forEach(k => {
-      const v = p.get(k); if (v) utm[k] = v
-    })
-    // Kun ekstern henvisning teller — same-origin (intern navigasjon/reload) er støy.
-    const ref = (typeof document !== 'undefined' && document.referrer) || ''
-    if (ref) {
-      try { if (new URL(ref).host !== window.location.host) utm.referrer = ref } catch (_) {}
-    }
-    if (Object.keys(utm).length === 0) return   // ingenting å lagre → ikke rør eksisterende
-    localStorage.setItem(EP_KILDE_UTM_KEY, JSON.stringify(utm))
-  } catch (_) { /* stille — attribusjon skal aldri stoppe appen */ }
-}
-function lesKildeUtm() {
-  try { return JSON.parse(localStorage.getItem(EP_KILDE_UTM_KEY) || '{}') } catch (_) { return {} }
-}
-function slettKildeUtm() {
-  try { localStorage.removeItem(EP_KILDE_UTM_KEY) } catch (_) {}
-}
-
-// Tur-sperre: mens denne er `true` skal Produktomvisning IKKE auto-starte
-// (og dermed ikke markere seg 'done' i localStorage). Settes true mens
-// kilde-popupen er åpen / ubesvart-sjekken pågår. Default false → alle andre
-// bruk av Produktomvisning (f.eks. anonym UE-portal) er upåvirket.
-const KildeGateContext = React.createContext(false)
-
-// ─── KILDE-BRUKERDETALJ (delt komponent — Brukere-fanen + Kunder-detaljen) ────
-// Viser ett brukers kildesvar gruppert. `kilde` = rad fra kilde_per_bruker-RPC,
-// eller null/undefined = ikke besvart. Tre tilstander skilles tydelig.
-function KildeBrukerDetalj({ bruker, kilde, bedriftsnavn }) {
-  const fmtDato = (d) => { try { return d ? new Date(d).toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—' } catch (_) { return '—' } }
-  const Felt = ({ etikett, verdi }) => (
-    <div style={{ display: 'flex', gap: '10px', padding: '3px 0', fontSize: '13px', lineHeight: 1.4 }}>
-      <span style={{ color: '#94a3b8', minWidth: '116px', flexShrink: 0 }}>{etikett}</span>
-      <span style={{ color: '#0f172a', fontWeight: '600', wordBreak: 'break-word', minWidth: 0 }}>{verdi}</span>
-    </div>
-  )
-  const Seksjon = ({ children }) => (
-    <div style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px', margin: '14px 0 5px' }}>{children}</div>
-  )
-  const merkelapp = { display: 'inline-block', fontSize: '12px', fontWeight: '700', color: '#059669', background: '#ecfdf5', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '3px 10px' }
-  const notat = { fontSize: '13px', color: '#94a3b8', fontStyle: 'italic', padding: '3px 0' }
-
-  const besvart = !!(kilde && kilde.kilde_besvart_at)
-  const utm = (kilde && kilde.kilde_utm) || {}
-  const utmFelt = [
-    ['utm_source', utm.utm_source], ['utm_medium', utm.utm_medium], ['utm_campaign', utm.utm_campaign],
-    ['utm_content', utm.utm_content], ['gclid', utm.gclid], ['fbclid', utm.fbclid], ['referrer', utm.referrer],
-  ].filter(([, v]) => v)
-  const hoppetOverSteg2 = besvart && !kilde.kilde_dagens_system && !kilde.kilde_hovedbehov
-
-  return (
-    <div>
-      <Seksjon>Bruker</Seksjon>
-      <Felt etikett="Navn" verdi={bruker?.full_name || '—'} />
-      <Felt etikett="E-post" verdi={bruker?.email || '—'} />
-      <Felt etikett="Rolle" verdi={bruker?.role || '—'} />
-      <Felt etikett="Bedrift" verdi={bedriftsnavn || '—'} />
-      <Felt etikett="Registrert" verdi={fmtDato(bruker?.created_at)} />
-
-      {!besvart ? (
-        <div style={{ marginTop: '12px', padding: '10px 12px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '8px', fontSize: '13px', color: '#92400e', fontWeight: '600' }}>
-          ⏳ Ikke besvart ennå
-        </div>
-      ) : (
-        <>
-          <Seksjon>Hvor fant de oss</Seksjon>
-          <div style={{ padding: '3px 0' }}><span style={merkelapp}>{kildeKanalLabel(kilde.kilde_kanal)}</span></div>
-          {kilde.kilde_kanal === 'annet' && kilde.kilde_fritekst && <Felt etikett="Utdyping" verdi={kilde.kilde_fritekst} />}
-          <Felt etikett="Besvart" verdi={fmtDato(kilde.kilde_besvart_at)} />
-
-          <Seksjon>Bakgrunn (steg 2)</Seksjon>
-          {hoppetOverSteg2 ? (
-            <div style={notat}>Besvart — hoppet over steg 2</div>
-          ) : (
-            <>
-              <Felt etikett="Bruker i dag" verdi={kilde.kilde_dagens_system || '—'} />
-              <Felt etikett="Vil løse først" verdi={kilde.kilde_hovedbehov || '—'} />
-            </>
-          )}
-
-          <Seksjon>Teknisk kilde</Seksjon>
-          {utmFelt.length === 0
-            ? <div style={notat}>Ingen teknisk kilde registrert</div>
-            : utmFelt.map(([k, v]) => <Felt key={k} etikett={k} verdi={v} />)}
-        </>
-      )}
-    </div>
-  )
-}
-
 // ─── PRODUKTOMVISNING (guided tour / coach marks) ────────────────────────────
 // Gjenbrukbar motor: tar en liste med steg. Hvert steg peker (valgfritt) på et
 // element via data-tour="<key>", med tittel + tekst. Viser mørkt overlegg med
@@ -2858,7 +2733,6 @@ function KildeBrukerDetalj({ bruker, kilde, bedriftsnavn }) {
 // på nytt ved å dispatche window-eventet `ep-tour:<tourKey>`.
 function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon = false }) {
   const { user } = useAuth()
-  const kildeGate = React.useContext(KildeGateContext)   // true = hold igjen auto-start (kilde-popup åpen/ubesvart)
   const [aktiv, setAktiv] = React.useState(false)
   const [idx, setIdx] = React.useState(0)
   const [rect, setRect] = React.useState(null)
@@ -2888,7 +2762,6 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
 
   React.useEffect(() => {
     if (!autoStart) return
-    if (kildeGate) return                                     // kilde-popup åpen/ubesvart → ikke start (og ikke marker 'done')
     if (!tillatAnon && (!user || !user.id)) return            // vent til ekte bruker er lastet (unngå 'anon'-nøkkel)
     let sett = false
     try { sett = localStorage.getItem(nokkel) === 'done' } catch (_) {}
@@ -2900,7 +2773,7 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
       try { localStorage.setItem(nokkel, 'done') } catch (_) {}
     }, 650)
     return () => clearTimeout(t)
-  }, [nokkel, autoStart, user, kildeGate])
+  }, [nokkel, autoStart, user])
 
   React.useEffect(() => {
     const start = () => { setIdx(0); setAktiv(true); setTick(x => x + 1) }
@@ -2972,206 +2845,6 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
         </div>
       </div>
     </>
-  )
-}
-
-// ─── KILDE-POPUP («Hvor fant du oss?») ───────────────────────────────────────
-// Tvungen popup ved innlogging når user_profiles.kilde_besvart_at IS NULL.
-// Kan IKKE lukkes i steg 1–2 (ingen X, ingen klikk-utenfor, ingen ESC).
-// Sikkerhetsventil: feiler lagringen, vis feil i kortet + «Lukk» og la brukeren
-// ut uansett (kilde_besvart_at forblir NULL → spørsmålet kommer igjen).
-// Z-index 200: over app-header (40) og vanlige modaler, under alert/confirm.
-function KildePopup({ user, onFerdig }) {
-  const [steg, setSteg] = React.useState(1)
-  const [kanal, setKanal] = React.useState(null)
-  const [fritekst, setFritekst] = React.useState('')
-  const [dagensSystem, setDagensSystem] = React.useState(null)
-  const [hovedbehov, setHovedbehov] = React.useState(null)
-  const [lagrer, setLagrer] = React.useState(false)
-  const [feil, setFeil] = React.useState(null)
-  const [isMob, setIsMob] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640)
-  React.useEffect(() => {
-    const onResize = () => setIsMob(window.innerWidth < 640)
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
-  const GRONN = '#059669'
-
-  // STEG 1 — obligatorisk svar. Lagrer kanal + fritekst + UTM + besvart_at i ÉN
-  // skriving. Feiler den: sikkerhetsventil (rød linje i kortet), ingen useAppAlert.
-  const lagreSteg1 = async () => {
-    setLagrer(true); setFeil(null)
-    try {
-      const patch = {
-        kilde_kanal: kanal,
-        kilde_fritekst: kanal === 'annet' ? (fritekst.trim() || null) : null,
-        kilde_utm: lesKildeUtm(),
-        kilde_besvart_at: new Date().toISOString(),
-      }
-      const { error } = await supabase.from('user_profiles').update(patch).eq('id', user.id)
-      if (error) throw error
-      slettKildeUtm()            // brukt opp — neste registrering i samme nettleser skal ikke arve
-      setLagrer(false)
-      setSteg(2)
-    } catch (e) {
-      // SIKKERHETSVENTIL — aldri lås brukeren ute.
-      setFeil('Kunne ikke lagre svaret akkurat nå. Du kan lukke og fortsette — vi spør gjerne igjen senere.')
-      setLagrer(false)
-    }
-  }
-
-  // STEG 2 — valgfritt. Egen skriving for dagens system + hovedbehov. Det
-  // obligatoriske svaret er allerede lagret i steg 1, så en feil her ignoreres
-  // stille og popupen lukkes normalt.
-  const lagreSteg2 = async () => {
-    setLagrer(true)
-    try {
-      await supabase.from('user_profiles').update({
-        kilde_dagens_system: dagensSystem || null,
-        kilde_hovedbehov: hovedbehov || null,
-      }).eq('id', user.id)
-    } catch (_) { /* stille — steg 2 er valgfritt */ }
-    setLagrer(false)
-    setSteg(3)
-    setTimeout(() => onFerdig(true), 1500)
-  }
-
-  const radLabelStil = { fontSize: '14px', fontWeight: '600', color: '#0f172a', lineHeight: 1.3 }
-  const seksjonTittel = { margin: '0 0 10px', fontSize: '13px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }
-
-  // Kompakt valgrad (gjenbrukt i steg 1 og 2)
-  const Valg = ({ valgt, onClick, ikon, tekst }) => (
-    <button type="button" onClick={onClick}
-      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 13px',
-        border: `1.5px solid ${valgt ? GRONN : '#e2e8f0'}`, borderRadius: '12px',
-        background: valgt ? '#ecfdf5' : 'white', cursor: 'pointer', textAlign: 'left',
-        transition: 'border-color 0.12s, background 0.12s' }}>
-      {ikon && <span style={{ fontSize: '18px', flexShrink: 0, lineHeight: 1 }}>{ikon}</span>}
-      <span style={{ flex: 1, ...radLabelStil }}>{tekst}</span>
-      <span style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
-        border: `2px solid ${valgt ? GRONN : '#cbd5e1'}`, background: valgt ? GRONN : 'white',
-        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        {valgt && <span style={{ color: 'white', fontSize: '11px', fontWeight: '900', lineHeight: 1 }}>✓</span>}
-      </span>
-    </button>
-  )
-
-  return createPortal(
-    <div
-      onMouseDown={(e) => e.stopPropagation()}
-      onClick={(e) => e.stopPropagation()}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 200,
-        display: 'flex', alignItems: isMob ? 'flex-end' : 'center', justifyContent: 'center',
-        padding: isMob ? '0' : '20px', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ background: 'white', borderRadius: isMob ? '20px 20px 0 0' : '24px',
-        width: '100%', maxWidth: '460px', maxHeight: isMob ? '92vh' : '88vh',
-        display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
-
-        {/* ── STEG 3: Takk ── */}
-        {steg === 3 ? (
-          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
-            <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#ecfdf5',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
-              <span style={{ fontSize: '38px', color: GRONN }}>✓</span>
-            </div>
-            <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: '800', color: '#0f172a' }}>Takk!</h2>
-            <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Det hjelper oss å bli bedre.</p>
-          </div>
-        ) : (
-        <>
-          {/* ── Header (fast) ── */}
-          <div style={{ flexShrink: 0, padding: isMob ? '18px 20px 12px' : '22px 26px 14px', borderBottom: '1px solid #f1f5f9' }}>
-            {isMob && <div style={{ width: '40px', height: '4px', background: '#e2e8f0', borderRadius: '2px', margin: '0 auto 14px' }} />}
-            <div style={{ fontSize: '12px', fontWeight: '800', color: GRONN, marginBottom: '4px' }}>{steg} / 2</div>
-            <h2 style={{ margin: 0, fontSize: isMob ? '18px' : '20px', fontWeight: '800', color: '#0f172a' }}>
-              {steg === 1 ? 'Hvor fant du oss?' : 'To korte spørsmål til'}
-            </h2>
-            <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
-              {steg === 1
-                ? 'Hjelp oss å forstå hvordan folk finner En Plattform. Velg det som passer best.'
-                : 'Helt valgfritt — men det hjelper oss å lage riktig verktøy for dere.'}
-            </p>
-          </div>
-
-          {/* ── Body (scrollbar) ── */}
-          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-            padding: isMob ? '14px 20px' : '16px 26px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {steg === 1 && KILDE_KANALER.map(k => (
-              <React.Fragment key={k.id}>
-                <Valg valgt={kanal === k.id} onClick={() => setKanal(k.id)} ikon={k.ikon} tekst={k.label} />
-                {k.id === 'annet' && kanal === 'annet' && (
-                  <input autoFocus value={fritekst} onChange={e => setFritekst(e.target.value)}
-                    placeholder="Skriv gjerne hvor…" maxLength={200}
-                    style={{ width: '100%', padding: '11px 13px', border: '1.5px solid #cbd5e1', borderRadius: '12px',
-                      fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginTop: '-2px' }} />
-                )}
-              </React.Fragment>
-            ))}
-
-            {steg === 2 && (
-              <>
-                <div>
-                  <div style={seksjonTittel}>Hva bruker dere i dag?</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {KILDE_DAGENS_SYSTEM.map(s => (
-                      <Valg key={s} valgt={dagensSystem === s} onClick={() => setDagensSystem(dagensSystem === s ? null : s)} tekst={s} />
-                    ))}
-                  </div>
-                </div>
-                <div style={{ marginTop: '14px' }}>
-                  <div style={seksjonTittel}>Hva vil dere først og fremst løse?</div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {KILDE_HOVEDBEHOV.map(s => (
-                      <Valg key={s} valgt={hovedbehov === s} onClick={() => setHovedbehov(hovedbehov === s ? null : s)} tekst={s} />
-                    ))}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* ── Footer (fast) ── */}
-          <div style={{ flexShrink: 0, padding: isMob ? '12px 20px calc(14px + env(safe-area-inset-bottom))' : '16px 26px 20px', borderTop: '1px solid #f1f5f9' }}>
-            {feil && (
-              <div style={{ marginBottom: '12px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca',
-                borderRadius: '10px', fontSize: '13px', color: '#991b1b', lineHeight: 1.5 }}>
-                ⚠️ {feil}
-              </div>
-            )}
-            {feil ? (
-              <button onClick={() => onFerdig(false)}
-                style={{ width: '100%', padding: '13px', background: '#0f172a', color: 'white', border: 'none',
-                  borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}>
-                Lukk
-              </button>
-            ) : steg === 1 ? (
-              <button onClick={lagreSteg1} disabled={!kanal || lagrer}
-                style={{ width: '100%', padding: '13px', background: (kanal && !lagrer) ? GRONN : '#e2e8f0',
-                  color: (kanal && !lagrer) ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px',
-                  fontSize: '15px', fontWeight: '700', cursor: (kanal && !lagrer) ? 'pointer' : 'not-allowed' }}>
-                {lagrer ? 'Lagrer…' : 'Send inn'}
-              </button>
-            ) : (
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button onClick={lagreSteg2} disabled={lagrer}
-                  style={{ flex: 1, padding: '13px', background: 'white', color: '#475569', border: '1px solid #e2e8f0',
-                    borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: lagrer ? 'not-allowed' : 'pointer' }}>
-                  Hopp over
-                </button>
-                <button onClick={lagreSteg2} disabled={lagrer}
-                  style={{ flex: 1, padding: '13px', background: GRONN, color: 'white', border: 'none',
-                    borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: lagrer ? 'not-allowed' : 'pointer', opacity: lagrer ? 0.7 : 1 }}>
-                  {lagrer ? 'Lagrer…' : 'Fullfør'}
-                </button>
-              </div>
-            )}
-          </div>
-        </>
-        )}
-      </div>
-    </div>,
-    document.body
   )
 }
 
@@ -4519,6 +4192,8 @@ const db = {
   async createProject(data) {
     const { data: result, error } = await supabase.from('projects').insert(data).select().single()
     if (error) throw error
+    // Forfremme kunden hvis den fortsatt er en lead (første prosjekt)
+    if (result?.customer_id) { try { await promoterKundeHvisLead(result.customer_id) } catch(_) {} }
     return result
   },
   async updateProject(id, data) {
@@ -4556,6 +4231,20 @@ function nextSequenceNumber(existingItems, prefix, numberField, { withYear = tru
   }
 }
 
+// Automatisk forfremmelse lead → kunde: når en EKSISTERENDE lead får sitt første
+// prosjekt/tilbud/faktura. Rører ALDRI andre statuser (kun lead/kontaktet/tilbud_sendt),
+// så en rad som allerede er vunnet/kunde/tapt/inaktiv/NULL står urørt.
+async function promoterKundeHvisLead(customerId) {
+  if (!customerId) return
+  try {
+    await supabase.from('customers')
+      .update({ status: 'kunde', updated_at: new Date().toISOString() })
+      .eq('id', customerId)
+      .in('status', ['lead', 'kontaktet', 'tilbud_sendt'])
+    invalidateCustomerCache()
+  } catch (e) { console.error('[promoterKunde]', e) }
+}
+
 // ─── FELLES KUNDE-OPPLØSNING FOR ØKONOMI-MODULER ────────────────────────
 // Bruker i TilbudEditorModal / OrdreEditorModal / FakturaEditorModal / EndringsmeldingModal.
 // Hvis bruker allerede har valgt kunde via CustomerSelect (form.customer_id satt), returnerer den id-en.
@@ -4565,7 +4254,7 @@ function nextSequenceNumber(existingItems, prefix, numberField, { withYear = tru
 async function resolveCustomerFromForm({ form, user, initialCustomerId = null, statusOnCreate = null }) {
   // 1. Hvis kunde allerede er valgt (dropdown eller tidligere lagret), bruk den
   let customerId = form.customer_id || initialCustomerId || null
-  if (customerId) return { customerId, created: false }
+  if (customerId) { await promoterKundeHvisLead(customerId); return { customerId, created: false } }
 
   // 2. Ingen kunde valgt — hvis heller ingen navn skrevet, returner null (ikke valgfritt å ha kunde)
   if (!form.customer_name?.trim()) return { customerId: null, created: false }
@@ -4592,6 +4281,7 @@ async function resolveCustomerFromForm({ form, user, initialCustomerId = null, s
       if (form.customer_address?.trim()) updates.address = form.customer_address.trim()
       if (form.customer_orgnr?.trim()) updates.orgnr = form.customer_orgnr.trim()
       await supabase.from('customers').update(updates).eq('id', existingCustomer.id)
+      await promoterKundeHvisLead(existingCustomer.id)
       return { customerId: existingCustomer.id, created: false }
     }
 
@@ -36434,17 +36124,38 @@ const KUNDE_TYPE = {
 
 const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 
+// HVITLISTE: statuser som vises i Kundeoversikt som standard (NULL vises alltid i tillegg).
+// Skjules som standard: 'lead','kontaktet','tapt','inaktiv'. Bryteren «Vis også leads» PÅ = ingen statusfiltrering.
+const KUNDE_SYNLIGE_STATUSER = ['kunde', 'vunnet', 'tilbud_sendt', 'ordre_bekreftet', 'faktura_sendt']
+function lesVisLeads() { try { return window.localStorage.getItem('kunder_vis_leads') === '1' } catch(_) { return false } }
+
+const KUNDE_SORT = {
+  navn_asc:  { label:'Navn A–Å',      col:'name',       asc:true  },
+  navn_desc: { label:'Navn Å–A',      col:'name',       asc:false },
+  nyeste:    { label:'Sist opprettet', col:'created_at', asc:false },
+}
+
 function KunderPage() {
   const { user } = useAuth()
   const confirm = useConfirm()
   const appAlert = useAppAlert()
-  const [kunder, setKunder] = useState([])
+  const PAGE_SIZE = 50
+  const [kunder, setKunder] = useState([])          // paginert liste (DB-filtrert/sortert)
   const [prosjekter, setProsjekter] = useState([])
   const [tilbud, setTilbud] = useState([])
   const [fakturaer, setFakturaer] = useState([])
   const [loading, setLoading] = useState(true)
+  const [listBusy, setListBusy] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState('')
+  const [debSearch, setDebSearch] = useState('')
   const [filterType, setFilterType] = useState('alle')
+  const [visLeads, setVisLeads] = useState(lesVisLeads) // standard AV
+  const [sortBy, setSortBy] = useState('navn_asc')
+  const [listCount, setListCount] = useState(0)      // antall som matcher aktivt filter (DB count)
+  const [typeCounts, setTypeCounts] = useState({})   // per type, innenfor hvitliste+søk (DB count)
+  const [page, setPage] = useState(0)
+  const initedRef = React.useRef(false)
   const [selected, setSelected] = useState(null)
   // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
   // å forlate Kunder-modulen helt.
@@ -36460,9 +36171,23 @@ function KunderPage() {
   const [importing, setImporting] = useState(false)
   const csvInputRef = React.useRef()
 
-  const exportCSV = () => {
+  const exportCSV = async () => {
+    // Eksporterer HELE det filtrerte settet (paginert henting), ikke bare de lastede radene
+    let alle = [], from = 0
+    try {
+      while (true) {
+        let q = anvendKundeFilter(supabase.from('customers').select('*'))
+        const so = KUNDE_SORT[sortBy] || KUNDE_SORT.navn_asc
+        q = q.order(so.col, { ascending: so.asc, nullsFirst:false }).order('id', { ascending:true })
+        const { data } = await q.range(from, from + 999)
+        const chunk = data || []
+        alle = alle.concat(chunk)
+        if (chunk.length < 1000) break
+        from += 1000
+      }
+    } catch(e) { console.error('[Kunder] exportCSV', e) }
     const headers = ['Navn','Type','Org.nr','E-post','Telefon','Faktura e-post','Adresse','Postnr','By','Merknad']
-    const rows = kunder.map(k => [k.name, k.type, k.orgnr, k.email, k.phone, k.invoice_email, k.address, k.postal_code, k.city, k.notes].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(';'))
+    const rows = alle.map(k => [k.name, k.type, k.orgnr, k.email, k.phone, k.invoice_email, k.address, k.postal_code, k.city, k.notes].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(';'))
     const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -36515,27 +36240,63 @@ function KunderPage() {
     } catch(e) { await appAlert({ message: 'Feil ved import', subMessage: e.message, kind: 'error' }) } finally { setImporting(false) }
   }
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const [k, p, q, inv] = await Promise.all([
-        supabase.from('customers').select('*').order('name').then(r => r.data || []),
-        supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
-        supabase.from('quotes').select('id,title,status,total_amount,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
-        supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
-      ])
-      setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+  const sanitizeSok = (s) => (s||'').trim().replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim()
+
+  // Bygg customers-spørring med hvitliste (leads skjules med mindre visLeads) + søk + type — alt DB-side.
+  const anvendKundeFilter = (q, { medType = true } = {}) => {
+    if (!visLeads) q = q.or(`status.is.null,status.in.(${KUNDE_SYNLIGE_STATUSER.join(',')})`)
+    const t = sanitizeSok(debSearch)
+    if (t) q = q.or(`name.ilike.%${t}%,orgnr.ilike.%${t}%,email.ilike.%${t}%,phone.ilike.%${t}%`)
+    if (medType && filterType !== 'alle') q = q.eq('type', filterType)
+    return q
   }
 
-  useEffect(() => { load() }, [])
+  // Last første (reset) eller neste side via .range() — ikke begrenset til 1000.
+  const loadList = async (reset = true) => {
+    reset ? setListBusy(true) : setLoadingMore(true)
+    try {
+      const nextPage = reset ? 0 : page + 1
+      const from = nextPage * PAGE_SIZE, to = from + PAGE_SIZE - 1
+      let q = anvendKundeFilter(supabase.from('customers').select('*', { count:'exact' }))
+      const so = KUNDE_SORT[sortBy] || KUNDE_SORT.navn_asc
+      q = q.order(so.col, { ascending: so.asc, nullsFirst:false }).order('id', { ascending:true })
+      const { data, count } = await q.range(from, to)
+      const rows = data || []
+      setKunder(prev => reset ? rows : [...prev, ...rows])
+      if (typeof count === 'number') setListCount(count)
+      setPage(nextPage)
+    } catch(e) { console.error('[Kunder] loadList', e); if (reset) { setKunder([]); setListCount(0) } }
+    finally { if (!initedRef.current) { initedRef.current = true; setLoading(false) } reset ? setListBusy(false) : setLoadingMore(false) }
+  }
 
-  const filtered = kunder.filter(k => {
-    if (filterType !== 'alle' && k.type !== filterType) return false
-    if (search && ![k.name, k.email, k.phone, k.orgnr, k.city].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
-    return true
-  })
+  // Type-tellere via DB-count, innenfor aktiv hvitliste + søk (uavhengig av valgt type).
+  const loadTypeCounts = async () => {
+    try {
+      const keys = Object.keys(KUNDE_TYPE)
+      const res = await Promise.all(keys.map(k => anvendKundeFilter(supabase.from('customers').select('id', { count:'exact', head:true }), { medType:false }).eq('type', k)))
+      const obj = {}; keys.forEach((k, i) => { obj[k] = res[i].count || 0 }); setTypeCounts(obj)
+    } catch(e) { console.error('[Kunder] typeCounts', e) }
+  }
+
+  // Hjelpedata (prosjekt/tilbud/faktura) for detaljvisning + prosjektteller på rad.
+  const loadAux = async () => {
+    const [p, q, inv] = await Promise.all([
+      supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []).catch(()=>[]),
+      supabase.from('quotes').select('id,title,status,total_amount,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []).catch(()=>[]),
+      supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []).catch(()=>[]),
+    ])
+    setProsjekter(p); setTilbud(q); setFakturaer(inv)
+  }
+
+  // Full oppfriskning (etter ny/rediger/slett/import)
+  const load = async () => { await Promise.all([ loadList(true), loadTypeCounts(), loadAux() ]) }
+
+  useEffect(() => { const t = setTimeout(() => setDebSearch(search), 350); return () => clearTimeout(t) }, [search])
+  useEffect(() => { loadAux() }, [])
+  useEffect(() => { loadList(true) }, [sortBy, filterType, visLeads, debSearch])
+  useEffect(() => { loadTypeCounts() }, [visLeads, debSearch])
+
+  const noFilters = !debSearch && filterType === 'alle'
 
   const handleDelete = async (kunde) => {
     const ok = await confirm({ message: `Slett ${kunde.name}?`, subMessage: 'Kunden og all tilhørende informasjon slettes permanent.', danger: true })
@@ -36577,7 +36338,7 @@ function KunderPage() {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', marginBottom: isMobK ? '10px' : '0' }}>
           <div>
             <h1 style={{ margin:0, fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{kunder.length} kunder</p>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{listCount.toLocaleString('nb-NO')} kunder{visLeads?' (inkl. leads)':''}</p>
           </div>
           <button data-tour="kunde-ny" onClick={() => setShowNew(true)}
             style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '8px 12px' : '10px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
@@ -36595,7 +36356,7 @@ function KunderPage() {
       {/* Stats */}
       <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding: isMobK ? '10px 14px' : '12px 32px', display:'flex', gap: isMobK ? '6px' : '24px', flexWrap:'wrap' }}>
         {Object.entries(KUNDE_TYPE).map(([key, cfg]) => {
-          const count = kunder.filter(k => k.type === key).length
+          const count = typeCounts[key] || 0
           return (
             <button key={key} onClick={() => setFilterType(filterType === key ? 'alle' : key)}
               style={{ display:'flex', alignItems:'center', gap:'8px', background:'none', border:'none', cursor:'pointer', padding:'6px 12px', borderRadius:'10px',
@@ -36617,27 +36378,34 @@ function KunderPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk på navn, e-post, telefon, orgnr..."
             style={{ ...kundeInp, paddingLeft:'34px' }} />
         </div>
+        <select value={sortBy} onChange={e => setSortBy(e.target.value)} title="Sortering" style={{ ...kundeInp, maxWidth: isMobK ? '48%' : '160px' }}>
+          {Object.entries(KUNDE_SORT).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <label style={{ display:'flex', alignItems:'center', gap:'7px', fontSize:'13px', fontWeight:'600', color:'#374151', cursor:'pointer', whiteSpace:'nowrap' }}>
+          <input type="checkbox" checked={visLeads} onChange={e => { const v = e.target.checked; setVisLeads(v); try{ window.localStorage.setItem('kunder_vis_leads', v ? '1' : '0') }catch(_){} }} style={{ width:'16px', height:'16px', accentColor:'#059669', cursor:'pointer' }} />
+          Vis også leads
+        </label>
         {(search || filterType !== 'alle') && (
           <button onClick={() => { setSearch(''); setFilterType('alle') }}
             style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>
             Nullstill
           </button>
         )}
-        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kunder</span>
+        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>Viser {kunder.length.toLocaleString('nb-NO')} av {listCount.toLocaleString('nb-NO')}{listBusy?' …':''}</span>
       </div>
 
       {/* Customer list */}
       <div style={{ padding: isMobK ? '12px' : '20px 32px' }}>
-        {filtered.length === 0 ? (
+        {kunder.length === 0 ? (
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
             <div style={{ fontSize:'48px', marginBottom:'12px' }}>🏢</div>
-            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{search ? 'Ingen kunder funnet' : 'Ingen kunder ennå'}</h3>
-            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>{search ? 'Prøv et annet søkeord' : 'Registrer din første kunde'}</p>
-            {!search && <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'11px 22px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde</button>}
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{noFilters ? 'Ingen kunder ennå' : 'Ingen kunder funnet'}</h3>
+            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>{noFilters ? 'Registrer din første kunde' : 'Prøv et annet søk eller filter — eller slå på «Vis også leads».'}</p>
+            {noFilters && <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'11px 22px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde</button>}
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {filtered.map(kunde => {
+            {kunder.map(kunde => {
               const type = KUNDE_TYPE[kunde.type] || KUNDE_TYPE.bedrift
               const antallProsjekter = prosjekter.filter(p => p.customer_id === kunde.id).length
               return (
@@ -36684,6 +36452,13 @@ function KunderPage() {
                 </div>
               )
             })}
+            {kunder.length < listCount && (
+              <div style={{ textAlign:'center', paddingTop:'8px' }}>
+                <button onClick={() => loadList(false)} disabled={loadingMore} style={{ padding:'10px 24px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor: loadingMore?'wait':'pointer', fontSize:'14px', fontWeight:'700' }}>
+                  {loadingMore ? 'Laster…' : `Last inn flere (${(listCount - kunder.length).toLocaleString('nb-NO')} igjen)`}
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -37524,6 +37299,7 @@ const CRM_STATUS = {
   kontaktet:     { label:'Kontaktet',     emoji:'📞', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
   tilbud_sendt:  { label:'Tilbud sendt',  emoji:'📋', color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
   vunnet:        { label:'Vunnet',        emoji:'🏆', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
+  kunde:         { label:'Kunde',         emoji:'✅', color:'#059669', bg:'#ecfdf5', border:'#a7f3d0' },
   tapt:          { label:'Tapt',          emoji:'❌', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
   inaktiv:       { label:'Inaktiv',       emoji:'💤', color:'#94a3b8', bg:'#f8fafc', border:'#e2e8f0' },
 }
@@ -47674,17 +47450,6 @@ function SuperAdminPage() {
   const [mrrSnapshots, setMrrSnapshots] = useState([])
   const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
-  // Kildesporing («Hvor kommer brukerne fra»)
-  const [kildeStat, setKildeStat] = useState(null)      // [{ kilde_kanal, antall }] eller null (laster/feil)
-  const [kildeStatLaster, setKildeStatLaster] = useState(true)
-  const [kildePeriode, setKildePeriode] = useState('30') // '30' | '90' | 'alt'
-  // Kilde hentes ON-DEMAND (ved rad-/bedrifts-ekspansjon), aldri i bulk ved
-  // fane-lasting — unngår 1000-radersgrensen. kildeCache: id→rad (kun besvarte);
-  // kildeHentet: id-er vi har avklart (ikke i cache = ikke besvart).
-  const [selectedUser, setSelectedUser] = useState(null)
-  const [kildeCache, setKildeCache] = useState({})
-  const [kildeHentet, setKildeHentet] = useState(() => new Set())
-  const [kildeLasterId, setKildeLasterId] = useState(null)
   const [isMobSA, setIsMobSA] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     const onResize = () => setIsMobSA(window.innerWidth < 640)
@@ -47695,56 +47460,6 @@ function SuperAdminPage() {
       window.removeEventListener('orientationchange', onResize)
     }
   }, [])
-
-  // Kildestatistikk — all telling skjer i SQL (RPC kilde_statistikk), aldri i JS.
-  useEffect(() => {
-    let aktiv = true
-    setKildeStatLaster(true)
-    const idag = new Date()
-    let p_fra = null
-    if (kildePeriode !== 'alt') {
-      const d = new Date(idag); d.setDate(d.getDate() - (kildePeriode === '90' ? 90 : 30))
-      p_fra = d.toISOString().split('T')[0]
-    }
-    const p_til = idag.toISOString().split('T')[0]
-    ;(async () => {
-      try {
-        const { data, error } = await supabase.rpc('kilde_statistikk', { p_fra, p_til })
-        if (!aktiv) return
-        setKildeStat(error ? null : (data || []))
-      } catch (_) { if (aktiv) setKildeStat(null) }
-      finally { if (aktiv) setKildeStatLaster(false) }
-    })()
-    return () => { aktiv = false }
-  }, [kildePeriode])
-
-  // Hent én brukers kildesvar (ved rad-ekspansjon i Brukere-fanen).
-  const hentBrukerKilde = async (userId) => {
-    if (!userId || kildeHentet.has(userId)) return
-    setKildeLasterId(userId)
-    try {
-      const { data } = await supabase.rpc('kilde_per_bruker', { p_user_id: userId })
-      const rad = Array.isArray(data) ? data[0] : data
-      if (rad) setKildeCache(m => ({ ...m, [userId]: rad }))
-    } catch (_) { /* degraderer til «ikke besvart» */ }
-    finally {
-      setKildeHentet(s => new Set(s).add(userId))
-      setKildeLasterId(id => id === userId ? null : id)
-    }
-  }
-
-  // Hent kildesvar for alle brukere i én bedrift (ved bedrifts-ekspansjon).
-  const hentBedriftKilder = async (companyId, brukerIds) => {
-    if (!companyId) return
-    try {
-      const { data } = await supabase.rpc('kilde_per_bruker', { p_company_id: companyId })
-      const rader = data || []
-      if (rader.length) setKildeCache(m => { const n = { ...m }; rader.forEach(r => { n[r.id] = r }); return n })
-    } catch (_) { /* degraderer til «ikke besvart» */ }
-    finally {
-      setKildeHentet(s => { const n = new Set(s); (brukerIds || []).forEach(id => n.add(id)); return n })
-    }
-  }
 
   const savePayment = async (companyId, paymentDate) => {
     try {
@@ -47802,25 +47517,12 @@ function SuperAdminPage() {
     finally { setSavingNote(false) }
   }
 
-  const exportCSV = async () => {
-    // Kildesvar pr. bedrift = REGISTRANTENS svar (den som opprettet bedriften),
-    // pluss antall brukere i bedriften som har besvart. Aggregert i SQL.
-    const kildeByComp = {}
-    try {
-      const { data: kb } = await supabase.rpc('kilde_per_bedrift')
-      ;(kb || []).forEach(r => { kildeByComp[r.company_id] = r })
-    } catch (_) { /* CSV leveres uansett — kilde-kolonnene blir tomme */ }
-    const clean = (v) => (''+(v==null?'':v)).replace(/[\n\r"]/g,' ')
-    const headers = ['Bedrift','Status','E-post','Telefon','Org.nr','Brukere','Moduler','MRR','Registrert','Trial slutt','Notater',
-      'Kilde kanal','Kilde utdyping','Bruker i dag','Vil løse først','utm_source','utm_medium','utm_campaign','referrer','Antall besvart']
+  const exportCSV = () => {
+    const headers = ['Bedrift','Status','E-post','Telefon','Org.nr','Brukere','Moduler','MRR','Registrert','Trial slutt','Notater']
     const rows = companies.map(c => {
       const mods = c.active_modules||[]
       const mrr = c.subscription_status==='active' ? Math.round(beregnBedriftMrr(c, allUsers)) : 0
-      const k = kildeByComp[c.id] || {}
-      const utm = k.kilde_utm || {}
-      return [c.name||'', c.subscription_status||'', c.email||'', c.phone||'', c.org_number||'', c.num_users||1, mods.join('; '), mrr, c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'', c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'', (c.admin_notes||'').replace(/[\n,]/g,' '),
-        k.kilde_kanal?kildeKanalLabel(k.kilde_kanal):'', clean(k.kilde_fritekst), clean(k.kilde_dagens_system), clean(k.kilde_hovedbehov),
-        clean(utm.utm_source), clean(utm.utm_medium), clean(utm.utm_campaign), clean(utm.referrer), k.antall_besvart!=null?k.antall_besvart:'']
+      return [c.name||'', c.subscription_status||'', c.email||'', c.phone||'', c.org_number||'', c.num_users||1, mods.join('; '), mrr, c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'', c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'', (c.admin_notes||'').replace(/[\n,]/g,' ')]
     })
     const csv = [headers.join(','), ...rows.map(r=>r.map(v=>'"'+v+'"').join(','))].join('\n')
     const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'})
@@ -47838,7 +47540,6 @@ function SuperAdminPage() {
       ])
       setCompanies(comp); setAllUsers(users); setNotifications(notifs)
 
-      // (Kildesvar hentes on-demand ved ekspansjon — se hentBrukerKilde/hentBedriftKilder.)
 
       // Storage check — via admin-funksjon (kryssbedrift, kun eier)
       try {
@@ -48147,54 +47848,6 @@ function SuperAdminPage() {
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'4px' }}>
               <span style={{ fontSize:'12px', fontWeight:'800', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', whiteSpace:'nowrap' }}>📊 Nøkkeltall og analyse</span>
               <div style={{ flex:1, height:'1px', background:'#e2e8f0' }}/>
-            </div>
-
-            {/* Hvor kommer brukerne fra — kildesporing (aggregert i SQL) */}
-            <div style={saCard}>
-              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'14px' }}>
-                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', display:'flex', alignItems:'center', gap:'8px' }}>🌐 Hvor kommer brukerne fra</h3>
-                <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', padding:'3px', borderRadius:'10px' }}>
-                  {[['30','30 dager'],['90','90 dager'],['alt','Alt']].map(([id,label])=>(
-                    <button key={id} onClick={()=>setKildePeriode(id)}
-                      style={{ padding:'5px 12px', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700',
-                        background: kildePeriode===id ? 'white' : 'transparent', color: kildePeriode===id ? '#059669' : '#64748b',
-                        boxShadow: kildePeriode===id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>{label}</button>
-                  ))}
-                </div>
-              </div>
-              {kildeStatLaster ? (
-                <div style={{ fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>Laster …</div>
-              ) : !kildeStat ? (
-                <div style={{ fontSize:'13px', color:'#dc2626', padding:'8px 0' }}>Kunne ikke hente kildestatistikk.</div>
-              ) : kildeStat.length === 0 ? (
-                <div style={{ fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>Ingen kildesvar i denne perioden ennå.</div>
-              ) : (() => {
-                const total = kildeStat.reduce((s,r)=>s+Number(r.antall||0),0)
-                return (
-                  <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                    <div style={{ fontSize:'12px', color:'#64748b' }}>{total} svar totalt</div>
-                    {kildeStat.map(r=>{
-                      const antall = Number(r.antall||0)
-                      const pst = total>0 ? Math.round(antall/total*100) : 0
-                      const kanal = KILDE_KANALER.find(k=>k.id===r.kilde_kanal)
-                      return (
-                        <div key={r.kilde_kanal||'ukjent'} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
-                          <span style={{ fontSize:'16px', flexShrink:0, width:'20px', textAlign:'center' }}>{kanal?.ikon||'❓'}</span>
-                          <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', marginBottom:'3px' }}>
-                              <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{kildeKanalLabel(r.kilde_kanal)}</span>
-                              <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0 }}>{antall} <span style={{ color:'#94a3b8', fontWeight:'500' }}>· {pst}%</span></span>
-                            </div>
-                            <div style={{ height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
-                              <div style={{ height:'100%', width:`${pst}%`, background:'#059669', borderRadius:'3px' }}/>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                )
-              })()}
             </div>
 
             {/* Lagringsstatus */}
@@ -48621,7 +48274,7 @@ function SuperAdminPage() {
                 const mrr = beregnBedriftMrr(c, allUsers)
                 return (
                   <div key={c.id} style={{ ...saCard, cursor:'pointer' }}
-                    onClick={()=>{ const skalApne = selectedCompany?.id!==c.id; setSelectedCompany(skalApne?c:null); if (skalApne) hentBedriftKilder(c.id, allUsers.filter(x=>x.company_id===c.id).map(x=>x.id)) }}>
+                    onClick={()=>setSelectedCompany(selectedCompany?.id===c.id?null:c)}>
                     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap: isMobSA ? '8px' : '12px', flexWrap:'wrap' }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'10px', flex:1, minWidth:0 }}>
                         <div style={{ width: isMobSA ? '36px' : '40px', height: isMobSA ? '36px' : '40px', borderRadius:'12px', background:'linear-gradient(135deg,#e0e7ff,#c7d2fe)', display:'flex', alignItems:'center', justifyContent:'center', fontSize: isMobSA ? '14px' : '16px', fontWeight:'700', color:'#4338ca', flexShrink:0 }}>{(c.name?.[0]||'?').toUpperCase()}</div>
@@ -48668,26 +48321,6 @@ function SuperAdminPage() {
                             </div>
                           ))}
                         </div>
-
-                        {/* Kilde per bruker i bedriften — samme delte komponent som Brukere-fanen */}
-                        {(() => {
-                          const cusers = allUsers.filter(u=>u.company_id===c.id)
-                          if (!cusers.length) return null
-                          return (
-                            <div style={{ marginBottom:'12px' }}>
-                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'8px' }}>KILDE PER BRUKER</div>
-                              <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                                {cusers.map(u=>(
-                                  <div key={u.id} style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px', border:'1px solid #f1f5f9' }}>
-                                    {kildeHentet.has(u.id)
-                                      ? <KildeBrukerDetalj bruker={u} kilde={kildeCache[u.id]} bedriftsnavn={c.name} />
-                                      : <div style={{ fontSize:'13px', color:'#94a3b8', padding:'4px 0' }}>Laster …</div>}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )
-                        })()}
 
                         {/* Betalingsstatus */}
                         {c.subscription_status==='active' && (
@@ -48833,34 +48466,18 @@ function SuperAdminPage() {
         {tab==='brukere' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             <div style={{ fontSize:'13px', color:'#64748b', marginBottom:'4px' }}>{allUsers.length} brukere totalt</div>
-            {allUsers.map(u=>{
-              const apen = selectedUser===u.id
-              const avklart = kildeHentet.has(u.id)
-              const bedrift = companies.find(c=>c.id===u.company_id)?.name
-              return (
-              <div key={u.id} style={{ ...saCard, padding: isMobSA ? '10px 12px' : '12px 16px', cursor:'pointer' }}
-                onClick={()=>{ const neste = apen?null:u.id; setSelectedUser(neste); if (neste) hentBrukerKilde(u.id) }}>
-                <div style={{ display:'flex', alignItems:'center', gap: isMobSA ? '10px' : '12px' }}>
-                  <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
-                    <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
-                  </div>
-                  <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right', display:'flex', alignItems:'center', gap:'8px' }}>
-                    <span>{u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}</span>
-                    <span style={{ color:'#cbd5e1', fontSize:'13px' }}>{apen?'▾':'▸'}</span>
-                  </div>
+            {allUsers.map(u=>(
+              <div key={u.id} style={{ ...saCard, padding: isMobSA ? '10px 12px' : '12px 16px', display:'flex', alignItems:'center', gap: isMobSA ? '10px' : '12px' }}>
+                <div style={{ width:'32px', height:'32px', borderRadius:'50%', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'13px', fontWeight:'700', color:'#475569', flexShrink:0 }}>{(u.full_name?.[0]||u.email?.[0]||'?').toUpperCase()}</div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
                 </div>
-                {apen && (
-                  <div style={{ marginTop:'12px', paddingTop:'12px', borderTop:'1px solid #f1f5f9' }} onClick={e=>e.stopPropagation()}>
-                    {avklart
-                      ? <KildeBrukerDetalj bruker={u} kilde={kildeCache[u.id]} bedriftsnavn={bedrift} />
-                      : <div style={{ fontSize:'13px', color:'#94a3b8', padding:'4px 0' }}>Laster …</div>}
-                  </div>
-                )}
+                <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right' }}>
+                  {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
+                </div>
               </div>
-              )
-            })}
+            ))}
           </div>
         )}
 
@@ -76084,31 +75701,6 @@ function AppContent() {
   const [hoverTip, setHoverTip] = useState(null) // { label, top } | null
   const visSidebarTip = (e, label) => setHoverTip({ label, top: e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 })
   const skjulSidebarTip = () => setHoverTip(null)
-
-  // ── Kilde-popup («Hvor fant du oss?») ──
-  // Fanger UTM ved første landing, og sjekker lettvekts om kilde er besvart.
-  // FAIL OPEN: feiler lesingen, vises IKKE popupen — markedsføring skal aldri
-  // kunne stoppe innlogging. Plattformeier holdes helt utenfor.
-  const [kildeSjekket, setKildeSjekket] = useState(false)
-  const [kildePopupVises, setKildePopupVises] = useState(false)
-  React.useEffect(() => { fangKildeUtm() }, [])
-  React.useEffect(() => {
-    if (!user) { setKildeSjekket(false); setKildePopupVises(false); return }
-    if (isPlatformOwner) { setKildeSjekket(true); setKildePopupVises(false); return }
-    let aktiv = true
-    ;(async () => {
-      try {
-        const { data, error } = await supabase.from('user_profiles').select('kilde_besvart_at').eq('id', user.id).maybeSingle()
-        if (!aktiv) return
-        if (!error && data && !data.kilde_besvart_at) setKildePopupVises(true)
-      } catch (_) { /* fail open — ikke vis popup */ }
-      finally { if (aktiv) setKildeSjekket(true) }
-    })()
-    return () => { aktiv = false }
-  }, [user, isPlatformOwner])
-  // Tur-sperre: hold tilbake auto-start av omvisning til kilde-sjekken er ferdig
-  // OG popupen (hvis den vises) er unmountet. Eier er aldri sperret.
-  const kildeGateAktiv = !isPlatformOwner && (!kildeSjekket || kildePopupVises)
   // Registrer service worker (PWA + pushvarsler). Idempotent — trygt å kalle ved hver oppstart.
   React.useEffect(() => {
     if ('serviceWorker' in navigator) {
@@ -76621,10 +76213,6 @@ function AppContent() {
   const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer' && page !== 'superadmin' && page !== 'crm'
 
   return (
-    <KildeGateContext.Provider value={kildeGateAktiv}>
-    {kildePopupVises && user && !isPlatformOwner && (
-      <KildePopup user={user} onFerdig={() => setKildePopupVises(false)} />
-    )}
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', '--sidebar-width': sidebarWidth + 'px' }}>
 
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
@@ -77082,7 +76670,6 @@ function AppContent() {
         </>)}
       </main>
     </div>
-    </KildeGateContext.Provider>
   )
 }
 
