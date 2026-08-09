@@ -178,12 +178,15 @@ Hvis 5–9 stemmer, virker autentiseringen og fornyingen som den skal.
 
 Synker **én** kunde, **én vei** (En Plattform → Tripletex), per kall.
 
-**Matchings- og opprettingsregler:**
-- **Har org.nr (9 siffer):** søk i Tripletex på org.nr. Finnes kunden → koble til
-  og lagre `tripletex_customer_id` på vår kunde. Finnes ikke → opprett, lagre ID.
+**Matchings- og opprettingsregler (styrt av kolonnen `customers.type`):**
+- **`type='bedrift'` / `'ue'` MED org.nr (9 siffer):** søk i Tripletex på org.nr.
+  Finnes kunden → koble til og lagre `tripletex_customer_id`. Finnes ikke → opprett, lagre ID.
+- **`type='bedrift'` / `'ue'` UTEN org.nr:** **synkes ikke** — dette er en ufullstendig
+  registrering, ikke en privatperson. Funksjonen returnerer HTTP 400 med en tydelig melding
+  om at org.nr må fylles inn først (logges med `action='skipped'`, `reason='missing_orgnr'`).
+- **`type='privat'`:** **opprett alltid ny** — vi navnematcher **ikke** (org.nr sendes aldri).
 - **Allerede koblet** (`tripletex_customer_id` satt): verifiser at ID-en finnes i
   Tripletex → `noop`. Da blir **aldri** duplikat, uansett hvor mange ganger man synker.
-- **Uten org.nr (privatperson):** **opprett alltid ny** — vi navnematcher **ikke**.
 - **Aldri** slett i Tripletex. **Aldri** oppdater felter på en kunde som finnes fra
   før (vi bare kobler til).
 
@@ -199,7 +202,7 @@ kontaktinfo) og aldri felt regnskapsføreren styrer. Tas i eget steg.
 ## Synk-logg: `integration_sync_log`
 
 Hvert forsøk logges med tidspunkt, kunde (`entity_id`), Tripletex-ID (`external_id`),
-`action` (`created`/`linked_existing`/`noop`/`failed`), **nøyaktig payload vi sendte**
+`action` (`created`/`linked_existing`/`noop`/`skipped`/`failed`), **nøyaktig payload vi sendte**
 (`request_payload`), kort svar-utdrag, `http_status` og `error`. RLS på — kun
 serveren leser den nå; lese-tilgang for admin i UI kommer senere.
 
@@ -236,14 +239,21 @@ Forvent: `{ "ok": true, "action": "noop", "tripletexCustomerId": <samme tall> }`
 Forvent: `{ "ok": true, "action": "linked_existing", "tripletexCustomerId": <samme tall som Test 1> }`.
 Dette beviser at samme kunde synket to ganger IKKE gir duplikat i Tripletex.
 
-**Test 4 — privatperson uten org.nr (opprett, ingen navnematch)**
+**Test 4 — privatperson (`type='privat'`) → opprett, ingen navnematch**
 ```json
-{ "companyId": "DIN-UUID", "customerId": "KUNDE-UTEN-ORGNR" }
+{ "companyId": "DIN-UUID", "customerId": "KUNDE-TYPE-PRIVAT" }
 ```
 Forvent: `{ "ok": true, "action": "created", "tripletexCustomerId": <tall> }`.
-Ny synk av samme → `noop`.
+Ny synk av samme → `noop`. (I loggen: `response_summary.matchBasis = 'privat'`.)
 
-**Test 5 — negativ test (kunde finnes ikke)**
+**Test 5 — bedrift uten org.nr (`type='bedrift'`, `orgnr` tom) → blokkeres**
+```json
+{ "companyId": "DIN-UUID", "customerId": "BEDRIFT-UTEN-ORGNR" }
+```
+Forvent: HTTP 400 `{ "error": "Kunden er registrert som «bedrift» men mangler org.nr. …", "action": "skipped", "reason": "missing_orgnr" }`.
+I `integration_sync_log`: `action='skipped'`. Ingenting opprettes i Tripletex.
+
+**Test 6 — negativ test (kunde finnes ikke)**
 ```json
 { "companyId": "DIN-UUID", "customerId": "00000000-0000-0000-0000-000000000000" }
 ```
