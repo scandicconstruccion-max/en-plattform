@@ -294,7 +294,7 @@ Synker **ett** prosjekt, **én vei** (En Plattform → Tripletex), per kall. Inp
 | `name` | alltid | Vi eier prosjektnavnet. Påkrevd i Tripletex. |
 | `number` | alltid | **Prosjektnummeret er selve matchings­nøkkelen.** Vi eier det. |
 | `customer.id` | alltid | Poenget med å synke kunden først — knytter prosjektet til riktig kunde. |
-| `projectManager.id` | ved opprettelse | Tripletex **krever** en prosjektleder. Vi setter token-eierens egen ansatt (whoAmI), fallback første ansatt. Kun ved opprettelse, aldri overskrevet siden. |
+| `projectManager.id` | ved opprettelse | Tripletex **krever** en prosjektleder. Vi setter token-eierens egen ansatt (whoAmI). **Ingen fallback** — gir whoAmI ingen ansatt, blokkeres synk (400, `no_project_manager`) framfor å plukke en vilkårlig ansatt. Konfigurerbar PM per bedrift kommer med UI. Kun ved opprettelse, aldri overskrevet siden. |
 | `startDate` / `endDate` | kun hvis vi har dem | Nyttig, vi eier datoene. Utelates hvis tomme — vi sender aldri en oppdiktet dato. |
 
 Bevisst utelatt nå (kan utvides senere): adresse, beskrivelse, budsjett, avdeling. Grunn:

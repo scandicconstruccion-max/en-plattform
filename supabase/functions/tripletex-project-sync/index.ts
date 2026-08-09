@@ -86,7 +86,8 @@ async function getSession(companyId: string): Promise<string> {
 }
 
 // Tripletex krever en prosjektleder ved opprettelse. Vi bruker token-eierens egen
-// ansatt (whoAmI); faller tilbake til første ansatt. Settes KUN ved opprettelse.
+// ansatt (whoAmI) — og INGEN fallback: å plukke en vilkårlig ansatt som prosjektleder
+// i kundens Tripletex er verre enn å feile. Settes KUN ved opprettelse. Null → kaller blokkerer.
 async function resolveProjectManagerId(authHeader: string): Promise<number | null> {
   try {
     const r = await fetch(`${TRIPLETEX_BASE}/v2/token/session/>whoAmI`, { headers: { Authorization: authHeader } })
@@ -95,14 +96,7 @@ async function resolveProjectManagerId(authHeader: string): Promise<number | nul
       const id = v?.employeeId ?? v?.employee?.id
       if (id) return id
     }
-  } catch (_) { /* fall through */ }
-  try {
-    const r = await fetch(`${TRIPLETEX_BASE}/v2/employee?count=1&fields=id`, { headers: { Authorization: authHeader } })
-    if (r.ok) {
-      const id = safeJson(await r.text())?.values?.[0]?.id
-      if (id) return id
-    }
-  } catch (_) { /* fall through */ }
+  } catch (_) { /* returner null → kaller stopper pent */ }
   return null
 }
 
@@ -226,9 +220,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
     // 9) Opprett nytt prosjekt i Tripletex.
     const pmId = await resolveProjectManagerId(authHeader)
     if (!pmId) {
-      const melding = 'Fant ingen ansatt i Tripletex å sette som prosjektleder (påkrevd ved opprettelse).'
-      await log({ ...logBase, action: 'failed', error: melding })
-      return json({ error: melding, reason: 'no_project_manager' }, 502)
+      const melding = 'Fant ingen prosjektleder i Tripletex. Tripletex krever en prosjektleder ved '
+        + 'opprettelse, og integrasjonens employee-token må tilhøre en aktiv ansatt i Tripletex. '
+        + 'Sjekk at employee-tokenet er koblet til en ansatt, og prøv igjen.'
+      await log({ ...logBase, action: 'skipped', error: melding })
+      return json({ error: melding, action: 'skipped', reason: 'no_project_manager' }, 400)
     }
 
     const payload: Record<string, unknown> = {
