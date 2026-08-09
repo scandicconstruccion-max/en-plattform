@@ -28,3 +28,33 @@ Stack: React + Supabase + Vercel. Hele appen ligger i ÉN fil: src/App.jsx (~75 
 
 ## Arbeidsspråk
 Svar på norsk (bokmål). Kort og teknisk presist.
+
+## Fast svarformat — «TIL WISSAM» (gjelder ALLE oppgaver)
+Hvert svar skal avsluttes med ÉN kodeblokk merket «TIL WISSAM». Det skal være en
+kodeblokk (```-fence), ikke vanlig tekst, slik at hele kan kopieres med ett klikk.
+Alt Wissam skal ta stilling til skal ligge INNE i blokken — ingenting viktig utenfor.
+
+Blokken har alltid disse fire delene, i denne rekkefølgen:
+
+```
+TIL WISSAM
+
+UTFØRT
+- Hva som faktisk er bygget/endret. Maks 5 punkter, vanlig norsk.
+
+DU MÅ BESTEMME
+- Nummererte spørsmål, maks 3. Hvert med din anbefaling formulert slik at Wissam
+  kan svare «ja til alle» hvis han er enig. Skriv «Ingen» hvis det ikke er noe.
+
+DU MÅ GJØRE
+- Konkrete steg i rekkefølge: hvilken SQL, hvilken funksjon som skal deployes,
+  hvilke tester. Klikkbare instruksjoner, ikke beskrivelser. «Ingenting» hvis tomt.
+
+USIKKERT / RISIKO
+- Ting du er usikker på, eller som kan gi problemer senere. «Ingenting» hvis tomt.
+```
+
+Regler for blokken:
+- Vanlig norsk, ingen fagsjargong uten forklaring (Wissam er ikke utvikler).
+- Ikke gjenta detaljer som allerede står i `docs/` — pek dit i stedet.
+- Kode, SQL og testoppskrifter ligger UTENFOR blokken (som før), i chat/docs.
