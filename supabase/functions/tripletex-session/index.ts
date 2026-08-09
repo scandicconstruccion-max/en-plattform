@@ -115,7 +115,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     url.searchParams.set('employeeToken', employeeTokenDb)
     url.searchParams.set('expirationDate', expDate)
 
-    const ttRes = await fetch(url.toString(), { method: 'PUT' })
+    // POST (ikke PUT — PUT-varianten av :create er utfaset i Tripletex' API).
+    const ttRes = await fetch(url.toString(), { method: 'POST' })
     const ttText = await ttRes.text()
 
     if (!ttRes.ok) {

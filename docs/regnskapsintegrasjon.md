@@ -323,8 +323,12 @@ synker treet ovenfra og ned og håndterer at et mellomledd kan mangle synk. Tas 
   tilbake** fra Tripletex (til budsjett-oppfølging o.l.), skal det bygges på **webhooks**
   (Tripletex varsler oss ved endring), **ikke** gjentatt polling. Vi lagrer siste kjente
   tilstand og reagerer på hendelser — færre kall, ferskere data, og i tråd med Tripletex'
-  anbefaling om webhooks/checksum framfor gjentatte kall. Selve mottaket blir en egen
-  Edge Function som verifiserer webhook-signaturen før den oppdaterer våre tall.
+  anbefaling om webhooks framfor gjentatte kall. Selve mottaket blir en egen Edge Function.
+  - **Verifisering:** Tripletex bruker **ikke** kryptografiske signaturer på webhooks. Når vi
+    oppretter webhook-abonnementet, setter vi **selv** navn og verdi på en egendefinert header
+    (`authHeaderName` / `authHeaderValue`). Tripletex sender den headeren med hvert webhook-kall.
+    Verifiseringen består altså i å sjekke at den innkommende headeren stemmer mot en
+    **hemmelighet vi har lagret** (Edge-hemmelighet) — matcher den ikke, avvises kallet.
 
 ## SQL (fase 1c) — kjør selv i «En Plattform – Utvikling» først
 
@@ -379,6 +383,97 @@ Forvent: HTTP 404 `{ "error": "Fant ikke prosjektet" }`.
 **Kontroller etter testene**
 - **`integration_sync_log`**: to operasjoner ved første synk — `customer_sync` og `project_sync` — hver med sin `action` og `request_payload`.
 - **`projects`**: `tripletex_id` satt, `tripletex_synced_at` fylt, `tripletex_sync_error` = null på de synkede.
+
+---
+
+# Fase 1(d) — timer ut
+
+## `tripletex-hours-sync` (Edge Function)
+
+Synker **én godkjent timerad** til Tripletex, én vei. Input: `{ companyId, entryId }`.
+Denne runden sendes **kun normaltimer** på et prosjekt.
+
+**Tabeller/kolonner brukt (lest fra koden):**
+- `timesheet_entries`: `id, timesheet_id, date, project_id, absence_type, normal_hours,
+  overtime_50, overtime_100, status, tripletex_entry_id*, tripletex_synced_hours*,
+  tripletex_synced_at*, tripletex_sync_error*` (`*` = nye)
+- `timesheets`: `id, employee_id` (eier av timelisten)
+- `employees`: `id, first_name, last_name, tripletex_employee_id*`
+- `company_integrations`: `tripletex_default_activity_id*`
+- `projects`: `id, tripletex_id` (fra fase 1c)
+
+**Blokkeringer (alt logges, ingenting sendes til Tripletex):**
+| Situasjon | `reason` |
+|---|---|
+| Ikke godkjent (`status ≠ 'Godkjent'`) | `not_approved` |
+| Fravær (`absence_type` satt) | `absence_not_supported` |
+| Mangler prosjekt | `missing_project` |
+| Har overtid | `overtime_not_supported` |
+| Ansatt ikke koblet til Tripletex | `employee_not_linked` |
+| Ingen standardaktivitet valgt | `missing_default_activity` |
+| Endret etter synk | `changed_after_sync` |
+
+## Ansatt-kobling — valg og risiko (rule 2)
+
+En time må treffe **riktig** ansatt i Tripletex — feil kobling = feil lønn. To måter:
+- **E-postmatch** (slå opp Tripletex-ansatt på `employees.email`): *risikabelt*. E-post kan
+  mangle, være privat/jobb-forskjellig, eller endres. Et bomtreff er «stille» og gir feil lønn.
+- **Egen koblings-ID (valgt):** kolonnen `employees.tripletex_employee_id` settes **eksplisitt**
+  (nå manuelt/SQL, senere i UI). Ingen gjetting. Er den tom → synk **blokkeres** (400,
+  `employee_not_linked`). **Aldri** fallback til «første ansatt».
+
+Vi bruker den eksplisitte koblingen. Automatisk e-post-*forslag* i UI kan komme senere, men
+skal alltid bekreftes av et menneske før det lagres.
+
+## Aktivitet (rule 6)
+
+Tripletex krever en aktivitet på hver time. Vårt `activity`-felt er kun fritekst og kan ikke
+mappes trygt. Løsning: bedriften velger **én standardaktivitet**
+(`company_integrations.tripletex_default_activity_id`) som brukes på alle timer. Er den ikke
+satt → blokkeres (`missing_default_activity`). Per-linje-aktivitet kan komme senere.
+
+## Endring og sletting etter synk (rule 5) — forslag, ikke bygget
+
+- **Endret hos oss etter synk:** Vi lagrer antall timer vi sendte (`tripletex_synced_hours`).
+  Endres timen senere, oppdager funksjonen avviket og **feiler pent** (`changed_after_sync`,
+  409) i stedet for å overskrive. *(Merk: i praksis setter appen en endret time tilbake til
+  «Til godkjenning», som uansett blokkeres av `not_approved` til den godkjennes på nytt.)*
+  Forslag senere: en bevisst «oppdater i Tripletex»-handling som sender ny verdi (PUT).
+- **Slettet hos oss etter synk:** Vi sletter **aldri** i Tripletex automatisk. Forslag senere:
+  marker som «skal fjernes» og la et menneske ta det i Tripletex, eller en egen avstemming.
+- **Låst periode i Tripletex:** Da avviser Tripletex opprettelsen; vi fanger feilen, lagrer
+  den i `tripletex_sync_error` og logger `failed`. Ingen rot — timen forblir usendt.
+
+## SQL (fase 1d) — kjør selv i «En Plattform – Utvikling» først
+
+Full SQL: `supabase/sql/hours_sync.sql` (aktivitet på bedrift, `tripletex_employee_id` på
+ansatt, Tripletex-time-id + synk-status på timeraden). Ingen ny tabell.
+
+## Testdata du må opprette (SQL i egen kodeblokk i chatten)
+
+Du trenger: (a) en **Tripletex-ansatt-id** og en **Tripletex-aktivitet-id** fra testmiljøet,
+(b) en ansatt hos oss koblet til den, (c) bedriftens standardaktivitet satt, (d) minst én
+**godkjent** timerad med prosjekt og normaltimer, og (e) én **ikke-godkjent** rad.
+Se testdata-SQL og hvordan du finner Tripletex-ID-ene i chat-svaret.
+
+## Test — timer (nøyaktig JSON)
+
+- **Test 1 — godkjent time sendes:** `{ "companyId": "DIN-UUID", "entryId": "GODKJENT-TIME" }`
+  → `{ "ok": true, "action": "created", "tripletexEntryId": <tall> }`. (Er prosjektet ikke
+  synket, synkes det først — egen `project_sync`-rad i loggen.)
+- **Test 2 — samme time igjen (ingen dobbeltføring):** samme kall → `{ "action": "noop", ... }`.
+- **Test 3 — ikke-godkjent time:** `{ "companyId": "DIN-UUID", "entryId": "IKKE-GODKJENT" }`
+  → 400 `{ "reason": "not_approved" }`.
+- **Test 4 — ansatt uten kobling:** fjern koblingen (`update employees set tripletex_employee_id = null where id = '…';`)
+  og synk en godkjent time for den ansatte → 400 `{ "reason": "employee_not_linked" }`.
+- **Test 5 — prosjekt ikke synket:** velg en godkjent time på et prosjekt uten `tripletex_id`
+  → prosjektet synkes automatisk først, deretter timen (`created`). To rader i loggen.
+- **Test 6 — ukjent time:** `{ "companyId": "DIN-UUID", "entryId": "00000000-0000-0000-0000-000000000000" }`
+  → 404.
+
+**Kontroller etter testene:** `integration_sync_log` (rader per steg, `action`,
+`request_payload`), og `timesheet_entries` (`tripletex_entry_id`, `tripletex_synced_hours`,
+`tripletex_synced_at` satt på de synkede).
 
 ---
 
