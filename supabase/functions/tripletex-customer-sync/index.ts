@@ -143,7 +143,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // 3) Allerede koblet? Verifiser at ID-en fortsatt finnes i Tripletex → ingen duplikat.
     if (cust.tripletex_customer_id) {
-      const getRes = await fetch(`${TRIPLETEX_BASE}/v2/customer/${cust.tripletex_customer_id}`, {
+      // fields=id: vi trenger bare å bekrefte at kunden finnes — minimal datamengde.
+      const getRes = await fetch(`${TRIPLETEX_BASE}/v2/customer/${cust.tripletex_customer_id}?fields=id`, {
         headers: { Authorization: authHeader },
       })
       if (getRes.ok) {

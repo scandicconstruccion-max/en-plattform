@@ -310,6 +310,22 @@ Riktig rekkefølge blir: synk mor-prosjektet først (så det har en `tripletex_i
 opprett underprosjektet i Tripletex med referanse til morens `tripletex_id`. Det krever at vi
 synker treet ovenfra og ned og håndterer at et mellomledd kan mangle synk. Tas som eget steg.
 
+## Tripletex-retningslinjer vi følger
+
+- **`fields` på alle GET-kall.** Tripletex ber eksplisitt om at vi begrenser datamengden
+  med `fields`-parameteren. Alle GET-kall i integrasjonen bruker den:
+  `/v2/customer?...&fields=id,name,organizationNumber`, `/v2/customer/{id}?fields=id`,
+  `/v2/project?...&fields=id,name,number`, `/v2/project/{id}?fields=id`,
+  `/v2/token/session/>whoAmI?fields=employeeId,employee`.
+  (PUT/POST-kall — `:create`, opprett kunde/prosjekt — er ikke GET og påvirkes ikke.)
+
+- **Webhooks framfor polling (fase 2).** Når vi i fase 2 skal hente **kostnader/tall
+  tilbake** fra Tripletex (til budsjett-oppfølging o.l.), skal det bygges på **webhooks**
+  (Tripletex varsler oss ved endring), **ikke** gjentatt polling. Vi lagrer siste kjente
+  tilstand og reagerer på hendelser — færre kall, ferskere data, og i tråd med Tripletex'
+  anbefaling om webhooks/checksum framfor gjentatte kall. Selve mottaket blir en egen
+  Edge Function som verifiserer webhook-signaturen før den oppdaterer våre tall.
+
 ## SQL (fase 1c) — kjør selv i «En Plattform – Utvikling» først
 
 Full SQL: `supabase/sql/project_sync.sql`. Den legger til `projects.tripletex_id`,

@@ -90,7 +90,8 @@ async function getSession(companyId: string): Promise<string> {
 // i kundens Tripletex er verre enn å feile. Settes KUN ved opprettelse. Null → kaller blokkerer.
 async function resolveProjectManagerId(authHeader: string): Promise<number | null> {
   try {
-    const r = await fetch(`${TRIPLETEX_BASE}/v2/token/session/>whoAmI`, { headers: { Authorization: authHeader } })
+    // fields: hent kun det vi bruker for prosjektleder (dekker begge mulige svar-former).
+    const r = await fetch(`${TRIPLETEX_BASE}/v2/token/session/>whoAmI?fields=employeeId,employee`, { headers: { Authorization: authHeader } })
     if (r.ok) {
       const v = safeJson(await r.text())?.value
       const id = v?.employeeId ?? v?.employee?.id
@@ -190,7 +191,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // 7) Allerede koblet? Verifiser at ID-en fortsatt finnes i Tripletex → ingen duplikat.
     if (proj.tripletex_id) {
-      const getRes = await fetch(`${TRIPLETEX_BASE}/v2/project/${proj.tripletex_id}`, { headers: { Authorization: authHeader } })
+      // fields=id: vi trenger bare å bekrefte at prosjektet finnes — minimal datamengde.
+      const getRes = await fetch(`${TRIPLETEX_BASE}/v2/project/${proj.tripletex_id}?fields=id`, { headers: { Authorization: authHeader } })
       if (getRes.ok) {
         await log({ ...logBase, external_id: proj.tripletex_id, action: 'noop', http_status: 200, response_summary: { note: 'allerede koblet' } })
         return json({ ok: true, action: 'noop', tripletexProjectId: proj.tripletex_id })
