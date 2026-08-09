@@ -452,6 +452,11 @@ ansatt, Tripletex-time-id + synk-status på timeraden). Ingen ny tabell.
 
 ## Testdata du må opprette (SQL i egen kodeblokk i chatten)
 
+> **Finn ID-ene enkelt:** deploy funksjonen `tripletex-lookup` og kall den med
+> `{ "companyId": "DIN-UUID" }`. Den returnerer en kort liste med ansatte (id + navn)
+> og aktiviteter (id + navn) fra Tripletex — skrivefritt oppslag. Er `activities` tom,
+> forteller svaret hva du må gjøre i Tripletex først.
+
 Du trenger: (a) en **Tripletex-ansatt-id** og en **Tripletex-aktivitet-id** fra testmiljøet,
 (b) en ansatt hos oss koblet til den, (c) bedriftens standardaktivitet satt, (d) minst én
 **godkjent** timerad med prosjekt og normaltimer, og (e) én **ikke-godkjent** rad.
