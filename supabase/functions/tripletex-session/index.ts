@@ -41,23 +41,43 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ error: 'Server mangler hemmeligheter (TRIPLETEX_CONSUMER_TOKEN / TRIPLETEX_ENC_KEY)' }, 500)
     }
 
-    const { companyId, employeeToken, force } = await req.json().catch(() => ({}))
+    const body = await req.json().catch(() => ({}))
+    const companyId = body?.companyId
+    const force = !!body?.force
+    // Fiks #3 (trimming): rens employee-token for mellomrom, tab og linjeskift.
+    // Kunden limer ofte inn fra e-post/PDF og skal ikke straffes for et usynlig linjeskift.
+    const employeeToken = typeof body?.employeeToken === 'string'
+      ? body.employeeToken.replace(/\s+/g, '')
+      : ''
     if (!companyId) return json({ error: 'companyId er påkrevd' }, 400)
 
     // (Valgfritt, praktisk for testing) Lagre/oppdater employee-token hvis det sendes med.
     // Da holdes hovednøkkelen på ETT sted (Edge-hemmeligheten) — du slipper å røre den i SQL.
+    // Fiks #1 (cache-forkasting): hvis tokenet AVVIKER fra det lagrede, skal cachen
+    // forkastes og et nytt sesjonstoken hentes umiddelbart — ellers ville et nytt token
+    // bli ignorert helt til det gamle sesjonstokenet gikk ut (ved midnatt).
+    let tokenChanged = false
     if (employeeToken) {
-      const { error: setErr } = await admin.rpc('tripletex_set_employee_token', {
+      const { data: stored, error: getErr } = await admin.rpc('tripletex_get_employee_token', {
         p_company_id: companyId,
-        p_environment: 'test',
-        p_token: employeeToken,
         p_key: ENC_KEY,
       })
-      if (setErr) return json({ error: `Kunne ikke lagre employee-token: ${setErr.message}` }, 500)
+      if (getErr) return json({ error: `DB-feil (les employee-token): ${getErr.message}` }, 500)
+      if (stored !== employeeToken) {
+        const { error: setErr } = await admin.rpc('tripletex_set_employee_token', {
+          p_company_id: companyId,
+          p_environment: 'test',
+          p_token: employeeToken,
+          p_key: ENC_KEY,
+        })
+        if (setErr) return json({ error: `Kunne ikke lagre employee-token: ${setErr.message}` }, 500)
+        tokenChanged = true
+      }
     }
 
-    // 1) Har vi allerede et gyldig, cachet sesjonstoken? (Hopp over hvis force = true.)
-    if (!force) {
+    // 1) Har vi allerede et gyldig, cachet sesjonstoken?
+    //    Hopp over hvis force = true ELLER hvis employee-tokenet nettopp ble endret.
+    if (!force && !tokenChanged) {
       const { data: cached, error: cErr } = await admin.rpc('tripletex_get_cached_session', {
         p_company_id: companyId,
         p_key: ENC_KEY,

@@ -19,6 +19,7 @@ create table if not exists public.company_integrations (
   session_token_enc     bytea,                                   -- cachet sesjonstoken (kryptert)
   session_token_expires timestamptz,                             -- når det cachede sesjonstokenet utløper
   is_connected          boolean not null default false,
+  connection_status     text not null default 'not_configured',  -- 'not_configured' | 'connected' | 'failed'
   last_status           text,                                    -- 'ok' | 'failed' | null
   last_error            text,
   last_verified_at      timestamptz,
@@ -86,6 +87,7 @@ language sql security definer set search_path = public, extensions, pg_temp as $
     session_token_enc     = pgp_sym_encrypt(p_token, p_key),
     session_token_expires = p_expires,
     is_connected          = true,
+    connection_status     = 'connected',
     last_status           = 'ok',
     last_error            = null,
     last_verified_at      = now(),
@@ -93,13 +95,17 @@ language sql security definer set search_path = public, extensions, pg_temp as $
   where company_id = p_company_id and provider = 'tripletex';
 $$;
 
--- 3e) Registrere en feil (for enkel sporbarhet på raden).
+-- 3e) Registrere en feil (for enkel sporbarhet på raden). Statusen skal gjenspeile SISTE resultat.
 create or replace function public.tripletex_mark_failed(
   p_company_id uuid, p_error text
 ) returns void
 language sql security definer set search_path = public, extensions, pg_temp as $$
   update public.company_integrations set
-    last_status = 'failed', last_error = p_error, updated_at = now()
+    is_connected      = false,
+    connection_status = 'failed',
+    last_status       = 'failed',
+    last_error        = p_error,
+    updated_at        = now()
   where company_id = p_company_id and provider = 'tripletex';
 $$;
 

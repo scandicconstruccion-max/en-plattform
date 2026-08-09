@@ -146,15 +146,113 @@ Hvis 5–9 stemmer, virker autentiseringen og fornyingen som den skal.
 
 ---
 
-## Bevisste avgrensninger (kommer i neste steg, ikke nå)
+## Bevisste avgrensninger (fase 1a)
 
-- **Prosjekt-/kundesynk** og feltene `projects.tripletex_id`,
-  `customers.tripletex_customer_id` samt en egen **synk-logg-tabell** hører til
-  neste oppgave og er **ikke** med her.
 - **UI** (bedriften limer inn nøkkel, ser status) kommer senere. Foreløpig
   legges employee-token inn via kallet i testen over.
 - **Innloggingssjekk i funksjonen** (at kalleren tilhører `companyId`) legges på
   når UI-et bygges. Nå returneres uansett aldri noe hemmelig.
+
+---
+
+# Fase 1(b) — tre fikser + kundesynk
+
+## Tre fikser i `tripletex-session`
+
+1. **Cache-forkasting.** Sendes det inn et `employeeToken` som **avviker** fra det
+   lagrede, forkastes cachen og et nytt sesjonstoken hentes med én gang. Før
+   ignorerte funksjonen et nytt token så lenge det gamle sesjonstokenet var
+   gyldig (til midnatt). (`supabase/functions/tripletex-session/index.ts`)
+2. **Status.** `company_integrations` har nå en tredelt status som gjenspeiler
+   **siste** resultat:
+   - `not_configured` — bedriften har ikke fullført oppsett (ingen vellykket sesjon ennå)
+   - `connected` — siste sesjon lyktes
+   - `failed` — siste forsøk feilet (og `is_connected` settes da til `false`)
+   Settes i databasefunksjonene `tripletex_store_session` (→ connected) og
+   `tripletex_mark_failed` (→ failed). (`supabase/sql/customer_sync.sql`)
+3. **Trimming.** Alt som kommer inn som `employeeToken` renses for mellomrom,
+   tabulator og linjeskift før bruk — kunden skal ikke straffes for et usynlig
+   linjeskift fra e-post/PDF.
+
+## Kundesynk: `tripletex-customer-sync`
+
+Synker **én** kunde, **én vei** (En Plattform → Tripletex), per kall.
+
+**Matchings- og opprettingsregler:**
+- **Har org.nr (9 siffer):** søk i Tripletex på org.nr. Finnes kunden → koble til
+  og lagre `tripletex_customer_id` på vår kunde. Finnes ikke → opprett, lagre ID.
+- **Allerede koblet** (`tripletex_customer_id` satt): verifiser at ID-en finnes i
+  Tripletex → `noop`. Da blir **aldri** duplikat, uansett hvor mange ganger man synker.
+- **Uten org.nr (privatperson):** **opprett alltid ny** — vi navnematcher **ikke**.
+- **Aldri** slett i Tripletex. **Aldri** oppdater felter på en kunde som finnes fra
+  før (vi bare kobler til).
+
+**Hvorfor ikke navnematch for privatpersoner (risiko):** to ulike personer kan hete
+det samme («Ola Nordmann»), og et feiltreff ville koblet fakturaer til feil person i
+regnskapet — juridisk alvorlig. Å opprette ny er tryggere: verste utfall er en
+dublett vi kan rydde manuelt, ikke sammenblanding av to personers økonomi.
+
+**Endrer kunden navn/adresse hos oss senere?** Bygges **ikke** nå. Forslag: en egen,
+bevisst «oppdater i Tripletex»-handling som kun rører felt **vi** eier (navn,
+kontaktinfo) og aldri felt regnskapsføreren styrer. Tas i eget steg.
+
+## Synk-logg: `integration_sync_log`
+
+Hvert forsøk logges med tidspunkt, kunde (`entity_id`), Tripletex-ID (`external_id`),
+`action` (`created`/`linked_existing`/`noop`/`failed`), **nøyaktig payload vi sendte**
+(`request_payload`), kort svar-utdrag, `http_status` og `error`. RLS på — kun
+serveren leser den nå; lese-tilgang for admin i UI kommer senere.
+
+## SQL (fase 1b) — kjør selv i «En Plattform – Utvikling» først
+
+Full, kommentert SQL: `supabase/sql/customer_sync.sql`. Den:
+- legger til `customers.tripletex_customer_id`,
+- legger til `company_integrations.connection_status` (tredelt status),
+- oppdaterer funksjonene `tripletex_store_session` / `tripletex_mark_failed`,
+- oppretter `integration_sync_log`.
+
+## Test — kundesynk (nøyaktig JSON i testpanelet)
+
+**Forberedelse**
+- Deploy funksjonen `tripletex-customer-sync` (lim inn `index.ts`). Ingen nye
+  hemmeligheter trengs — `TRIPLETEX_ENC_KEY` deles på prosjektnivå.
+- Bruk en `companyId` som allerede er `connected` fra fase 1a.
+- Finn testkunder: `select id, name, orgnr from customers limit 20;` — merk deg
+  én kunde **med** org.nr og én **uten** (privatperson).
+
+**Test 1 — opprett (kunde med org.nr, ikke i Tripletex fra før)**
+```json
+{ "companyId": "DIN-UUID", "customerId": "KUNDE-MED-ORGNR" }
+```
+Forvent: `{ "ok": true, "action": "created", "tripletexCustomerId": <tall> }`.
+
+**Test 2 — ingen duplikat ved ny synk (via lagret ID)**
+- Kjør nøyaktig samme kall som Test 1 en gang til.
+Forvent: `{ "ok": true, "action": "noop", "tripletexCustomerId": <samme tall> }`.
+
+**Test 3 — ingen duplikat selv om koblingen «glemmes» (match på org.nr)**
+- Nullstill koblingen: `update customers set tripletex_customer_id = null where id = 'KUNDE-MED-ORGNR';`
+- Kjør samme kall som Test 1 igjen.
+Forvent: `{ "ok": true, "action": "linked_existing", "tripletexCustomerId": <samme tall som Test 1> }`.
+Dette beviser at samme kunde synket to ganger IKKE gir duplikat i Tripletex.
+
+**Test 4 — privatperson uten org.nr (opprett, ingen navnematch)**
+```json
+{ "companyId": "DIN-UUID", "customerId": "KUNDE-UTEN-ORGNR" }
+```
+Forvent: `{ "ok": true, "action": "created", "tripletexCustomerId": <tall> }`.
+Ny synk av samme → `noop`.
+
+**Test 5 — negativ test (kunde finnes ikke)**
+```json
+{ "companyId": "DIN-UUID", "customerId": "00000000-0000-0000-0000-000000000000" }
+```
+Forvent: HTTP 404 `{ "error": "Fant ikke kunden" }`.
+
+**Kontroller loggen etter hver test**
+- **Table Editor → `integration_sync_log`**: se `action`, `external_id`,
+  `request_payload` (hva som ble sendt), `http_status` og evt. `error`.
+- **Table Editor → `customers`**: `tripletex_customer_id` er satt på de synkede kundene.
 
 ---
 
