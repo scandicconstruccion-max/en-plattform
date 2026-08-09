@@ -266,6 +266,106 @@ Forvent: HTTP 404 `{ "error": "Fant ikke kunden" }`.
 
 ---
 
+# Fase 1(c) — prosjektsynk
+
+## `tripletex-project-sync` (Edge Function)
+
+Synker **ett** prosjekt, **én vei** (En Plattform → Tripletex), per kall. Input: `{ companyId, projectId }`.
+
+**Rekkefølge og regler:**
+- **Underprosjekt** (`projects.parent_id` satt) → **ikke støttet ennå**: HTTP 400,
+  `action='skipped'`, `reason='subproject_not_supported'`. Ingenting sendes til Tripletex.
+- **Mangler prosjektnummer** → blokkeres (`skipped`, `missing_project_number`).
+- **Mangler ekte kunde** (`projects.customer_id` er tom) → blokkeres med tydelig melding
+  om at man må velge en kunde (`skipped`, `missing_customer`). Ingen dummy-kunde.
+- **Kunden ikke synket ennå** → funksjonen kaller den deployede `tripletex-customer-sync`
+  (samme logikk gjenbrukes — **ikke** kopiert kode). Feiler kundesynk (f.eks. bedrift uten
+  org.nr) → prosjektsynk blokkeres med den samme meldingen (`reason='customer_sync_required'`).
+  De to stegene logges hver for seg (`operation='customer_sync'` og `operation='project_sync'`).
+- **Allerede koblet** (`tripletex_id` satt): verifiser at ID-en finnes i Tripletex → `noop`.
+- **Match på prosjektnummer**: finnes nummeret i Tripletex → koble til og lagre `tripletex_id`.
+  Aldri duplikat. Finnes ikke → opprett og lagre ID-en.
+- **Aldri** slett i Tripletex. **Aldri** oppdater et prosjekt som finnes fra før (vi kobler bare til).
+
+## Felter vi sender (minimalt — og hvorfor)
+
+| Felt | Sendes | Begrunnelse |
+|------|--------|-------------|
+| `name` | alltid | Vi eier prosjektnavnet. Påkrevd i Tripletex. |
+| `number` | alltid | **Prosjektnummeret er selve matchings­nøkkelen.** Vi eier det. |
+| `customer.id` | alltid | Poenget med å synke kunden først — knytter prosjektet til riktig kunde. |
+| `projectManager.id` | ved opprettelse | Tripletex **krever** en prosjektleder. Vi setter token-eierens egen ansatt (whoAmI), fallback første ansatt. Kun ved opprettelse, aldri overskrevet siden. |
+| `startDate` / `endDate` | kun hvis vi har dem | Nyttig, vi eier datoene. Utelates hvis tomme — vi sender aldri en oppdiktet dato. |
+
+Bevisst utelatt nå (kan utvides senere): adresse, beskrivelse, budsjett, avdeling. Grunn:
+felter vi sender feil er vanskelige å rydde i regnskapet — vi starter minimalt.
+
+## Underprosjekter (parent_id) — forslag, ikke bygget
+
+Vi har hierarki via `parent_id`. **Nå:** et forsøk på å synke et underprosjekt blokkeres pent
+(400, `subproject_not_supported`) — det havner **aldri** i Tripletex, så ingen rot oppstår.
+
+**Forslag til senere:** Tripletex støtter underprosjekt via et `subProjects`/parent-felt.
+Riktig rekkefølge blir: synk mor-prosjektet først (så det har en `tripletex_id`), deretter
+opprett underprosjektet i Tripletex med referanse til morens `tripletex_id`. Det krever at vi
+synker treet ovenfra og ned og håndterer at et mellomledd kan mangle synk. Tas som eget steg.
+
+## SQL (fase 1c) — kjør selv i «En Plattform – Utvikling» først
+
+Full SQL: `supabase/sql/project_sync.sql`. Den legger til `projects.tripletex_id`,
+`projects.tripletex_synced_at` og `projects.tripletex_sync_error`. Ingen ny tabell —
+prosjektsynk bruker samme `integration_sync_log`.
+
+## Test — prosjektsynk (nøyaktig JSON)
+
+**Forberedelse**
+- Deploy funksjonen `tripletex-project-sync` (funksjonsnavn står på linje 2 i `index.ts`).
+  Ingen nye hemmeligheter.
+- Finn testprosjekter: `select id, name, project_number, parent_id, customer_id from projects limit 20;`
+  Merk deg: ett **toppnivå**-prosjekt **med** `customer_id`, ett **uten** `customer_id`, og ett **underprosjekt** (`parent_id` satt).
+
+**Test 1 — opprett (toppnivå, med kunde)**
+```json
+{ "companyId": "DIN-UUID", "projectId": "PROSJEKT-MED-KUNDE" }
+```
+Forvent: `{ "ok": true, "action": "created", "tripletexProjectId": <tall> }`.
+(Er kunden ikke synket fra før, synkes den automatisk først — se egen `customer_sync`-rad i loggen.)
+
+**Test 2 — synk igjen (ingen duplikat, via lagret ID)**
+- Samme kall som Test 1.
+Forvent: `{ "ok": true, "action": "noop", "tripletexProjectId": <samme tall> }`.
+
+**Test 3 — nullstill koblingen og synk igjen (skal koble til eksisterende)**
+- `update projects set tripletex_id = null where id = 'PROSJEKT-MED-KUNDE';`
+- Samme kall igjen.
+Forvent: `{ "ok": true, "action": "linked_existing", "tripletexProjectId": <samme tall som Test 1> }`.
+Bekreft i Tripletex' prosjektliste: fortsatt **ett** prosjekt med det nummeret — ingen duplikat.
+
+**Test 4 — prosjekt uten kunde (blokkeres)**
+```json
+{ "companyId": "DIN-UUID", "projectId": "PROSJEKT-UTEN-KUNDE" }
+```
+Forvent: HTTP 400 `{ "error": "Prosjektet mangler en ekte kunde. …", "action": "skipped", "reason": "missing_customer" }`.
+
+**Test 5 — underprosjekt (blokkeres pent)**
+```json
+{ "companyId": "DIN-UUID", "projectId": "ET-UNDERPROSJEKT" }
+```
+Forvent: HTTP 400 `{ "error": "Dette er et underprosjekt …", "action": "skipped", "reason": "subproject_not_supported" }`.
+Ingenting opprettes i Tripletex.
+
+**Test 6 — ukjent prosjekt**
+```json
+{ "companyId": "DIN-UUID", "projectId": "00000000-0000-0000-0000-000000000000" }
+```
+Forvent: HTTP 404 `{ "error": "Fant ikke prosjektet" }`.
+
+**Kontroller etter testene**
+- **`integration_sync_log`**: to operasjoner ved første synk — `customer_sync` og `project_sync` — hver med sin `action` og `request_payload`.
+- **`projects`**: `tripletex_id` satt, `tripletex_synced_at` fylt, `tripletex_sync_error` = null på de synkede.
+
+---
+
 ## SAMMENDRAG TIL WISSAM
 
 1. Første byggekloss mot Tripletex er ferdig: kun innlogging, ikke prosjektsynk ennå.
