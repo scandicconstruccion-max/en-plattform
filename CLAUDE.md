@@ -6,10 +6,15 @@ Stack: React + Supabase + Vercel. Hele appen ligger i ÉN fil: src/App.jsx (~75 
 
 ## Absolutte regler
 - **IKKE splitt src/App.jsx** i flere filer uten at det er avtalt eksplisitt.
-- **SQL kjøres KUN mot staging** (Supabase-prosjekt `zffzvvtuycjbrdybajwu`).
-  Verifiser ALLTID at URL-en inneholder `zffzvvtuycjbrdybajwu` før SQL kjøres.
-- **Produksjon røres ALDRI** uten en bevisst, planlagt cutover.
-  Prod = Supabase `yrrhjbhqwakatghxwqwr` / app.enplattform.no (main-branch).
+- **Supabase-prosjekt = alltid navn OG prosjekt-ID sammen, og de SKAL stemme overens.**
+  Når du nevner et miljø, skriv begge deler. Feil her kan sende SQL til feil miljø — hard regel.
+  Miljøene er:
+  - **Utvikling** (dev): `actefthtojooqxkdhbkb` — her, og KUN her, kjøres SQL.
+  - **Produksjon**: `zffzvvtuycjbrdybajwu` — røres ALDRI med SQL uten en bevisst, planlagt cutover.
+  - **Produksjon / app.enplattform.no** (main-branch): `yrrhjbhqwakatghxwqwr` — røres ALDRI uten cutover.
+- **SQL kjøres KUN mot Utvikling** (`actefthtojooqxkdhbkb`).
+  Verifiser ALLTID at URL-en inneholder `actefthtojooqxkdhbkb` før SQL kjøres.
+- **Produksjon (`zffzvvtuycjbrdybajwu` og `yrrhjbhqwakatghxwqwr`) røres ALDRI** uten en bevisst, planlagt cutover.
 - **Aldri** native `alert()`, `confirm()` eller `prompt()`.
   Bruk alltid `useAppAlert()` / `useConfirm({ message, subMessage, danger, confirmLabel })`.
 - Databaseendringer på prod skal være ADDITIVE (aldri slette/endre eksisterende kolonner på prod).

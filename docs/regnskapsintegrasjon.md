@@ -46,7 +46,8 @@ Frontend får derfor **aldri** se tokenet. Den kan senere bare vise status:
 ## (a) SQL — kjør denne i Supabase SQL Editor
 
 > Ligger også som egen fil: `supabase/sql/company_integrations.sql`.
-> Kjør **først** i staging (`zffzvvtuycjbrdybajwu`), verifiser, deretter prod.
+> Kjør i **Utvikling** (`actefthtojooqxkdhbkb`), verifiser. Produksjon
+> (`zffzvvtuycjbrdybajwu`) røres kun ved en bevisst, planlagt cutover.
 > Alt er additivt — ingenting eksisterende slettes eller endres.
 
 Se den fullstendige, kommenterte SQL-en i `supabase/sql/company_integrations.sql`.
@@ -70,7 +71,7 @@ Den gjør, i rekkefølge:
    Praktisk for testing, så hovednøkkelen bare finnes ett sted.
 2. Har vi et gyldig cachet sesjonstoken? → returnér `{ cached: true }`.
 3. Ellers: dekryptér employee-token, kall Tripletex
-   `PUT /v2/token/session/:create`, få nytt sesjonstoken.
+   `POST /v2/token/session/:create`, få nytt sesjonstoken.
 4. Lagre sesjonstokenet kryptert med utløp → returnér `{ cached: false }`.
 
 Tokenet returneres **aldri** — svaret inneholder bare `ok`, `cached` og `expires`.
@@ -84,7 +85,7 @@ sitt testmiljø (`api-test.tripletex.tech`). Disse hentes i Tripletex sin
 utviklerportal / testkonto.
 
 **1. Kjør SQL-en**
-- Åpne Supabase-prosjektet (bekreft at URL-en inneholder `zffzvvtuycjbrdybajwu` = staging).
+- Åpne **Utvikling**-prosjektet (bekreft at URL-en inneholder `actefthtojooqxkdhbkb` = Utvikling — IKKE produksjon `zffzvvtuycjbrdybajwu`).
 - Meny: **SQL Editor** → lim inn innholdet fra `supabase/sql/company_integrations.sql` → **Run**.
 - Forvent: «Success. No rows returned».
 
@@ -206,7 +207,7 @@ Hvert forsøk logges med tidspunkt, kunde (`entity_id`), Tripletex-ID (`external
 (`request_payload`), kort svar-utdrag, `http_status` og `error`. RLS på — kun
 serveren leser den nå; lese-tilgang for admin i UI kommer senere.
 
-## SQL (fase 1b) — kjør selv i «En Plattform – Utvikling» først
+## SQL (fase 1b) — kjør selv i «En Plattform – Utvikling» (`actefthtojooqxkdhbkb`) først
 
 Full, kommentert SQL: `supabase/sql/customer_sync.sql`. Den:
 - legger til `customers.tripletex_customer_id`,
@@ -330,7 +331,7 @@ synker treet ovenfra og ned og håndterer at et mellomledd kan mangle synk. Tas 
     Verifiseringen består altså i å sjekke at den innkommende headeren stemmer mot en
     **hemmelighet vi har lagret** (Edge-hemmelighet) — matcher den ikke, avvises kallet.
 
-## SQL (fase 1c) — kjør selv i «En Plattform – Utvikling» først
+## SQL (fase 1c) — kjør selv i «En Plattform – Utvikling» (`actefthtojooqxkdhbkb`) først
 
 Full SQL: `supabase/sql/project_sync.sql`. Den legger til `projects.tripletex_id`,
 `projects.tripletex_synced_at` og `projects.tripletex_sync_error`. Ingen ny tabell —
@@ -444,7 +445,7 @@ satt → blokkeres (`missing_default_activity`). Per-linje-aktivitet kan komme s
 - **Låst periode i Tripletex:** Da avviser Tripletex opprettelsen; vi fanger feilen, lagrer
   den i `tripletex_sync_error` og logger `failed`. Ingen rot — timen forblir usendt.
 
-## SQL (fase 1d) — kjør selv i «En Plattform – Utvikling» først
+## SQL (fase 1d) — kjør selv i «En Plattform – Utvikling» (`actefthtojooqxkdhbkb`) først
 
 Full SQL: `supabase/sql/hours_sync.sql` (aktivitet på bedrift, `tripletex_employee_id` på
 ansatt, Tripletex-time-id + synk-status på timeraden). Ingen ny tabell.
@@ -484,7 +485,7 @@ Se testdata-SQL og hvordan du finner Tripletex-ID-ene i chat-svaret.
 3. Ny tabell `company_integrations` lagrer kundens nøkkel — kryptert og utilgjengelig fra nettleseren.
 4. En Edge Function bytter nøklene mot et sesjonstoken hos Tripletex, mellomlagrer det og fornyer automatisk.
 5. Selve nøkkelen kan aldri leses tilbake til nettsiden — kun status vises (tilkoblet/ikke/feilet).
-6. Du kjører SQL-en selv i både staging og prod (den sletter ingenting).
+6. Du kjører SQL-en selv i Utvikling (`actefthtojooqxkdhbkb`); produksjon kun ved en bevisst cutover (den sletter ingenting).
 7. Du setter to hemmeligheter i Supabase: vårt consumer-token og en krypteringsnøkkel du finner på.
 8. Testoppskrift ligger i dette dokumentet — kun klikk i Supabase-dashbordet, ingen koding.
 9. Alt kjører foreløpig mot Tripletex sitt TESTmiljø (api-test.tripletex.tech).
