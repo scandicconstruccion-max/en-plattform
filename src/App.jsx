@@ -37451,8 +37451,16 @@ const CRM_SORT = {
   kontaktet_asc: { label:'📞 Sist kontaktet (eldst først)',col:'sist_kontaktet',   asc:true  },
   navn_asc:      { label:'🔤 Navn (A–Å)',                   col:'name',             asc:true  },
   nyeste:        { label:'🆕 Nyeste først',                 col:'created_at',       asc:false },
+  oppgave_asc:   { label:'📌 Oppgavefrist (tidligst)',      col:'neste_oppgave_frist', asc:true },
 }
 const CRM_SORT_DEFAULT = 'score_desc'
+// Filter på oppgavestatus i CRM-lista (bruker denormaliserte kolonner på customers)
+const CRM_OPPGAVE_FILTER = {
+  alle:    'Alle oppgaver',
+  apen:    'Har åpen oppgave',
+  forfalt: 'Har forfalt oppgave',
+  ingen:   'Ingen åpen oppgave',
+}
 function readCrmSort() {
   try { const v = window.localStorage.getItem('crm_sort'); if (v && CRM_SORT[v]) return v } catch(_) {}
   return CRM_SORT_DEFAULT
@@ -37475,6 +37483,7 @@ function CRMPage() {
   const [filterIndustry, setFilterIndustry] = useState('alle')
   const [filterKilde, setFilterKilde] = useState('alle')
   const [filterKommune, setFilterKommune] = useState('alle')
+  const [filterOppgave, setFilterOppgave] = useState('alle') // alle|apen|forfalt|ingen (DB-side via denorm-kolonner)
   const [visOppfolging, setVisOppfolging] = useState(false) // KPI-kort «Til oppfølging i dag» aktivt
   const [kilder, setKilder] = useState([])       // distinkte kilder (fra DB)
   const [kommuner, setKommuner] = useState([])   // distinkte kommuner/steder (fra DB, city-feltet)
@@ -37486,6 +37495,8 @@ function CRMPage() {
   const [visAssistent, setVisAssistent] = useState(false)
   const [visOppgaver, setVisOppgaver] = useState(false)
   const [hurtigRediger, setHurtigRediger] = useState(null) // lead for hurtigredigering fra lista
+  const [detailTab, setDetailTab] = useState(null)          // startfane i kundekortet (deep-link/banner)
+  const [visForfalteModal, setVisForfalteModal] = useState(false) // banner → liste over forfalte oppgaver
   const [sortBy, setSortBy] = useState(readCrmSort)
   const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -37510,6 +37521,10 @@ function CRMPage() {
     if (filterIndustry !== 'alle') q = q.eq('industry', filterIndustry)
     if (filterKilde !== 'alle') q = q.eq('kilde', filterKilde)
     if (filterKommune !== 'alle') q = q.eq('city', filterKommune) // geografi ligger i city (poststed)
+    // Oppgavefilter — DB-side via denormaliserte kolonner (vedlikeholdt av trigger)
+    if (filterOppgave === 'apen') q = q.eq('har_apen_oppgave', true)
+    else if (filterOppgave === 'forfalt') q = q.not('neste_oppgave_frist', 'is', null).lt('neste_oppgave_frist', idag)
+    else if (filterOppgave === 'ingen') q = q.or('har_apen_oppgave.is.null,har_apen_oppgave.eq.false')
     if (visOppfolging) q = q.not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag) // forfalt eller i dag
     const term = sanitizeSearch(debSearch)
     if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,city.ilike.%${term}%,orgnr.ilike.%${term}%`)
@@ -37563,7 +37578,7 @@ function CRMPage() {
     const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
     const [ct, act, proj, q, inv] = await Promise.all([
       supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
-      safeQuery('crm_activities'),
+      supabase.from('crm_activities').select('*, customers(id,name,city,status,score)').order('created_at',{ascending:false}).then(r=>r.data||[]).catch(()=>[]),
       supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
       safeQuery('quotes'),
       safeQuery('invoices'),
@@ -37597,7 +37612,7 @@ function CRMPage() {
   // Init: KPI + hjelpedata + facetter én gang
   useEffect(()=>{ loadKpis(); loadAux(); loadFacets() },[])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
-  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
+  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, filterOppgave, visOppfolging, debSearch])
 
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
   const activeKpi = visOppfolging ? 'oppfolging'
@@ -37623,15 +37638,44 @@ function CRMPage() {
     if (!user||activities.length===0) return
     const today = new Date().toISOString().split('T')[0]
     activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<today).forEach(async a=>{
-      const cust = customers.find(c=>c.id===a.customer_id)
+      const kundeNavn = a.customers?.name || customers.find(c=>c.id===a.customer_id)?.name || ''
       const { data } = await supabase.from('notifications').select('id').eq('user_id',user.id).ilike('title',`%${a.title}%`).gte('created_at',today+'T00:00:00').limit(1)
       if (!data||data.length===0) {
-        await supabase.from('notifications').insert({ user_id:user.id, title:`Forfalt oppgave: ${a.title}`, message:cust?`Kunde: ${cust.name}`:'', type:'warning', link_page:'crm' })
+        // link_id = customer_id → varselet dyplenker til kunden (Aktiviteter-fanen). Gamle varsler uten link_id → fallback til CRM-forsiden.
+        await supabase.from('notifications').insert({ user_id:user.id, title:`Forfalt oppgave: ${a.title}`, message:kundeNavn?`Kunde: ${kundeNavn}`:'', type:'warning', link_page:'crm', link_id: a.customer_id || null })
       }
     })
   },[activities])
 
-  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !visOppfolging
+  // Åpne en kunde på Aktiviteter-fanen (fra banner-liste eller varsel). Henter ALLTID full kunde-rad
+  // (embed fra aktiviteter kan være delvis), fra lastet liste eller egen spørring.
+  const apneKundePaaAktiviteter = async (idEllerKunde) => {
+    const id = typeof idEllerKunde === 'string' ? idEllerKunde : idEllerKunde?.id
+    if (!id) return
+    let kunde = customers.find(c => c.id === id)
+    if (!kunde) { try { const { data } = await supabase.from('customers').select('*').eq('id', id).single(); kunde = data } catch(_) {} }
+    if (!kunde) return
+    setVisForfalteModal(false)
+    setDetailTab('aktiviteter')
+    setSelected(kunde)
+  }
+
+  // Marker en task fullført direkte fra banner-lista (uten å åpne kunden)
+  const fullforOppgave = async (a) => {
+    try { await supabase.from('crm_activities').update({ completed: true }).eq('id', a.id); await refreshAll() }
+    catch(e) { alert({ message:'Kunne ikke fullføre oppgaven: ' + e.message, kind:'error' }) }
+  }
+
+  // Deep-link fra varselbjella: window.__pendingLinkId = customer_id (nye varsler).
+  // Gamle varsler uten link_id → ingen id → blir stående på CRM-forsiden (ingen krasj).
+  useEffect(() => {
+    const id = typeof window !== 'undefined' ? window.__pendingLinkId : null
+    if (!id) return
+    try { window.__pendingLinkId = null } catch(_) {}
+    apneKundePaaAktiviteter(String(id))
+  }, [])
+
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && filterOppgave==='alle' && !visOppfolging
   const overdueTasks = activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<new Date().toISOString().split('T')[0])
 
   const exportCSV = async () => {
@@ -37660,9 +37704,9 @@ function CRMPage() {
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
   // Detaljsiden har forrang: klikk på en lead i assistent/oppgaver setter `selected`,
   // og «Tilbake» derfra returnerer til undervisningen (som fortsatt er aktiv under).
-  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
+  if (selected) return <CRMDetaljer customer={selected} initialTab={detailTab} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);setDetailTab(null);refreshAll()}} />
   if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
-  if (visOppgaver) return <MineOppgaver user={user} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
+  if (visOppgaver) return <MineOppgaver user={user} onOpenKunde={(c, t)=>{ setDetailTab(t||null); setSelected(c) }} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -37715,10 +37759,11 @@ function CRMPage() {
       <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
         {/* Overdue tasks warning */}
         {overdueTasks.length>0&&(
-          <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px' }}>
+          <button onClick={()=>setVisForfalteModal(true)} style={{ width:'100%', textAlign:'left', background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', fontFamily:'inherit' }}>
             <span style={{ fontSize:'18px' }}>🚨</span>
             <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626' }}>{overdueTasks.length} forfalt oppgave{overdueTasks.length>1?'r':''} krever oppfølging</span>
-          </div>
+            <span style={{ marginLeft:'auto', fontSize:'13px', color:'#dc2626', fontWeight:'700' }}>Se liste →</span>
+          </button>
         )}
 
         {/* Controls */}
@@ -37728,6 +37773,9 @@ function CRMPage() {
             <option value="alle">Alle statuser</option>
             <option value="aktive">📋 Aktive (kontaktet + tilbud)</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
+          </select>
+          <select value={filterOppgave} onChange={e=>setFilterOppgave(e.target.value)} title="Oppgavefilter" style={{ ...crmInp, maxWidth: mob?'none':'175px', flex: mob?'1 1 45%':'none' }}>
+            {Object.entries(CRM_OPPGAVE_FILTER).map(([k,label])=><option key={k} value={k}>{label}</option>)}
           </select>
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'140px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle typer</option>
@@ -37748,7 +37796,7 @@ function CRMPage() {
           <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth: mob?'none':'200px', flex: mob?'1 1 45%':'none' }}>
             {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
-          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setFilterOppgave('alle');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
@@ -37874,6 +37922,39 @@ function CRMPage() {
       {showImport&&<CRMImportModal user={user} onClose={()=>setShowImport(false)} onDone={()=>{setShowImport(false);refreshAll()}} />}
 
       {hurtigRediger&&<CRMHurtigRedigerModal customer={hurtigRediger} user={user} onClose={()=>setHurtigRediger(null)} onSaved={()=>{setHurtigRediger(null);refreshAll()}} />}
+
+      {visForfalteModal && (
+        <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
+          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e)=>{ if(e.target===e.currentTarget) setVisForfalteModal(false) }} />
+          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
+            <div style={{ padding:'16px 22px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
+              <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#dc2626' }}>🚨 Forfalte oppgaver ({overdueTasks.length})</h2>
+              <button onClick={()=>setVisForfalteModal(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+            </div>
+            <div style={{ padding:'14px 22px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'8px' }}>
+              {overdueTasks.length===0 ? <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen forfalte oppgaver 🎉</p> :
+                [...overdueTasks].sort((a,b)=>(a.due_date||'').localeCompare(b.due_date||'')).map(a=>{
+                  const dagerOver = Math.max(0, Math.round((new Date(new Date().toISOString().split('T')[0]) - new Date(a.due_date)) / 86400000))
+                  const kundeNavn = a.customers?.name || '(ukjent kunde)'
+                  return (
+                    <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'10px 12px' }}>
+                      <input type="checkbox" onChange={()=>fullforOppgave(a)} title="Marker fullført" style={{ width:'18px', height:'18px', accentColor:'#059669', cursor:'pointer', flexShrink:0 }} />
+                      <div onClick={()=>apneKundePaaAktiviteter(a.customer_id)} style={{ flex:1, minWidth:0, cursor:'pointer' }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                          <span>{a.title}</span>
+                          <span style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>· {kundeNavn}</span>
+                        </div>
+                        {a.description&&<div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{a.description}</div>}
+                        <div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'700', marginTop:'2px' }}>Frist {a.due_date} · {dagerOver} dag{dagerOver===1?'':'er'} på overtid</div>
+                      </div>
+                      <button onClick={()=>apneKundePaaAktiviteter(a.customer_id)} style={{ flexShrink:0, background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'9px', padding:'7px 11px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>Åpne →</button>
+                    </div>
+                  )
+                })}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import fra tilbud modal */}
       {showImportQuotes && (()=>{
@@ -38015,7 +38096,7 @@ function CRMPage() {
   )
 }
 
-function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
+function CRMDetaljer({ customer: init, initialTab, contacts, activities, projects, quotes, invoices, user, onBack }) {
   const alert = useAppAlert()
   const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
@@ -38024,7 +38105,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [cts, setCts] = useState(contacts)
   const [acts, setActs] = useState(activities)
   const [docs, setDocs] = useState([])
-  const [tab, setTab] = useState('oversikt')
+  const [tab, setTab] = useState(initialTab || 'oversikt')
   const [editing, setEditing] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewActivity, setShowNewActivity] = useState(false)
@@ -38708,18 +38789,22 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
   const [vindu, setVindu] = useState(crmLesOppgaveVindu) // dager frem (0 = kun i dag)
   const idag = new Date().toISOString().split('T')[0]
 
+  // Henter BEGGE kilder: oppfølginger (customers.neste_oppfolging) OG tasks
+  // (crm_activities type=task, ikke fullført, med frist) — begge innen samme tidsvindu.
   const load = async () => {
     setLoading(true)
     try {
-      // DB-side: leads med oppfølging satt, t.o.m. valgt vindu frem. Overdue (< i dag) er
-      // alltid inkludert siden grensen ≥ i dag. Eldste først.
-      const { data, error } = await supabase.from('customers').select('*')
-        .not('neste_oppfolging', 'is', null)
-        .lte('neste_oppfolging', crmDatoPlussDager(vindu))
-        .order('neste_oppfolging', { ascending: true })
-        .limit(500)
-      if (error) throw error
-      setOppgaver(data || [])
+      const grense = crmDatoPlussDager(vindu)
+      const [oppfRes, taskRes] = await Promise.all([
+        supabase.from('customers').select('*').not('neste_oppfolging','is',null).lte('neste_oppfolging', grense).order('neste_oppfolging',{ascending:true}).limit(500),
+        supabase.from('crm_activities').select('*, customers(*)').eq('type','task').eq('completed',false).not('due_date','is',null).lte('due_date', grense).order('due_date',{ascending:true}).limit(500),
+      ])
+      if (oppfRes.error) throw oppfRes.error
+      if (taskRes.error) throw taskRes.error
+      const oppf = (oppfRes.data||[]).map(c => ({ kind:'oppfolging', key:'o_'+c.id, dato:c.neste_oppfolging, kunde:c, raw:c }))
+      const tasks = (taskRes.data||[]).filter(a=>a.customers).map(a => ({ kind:'task', key:'t_'+a.id, dato:a.due_date, kunde:a.customers, raw:a }))
+      const merged = [...oppf, ...tasks].sort((a,b)=>(a.dato||'').localeCompare(b.dato||''))
+      setOppgaver(merged)
     } catch (e) { console.error('[CRM-oppgaver] load', e); alert({ message:'Kunne ikke hente oppgaver: '+e.message, kind:'error' }); setOppgaver([]) }
     finally { setLoading(false) }
   }
@@ -38728,58 +38813,73 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
   const apneMail = (c) => { if (!c.email) { alert({ message:'Kontakten mangler e-postadresse', kind:'warning' }); return } const a=document.createElement('a'); a.href='mailto:'+encodeURIComponent(c.email); a.click() }
   const ring = (c) => { if (!c.phone) { alert({ message:'Kontakten mangler telefonnummer', kind:'warning' }); return } const a=document.createElement('a'); a.href='tel:'+String(c.phone).replace(/\s/g,''); a.click() }
 
-  const fullfor = async (c) => {
-    setBehandler(b => ({ ...b, [c.id]: true }))
+  // Marker fullført direkte i lista. Task → completed=true. Oppfølging → tøm neste_oppfolging + logg.
+  const fullforItem = async (item) => {
+    setBehandler(b => ({ ...b, [item.key]: true }))
     try {
       const today = new Date().toISOString().split('T')[0]
-      const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
-      let navn = null
-      try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
-      const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:c.id, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: c.oppfolging_notat||null, date: today, created_by: user?.id })
-      if (aErr) throw aErr
-      const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
-      if (navn) upd.kontaktet_av = navn
-      const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
-      if (cErr) throw cErr
+      if (item.kind === 'task') {
+        const { error } = await supabase.from('crm_activities').update({ completed: true }).eq('id', item.raw.id)
+        if (error) throw error
+      } else {
+        const c = item.kunde
+        const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+        let navn = null
+        try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
+        const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:c.id, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: c.oppfolging_notat||null, date: today, created_by: user?.id })
+        if (aErr) throw aErr
+        const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
+        if (navn) upd.kontaktet_av = navn
+        const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
+        if (cErr) throw cErr
+        crmVarsleOppfolging()
+      }
       invalidateCustomerCache()
-      crmVarsleOppfolging()
-      setOppgaver(o => o.filter(x => x.id !== c.id))
+      setOppgaver(o => o.filter(x => x.key !== item.key))
     } catch (e) { console.error('[CRM-oppgaver] fullfor', e); alert({ message:'Kunne ikke fullføre: '+e.message, kind:'error' }) }
-    finally { setBehandler(b => { const n={...b}; delete n[c.id]; return n }) }
+    finally { setBehandler(b => { const n={...b}; delete n[item.key]; return n }) }
   }
 
   const grupper = {
-    overdue: oppgaver.filter(o => o.neste_oppfolging < idag),
-    idag:    oppgaver.filter(o => o.neste_oppfolging === idag),
-    kommende: oppgaver.filter(o => o.neste_oppfolging > idag),
+    overdue: oppgaver.filter(o => o.dato < idag),
+    idag:    oppgaver.filter(o => o.dato === idag),
+    kommende: oppgaver.filter(o => o.dato > idag),
   }
   const knapp = { padding:'7px 11px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }
 
-  const rad = (c, forfalt) => {
-    const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+  const rad = (item, forfalt) => {
+    const c = item.kunde || {}
+    const erTask = item.kind === 'task'
+    const t = erTask ? null : CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+    const aapneFane = erTask ? 'aktiviteter' : null
     return (
-      <div key={c.id} onClick={()=>onOpenKunde&&onOpenKunde(c)} title="Åpne kundekort"
-        style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap', cursor:'pointer', transition:'background 0.12s' }}
+      <div key={item.key} style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:'12px', flexWrap:'wrap', transition:'background 0.12s' }}
         onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-        <div style={{ flex: mob?'1 1 100%':'1 1 220px', minWidth:0 }}>
+        {/* Avkryssing — marker fullført direkte i lista */}
+        <input type="checkbox" disabled={!!behandler[item.key]} onChange={()=>fullforItem(item)} title="Marker fullført"
+          style={{ width:'20px', height:'20px', accentColor:'#059669', cursor: behandler[item.key]?'wait':'pointer', flexShrink:0, marginTop:'2px' }} />
+        <div onClick={()=>onOpenKunde&&onOpenKunde(c, aapneFane)} title="Åpne kundekort" style={{ flex: mob?'1 1 100%':'1 1 220px', minWidth:0, cursor:'pointer' }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
+            <span style={{ fontSize:'11px', fontWeight:'800', color: erTask?'#7c3aed':'#059669', background: erTask?'#f5f3ff':'#f0fdf4', border:`1px solid ${erTask?'#ddd6fe':'#bbf7d0'}`, borderRadius:'999px', padding:'1px 8px' }}>{erTask?'✅ Oppgave':'📅 Oppfølging'}</span>
             <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{c.name}</span>
             {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
-            <span style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#64748b' }}>📅 {c.neste_oppfolging}{c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}</span>
+            <span style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#64748b' }}>Frist {item.dato}{!erTask&&c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}</span>
             {t&&<span style={{ fontSize:'11px', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'1px 8px', fontWeight:'700' }}>{t.emoji} {t.label}</span>}
           </div>
-          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
+          {/* Hva oppgaven faktisk sier */}
+          {erTask ? (
+            <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600' }}>{item.raw.title}{item.raw.description ? <span style={{ fontWeight:'400', color:'#64748b' }}> — {item.raw.description}</span> : ''}</div>
+          ) : (c.oppfolging_notat && <div style={{ fontSize:'13px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>)}
+          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b', wordBreak:'break-word', marginTop:'3px' }}>
             {c.city&&<span>📍 {c.city}</span>}
             {c.email&&<span>📧 {c.email}</span>}
             {c.phone&&<span>📞 {c.phone}</span>}
           </div>
-          {c.oppfolging_notat&&<div style={{ marginTop:'4px', fontSize:'12px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>}
         </div>
-        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap', width: mob?'100%':'auto' }} onClick={e=>e.stopPropagation()}>
+        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap', width: mob?'100%':'auto' }}>
           <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
           <button onClick={(e)=>{e.stopPropagation();ring(c)}} disabled={!c.phone} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
           <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
-          <button onClick={(e)=>{e.stopPropagation();fullfor(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
         </div>
       </div>
     )
@@ -38790,7 +38890,7 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
         <h3 style={{ margin:0, fontSize:'14px', fontWeight:'800', color: forfalt?'#dc2626':'#0f172a' }}>{emoji} {tittel}</h3>
         <span style={{ fontSize:'12px', fontWeight:'700', color:'white', background: forfalt?'#dc2626':'#64748b', borderRadius:'999px', padding:'1px 9px' }}>{liste.length}</span>
       </div>
-      {liste.length===0 ? <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{tomtekst}</p> : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(c=>rad(c, forfalt))}</div>}
+      {liste.length===0 ? <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{tomtekst}</p> : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(item=>rad(item, forfalt))}</div>}
     </div>
   )
 
@@ -38800,7 +38900,7 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
         <button onClick={onBack} style={{ padding:'8px 12px', borderRadius:'10px', border:'none', background:'#f1f5f9', color:'#64748b', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>← Tilbake</button>
         <div>
           <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>✅ Mine oppgaver</h1>
-          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Forfalte vises alltid øverst.</p>
+          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Oppgaver og avtalte oppfølginger. Forfalte vises alltid øverst. Kryss av for å fullføre.</p>
         </div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
           <select value={vindu} onChange={e=>{ const v=parseInt(e.target.value,10); setVindu(v); try{ window.localStorage.setItem('crm_oppgave_vindu', String(v)) }catch(_){} }} title="Tidsvindu" style={{ ...crmInp, maxWidth:'170px' }}>
