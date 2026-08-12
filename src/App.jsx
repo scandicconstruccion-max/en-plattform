@@ -609,6 +609,182 @@ function erGyldigEpost(e) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+// REGISTRERINGSVALIDERING — org.nr mot BRREG, engangs-e-post, telefon, adresse
+// ══════════════════════════════════════════════════════════════════════
+// Brukes av BÅDE Registrer() og FullforRegistrering() slik at ingen av dem
+// blir en bakvei rundt sperren. GRUNNPRINSIPP: «fail-open» der det er tvil —
+// en uventet feil skal ALDRI låse ute en ekte kunde. Kun org.nr som positivt
+// bekreftes ugyldig/slettet i BRREG sperres; alt annet slipper gjennom.
+
+// Kjente engangs-/wegwerp-e-postdomener. Utvid listen her ved behov.
+const ENGANGS_EPOST_DOMENER = [
+  'lanvos.com',
+  'rpaintel.com',
+]
+
+function erEngangsEpost(epost) {
+  try {
+    const dom = String(epost || '').trim().toLowerCase().split('@')[1] || ''
+    return ENGANGS_EPOST_DOMENER.includes(dom)
+  } catch (_) { return false } // tvil → slipp gjennom
+}
+
+// Trekk ut kun sifre («930 358 118» → «930358118»).
+function normalizeOrgnr(v) {
+  return String(v || '').replace(/\D/g, '')
+}
+
+// Gyldig norsk org.nr: 9 siffer + korrekt MOD11-kontrollsiffer.
+function erGyldigOrgnr(v) {
+  const s = normalizeOrgnr(v)
+  if (!/^\d{9}$/.test(s)) return false
+  const vekter = [3, 2, 7, 6, 5, 4, 3, 2]
+  let sum = 0
+  for (let i = 0; i < 8; i++) sum += Number(s[i]) * vekter[i]
+  const rest = sum % 11
+  const kontroll = rest === 0 ? 0 : 11 - rest
+  if (kontroll === 10) return false // ugyldig kontrollsiffer → ikke et gyldig org.nr
+  return kontroll === Number(s[8])
+}
+
+// Norsk telefon: 8 siffer etter at +47/0047/mellomrom/bindestrek er strippet.
+// Første siffer 2–9 (norske geografiske- og mobilnumre; mobil starter på 4/9).
+// Avviser «dd», feil lengde og utenlandske format.
+function erGyldigTelefon(v) {
+  let s = String(v || '').replace(/[\s-]/g, '')
+  s = s.replace(/^\+47/, '').replace(/^0047/, '')
+  return /^[2-9]\d{7}$/.test(s)
+}
+
+// Adresse skrevet av brukeren: minst 5 tegn og minst ett siffer (husnr/postnr).
+// Adresser hentet fra BRREG regnes alltid som gyldige og valideres ikke her.
+function erGyldigAdresse(v) {
+  const s = String(v || '').trim()
+  return s.length >= 5 && /\d/.test(s)
+}
+
+// Slår opp org.nr i Brønnøysundregistrene (Enhetsregisteret). Ren klient-fetch,
+// 5 sek timeout via AbortController. Returnerer ALLTID et objekt, kaster aldri:
+//   status: 'aktiv' | 'ikke_funnet' | 'slettet' | 'under_avvikling' | 'konkurs' | 'nede'
+//   navn, organisasjonsform, adresse (når tilgjengelig)
+// 'nede' = API nede/timeout/uventet → kalleren SKAL slippe brukeren gjennom.
+async function hentBrreg(orgnr, { timeoutMs = 5000 } = {}) {
+  const s = normalizeOrgnr(orgnr)
+  if (!/^\d{9}$/.test(s)) return { status: 'ikke_funnet' }
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => { try { ctrl.abort() } catch (_) {} }, timeoutMs)
+  try {
+    const resp = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${s}`, {
+      signal: ctrl.signal,
+      headers: { Accept: 'application/json' },
+    })
+    if (resp.status === 404) return { status: 'ikke_funnet' }
+    if (!resp.ok) return { status: 'nede' } // 5xx o.l. → slipp gjennom
+    const d = await resp.json()
+    const a = d.forretningsadresse || d.postadresse || {}
+    const adrLinje = [
+      Array.isArray(a.adresse) ? a.adresse.filter(Boolean).join(', ') : (a.adresse || ''),
+      [a.postnummer, a.poststed].filter(Boolean).join(' '),
+    ].filter(Boolean).join(', ')
+    const base = {
+      navn: d.navn || '',
+      organisasjonsform: d.organisasjonsform?.kode || '',
+      adresse: adrLinje,
+    }
+    if (d.slettedato) return { status: 'slettet', ...base }
+    if (d.konkurs === true) return { status: 'konkurs', ...base }
+    if (d.underAvvikling === true || d.underTvangsavviklingEllerTvangsopplosning === true) return { status: 'under_avvikling', ...base }
+    return { status: 'aktiv', ...base }
+  } catch (_) {
+    return { status: 'nede' } // abort/timeout/nettfeil → slipp gjennom
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Konkret, menneskelesbar feilmelding for en BRREG-status som SKAL sperre.
+// Returnerer null for status som IKKE sperrer ('aktiv' og 'nede').
+function brregSperreMelding(status) {
+  switch (status) {
+    case 'ikke_funnet':
+      return 'Vi finner ikke dette organisasjonsnummeret i Brønnøysundregistrene. Sjekk at de 9 sifrene stemmer. Mener du dette er feil, kontakt post@enplattform.no.'
+    case 'slettet':
+      return 'Denne bedriften står som slettet i Brønnøysundregistrene og kan ikke registreres. Mener du dette er feil, kontakt post@enplattform.no.'
+    case 'under_avvikling':
+      return 'Denne bedriften står under avvikling i Brønnøysundregistrene og kan ikke registreres. Mener du dette er feil, kontakt post@enplattform.no.'
+    case 'konkurs':
+      return 'Denne bedriften er registrert konkurs i Brønnøysundregistrene og kan ikke registreres. Mener du dette er feil, kontakt post@enplattform.no.'
+    default:
+      return null
+  }
+}
+
+// Felles LOKAL feltvalidering — brukes av BÅDE Registrer() og FullforRegistrering()
+// slik at den ene ikke blir en bakvei rundt den andre. Kun synkrone regler
+// (ingen BRREG-kall). Returnerer { felt: melding }; tomt objekt = alt OK.
+// adresseFraBrreg=true → hopp over adresse-innholdssjekk (BRREG-adresse er grei).
+// passord utelates (undefined) for FullforRegistrering (bruker har allerede konto).
+function validerRegistreringsfelt({ bedrift, orgnr, navn, epost, telefon, adresse, passord, passord2, adresseFraBrreg }) {
+  const errs = {}
+  if (!String(bedrift || '').trim()) errs.bedrift = 'Fyll inn bedriftsnavn'
+  if (!String(navn || '').trim()) errs.navn = 'Fyll inn navnet ditt'
+
+  if (!String(orgnr || '').trim()) errs.orgnr = 'Fyll inn organisasjonsnummeret (9 siffer)'
+  else if (!erGyldigOrgnr(orgnr)) errs.orgnr = 'Dette ser ikke ut som et gyldig norsk organisasjonsnummer. Sjekk at det er 9 siffer.'
+
+  if (!String(epost || '').trim()) errs.epost = 'Fyll inn e-post'
+  else if (!erGyldigEpost(epost)) errs.epost = 'Sjekk at e-postadressen er skrevet riktig, f.eks. navn@bedrift.no.'
+  else if (erEngangsEpost(epost)) errs.epost = 'Bruk en firma-e-post. Midlertidige engangs-adresser godtas ikke.'
+
+  if (!String(telefon || '').trim()) errs.telefon = 'Fyll inn telefonnummer'
+  else if (!erGyldigTelefon(telefon)) errs.telefon = 'Skriv et gyldig norsk telefonnummer med 8 siffer, f.eks. 401 23 456. Du kan bruke +47 og mellomrom.'
+
+  if (!String(adresse || '').trim()) errs.adresse = 'Fyll inn adresse'
+  else if (!adresseFraBrreg && !erGyldigAdresse(adresse)) errs.adresse = 'Skriv full adresse med gate og postnummer, f.eks. Storgata 1, 0155 Oslo.'
+
+  if (passord !== undefined) {
+    if (String(passord || '').length < 10) errs.passord = 'Passordet må være minst 10 tegn'
+    if (passord !== passord2) errs.passord2 = 'Passordene er ikke like'
+  }
+  return errs
+}
+
+// Etterarbeid RETT ETTER at register_new_company har opprettet bedriften:
+//   1) skriv BRREG-verifisering (+ hvor_fant_oss) på company_settings
+//   2) varsle plattformeier via SECURITY DEFINER-RPC (server-side)
+// ALT er best-effort og kan ALDRI kaste videre — bedriften er allerede opprettet,
+// så verken varsel eller status-skriving skal kunne velte en fullført registrering.
+async function ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt, epost, telefon }) {
+  let companyId = null
+  try {
+    const { data: cs } = await supabase.from('company_settings').select('id').limit(1).single()
+    companyId = cs?.id || null
+  } catch (_) {}
+  if (!companyId) return
+  // 1) BRREG-status på bedriften
+  try {
+    const verifisert = brreg && brreg.status === 'aktiv'
+    await supabase.from('company_settings').update({
+      brreg_status: (brreg?.status === 'nede' || !brreg?.status) ? 'ikke_verifisert' : brreg.status,
+      brreg_navn: brreg?.navn || null,
+      brreg_organisasjonsform: brreg?.organisasjonsform || null,
+      brreg_verifisert_at: verifisert ? new Date().toISOString() : null,
+      hvor_fant_oss: (hvorFant && hvorFant.trim()) ? hvorFant.trim() : null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', companyId)
+  } catch (e) { try { console.warn('[signup] kunne ikke skrive BRREG-status:', e?.message) } catch (_) {} }
+  // 2) Varsle plattformeier (server-side, best-effort)
+  try {
+    await supabase.rpc('notify_new_trial_signup', {
+      p_company_id: companyId,
+      p_kontakt: kontakt || null,
+      p_epost: epost || null,
+      p_telefon: telefon || null,
+    })
+  } catch (e) { try { console.warn('[signup] varsel til plattformeier feilet:', e?.message) } catch (_) {} }
+}
+
+// ══════════════════════════════════════════════════════════════════════
 // PDF-RAMMEVERK: createBrandedPdf()
 // ══════════════════════════════════════════════════════════════════════
 // Felles hjelpefunksjon for all PDF-generering. Gir konsistent header/footer
@@ -2343,17 +2519,45 @@ function Registrer() {
   const [adresse, setAdresse] = React.useState('')
   const [passord, setPassord] = React.useState('')
   const [passord2, setPassord2] = React.useState('')
+  const [hvorFant, setHvorFant] = React.useState('')
   const [error, setError] = React.useState('')
   const [saving, setSaving] = React.useState(false)
   const [ferdig, setFerdig] = React.useState(null)
   const [plan, setPlan] = React.useState('full') // 'full' = plattform m/grunnpakke · 'kalkyle' = kun Kalkulasjon
   const [fieldErrors, setFieldErrors] = React.useState({})
+  // BRREG-oppslag: { status, navn, adresse, organisasjonsform, forOrgnr } | null
+  const [brregInfo, setBrregInfo] = React.useState(null)
+  const [brregSjekker, setBrregSjekker] = React.useState(false)
+  const [adresseFraBrreg, setAdresseFraBrreg] = React.useState(false)
   const refs = {
-    bedrift: React.useRef(null), navn: React.useRef(null), epost: React.useRef(null),
+    bedrift: React.useRef(null), orgnr: React.useRef(null), navn: React.useRef(null), epost: React.useRef(null),
     telefon: React.useRef(null), adresse: React.useRef(null), passord: React.useRef(null), passord2: React.useRef(null),
   }
   // Fjern feilmarkering på et felt så snart brukeren begynner å rette det
   const clearErr = (k) => setFieldErrors(p => { if (!p[k]) return p; const n = { ...p }; delete n[k]; return n })
+
+  // Slå opp org.nr i BRREG når feltet forlates. Forhåndsutfyller firmanavn +
+  // adresse ved treff (brukeren kan justere). Fail-open: aldri kast.
+  const sjekkOrgnr = async () => {
+    const s = normalizeOrgnr(orgnr)
+    if (!s) { setBrregInfo(null); return }
+    if (!erGyldigOrgnr(orgnr)) { setBrregInfo({ status: 'format', forOrgnr: s }); return }
+    setBrregSjekker(true)
+    try {
+      const r = await hentBrreg(orgnr)
+      const info = { ...r, forOrgnr: s }
+      setBrregInfo(info)
+      if (r.status === 'aktiv') {
+        if (r.navn) { setBedrift(r.navn); clearErr('bedrift') }
+        if (r.adresse) { setAdresse(r.adresse); setAdresseFraBrreg(true); clearErr('adresse') }
+        clearErr('orgnr')
+      }
+    } catch (_) {
+      setBrregInfo({ status: 'nede', forOrgnr: s })
+    } finally {
+      setBrregSjekker(false)
+    }
+  }
 
   // Allerede innlogget? Send til appen (unngå dobbel bedrift).
   React.useEffect(() => {
@@ -2363,20 +2567,12 @@ function Registrer() {
   }, [])
 
   const fullfor = async () => {
-    // Samme påkrevd-regler som før — men samle alle feil så vi kan markere hvert felt
-    const errs = {}
-    if (!bedrift.trim()) errs.bedrift = 'Fyll inn bedriftsnavn'
-    if (!navn.trim()) errs.navn = 'Fyll inn navnet ditt'
-    if (!epost.trim()) errs.epost = 'Fyll inn e-post'
-    if (!telefon.trim()) errs.telefon = 'Fyll inn telefonnummer'
-    if (!adresse.trim()) errs.adresse = 'Fyll inn adresse'
-    if (passord.length < 10) errs.passord = 'Passordet må være minst 10 tegn'
-    if (passord !== passord2) errs.passord2 = 'Passordene er ikke like'
+    // 1) Felles lokal feltvalidering (org.nr-format, e-post, engangs-e-post, telefon, adresse, passord)
+    const errs = validerRegistreringsfelt({ bedrift, orgnr, navn, epost, telefon, adresse, passord, passord2, adresseFraBrreg })
     if (Object.keys(errs).length) {
       setFieldErrors(errs)
-      setError('Noen felt mangler — vi har markert dem')
-      // Scroll det første ugyldige feltet inn i synsfeltet og gi det fokus
-      const rekkefolge = ['bedrift','navn','epost','telefon','adresse','passord','passord2']
+      setError('Noen felt mangler eller er ugyldige — vi har markert dem')
+      const rekkefolge = ['bedrift','orgnr','navn','epost','telefon','adresse','passord','passord2']
       const forste = rekkefolge.find(k => errs[k])
       const el = refs[forste]?.current
       if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
@@ -2384,11 +2580,41 @@ function Registrer() {
     }
     setFieldErrors({})
     setSaving(true); setError('')
+
+    // 2) HARD SPERRE mot BRREG. Bruk ferskt oppslag hvis vi allerede har det for
+    //    dette org.nr-et, ellers hent nå. Fail-open: uventet feil → behandles som 'nede'.
+    let brreg
+    if (brregInfo && brregInfo.forOrgnr === normalizeOrgnr(orgnr) && brregInfo.status !== 'format') {
+      brreg = brregInfo
+    } else {
+      try { brreg = await hentBrreg(orgnr) } catch (_) { brreg = { status: 'nede' } }
+    }
+    const sperre = brregSperreMelding(brreg.status)
+    if (sperre) {
+      setBrregInfo({ ...brreg, forOrgnr: normalizeOrgnr(orgnr) })
+      setFieldErrors({ orgnr: sperre })
+      setError(sperre)
+      setSaving(false)
+      const el = refs.orgnr?.current
+      if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
+      return
+    }
+    // Her er status 'aktiv' (verifisert) eller 'nede' (BRREG utilgjengelig → slipp
+    // gjennom, marker «ikke verifisert», retry ved neste innlogging).
+
     try {
       const { data, error: suErr } = await supabase.auth.signUp({
         email: epost.trim(),
         password: passord,
-        options: { data: { full_name: navn.trim(), company_name: bedrift.trim(), org_number: orgnr.trim() || null, plan } }
+        options: { data: {
+          full_name: navn.trim(), company_name: bedrift.trim(), org_number: orgnr.trim() || null, plan,
+          phone: telefon.trim(), address: adresse.trim(),
+          // BRREG-resultat + kontekst bæres videre til FullforRegistrering (Confirm email PÅ)
+          brreg_status: brreg.status, brreg_navn: brreg.navn || null,
+          brreg_organisasjonsform: brreg.organisasjonsform || null,
+          brreg_adresse: (adresseFraBrreg && brreg.adresse) ? brreg.adresse : null,
+          hvor_fant_oss: hvorFant.trim() || null,
+        } }
       })
       if (suErr) { setError(/already registered|already been registered/i.test(suErr.message) ? 'Denne e-posten har allerede vært registrert. Har du et aktivt abonnement, logg inn. Har prøveperioden din gått ut, kan du ikke starte en ny på samme innlogging — ta kontakt med support@enplattform.no for ny tilgang.' : suErr.message); setSaving(false); return }
       if (data.session && data.user) {
@@ -2401,6 +2627,8 @@ function Registrer() {
           p_address: adresse.trim()
         })
         if (rpcErr) { setError('Konto opprettet, men oppsett av bedrift feilet: ' + rpcErr.message + '. Logg inn og prøv igjen.'); setSaving(false); return }
+        // Skriv BRREG-verifisering + varsle plattformeier (best-effort, blokkerer aldri)
+        await ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt: navn.trim(), epost: epost.trim(), telefon: telefon.trim() })
         // Pakke-valg: «Kun Kalkulasjon» → frittstående uten grunnpakke.
         if (plan === 'kalkyle') {
           try {
@@ -2475,8 +2703,24 @@ function Registrer() {
         {fieldErrors.bedrift && <p style={errTxt}>{fieldErrors.bedrift}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Organisasjonsnummer <span style={{ color:'#94a3b8', fontWeight:'400' }}>(valgfritt)</span></label>
-        <input value={orgnr} onChange={e=>setOrgnr(e.target.value)} placeholder="123 456 789" style={inp} />
+        <label style={lbl}>Organisasjonsnummer</label>
+        <input ref={refs.orgnr} inputMode="numeric" value={orgnr}
+          onChange={e=>{ setOrgnr(e.target.value); clearErr('orgnr'); if (brregInfo) setBrregInfo(null) }}
+          onBlur={sjekkOrgnr}
+          placeholder="123 456 789" style={fieldErrors.orgnr ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.orgnr && <p style={errTxt}>{fieldErrors.orgnr}</p>}
+        {!fieldErrors.orgnr && brregSjekker && (
+          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#64748b', fontWeight:'500' }}>Sjekker Brønnøysundregistrene …</p>
+        )}
+        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'aktiv' && (
+          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#059669', fontWeight:'600' }}>✓ {brregInfo.navn || 'Bedrift'} funnet i Brønnøysundregistrene. Vi har fylt ut navn og adresse — juster gjerne.</p>
+        )}
+        {!fieldErrors.orgnr && !brregSjekker && brregInfo && brregSperreMelding(brregInfo.status) && (
+          <p style={errTxt}>{brregSperreMelding(brregInfo.status)}</p>
+        )}
+        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'nede' && (
+          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#b45309', fontWeight:'500' }}>Vi fikk ikke sjekket Brønnøysundregistrene akkurat nå. Du kommer videre — vi verifiserer automatisk senere.</p>
+        )}
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Ditt navn</label>
@@ -2495,8 +2739,12 @@ function Registrer() {
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Adresse</label>
-        <input ref={refs.adresse} value={adresse} onChange={e=>{setAdresse(e.target.value); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
+        <input ref={refs.adresse} value={adresse} onChange={e=>{setAdresse(e.target.value); setAdresseFraBrreg(false); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
         {fieldErrors.adresse && <p style={errTxt}>{fieldErrors.adresse}</p>}
+      </div>
+      <div style={{ marginBottom:'1rem' }}>
+        <label style={lbl}>Hvor fant du oss? <span style={{ color:'#94a3b8', fontWeight:'400' }}>(valgfritt)</span></label>
+        <input value={hvorFant} onChange={e=>setHvorFant(e.target.value)} placeholder="F.eks. Byggmesteren, Google, en kollega …" style={inp} />
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Passord (min. 10 tegn)</label>
@@ -2520,19 +2768,81 @@ function Registrer() {
 // fullfør oppsettet. Ellers: tydelig melding (skal ikke skje for inviterte).
 function FullforRegistrering() {
   const { user, supabase } = useAuth()
+  const md = user?.user_metadata || {}
+  const lbl = { display:'block', fontSize:'14px', fontWeight:'500', color:'#374151', marginBottom:'6px' }
+  const inp = { width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
+  const errBorder = { border:'1px solid #dc2626' }
+  const errTxt = { margin:'6px 0 0', fontSize:'12px', color:'#dc2626', fontWeight:'500' }
+
+  // Forhåndsutfyll fra metadata satt ved registrering. Feltene er redigerbare
+  // slik at ingen kan bli stående fast, men SAMME validering gjelder som i Registrer().
+  const [bedrift, setBedrift] = React.useState(md.company_name || '')
+  const [orgnr, setOrgnr] = React.useState(md.org_number || '')
+  const [navn, setNavn] = React.useState(md.full_name || '')
+  const [telefon, setTelefon] = React.useState(md.phone || '')
+  const [adresse, setAdresse] = React.useState(md.address || '')
+  const [adresseFraBrreg, setAdresseFraBrreg] = React.useState(!!(md.brreg_adresse && (md.address || '') === md.brreg_adresse))
+  const [brregInfo, setBrregInfo] = React.useState(null)
+  const [brregSjekker, setBrregSjekker] = React.useState(false)
+  const [fieldErrors, setFieldErrors] = React.useState({})
   const [error, setError] = React.useState('')
   const [busy, setBusy] = React.useState(false)
-  const companyName = user?.user_metadata?.company_name || ''
+  const companyName = md.company_name || ''
+  const clearErr = (k) => setFieldErrors(p => { if (!p[k]) return p; const n = { ...p }; delete n[k]; return n })
+
+  const sjekkOrgnr = async () => {
+    const s = normalizeOrgnr(orgnr)
+    if (!s) { setBrregInfo(null); return }
+    if (!erGyldigOrgnr(orgnr)) { setBrregInfo({ status: 'format', forOrgnr: s }); return }
+    setBrregSjekker(true)
+    try {
+      const r = await hentBrreg(orgnr)
+      setBrregInfo({ ...r, forOrgnr: s })
+      if (r.status === 'aktiv') {
+        if (r.navn) { setBedrift(r.navn); clearErr('bedrift') }
+        if (r.adresse) { setAdresse(r.adresse); setAdresseFraBrreg(true); clearErr('adresse') }
+        clearErr('orgnr')
+      }
+    } catch (_) { setBrregInfo({ status: 'nede', forOrgnr: s }) }
+    finally { setBrregSjekker(false) }
+  }
 
   const fullfor = async () => {
+    // 1) Felles lokal validering (uten passord — bruker har allerede konto)
+    const errs = validerRegistreringsfelt({ bedrift, orgnr, navn, epost: user?.email, telefon, adresse, adresseFraBrreg })
+    if (Object.keys(errs).length) {
+      setFieldErrors(errs)
+      setError('Noen opplysninger mangler eller er ugyldige — vi har markert dem')
+      return
+    }
+    setFieldErrors({})
     setBusy(true); setError('')
+
+    // 2) HARD SPERRE mot BRREG (fail-open ved 'nede'/uventet)
+    let brreg
+    if (brregInfo && brregInfo.forOrgnr === normalizeOrgnr(orgnr) && brregInfo.status !== 'format') {
+      brreg = brregInfo
+    } else {
+      try { brreg = await hentBrreg(orgnr) } catch (_) { brreg = { status: 'nede' } }
+    }
+    const sperre = brregSperreMelding(brreg.status)
+    if (sperre) {
+      setBrregInfo({ ...brreg, forOrgnr: normalizeOrgnr(orgnr) })
+      setFieldErrors({ orgnr: sperre }); setError(sperre); setBusy(false)
+      return
+    }
+
+    // 3) Opprett bedrift + etterarbeid (samme som Registrer)
     try {
       const { error: rpcErr } = await supabase.rpc('register_new_company', {
-        p_company_name: companyName || (user?.email ? user.email.split('@')[0] : 'Min bedrift'),
-        p_org_number: user?.user_metadata?.org_number || null,
-        p_full_name: user?.user_metadata?.full_name || null
+        p_company_name: bedrift.trim() || (user?.email ? user.email.split('@')[0] : 'Min bedrift'),
+        p_org_number: orgnr.trim() || null,
+        p_full_name: navn.trim() || null,
+        p_phone: telefon.trim(),
+        p_address: adresse.trim()
       })
       if (rpcErr) { setError(rpcErr.message); setBusy(false); return }
+      await ettarbeidEtterRegistrering({ brreg, hvorFant: md.hvor_fant_oss, kontakt: navn.trim(), epost: user?.email, telefon: telefon.trim() })
       window.location.reload()
     } catch (e) { setError(e.message); setBusy(false) }
   }
@@ -2559,7 +2869,40 @@ function FullforRegistrering() {
   return wrap(
     <div>
       <h2 style={{ fontSize:'18px', fontWeight:'600', color:'#0f172a', marginTop:0, marginBottom:'4px' }}>Fullfør oppsett</h2>
-      <p style={{ color:'#64748b', fontSize:'14px', marginTop:0, marginBottom:'1.25rem' }}>Vi setter opp <strong>{companyName}</strong> og starter din 15-dagers prøveperiode.</p>
+      <p style={{ color:'#64748b', fontSize:'14px', marginTop:0, marginBottom:'1.25rem' }}>Bekreft opplysningene, så setter vi opp bedriften din og starter den 15-dagers prøveperioden.</p>
+
+      <div style={{ marginBottom:'1rem' }}>
+        <label style={lbl}>Bedriftsnavn</label>
+        <input value={bedrift} onChange={e=>{setBedrift(e.target.value); clearErr('bedrift')}} placeholder="Bedriften AS" style={fieldErrors.bedrift ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.bedrift && <p style={errTxt}>{fieldErrors.bedrift}</p>}
+      </div>
+      <div style={{ marginBottom:'1rem' }}>
+        <label style={lbl}>Organisasjonsnummer</label>
+        <input inputMode="numeric" value={orgnr}
+          onChange={e=>{ setOrgnr(e.target.value); clearErr('orgnr'); if (brregInfo) setBrregInfo(null) }}
+          onBlur={sjekkOrgnr} placeholder="123 456 789" style={fieldErrors.orgnr ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.orgnr && <p style={errTxt}>{fieldErrors.orgnr}</p>}
+        {!fieldErrors.orgnr && brregSjekker && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#64748b', fontWeight:'500' }}>Sjekker Brønnøysundregistrene …</p>}
+        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'aktiv' && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#059669', fontWeight:'600' }}>✓ {brregInfo.navn || 'Bedrift'} funnet i Brønnøysundregistrene.</p>}
+        {!fieldErrors.orgnr && !brregSjekker && brregInfo && brregSperreMelding(brregInfo.status) && <p style={errTxt}>{brregSperreMelding(brregInfo.status)}</p>}
+        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'nede' && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#b45309', fontWeight:'500' }}>Vi fikk ikke sjekket Brønnøysundregistrene akkurat nå. Du kommer videre — vi verifiserer automatisk senere.</p>}
+      </div>
+      <div style={{ marginBottom:'1rem' }}>
+        <label style={lbl}>Ditt navn</label>
+        <input value={navn} onChange={e=>{setNavn(e.target.value); clearErr('navn')}} placeholder="Ola Nordmann" style={fieldErrors.navn ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.navn && <p style={errTxt}>{fieldErrors.navn}</p>}
+      </div>
+      <div style={{ marginBottom:'1rem' }}>
+        <label style={lbl}>Telefon</label>
+        <input type="tel" value={telefon} onChange={e=>{setTelefon(e.target.value); clearErr('telefon')}} placeholder="+47 xxx xx xxx" style={fieldErrors.telefon ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.telefon && <p style={errTxt}>{fieldErrors.telefon}</p>}
+      </div>
+      <div style={{ marginBottom:'1.25rem' }}>
+        <label style={lbl}>Adresse</label>
+        <input value={adresse} onChange={e=>{setAdresse(e.target.value); setAdresseFraBrreg(false); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
+        {fieldErrors.adresse && <p style={errTxt}>{fieldErrors.adresse}</p>}
+      </div>
+
       {error && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', color:'#dc2626', marginBottom:'1rem', fontSize:'14px' }}>{error}</div>}
       <button onClick={fullfor} disabled={busy} style={{ width:'100%', padding:'12px', background:busy?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'15px', fontWeight:'600', cursor:busy?'not-allowed':'pointer' }}>{busy?'Setter opp...':'Kom i gang'}</button>
     </div>
@@ -48395,6 +48738,12 @@ function SuperAdminPage() {
                           background: ['active','gratis'].includes(c.subscription_status)?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':c.subscription_status==='intern'?'#f1f5f9':'#fef2f2',
                           color: ['active','gratis'].includes(c.subscription_status)?'#059669':c.subscription_status==='trial'?'#d97706':c.subscription_status==='intern'?'#475569':'#dc2626'
                         }}>{c.subscription_status==='trial'?`Prøve (${daysLeft||0}d)`:c.subscription_status==='active'?'Aktiv':c.subscription_status==='intern'?'Intern':c.subscription_status==='gratis'?'Gratis':c.subscription_status==='past_due'?'Bet. feilet':'Utløpt'}</span>
+                        {/* BRREG-brikke — vises kun når feltene faktisk finnes på raden */}
+                        {c.org_number && (c.brreg_verifisert_at !== undefined || c.brreg_status !== undefined) && (
+                          (!!c.brreg_verifisert_at && (c.brreg_status || 'aktiv') === 'aktiv')
+                            ? <span title="Verifisert mot Brønnøysundregistrene" style={{ padding:'3px 8px', borderRadius:'999px', fontSize:'10px', fontWeight:'700', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0' }}>✅ BRREG</span>
+                            : <span title={'BRREG-status: ' + (c.brreg_status || 'ikke verifisert')} style={{ padding:'3px 8px', borderRadius:'999px', fontSize:'10px', fontWeight:'700', background:'#fffbeb', color:'#b45309', border:'1px solid #fde68a' }}>⚠️ Ikke verif.</span>
+                        )}
                         {c.admin_notes && <span title={c.admin_notes} style={{ fontSize:'14px', cursor:'help' }}>📝</span>}
                       </div>
                     </div>
@@ -48414,13 +48763,45 @@ function SuperAdminPage() {
                     {selectedCompany?.id===c.id && (
                       <div style={{ marginTop:'14px', paddingTop:'14px', borderTop:'1px solid #f1f5f9' }}>
                         <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr 1fr', gap:'10px', marginBottom:'14px' }}>
-                          {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial start',c.trial_start_date?new Date(c.trial_start_date).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
+                          {/* «Trial start» er fjernet her — prøvestart vises i tidslinjen under («Prøveperiode startet») */}
+                          {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
                             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px' }}>
                               <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{k}</div>
                               <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px', wordBreak:'break-word' }}>{v}</div>
                             </div>
                           ))}
                         </div>
+
+                        {/* BRREG-verifisering — ren informasjon, ingen knapp */}
+                        {c.org_number && (() => {
+                          const verifisert = !!c.brreg_verifisert_at && (c.brreg_status || 'aktiv') === 'aktiv'
+                          const statusTekst = {
+                            aktiv: 'Aktiv i BRREG', ikke_funnet: 'Ikke funnet i BRREG', slettet: 'Slettet i BRREG',
+                            under_avvikling: 'Under avvikling', konkurs: 'Konkurs', ikke_verifisert: 'Ikke verifisert ennå',
+                          }[c.brreg_status] || (c.brreg_status || 'Ikke verifisert ennå')
+                          const avvik = c.brreg_navn && c.name && c.brreg_navn.trim().toLowerCase() !== c.name.trim().toLowerCase()
+                          return (
+                            <div style={{ marginBottom:'14px' }}>
+                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>BRREG-VERIFISERING</div>
+                              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+                                <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
+                                  background: verifisert ? '#f0fdf4' : '#fffbeb', color: verifisert ? '#059669' : '#b45309',
+                                  border: `1px solid ${verifisert ? '#bbf7d0' : '#fde68a'}` }}>
+                                  {verifisert ? '✅ Verifisert mot BRREG' : '⚠️ ' + statusTekst}
+                                </span>
+                                {c.brreg_organisasjonsform && <span style={{ fontSize:'11px', color:'#64748b' }}>{c.brreg_organisasjonsform}</span>}
+                                {c.brreg_verifisert_at && <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(c.brreg_verifisert_at).toLocaleDateString('nb-NO')}</span>}
+                              </div>
+                              {avvik && (
+                                <div style={{ marginTop:'8px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'8px', padding:'8px 12px' }}>
+                                  <div style={{ fontSize:'10px', color:'#b45309', fontWeight:'700', textTransform:'uppercase' }}>Avvik: oppgitt navn ≠ BRREG-navn</div>
+                                  <div style={{ fontSize:'12px', color:'#0f172a', marginTop:'2px' }}>Oppgitt: <strong>{c.name}</strong></div>
+                                  <div style={{ fontSize:'12px', color:'#0f172a' }}>BRREG: <strong>{c.brreg_navn}</strong></div>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
 
                         {/* Betalingsstatus */}
                         {c.subscription_status==='active' && (
@@ -75807,6 +76188,32 @@ function AppContent() {
       navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW-registrering feilet:', err))
     }
   }, [])
+  // Selvhelbredende BRREG-verifisering: kjører automatisk ved innlogging for
+  // bedrifter som ennå ikke er verifisert (f.eks. registrert mens BRREG var nede).
+  // Kjøres uansett — kan ikke skrus av fra UI. Fail-open: kaster aldri, blokkerer aldri.
+  const brregRetryKjort = React.useRef(false)
+  React.useEffect(() => {
+    if (!user || !companyId || isPlatformOwner) return
+    if (brregRetryKjort.current) return
+    brregRetryKjort.current = true
+    ;(async () => {
+      try {
+        const { data: cs } = await supabase.from('company_settings')
+          .select('id, org_number, brreg_verifisert_at').eq('id', companyId).maybeSingle()
+        if (!cs || cs.brreg_verifisert_at) return          // allerede verifisert → ferdig
+        if (!cs.org_number || !erGyldigOrgnr(cs.org_number)) return
+        const r = await hentBrreg(cs.org_number)
+        if (r.status === 'nede') return                     // fortsatt nede → prøv igjen neste innlogging
+        await supabase.from('company_settings').update({
+          brreg_status: r.status,
+          brreg_navn: r.navn || null,
+          brreg_organisasjonsform: r.organisasjonsform || null,
+          brreg_verifisert_at: r.status === 'aktiv' ? new Date().toISOString() : null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', cs.id)
+      } catch (_) { /* fail-open: aldri blokker innlogging */ }
+    })()
+  }, [user, companyId, isPlatformOwner])
   // Offline Lag 2: forhåndslasting — hold cachen fersk mens vi har nett.
   React.useEffect(() => {
     if (!user) return
