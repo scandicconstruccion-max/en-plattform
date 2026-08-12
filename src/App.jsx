@@ -719,6 +719,27 @@ function brregSperreMelding(status) {
   }
 }
 
+// Sjekker om org.nr allerede har en konto — SERVER-SIDE via SECURITY DEFINER-RPC
+// slik at den ser på tvers av alle bedrifter (RLS ville ellers skjult andre firma).
+// Matcher på normalisert org.nr (kun siffer). Returnerer eksisterende bedrifts
+// navn (BRREG-navn foretrukket) eller null. FAIL-OPEN: kaster aldri — ved
+// nettverks-/DB-feil returneres null slik at registreringen slipper gjennom.
+async function sjekkOrgnrDublett(orgnr) {
+  try {
+    const { data, error } = await supabase.rpc('orgnr_finnes_fra_for', { p_orgnr: normalizeOrgnr(orgnr) })
+    if (error) return null
+    return (data && String(data).trim()) ? String(data) : null
+  } catch (_) { return null }
+}
+
+// Melding når org.nr allerede er registrert. Bruker BRREG-navnet (ikke det
+// brukeren skrev). Vanligste tilfelle: en kollega som ikke vet at firmaet
+// allerede har konto — derfor «be administratoren invitere deg», ikke «support».
+function dublettMelding(bedriftsnavn) {
+  const navn = (bedriftsnavn && String(bedriftsnavn).trim()) || 'Bedriften'
+  return navn + ' er allerede registrert hos oss. Be administratoren i bedriften om å invitere deg som bruker. Er dette feil, kontakt post@enplattform.no.'
+}
+
 // Felles LOKAL feltvalidering — brukes av BÅDE Registrer() og FullforRegistrering()
 // slik at den ene ikke blir en bakvei rundt den andre. Kun synkrone regler
 // (ingen BRREG-kall). Returnerer { felt: melding }; tomt objekt = alt OK.
@@ -754,14 +775,16 @@ function validerRegistreringsfelt({ bedrift, orgnr, navn, epost, telefon, adress
 //   2) varsle plattformeier via SECURITY DEFINER-RPC (server-side)
 // ALT er best-effort og kan ALDRI kaste videre — bedriften er allerede opprettet,
 // så verken varsel eller status-skriving skal kunne velte en fullført registrering.
-async function ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt, epost, telefon }) {
+async function ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt, epost, telefon, oppgittNavn }) {
   let companyId = null
   try {
     const { data: cs } = await supabase.from('company_settings').select('id').limit(1).single()
     companyId = cs?.id || null
   } catch (_) {}
   if (!companyId) return
-  // 1) BRREG-status på bedriften
+  // 1) BRREG-status på bedriften. oppgitt_navn = navnet brukeren faktisk sendte inn
+  //    (frosset snapshot), slik at avvik mot BRREG-navnet vises selv om «name»
+  //    senere redigeres i innstillinger.
   try {
     const verifisert = brreg && brreg.status === 'aktiv'
     await supabase.from('company_settings').update({
@@ -769,6 +792,7 @@ async function ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt, epost, tel
       brreg_navn: brreg?.navn || null,
       brreg_organisasjonsform: brreg?.organisasjonsform || null,
       brreg_verifisert_at: verifisert ? new Date().toISOString() : null,
+      oppgitt_navn: (oppgittNavn && oppgittNavn.trim()) ? oppgittNavn.trim() : null,
       hvor_fant_oss: (hvorFant && hvorFant.trim()) ? hvorFant.trim() : null,
       updated_at: new Date().toISOString(),
     }).eq('id', companyId)
@@ -2602,6 +2626,19 @@ function Registrer() {
     // Her er status 'aktiv' (verifisert) eller 'nede' (BRREG utilgjengelig → slipp
     // gjennom, marker «ikke verifisert», retry ved neste innlogging).
 
+    // Dublett-sperre: har org.nr allerede en konto? (fail-open — sjekkOrgnrDublett
+    // returnerer null ved teknisk feil, så en nede DB stopper aldri registreringen.)
+    const finnes = await sjekkOrgnrDublett(orgnr)
+    if (finnes) {
+      const navn = brreg.navn || finnes
+      setFieldErrors({ orgnr: dublettMelding(navn) })
+      setError(dublettMelding(navn))
+      setSaving(false)
+      const el = refs.orgnr?.current
+      if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
+      return
+    }
+
     try {
       const { data, error: suErr } = await supabase.auth.signUp({
         email: epost.trim(),
@@ -2628,7 +2665,7 @@ function Registrer() {
         })
         if (rpcErr) { setError('Konto opprettet, men oppsett av bedrift feilet: ' + rpcErr.message + '. Logg inn og prøv igjen.'); setSaving(false); return }
         // Skriv BRREG-verifisering + varsle plattformeier (best-effort, blokkerer aldri)
-        await ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt: navn.trim(), epost: epost.trim(), telefon: telefon.trim() })
+        await ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt: navn.trim(), epost: epost.trim(), telefon: telefon.trim(), oppgittNavn: bedrift.trim() })
         // Pakke-valg: «Kun Kalkulasjon» → frittstående uten grunnpakke.
         if (plan === 'kalkyle') {
           try {
@@ -2832,6 +2869,14 @@ function FullforRegistrering() {
       return
     }
 
+    // Dublett-sperre (samme felles funksjon, fail-open)
+    const finnes = await sjekkOrgnrDublett(orgnr)
+    if (finnes) {
+      const navn = brreg.navn || finnes
+      setFieldErrors({ orgnr: dublettMelding(navn) }); setError(dublettMelding(navn)); setBusy(false)
+      return
+    }
+
     // 3) Opprett bedrift + etterarbeid (samme som Registrer)
     try {
       const { error: rpcErr } = await supabase.rpc('register_new_company', {
@@ -2842,7 +2887,7 @@ function FullforRegistrering() {
         p_address: adresse.trim()
       })
       if (rpcErr) { setError(rpcErr.message); setBusy(false); return }
-      await ettarbeidEtterRegistrering({ brreg, hvorFant: md.hvor_fant_oss, kontakt: navn.trim(), epost: user?.email, telefon: telefon.trim() })
+      await ettarbeidEtterRegistrering({ brreg, hvorFant: md.hvor_fant_oss, kontakt: navn.trim(), epost: user?.email, telefon: telefon.trim(), oppgittNavn: bedrift.trim() })
       window.location.reload()
     } catch (e) { setError(e.message); setBusy(false) }
   }
@@ -48779,7 +48824,8 @@ function SuperAdminPage() {
                             aktiv: 'Aktiv i BRREG', ikke_funnet: 'Ikke funnet i BRREG', slettet: 'Slettet i BRREG',
                             under_avvikling: 'Under avvikling', konkurs: 'Konkurs', ikke_verifisert: 'Ikke verifisert ennå',
                           }[c.brreg_status] || (c.brreg_status || 'Ikke verifisert ennå')
-                          const avvik = c.brreg_navn && c.name && c.brreg_navn.trim().toLowerCase() !== c.name.trim().toLowerCase()
+                          const oppgitt = c.oppgitt_navn || c.name
+                          const avvik = c.brreg_navn && oppgitt && c.brreg_navn.trim().toLowerCase() !== oppgitt.trim().toLowerCase()
                           return (
                             <div style={{ marginBottom:'14px' }}>
                               <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>BRREG-VERIFISERING</div>
@@ -48795,7 +48841,7 @@ function SuperAdminPage() {
                               {avvik && (
                                 <div style={{ marginTop:'8px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'8px', padding:'8px 12px' }}>
                                   <div style={{ fontSize:'10px', color:'#b45309', fontWeight:'700', textTransform:'uppercase' }}>Avvik: oppgitt navn ≠ BRREG-navn</div>
-                                  <div style={{ fontSize:'12px', color:'#0f172a', marginTop:'2px' }}>Oppgitt: <strong>{c.name}</strong></div>
+                                  <div style={{ fontSize:'12px', color:'#0f172a', marginTop:'2px' }}>Oppgitt: <strong>{oppgitt}</strong></div>
                                   <div style={{ fontSize:'12px', color:'#0f172a' }}>BRREG: <strong>{c.brreg_navn}</strong></div>
                                 </div>
                               )}
