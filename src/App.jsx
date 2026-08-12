@@ -2254,7 +2254,12 @@ function epostKnappHtml(url, label) {
 }
 
 function Login() {
-  const [mode, setMode] = useState('login') // 'login' | 'glemt' | 'sendt'
+  // Åpne direkte i «glemt passord»-modus når man kommer via ?glemt=1
+  // (brukes fra registreringen når e-posten allerede er registrert).
+  const [mode, setMode] = useState(() => {
+    try { if (new URLSearchParams(window.location.search).get('glemt')) return 'glemt' } catch (_) {}
+    return 'login'
+  }) // 'login' | 'glemt' | 'sendt'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(() => {
@@ -2545,6 +2550,7 @@ function Registrer() {
   const [passord2, setPassord2] = React.useState('')
   const [hvorFant, setHvorFant] = React.useState('')
   const [error, setError] = React.useState('')
+  const [epostFinnes, setEpostFinnes] = React.useState(false) // e-posten er allerede registrert
   const [saving, setSaving] = React.useState(false)
   const [ferdig, setFerdig] = React.useState(null)
   const [plan, setPlan] = React.useState('full') // 'full' = plattform m/grunnpakke · 'kalkyle' = kun Kalkulasjon
@@ -2654,6 +2660,16 @@ function Registrer() {
         } }
       })
       if (suErr) { setError(/already registered|already been registered/i.test(suErr.message) ? 'Denne e-posten har allerede vært registrert. Har du et aktivt abonnement, logg inn. Har prøveperioden din gått ut, kan du ikke starte en ny på samme innlogging — ta kontakt med support@enplattform.no for ny tilgang.' : suErr.message); setSaving(false); return }
+      // Bruker fantes fra før (Confirm email PÅ): Supabase gir ingen feil, men en
+      // TOM identities-array og ingen session. Uten dette ville skjermen vist
+      // «Sjekk e-posten din» mens ingen e-post faktisk sendes — den stille fella.
+      const identities = data?.user?.identities
+      if (Array.isArray(identities) && identities.length === 0) {
+        setEpostFinnes(true); setSaving(false)
+        const el = refs.epost?.current
+        if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
+        return
+      }
       if (data.session && data.user) {
         // E-postbekreftelse AV: vi har session med en gang → opprett bedrift nå.
         const { error: rpcErr } = await supabase.rpc('register_new_company', {
@@ -2766,7 +2782,7 @@ function Registrer() {
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>E-post</label>
-        <input ref={refs.epost} type="email" value={epost} onChange={e=>{setEpost(e.target.value); clearErr('epost')}} placeholder="navn@bedrift.no" style={fieldErrors.epost ? {...inp, ...errBorder} : inp} />
+        <input ref={refs.epost} type="email" value={epost} onChange={e=>{setEpost(e.target.value); clearErr('epost'); if (epostFinnes) setEpostFinnes(false)}} placeholder="navn@bedrift.no" style={fieldErrors.epost ? {...inp, ...errBorder} : inp} />
         {fieldErrors.epost && <p style={errTxt}>{fieldErrors.epost}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
@@ -2794,7 +2810,17 @@ function Registrer() {
         <input ref={refs.passord2} type="password" value={passord2} onChange={e=>{setPassord2(e.target.value); clearErr('passord2')}} placeholder="••••••••" style={fieldErrors.passord2 ? {...inp, ...errBorder} : inp} />
         {fieldErrors.passord2 && <p style={errTxt}>{fieldErrors.passord2}</p>}
       </div>
-      {error && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', color:'#dc2626', marginBottom:'1rem', fontSize:'14px' }}>{error}</div>}
+      {epostFinnes && (
+        <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'10px', padding:'14px', marginBottom:'1rem' }}>
+          <div style={{ fontSize:'14px', fontWeight:'700', color:'#1e3a8a', marginBottom:'4px' }}>Denne e-postadressen er allerede registrert</div>
+          <div style={{ fontSize:'13px', color:'#1e40af', lineHeight:1.5, marginBottom:'12px' }}>Logg inn, eller bruk «Glemt passord» hvis du ikke husker passordet.</div>
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+            <a href={window.location.origin} style={{ flex:'1 1 130px', textAlign:'center', padding:'11px 14px', background:'#059669', color:'white', borderRadius:'8px', textDecoration:'none', fontSize:'14px', fontWeight:'600', minHeight:'44px', display:'flex', alignItems:'center', justifyContent:'center' }}>Logg inn</a>
+            <a href={window.location.origin + '/?glemt=1'} style={{ flex:'1 1 130px', textAlign:'center', padding:'11px 14px', background:'white', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', textDecoration:'none', fontSize:'14px', fontWeight:'600', minHeight:'44px', display:'flex', alignItems:'center', justifyContent:'center' }}>Glemt passord</a>
+          </div>
+        </div>
+      )}
+      {error && !epostFinnes && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', color:'#dc2626', marginBottom:'1rem', fontSize:'14px' }}>{error}</div>}
       <button onClick={fullfor} disabled={saving} style={{ width:'100%', padding:'12px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'15px', fontWeight:'600', cursor:saving?'not-allowed':'pointer' }}>{saving?'Oppretter...':'Start gratis prøveperiode'}</button>
     </div>
   )
