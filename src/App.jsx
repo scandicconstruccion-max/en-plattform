@@ -609,182 +609,6 @@ function erGyldigEpost(e) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-// REGISTRERINGSVALIDERING — org.nr mot BRREG, engangs-e-post, telefon, adresse
-// ══════════════════════════════════════════════════════════════════════
-// Brukes av BÅDE Registrer() og FullforRegistrering() slik at ingen av dem
-// blir en bakvei rundt sperren. GRUNNPRINSIPP: «fail-open» der det er tvil —
-// en uventet feil skal ALDRI låse ute en ekte kunde. Kun org.nr som positivt
-// bekreftes ugyldig/slettet i BRREG sperres; alt annet slipper gjennom.
-
-// Kjente engangs-/wegwerp-e-postdomener. Utvid listen her ved behov.
-const ENGANGS_EPOST_DOMENER = [
-  'lanvos.com',
-  'rpaintel.com',
-]
-
-function erEngangsEpost(epost) {
-  try {
-    const dom = String(epost || '').trim().toLowerCase().split('@')[1] || ''
-    return ENGANGS_EPOST_DOMENER.includes(dom)
-  } catch (_) { return false } // tvil → slipp gjennom
-}
-
-// Trekk ut kun sifre («930 358 118» → «930358118»).
-function normalizeOrgnr(v) {
-  return String(v || '').replace(/\D/g, '')
-}
-
-// Gyldig norsk org.nr: 9 siffer + korrekt MOD11-kontrollsiffer.
-function erGyldigOrgnr(v) {
-  const s = normalizeOrgnr(v)
-  if (!/^\d{9}$/.test(s)) return false
-  const vekter = [3, 2, 7, 6, 5, 4, 3, 2]
-  let sum = 0
-  for (let i = 0; i < 8; i++) sum += Number(s[i]) * vekter[i]
-  const rest = sum % 11
-  const kontroll = rest === 0 ? 0 : 11 - rest
-  if (kontroll === 10) return false // ugyldig kontrollsiffer → ikke et gyldig org.nr
-  return kontroll === Number(s[8])
-}
-
-// Norsk telefon: 8 siffer etter at +47/0047/mellomrom/bindestrek er strippet.
-// Første siffer 2–9 (norske geografiske- og mobilnumre; mobil starter på 4/9).
-// Avviser «dd», feil lengde og utenlandske format.
-function erGyldigTelefon(v) {
-  let s = String(v || '').replace(/[\s-]/g, '')
-  s = s.replace(/^\+47/, '').replace(/^0047/, '')
-  return /^[2-9]\d{7}$/.test(s)
-}
-
-// Adresse skrevet av brukeren: minst 5 tegn og minst ett siffer (husnr/postnr).
-// Adresser hentet fra BRREG regnes alltid som gyldige og valideres ikke her.
-function erGyldigAdresse(v) {
-  const s = String(v || '').trim()
-  return s.length >= 5 && /\d/.test(s)
-}
-
-// Slår opp org.nr i Brønnøysundregistrene (Enhetsregisteret). Ren klient-fetch,
-// 5 sek timeout via AbortController. Returnerer ALLTID et objekt, kaster aldri:
-//   status: 'aktiv' | 'ikke_funnet' | 'slettet' | 'under_avvikling' | 'konkurs' | 'nede'
-//   navn, organisasjonsform, adresse (når tilgjengelig)
-// 'nede' = API nede/timeout/uventet → kalleren SKAL slippe brukeren gjennom.
-async function hentBrreg(orgnr, { timeoutMs = 5000 } = {}) {
-  const s = normalizeOrgnr(orgnr)
-  if (!/^\d{9}$/.test(s)) return { status: 'ikke_funnet' }
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => { try { ctrl.abort() } catch (_) {} }, timeoutMs)
-  try {
-    const resp = await fetch(`https://data.brreg.no/enhetsregisteret/api/enheter/${s}`, {
-      signal: ctrl.signal,
-      headers: { Accept: 'application/json' },
-    })
-    if (resp.status === 404) return { status: 'ikke_funnet' }
-    if (!resp.ok) return { status: 'nede' } // 5xx o.l. → slipp gjennom
-    const d = await resp.json()
-    const a = d.forretningsadresse || d.postadresse || {}
-    const adrLinje = [
-      Array.isArray(a.adresse) ? a.adresse.filter(Boolean).join(', ') : (a.adresse || ''),
-      [a.postnummer, a.poststed].filter(Boolean).join(' '),
-    ].filter(Boolean).join(', ')
-    const base = {
-      navn: d.navn || '',
-      organisasjonsform: d.organisasjonsform?.kode || '',
-      adresse: adrLinje,
-    }
-    if (d.slettedato) return { status: 'slettet', ...base }
-    if (d.konkurs === true) return { status: 'konkurs', ...base }
-    if (d.underAvvikling === true || d.underTvangsavviklingEllerTvangsopplosning === true) return { status: 'under_avvikling', ...base }
-    return { status: 'aktiv', ...base }
-  } catch (_) {
-    return { status: 'nede' } // abort/timeout/nettfeil → slipp gjennom
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-// Konkret, menneskelesbar feilmelding for en BRREG-status som SKAL sperre.
-// Returnerer null for status som IKKE sperrer ('aktiv' og 'nede').
-function brregSperreMelding(status) {
-  switch (status) {
-    case 'ikke_funnet':
-      return 'Vi finner ikke dette organisasjonsnummeret i Brønnøysundregistrene. Sjekk at de 9 sifrene stemmer. Mener du dette er feil, kontakt post@enplattform.no.'
-    case 'slettet':
-      return 'Denne bedriften står som slettet i Brønnøysundregistrene og kan ikke registreres. Mener du dette er feil, kontakt post@enplattform.no.'
-    case 'under_avvikling':
-      return 'Denne bedriften står under avvikling i Brønnøysundregistrene og kan ikke registreres. Mener du dette er feil, kontakt post@enplattform.no.'
-    case 'konkurs':
-      return 'Denne bedriften er registrert konkurs i Brønnøysundregistrene og kan ikke registreres. Mener du dette er feil, kontakt post@enplattform.no.'
-    default:
-      return null
-  }
-}
-
-// Felles LOKAL feltvalidering — brukes av BÅDE Registrer() og FullforRegistrering()
-// slik at den ene ikke blir en bakvei rundt den andre. Kun synkrone regler
-// (ingen BRREG-kall). Returnerer { felt: melding }; tomt objekt = alt OK.
-// adresseFraBrreg=true → hopp over adresse-innholdssjekk (BRREG-adresse er grei).
-// passord utelates (undefined) for FullforRegistrering (bruker har allerede konto).
-function validerRegistreringsfelt({ bedrift, orgnr, navn, epost, telefon, adresse, passord, passord2, adresseFraBrreg }) {
-  const errs = {}
-  if (!String(bedrift || '').trim()) errs.bedrift = 'Fyll inn bedriftsnavn'
-  if (!String(navn || '').trim()) errs.navn = 'Fyll inn navnet ditt'
-
-  if (!String(orgnr || '').trim()) errs.orgnr = 'Fyll inn organisasjonsnummeret (9 siffer)'
-  else if (!erGyldigOrgnr(orgnr)) errs.orgnr = 'Dette ser ikke ut som et gyldig norsk organisasjonsnummer. Sjekk at det er 9 siffer.'
-
-  if (!String(epost || '').trim()) errs.epost = 'Fyll inn e-post'
-  else if (!erGyldigEpost(epost)) errs.epost = 'Sjekk at e-postadressen er skrevet riktig, f.eks. navn@bedrift.no.'
-  else if (erEngangsEpost(epost)) errs.epost = 'Bruk en firma-e-post. Midlertidige engangs-adresser godtas ikke.'
-
-  if (!String(telefon || '').trim()) errs.telefon = 'Fyll inn telefonnummer'
-  else if (!erGyldigTelefon(telefon)) errs.telefon = 'Skriv et gyldig norsk telefonnummer med 8 siffer, f.eks. 401 23 456. Du kan bruke +47 og mellomrom.'
-
-  if (!String(adresse || '').trim()) errs.adresse = 'Fyll inn adresse'
-  else if (!adresseFraBrreg && !erGyldigAdresse(adresse)) errs.adresse = 'Skriv full adresse med gate og postnummer, f.eks. Storgata 1, 0155 Oslo.'
-
-  if (passord !== undefined) {
-    if (String(passord || '').length < 10) errs.passord = 'Passordet må være minst 10 tegn'
-    if (passord !== passord2) errs.passord2 = 'Passordene er ikke like'
-  }
-  return errs
-}
-
-// Etterarbeid RETT ETTER at register_new_company har opprettet bedriften:
-//   1) skriv BRREG-verifisering (+ hvor_fant_oss) på company_settings
-//   2) varsle plattformeier via SECURITY DEFINER-RPC (server-side)
-// ALT er best-effort og kan ALDRI kaste videre — bedriften er allerede opprettet,
-// så verken varsel eller status-skriving skal kunne velte en fullført registrering.
-async function ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt, epost, telefon }) {
-  let companyId = null
-  try {
-    const { data: cs } = await supabase.from('company_settings').select('id').limit(1).single()
-    companyId = cs?.id || null
-  } catch (_) {}
-  if (!companyId) return
-  // 1) BRREG-status på bedriften
-  try {
-    const verifisert = brreg && brreg.status === 'aktiv'
-    await supabase.from('company_settings').update({
-      brreg_status: (brreg?.status === 'nede' || !brreg?.status) ? 'ikke_verifisert' : brreg.status,
-      brreg_navn: brreg?.navn || null,
-      brreg_organisasjonsform: brreg?.organisasjonsform || null,
-      brreg_verifisert_at: verifisert ? new Date().toISOString() : null,
-      hvor_fant_oss: (hvorFant && hvorFant.trim()) ? hvorFant.trim() : null,
-      updated_at: new Date().toISOString(),
-    }).eq('id', companyId)
-  } catch (e) { try { console.warn('[signup] kunne ikke skrive BRREG-status:', e?.message) } catch (_) {} }
-  // 2) Varsle plattformeier (server-side, best-effort)
-  try {
-    await supabase.rpc('notify_new_trial_signup', {
-      p_company_id: companyId,
-      p_kontakt: kontakt || null,
-      p_epost: epost || null,
-      p_telefon: telefon || null,
-    })
-  } catch (e) { try { console.warn('[signup] varsel til plattformeier feilet:', e?.message) } catch (_) {} }
-}
-
-// ══════════════════════════════════════════════════════════════════════
 // PDF-RAMMEVERK: createBrandedPdf()
 // ══════════════════════════════════════════════════════════════════════
 // Felles hjelpefunksjon for all PDF-generering. Gir konsistent header/footer
@@ -2519,45 +2343,17 @@ function Registrer() {
   const [adresse, setAdresse] = React.useState('')
   const [passord, setPassord] = React.useState('')
   const [passord2, setPassord2] = React.useState('')
-  const [hvorFant, setHvorFant] = React.useState('')
   const [error, setError] = React.useState('')
   const [saving, setSaving] = React.useState(false)
   const [ferdig, setFerdig] = React.useState(null)
   const [plan, setPlan] = React.useState('full') // 'full' = plattform m/grunnpakke · 'kalkyle' = kun Kalkulasjon
   const [fieldErrors, setFieldErrors] = React.useState({})
-  // BRREG-oppslag: { status, navn, adresse, organisasjonsform, forOrgnr } | null
-  const [brregInfo, setBrregInfo] = React.useState(null)
-  const [brregSjekker, setBrregSjekker] = React.useState(false)
-  const [adresseFraBrreg, setAdresseFraBrreg] = React.useState(false)
   const refs = {
-    bedrift: React.useRef(null), orgnr: React.useRef(null), navn: React.useRef(null), epost: React.useRef(null),
+    bedrift: React.useRef(null), navn: React.useRef(null), epost: React.useRef(null),
     telefon: React.useRef(null), adresse: React.useRef(null), passord: React.useRef(null), passord2: React.useRef(null),
   }
   // Fjern feilmarkering på et felt så snart brukeren begynner å rette det
   const clearErr = (k) => setFieldErrors(p => { if (!p[k]) return p; const n = { ...p }; delete n[k]; return n })
-
-  // Slå opp org.nr i BRREG når feltet forlates. Forhåndsutfyller firmanavn +
-  // adresse ved treff (brukeren kan justere). Fail-open: aldri kast.
-  const sjekkOrgnr = async () => {
-    const s = normalizeOrgnr(orgnr)
-    if (!s) { setBrregInfo(null); return }
-    if (!erGyldigOrgnr(orgnr)) { setBrregInfo({ status: 'format', forOrgnr: s }); return }
-    setBrregSjekker(true)
-    try {
-      const r = await hentBrreg(orgnr)
-      const info = { ...r, forOrgnr: s }
-      setBrregInfo(info)
-      if (r.status === 'aktiv') {
-        if (r.navn) { setBedrift(r.navn); clearErr('bedrift') }
-        if (r.adresse) { setAdresse(r.adresse); setAdresseFraBrreg(true); clearErr('adresse') }
-        clearErr('orgnr')
-      }
-    } catch (_) {
-      setBrregInfo({ status: 'nede', forOrgnr: s })
-    } finally {
-      setBrregSjekker(false)
-    }
-  }
 
   // Allerede innlogget? Send til appen (unngå dobbel bedrift).
   React.useEffect(() => {
@@ -2567,12 +2363,20 @@ function Registrer() {
   }, [])
 
   const fullfor = async () => {
-    // 1) Felles lokal feltvalidering (org.nr-format, e-post, engangs-e-post, telefon, adresse, passord)
-    const errs = validerRegistreringsfelt({ bedrift, orgnr, navn, epost, telefon, adresse, passord, passord2, adresseFraBrreg })
+    // Samme påkrevd-regler som før — men samle alle feil så vi kan markere hvert felt
+    const errs = {}
+    if (!bedrift.trim()) errs.bedrift = 'Fyll inn bedriftsnavn'
+    if (!navn.trim()) errs.navn = 'Fyll inn navnet ditt'
+    if (!epost.trim()) errs.epost = 'Fyll inn e-post'
+    if (!telefon.trim()) errs.telefon = 'Fyll inn telefonnummer'
+    if (!adresse.trim()) errs.adresse = 'Fyll inn adresse'
+    if (passord.length < 10) errs.passord = 'Passordet må være minst 10 tegn'
+    if (passord !== passord2) errs.passord2 = 'Passordene er ikke like'
     if (Object.keys(errs).length) {
       setFieldErrors(errs)
-      setError('Noen felt mangler eller er ugyldige — vi har markert dem')
-      const rekkefolge = ['bedrift','orgnr','navn','epost','telefon','adresse','passord','passord2']
+      setError('Noen felt mangler — vi har markert dem')
+      // Scroll det første ugyldige feltet inn i synsfeltet og gi det fokus
+      const rekkefolge = ['bedrift','navn','epost','telefon','adresse','passord','passord2']
       const forste = rekkefolge.find(k => errs[k])
       const el = refs[forste]?.current
       if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
@@ -2580,41 +2384,11 @@ function Registrer() {
     }
     setFieldErrors({})
     setSaving(true); setError('')
-
-    // 2) HARD SPERRE mot BRREG. Bruk ferskt oppslag hvis vi allerede har det for
-    //    dette org.nr-et, ellers hent nå. Fail-open: uventet feil → behandles som 'nede'.
-    let brreg
-    if (brregInfo && brregInfo.forOrgnr === normalizeOrgnr(orgnr) && brregInfo.status !== 'format') {
-      brreg = brregInfo
-    } else {
-      try { brreg = await hentBrreg(orgnr) } catch (_) { brreg = { status: 'nede' } }
-    }
-    const sperre = brregSperreMelding(brreg.status)
-    if (sperre) {
-      setBrregInfo({ ...brreg, forOrgnr: normalizeOrgnr(orgnr) })
-      setFieldErrors({ orgnr: sperre })
-      setError(sperre)
-      setSaving(false)
-      const el = refs.orgnr?.current
-      if (el) { el.scrollIntoView({ behavior:'smooth', block:'center' }); el.focus() }
-      return
-    }
-    // Her er status 'aktiv' (verifisert) eller 'nede' (BRREG utilgjengelig → slipp
-    // gjennom, marker «ikke verifisert», retry ved neste innlogging).
-
     try {
       const { data, error: suErr } = await supabase.auth.signUp({
         email: epost.trim(),
         password: passord,
-        options: { data: {
-          full_name: navn.trim(), company_name: bedrift.trim(), org_number: orgnr.trim() || null, plan,
-          phone: telefon.trim(), address: adresse.trim(),
-          // BRREG-resultat + kontekst bæres videre til FullforRegistrering (Confirm email PÅ)
-          brreg_status: brreg.status, brreg_navn: brreg.navn || null,
-          brreg_organisasjonsform: brreg.organisasjonsform || null,
-          brreg_adresse: (adresseFraBrreg && brreg.adresse) ? brreg.adresse : null,
-          hvor_fant_oss: hvorFant.trim() || null,
-        } }
+        options: { data: { full_name: navn.trim(), company_name: bedrift.trim(), org_number: orgnr.trim() || null, plan } }
       })
       if (suErr) { setError(/already registered|already been registered/i.test(suErr.message) ? 'Denne e-posten har allerede vært registrert. Har du et aktivt abonnement, logg inn. Har prøveperioden din gått ut, kan du ikke starte en ny på samme innlogging — ta kontakt med support@enplattform.no for ny tilgang.' : suErr.message); setSaving(false); return }
       if (data.session && data.user) {
@@ -2627,8 +2401,6 @@ function Registrer() {
           p_address: adresse.trim()
         })
         if (rpcErr) { setError('Konto opprettet, men oppsett av bedrift feilet: ' + rpcErr.message + '. Logg inn og prøv igjen.'); setSaving(false); return }
-        // Skriv BRREG-verifisering + varsle plattformeier (best-effort, blokkerer aldri)
-        await ettarbeidEtterRegistrering({ brreg, hvorFant, kontakt: navn.trim(), epost: epost.trim(), telefon: telefon.trim() })
         // Pakke-valg: «Kun Kalkulasjon» → frittstående uten grunnpakke.
         if (plan === 'kalkyle') {
           try {
@@ -2703,24 +2475,8 @@ function Registrer() {
         {fieldErrors.bedrift && <p style={errTxt}>{fieldErrors.bedrift}</p>}
       </div>
       <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Organisasjonsnummer</label>
-        <input ref={refs.orgnr} inputMode="numeric" value={orgnr}
-          onChange={e=>{ setOrgnr(e.target.value); clearErr('orgnr'); if (brregInfo) setBrregInfo(null) }}
-          onBlur={sjekkOrgnr}
-          placeholder="123 456 789" style={fieldErrors.orgnr ? {...inp, ...errBorder} : inp} />
-        {fieldErrors.orgnr && <p style={errTxt}>{fieldErrors.orgnr}</p>}
-        {!fieldErrors.orgnr && brregSjekker && (
-          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#64748b', fontWeight:'500' }}>Sjekker Brønnøysundregistrene …</p>
-        )}
-        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'aktiv' && (
-          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#059669', fontWeight:'600' }}>✓ {brregInfo.navn || 'Bedrift'} funnet i Brønnøysundregistrene. Vi har fylt ut navn og adresse — juster gjerne.</p>
-        )}
-        {!fieldErrors.orgnr && !brregSjekker && brregInfo && brregSperreMelding(brregInfo.status) && (
-          <p style={errTxt}>{brregSperreMelding(brregInfo.status)}</p>
-        )}
-        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'nede' && (
-          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#b45309', fontWeight:'500' }}>Vi fikk ikke sjekket Brønnøysundregistrene akkurat nå. Du kommer videre — vi verifiserer automatisk senere.</p>
-        )}
+        <label style={lbl}>Organisasjonsnummer <span style={{ color:'#94a3b8', fontWeight:'400' }}>(valgfritt)</span></label>
+        <input value={orgnr} onChange={e=>setOrgnr(e.target.value)} placeholder="123 456 789" style={inp} />
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Ditt navn</label>
@@ -2739,12 +2495,8 @@ function Registrer() {
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Adresse</label>
-        <input ref={refs.adresse} value={adresse} onChange={e=>{setAdresse(e.target.value); setAdresseFraBrreg(false); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
+        <input ref={refs.adresse} value={adresse} onChange={e=>{setAdresse(e.target.value); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
         {fieldErrors.adresse && <p style={errTxt}>{fieldErrors.adresse}</p>}
-      </div>
-      <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Hvor fant du oss? <span style={{ color:'#94a3b8', fontWeight:'400' }}>(valgfritt)</span></label>
-        <input value={hvorFant} onChange={e=>setHvorFant(e.target.value)} placeholder="F.eks. Byggmesteren, Google, en kollega …" style={inp} />
       </div>
       <div style={{ marginBottom:'1rem' }}>
         <label style={lbl}>Passord (min. 10 tegn)</label>
@@ -2768,81 +2520,19 @@ function Registrer() {
 // fullfør oppsettet. Ellers: tydelig melding (skal ikke skje for inviterte).
 function FullforRegistrering() {
   const { user, supabase } = useAuth()
-  const md = user?.user_metadata || {}
-  const lbl = { display:'block', fontSize:'14px', fontWeight:'500', color:'#374151', marginBottom:'6px' }
-  const inp = { width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box' }
-  const errBorder = { border:'1px solid #dc2626' }
-  const errTxt = { margin:'6px 0 0', fontSize:'12px', color:'#dc2626', fontWeight:'500' }
-
-  // Forhåndsutfyll fra metadata satt ved registrering. Feltene er redigerbare
-  // slik at ingen kan bli stående fast, men SAMME validering gjelder som i Registrer().
-  const [bedrift, setBedrift] = React.useState(md.company_name || '')
-  const [orgnr, setOrgnr] = React.useState(md.org_number || '')
-  const [navn, setNavn] = React.useState(md.full_name || '')
-  const [telefon, setTelefon] = React.useState(md.phone || '')
-  const [adresse, setAdresse] = React.useState(md.address || '')
-  const [adresseFraBrreg, setAdresseFraBrreg] = React.useState(!!(md.brreg_adresse && (md.address || '') === md.brreg_adresse))
-  const [brregInfo, setBrregInfo] = React.useState(null)
-  const [brregSjekker, setBrregSjekker] = React.useState(false)
-  const [fieldErrors, setFieldErrors] = React.useState({})
   const [error, setError] = React.useState('')
   const [busy, setBusy] = React.useState(false)
-  const companyName = md.company_name || ''
-  const clearErr = (k) => setFieldErrors(p => { if (!p[k]) return p; const n = { ...p }; delete n[k]; return n })
-
-  const sjekkOrgnr = async () => {
-    const s = normalizeOrgnr(orgnr)
-    if (!s) { setBrregInfo(null); return }
-    if (!erGyldigOrgnr(orgnr)) { setBrregInfo({ status: 'format', forOrgnr: s }); return }
-    setBrregSjekker(true)
-    try {
-      const r = await hentBrreg(orgnr)
-      setBrregInfo({ ...r, forOrgnr: s })
-      if (r.status === 'aktiv') {
-        if (r.navn) { setBedrift(r.navn); clearErr('bedrift') }
-        if (r.adresse) { setAdresse(r.adresse); setAdresseFraBrreg(true); clearErr('adresse') }
-        clearErr('orgnr')
-      }
-    } catch (_) { setBrregInfo({ status: 'nede', forOrgnr: s }) }
-    finally { setBrregSjekker(false) }
-  }
+  const companyName = user?.user_metadata?.company_name || ''
 
   const fullfor = async () => {
-    // 1) Felles lokal validering (uten passord — bruker har allerede konto)
-    const errs = validerRegistreringsfelt({ bedrift, orgnr, navn, epost: user?.email, telefon, adresse, adresseFraBrreg })
-    if (Object.keys(errs).length) {
-      setFieldErrors(errs)
-      setError('Noen opplysninger mangler eller er ugyldige — vi har markert dem')
-      return
-    }
-    setFieldErrors({})
     setBusy(true); setError('')
-
-    // 2) HARD SPERRE mot BRREG (fail-open ved 'nede'/uventet)
-    let brreg
-    if (brregInfo && brregInfo.forOrgnr === normalizeOrgnr(orgnr) && brregInfo.status !== 'format') {
-      brreg = brregInfo
-    } else {
-      try { brreg = await hentBrreg(orgnr) } catch (_) { brreg = { status: 'nede' } }
-    }
-    const sperre = brregSperreMelding(brreg.status)
-    if (sperre) {
-      setBrregInfo({ ...brreg, forOrgnr: normalizeOrgnr(orgnr) })
-      setFieldErrors({ orgnr: sperre }); setError(sperre); setBusy(false)
-      return
-    }
-
-    // 3) Opprett bedrift + etterarbeid (samme som Registrer)
     try {
       const { error: rpcErr } = await supabase.rpc('register_new_company', {
-        p_company_name: bedrift.trim() || (user?.email ? user.email.split('@')[0] : 'Min bedrift'),
-        p_org_number: orgnr.trim() || null,
-        p_full_name: navn.trim() || null,
-        p_phone: telefon.trim(),
-        p_address: adresse.trim()
+        p_company_name: companyName || (user?.email ? user.email.split('@')[0] : 'Min bedrift'),
+        p_org_number: user?.user_metadata?.org_number || null,
+        p_full_name: user?.user_metadata?.full_name || null
       })
       if (rpcErr) { setError(rpcErr.message); setBusy(false); return }
-      await ettarbeidEtterRegistrering({ brreg, hvorFant: md.hvor_fant_oss, kontakt: navn.trim(), epost: user?.email, telefon: telefon.trim() })
       window.location.reload()
     } catch (e) { setError(e.message); setBusy(false) }
   }
@@ -2869,40 +2559,7 @@ function FullforRegistrering() {
   return wrap(
     <div>
       <h2 style={{ fontSize:'18px', fontWeight:'600', color:'#0f172a', marginTop:0, marginBottom:'4px' }}>Fullfør oppsett</h2>
-      <p style={{ color:'#64748b', fontSize:'14px', marginTop:0, marginBottom:'1.25rem' }}>Bekreft opplysningene, så setter vi opp bedriften din og starter den 15-dagers prøveperioden.</p>
-
-      <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Bedriftsnavn</label>
-        <input value={bedrift} onChange={e=>{setBedrift(e.target.value); clearErr('bedrift')}} placeholder="Bedriften AS" style={fieldErrors.bedrift ? {...inp, ...errBorder} : inp} />
-        {fieldErrors.bedrift && <p style={errTxt}>{fieldErrors.bedrift}</p>}
-      </div>
-      <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Organisasjonsnummer</label>
-        <input inputMode="numeric" value={orgnr}
-          onChange={e=>{ setOrgnr(e.target.value); clearErr('orgnr'); if (brregInfo) setBrregInfo(null) }}
-          onBlur={sjekkOrgnr} placeholder="123 456 789" style={fieldErrors.orgnr ? {...inp, ...errBorder} : inp} />
-        {fieldErrors.orgnr && <p style={errTxt}>{fieldErrors.orgnr}</p>}
-        {!fieldErrors.orgnr && brregSjekker && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#64748b', fontWeight:'500' }}>Sjekker Brønnøysundregistrene …</p>}
-        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'aktiv' && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#059669', fontWeight:'600' }}>✓ {brregInfo.navn || 'Bedrift'} funnet i Brønnøysundregistrene.</p>}
-        {!fieldErrors.orgnr && !brregSjekker && brregInfo && brregSperreMelding(brregInfo.status) && <p style={errTxt}>{brregSperreMelding(brregInfo.status)}</p>}
-        {!fieldErrors.orgnr && !brregSjekker && brregInfo?.status === 'nede' && <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#b45309', fontWeight:'500' }}>Vi fikk ikke sjekket Brønnøysundregistrene akkurat nå. Du kommer videre — vi verifiserer automatisk senere.</p>}
-      </div>
-      <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Ditt navn</label>
-        <input value={navn} onChange={e=>{setNavn(e.target.value); clearErr('navn')}} placeholder="Ola Nordmann" style={fieldErrors.navn ? {...inp, ...errBorder} : inp} />
-        {fieldErrors.navn && <p style={errTxt}>{fieldErrors.navn}</p>}
-      </div>
-      <div style={{ marginBottom:'1rem' }}>
-        <label style={lbl}>Telefon</label>
-        <input type="tel" value={telefon} onChange={e=>{setTelefon(e.target.value); clearErr('telefon')}} placeholder="+47 xxx xx xxx" style={fieldErrors.telefon ? {...inp, ...errBorder} : inp} />
-        {fieldErrors.telefon && <p style={errTxt}>{fieldErrors.telefon}</p>}
-      </div>
-      <div style={{ marginBottom:'1.25rem' }}>
-        <label style={lbl}>Adresse</label>
-        <input value={adresse} onChange={e=>{setAdresse(e.target.value); setAdresseFraBrreg(false); clearErr('adresse')}} placeholder="Gateadresse, postnr sted" style={fieldErrors.adresse ? {...inp, ...errBorder} : inp} />
-        {fieldErrors.adresse && <p style={errTxt}>{fieldErrors.adresse}</p>}
-      </div>
-
+      <p style={{ color:'#64748b', fontSize:'14px', marginTop:0, marginBottom:'1.25rem' }}>Vi setter opp <strong>{companyName}</strong> og starter din 15-dagers prøveperiode.</p>
       {error && <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'8px', padding:'12px', color:'#dc2626', marginBottom:'1rem', fontSize:'14px' }}>{error}</div>}
       <button onClick={fullfor} disabled={busy} style={{ width:'100%', padding:'12px', background:busy?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'15px', fontWeight:'600', cursor:busy?'not-allowed':'pointer' }}>{busy?'Setter opp...':'Kom i gang'}</button>
     </div>
@@ -3068,6 +2725,56 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
   )
 }
 
+// ─── KILDESPORING («Hvor fant du oss?») ──────────────────────────────────────
+// Kanaler (STEG 1). id lagres i user_profiles.kilde_kanal (stabil nøkkel),
+// label/ikon brukes i popup + kontrollpanel. Endre aldri id-ene i ettertid —
+// da mister historiske svar sin merkelapp i statistikken.
+const KILDE_KANALER = [
+  { id: 'kollega',      ikon: '👥', label: 'Tips / anbefaling fra kollega' },
+  { id: 'google',       ikon: '🔍', label: 'Google / søk' },
+  { id: 'ai',           ikon: '🤖', label: 'ChatGPT eller annen AI-assistent' },
+  { id: 'facebook',     ikon: '📘', label: 'Facebook' },
+  { id: 'instagram',    ikon: '📸', label: 'Instagram' },
+  { id: 'linkedin',     ikon: '💼', label: 'LinkedIn' },
+  { id: 'youtube',      ikon: '▶️', label: 'YouTube' },
+  { id: 'annonse_meta', ikon: '📢', label: 'Annonse på Facebook/Instagram' },
+  { id: 'epost',        ikon: '✉️', label: 'E-post fra En Plattform' },
+  { id: 'ringt',        ikon: '📞', label: 'Ringt av En Plattform' },
+  { id: 'fagpresse',    ikon: '📰', label: 'Artikkel i fagpresse (f.eks. Byggindustrien)' },
+  { id: 'invitert',     ikon: '🏢', label: 'Invitert av min egen bedrift' },
+  { id: 'annet',        ikon: '✏️', label: 'Annet' },
+]
+const KILDE_DAGENS_SYSTEM = ['Excel/papir', 'Fiken', 'Tripletex', 'Cordel', 'SmartDok', 'Svenn', 'Annet', 'Ingenting']
+const KILDE_HOVEDBEHOV = ['Kalkulasjon', 'Dokumentasjon/KS', 'Timelister', 'Faktura', 'Ressursplanlegging']
+const kildeKanalLabel = (id) => (KILDE_KANALER.find(k => k.id === id)?.label) || id || '—'
+
+// Fanger UTM/attribusjon ved FØRSTE landing i appen (kjøres én gang per økt).
+// Lagres i sessionStorage slik at svaret senere kan lagres sammen med kilde-valget,
+// selv om URL-parametrene er strippet bort etter navigasjon/reload.
+function fangKildeUtm() {
+  try {
+    if (typeof window === 'undefined') return
+    if (sessionStorage.getItem('ep_kilde_utm')) return
+    const p = new URLSearchParams(window.location.search || '')
+    const utm = {}
+    ;['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'gclid', 'fbclid'].forEach(k => {
+      const v = p.get(k); if (v) utm[k] = v
+    })
+    const ref = (typeof document !== 'undefined' && document.referrer) || ''
+    if (ref) utm.referrer = ref
+    sessionStorage.setItem('ep_kilde_utm', JSON.stringify(utm))
+  } catch (_) { /* stille — attribusjon skal aldri stoppe appen */ }
+}
+function lesKildeUtm() {
+  try { return JSON.parse(sessionStorage.getItem('ep_kilde_utm') || '{}') } catch (_) { return {} }
+}
+
+// Tur-sperre: mens denne er `true` skal Produktomvisning IKKE auto-starte
+// (og dermed ikke markere seg 'done' i localStorage). Settes true mens
+// kilde-popupen er åpen / ubesvart-sjekken pågår. Default false → alle andre
+// bruk av Produktomvisning (f.eks. anonym UE-portal) er upåvirket.
+const KildeGateContext = React.createContext(false)
+
 // ─── PRODUKTOMVISNING (guided tour / coach marks) ────────────────────────────
 // Gjenbrukbar motor: tar en liste med steg. Hvert steg peker (valgfritt) på et
 // element via data-tour="<key>", med tittel + tekst. Viser mørkt overlegg med
@@ -3076,6 +2783,7 @@ function ModuleCard({ module, onNavigate, isMobile, isLocked, onUpsell }) {
 // på nytt ved å dispatche window-eventet `ep-tour:<tourKey>`.
 function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon = false }) {
   const { user } = useAuth()
+  const kildeGate = React.useContext(KildeGateContext)   // true = hold igjen auto-start (kilde-popup åpen/ubesvart)
   const [aktiv, setAktiv] = React.useState(false)
   const [idx, setIdx] = React.useState(0)
   const [rect, setRect] = React.useState(null)
@@ -3105,6 +2813,7 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
 
   React.useEffect(() => {
     if (!autoStart) return
+    if (kildeGate) return                                     // kilde-popup åpen/ubesvart → ikke start (og ikke marker 'done')
     if (!tillatAnon && (!user || !user.id)) return            // vent til ekte bruker er lastet (unngå 'anon'-nøkkel)
     let sett = false
     try { sett = localStorage.getItem(nokkel) === 'done' } catch (_) {}
@@ -3116,7 +2825,7 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
       try { localStorage.setItem(nokkel, 'done') } catch (_) {}
     }, 650)
     return () => clearTimeout(t)
-  }, [nokkel, autoStart, user])
+  }, [nokkel, autoStart, user, kildeGate])
 
   React.useEffect(() => {
     const start = () => { setIdx(0); setAktiv(true); setTick(x => x + 1) }
@@ -3188,6 +2897,189 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
         </div>
       </div>
     </>
+  )
+}
+
+// ─── KILDE-POPUP («Hvor fant du oss?») ───────────────────────────────────────
+// Tvungen popup ved innlogging når user_profiles.kilde_besvart_at IS NULL.
+// Kan IKKE lukkes i steg 1–2 (ingen X, ingen klikk-utenfor, ingen ESC).
+// Sikkerhetsventil: feiler lagringen, vis feil i kortet + «Lukk» og la brukeren
+// ut uansett (kilde_besvart_at forblir NULL → spørsmålet kommer igjen).
+// Z-index 200: over app-header (40) og vanlige modaler, under alert/confirm.
+function KildePopup({ user, onFerdig }) {
+  const [steg, setSteg] = React.useState(1)
+  const [kanal, setKanal] = React.useState(null)
+  const [fritekst, setFritekst] = React.useState('')
+  const [dagensSystem, setDagensSystem] = React.useState(null)
+  const [hovedbehov, setHovedbehov] = React.useState(null)
+  const [lagrer, setLagrer] = React.useState(false)
+  const [feil, setFeil] = React.useState(null)
+  const [isMob, setIsMob] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640)
+  React.useEffect(() => {
+    const onResize = () => setIsMob(window.innerWidth < 640)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const GRONN = '#059669'
+
+  const lagre = async () => {
+    setLagrer(true); setFeil(null)
+    try {
+      const patch = {
+        kilde_kanal: kanal,
+        kilde_fritekst: kanal === 'annet' ? (fritekst.trim() || null) : null,
+        kilde_dagens_system: dagensSystem || null,
+        kilde_hovedbehov: hovedbehov || null,
+        kilde_utm: lesKildeUtm(),
+        kilde_besvart_at: new Date().toISOString(),
+      }
+      const { error } = await supabase.from('user_profiles').update(patch).eq('id', user.id)
+      if (error) throw error
+      setSteg(3)
+      setTimeout(() => onFerdig(true), 1500)
+    } catch (e) {
+      // SIKKERHETSVENTIL — aldri lås brukeren ute.
+      setFeil('Kunne ikke lagre svaret akkurat nå. Du kan lukke og fortsette — vi spør gjerne igjen senere.')
+      setLagrer(false)
+    }
+  }
+
+  const radLabelStil = { fontSize: '14px', fontWeight: '600', color: '#0f172a', lineHeight: 1.3 }
+  const seksjonTittel = { margin: '0 0 10px', fontSize: '13px', fontWeight: '800', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.4px' }
+
+  // Kompakt valgrad (gjenbrukt i steg 1 og 2)
+  const Valg = ({ valgt, onClick, ikon, tekst }) => (
+    <button type="button" onClick={onClick}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '11px 13px',
+        border: `1.5px solid ${valgt ? GRONN : '#e2e8f0'}`, borderRadius: '12px',
+        background: valgt ? '#ecfdf5' : 'white', cursor: 'pointer', textAlign: 'left',
+        transition: 'border-color 0.12s, background 0.12s' }}>
+      {ikon && <span style={{ fontSize: '18px', flexShrink: 0, lineHeight: 1 }}>{ikon}</span>}
+      <span style={{ flex: 1, ...radLabelStil }}>{tekst}</span>
+      <span style={{ width: '18px', height: '18px', borderRadius: '50%', flexShrink: 0,
+        border: `2px solid ${valgt ? GRONN : '#cbd5e1'}`, background: valgt ? GRONN : 'white',
+        display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        {valgt && <span style={{ color: 'white', fontSize: '11px', fontWeight: '900', lineHeight: 1 }}>✓</span>}
+      </span>
+    </button>
+  )
+
+  return createPortal(
+    <div
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => e.stopPropagation()}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.6)', zIndex: 200,
+        display: 'flex', alignItems: isMob ? 'flex-end' : 'center', justifyContent: 'center',
+        padding: isMob ? '0' : '20px', fontFamily: 'system-ui, sans-serif' }}>
+      <div style={{ background: 'white', borderRadius: isMob ? '20px 20px 0 0' : '24px',
+        width: '100%', maxWidth: '460px', maxHeight: isMob ? '92vh' : '88vh',
+        display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
+
+        {/* ── STEG 3: Takk ── */}
+        {steg === 3 ? (
+          <div style={{ padding: '48px 32px', textAlign: 'center' }}>
+            <div style={{ width: '72px', height: '72px', borderRadius: '50%', background: '#ecfdf5',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px' }}>
+              <span style={{ fontSize: '38px', color: GRONN }}>✓</span>
+            </div>
+            <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: '800', color: '#0f172a' }}>Takk!</h2>
+            <p style={{ margin: 0, fontSize: '14px', color: '#64748b' }}>Det hjelper oss å bli bedre.</p>
+          </div>
+        ) : (
+        <>
+          {/* ── Header (fast) ── */}
+          <div style={{ flexShrink: 0, padding: isMob ? '18px 20px 12px' : '22px 26px 14px', borderBottom: '1px solid #f1f5f9' }}>
+            {isMob && <div style={{ width: '40px', height: '4px', background: '#e2e8f0', borderRadius: '2px', margin: '0 auto 14px' }} />}
+            <div style={{ fontSize: '12px', fontWeight: '800', color: GRONN, marginBottom: '4px' }}>{steg} / 2</div>
+            <h2 style={{ margin: 0, fontSize: isMob ? '18px' : '20px', fontWeight: '800', color: '#0f172a' }}>
+              {steg === 1 ? 'Hvor fant du oss?' : 'To korte spørsmål til'}
+            </h2>
+            <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+              {steg === 1
+                ? 'Hjelp oss å forstå hvordan folk finner En Plattform. Velg det som passer best.'
+                : 'Helt valgfritt — men det hjelper oss å lage riktig verktøy for dere.'}
+            </p>
+          </div>
+
+          {/* ── Body (scrollbar) ── */}
+          <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+            padding: isMob ? '14px 20px' : '16px 26px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {steg === 1 && KILDE_KANALER.map(k => (
+              <React.Fragment key={k.id}>
+                <Valg valgt={kanal === k.id} onClick={() => setKanal(k.id)} ikon={k.ikon} tekst={k.label} />
+                {k.id === 'annet' && kanal === 'annet' && (
+                  <input autoFocus value={fritekst} onChange={e => setFritekst(e.target.value)}
+                    placeholder="Skriv gjerne hvor…" maxLength={200}
+                    style={{ width: '100%', padding: '11px 13px', border: '1.5px solid #cbd5e1', borderRadius: '12px',
+                      fontSize: '14px', outline: 'none', boxSizing: 'border-box', marginTop: '-2px' }} />
+                )}
+              </React.Fragment>
+            ))}
+
+            {steg === 2 && (
+              <>
+                <div>
+                  <div style={seksjonTittel}>Hva bruker dere i dag?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {KILDE_DAGENS_SYSTEM.map(s => (
+                      <Valg key={s} valgt={dagensSystem === s} onClick={() => setDagensSystem(dagensSystem === s ? null : s)} tekst={s} />
+                    ))}
+                  </div>
+                </div>
+                <div style={{ marginTop: '14px' }}>
+                  <div style={seksjonTittel}>Hva vil dere først og fremst løse?</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {KILDE_HOVEDBEHOV.map(s => (
+                      <Valg key={s} valgt={hovedbehov === s} onClick={() => setHovedbehov(hovedbehov === s ? null : s)} tekst={s} />
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── Footer (fast) ── */}
+          <div style={{ flexShrink: 0, padding: isMob ? '12px 20px calc(14px + env(safe-area-inset-bottom))' : '16px 26px 20px', borderTop: '1px solid #f1f5f9' }}>
+            {feil && (
+              <div style={{ marginBottom: '12px', padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca',
+                borderRadius: '10px', fontSize: '13px', color: '#991b1b', lineHeight: 1.5 }}>
+                ⚠️ {feil}
+              </div>
+            )}
+            {feil ? (
+              <button onClick={() => onFerdig(false)}
+                style={{ width: '100%', padding: '13px', background: '#0f172a', color: 'white', border: 'none',
+                  borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: 'pointer' }}>
+                Lukk
+              </button>
+            ) : steg === 1 ? (
+              <button onClick={() => setSteg(2)} disabled={!kanal}
+                style={{ width: '100%', padding: '13px', background: kanal ? GRONN : '#e2e8f0',
+                  color: kanal ? 'white' : '#94a3b8', border: 'none', borderRadius: '12px',
+                  fontSize: '15px', fontWeight: '700', cursor: kanal ? 'pointer' : 'not-allowed' }}>
+                Send inn
+              </button>
+            ) : (
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button onClick={lagre} disabled={lagrer}
+                  style={{ flex: 1, padding: '13px', background: 'white', color: '#475569', border: '1px solid #e2e8f0',
+                    borderRadius: '12px', fontSize: '15px', fontWeight: '600', cursor: lagrer ? 'not-allowed' : 'pointer' }}>
+                  Hopp over
+                </button>
+                <button onClick={lagre} disabled={lagrer}
+                  style={{ flex: 1, padding: '13px', background: GRONN, color: 'white', border: 'none',
+                    borderRadius: '12px', fontSize: '15px', fontWeight: '700', cursor: lagrer ? 'not-allowed' : 'pointer', opacity: lagrer ? 0.7 : 1 }}>
+                  {lagrer ? 'Lagrer…' : 'Fullfør'}
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+        )}
+      </div>
+    </div>,
+    document.body
   )
 }
 
@@ -4535,8 +4427,6 @@ const db = {
   async createProject(data) {
     const { data: result, error } = await supabase.from('projects').insert(data).select().single()
     if (error) throw error
-    // Forfremme kunden hvis den fortsatt er en lead (første prosjekt)
-    if (result?.customer_id) { try { await promoterKundeHvisLead(result.customer_id) } catch(_) {} }
     return result
   },
   async updateProject(id, data) {
@@ -4574,20 +4464,6 @@ function nextSequenceNumber(existingItems, prefix, numberField, { withYear = tru
   }
 }
 
-// Automatisk forfremmelse lead → kunde: når en EKSISTERENDE lead får sitt første
-// prosjekt/tilbud/faktura. Rører ALDRI andre statuser (kun lead/kontaktet/tilbud_sendt),
-// så en rad som allerede er vunnet/kunde/tapt/inaktiv/NULL står urørt.
-async function promoterKundeHvisLead(customerId) {
-  if (!customerId) return
-  try {
-    await supabase.from('customers')
-      .update({ status: 'kunde', updated_at: new Date().toISOString() })
-      .eq('id', customerId)
-      .in('status', ['lead', 'kontaktet', 'tilbud_sendt'])
-    invalidateCustomerCache()
-  } catch (e) { console.error('[promoterKunde]', e) }
-}
-
 // ─── FELLES KUNDE-OPPLØSNING FOR ØKONOMI-MODULER ────────────────────────
 // Bruker i TilbudEditorModal / OrdreEditorModal / FakturaEditorModal / EndringsmeldingModal.
 // Hvis bruker allerede har valgt kunde via CustomerSelect (form.customer_id satt), returnerer den id-en.
@@ -4597,7 +4473,7 @@ async function promoterKundeHvisLead(customerId) {
 async function resolveCustomerFromForm({ form, user, initialCustomerId = null, statusOnCreate = null }) {
   // 1. Hvis kunde allerede er valgt (dropdown eller tidligere lagret), bruk den
   let customerId = form.customer_id || initialCustomerId || null
-  if (customerId) { await promoterKundeHvisLead(customerId); return { customerId, created: false } }
+  if (customerId) return { customerId, created: false }
 
   // 2. Ingen kunde valgt — hvis heller ingen navn skrevet, returner null (ikke valgfritt å ha kunde)
   if (!form.customer_name?.trim()) return { customerId: null, created: false }
@@ -4624,7 +4500,6 @@ async function resolveCustomerFromForm({ form, user, initialCustomerId = null, s
       if (form.customer_address?.trim()) updates.address = form.customer_address.trim()
       if (form.customer_orgnr?.trim()) updates.orgnr = form.customer_orgnr.trim()
       await supabase.from('customers').update(updates).eq('id', existingCustomer.id)
-      await promoterKundeHvisLead(existingCustomer.id)
       return { customerId: existingCustomer.id, created: false }
     }
 
@@ -36467,38 +36342,17 @@ const KUNDE_TYPE = {
 
 const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 
-// HVITLISTE: statuser som vises i Kundeoversikt som standard (NULL vises alltid i tillegg).
-// Skjules som standard: 'lead','kontaktet','tapt','inaktiv'. Bryteren «Vis også leads» PÅ = ingen statusfiltrering.
-const KUNDE_SYNLIGE_STATUSER = ['kunde', 'vunnet', 'tilbud_sendt', 'ordre_bekreftet', 'faktura_sendt']
-function lesVisLeads() { try { return window.localStorage.getItem('kunder_vis_leads') === '1' } catch(_) { return false } }
-
-const KUNDE_SORT = {
-  navn_asc:  { label:'Navn A–Å',      col:'name',       asc:true  },
-  navn_desc: { label:'Navn Å–A',      col:'name',       asc:false },
-  nyeste:    { label:'Sist opprettet', col:'created_at', asc:false },
-}
-
 function KunderPage() {
   const { user } = useAuth()
   const confirm = useConfirm()
   const appAlert = useAppAlert()
-  const PAGE_SIZE = 50
-  const [kunder, setKunder] = useState([])          // paginert liste (DB-filtrert/sortert)
+  const [kunder, setKunder] = useState([])
   const [prosjekter, setProsjekter] = useState([])
   const [tilbud, setTilbud] = useState([])
   const [fakturaer, setFakturaer] = useState([])
   const [loading, setLoading] = useState(true)
-  const [listBusy, setListBusy] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
   const [search, setSearch] = useState('')
-  const [debSearch, setDebSearch] = useState('')
   const [filterType, setFilterType] = useState('alle')
-  const [visLeads, setVisLeads] = useState(lesVisLeads) // standard AV
-  const [sortBy, setSortBy] = useState('navn_asc')
-  const [listCount, setListCount] = useState(0)      // antall som matcher aktivt filter (DB count)
-  const [typeCounts, setTypeCounts] = useState({})   // per type, innenfor hvitliste+søk (DB count)
-  const [page, setPage] = useState(0)
-  const initedRef = React.useRef(false)
   const [selected, setSelected] = useState(null)
   // Browser tilbake-knapp og mobil-sveip: lukk detaljvisning i stedet for
   // å forlate Kunder-modulen helt.
@@ -36514,23 +36368,9 @@ function KunderPage() {
   const [importing, setImporting] = useState(false)
   const csvInputRef = React.useRef()
 
-  const exportCSV = async () => {
-    // Eksporterer HELE det filtrerte settet (paginert henting), ikke bare de lastede radene
-    let alle = [], from = 0
-    try {
-      while (true) {
-        let q = anvendKundeFilter(supabase.from('customers').select('*'))
-        const so = KUNDE_SORT[sortBy] || KUNDE_SORT.navn_asc
-        q = q.order(so.col, { ascending: so.asc, nullsFirst:false }).order('id', { ascending:true })
-        const { data } = await q.range(from, from + 999)
-        const chunk = data || []
-        alle = alle.concat(chunk)
-        if (chunk.length < 1000) break
-        from += 1000
-      }
-    } catch(e) { console.error('[Kunder] exportCSV', e) }
+  const exportCSV = () => {
     const headers = ['Navn','Type','Org.nr','E-post','Telefon','Faktura e-post','Adresse','Postnr','By','Merknad']
-    const rows = alle.map(k => [k.name, k.type, k.orgnr, k.email, k.phone, k.invoice_email, k.address, k.postal_code, k.city, k.notes].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(';'))
+    const rows = kunder.map(k => [k.name, k.type, k.orgnr, k.email, k.phone, k.invoice_email, k.address, k.postal_code, k.city, k.notes].map(v => `"${(v||'').replace(/"/g,'""')}"`).join(';'))
     const csv = '\uFEFF' + [headers.join(';'), ...rows].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -36583,63 +36423,27 @@ function KunderPage() {
     } catch(e) { await appAlert({ message: 'Feil ved import', subMessage: e.message, kind: 'error' }) } finally { setImporting(false) }
   }
 
-  const sanitizeSok = (s) => (s||'').trim().replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim()
-
-  // Bygg customers-spørring med hvitliste (leads skjules med mindre visLeads) + søk + type — alt DB-side.
-  const anvendKundeFilter = (q, { medType = true } = {}) => {
-    if (!visLeads) q = q.or(`status.is.null,status.in.(${KUNDE_SYNLIGE_STATUSER.join(',')})`)
-    const t = sanitizeSok(debSearch)
-    if (t) q = q.or(`name.ilike.%${t}%,orgnr.ilike.%${t}%,email.ilike.%${t}%,phone.ilike.%${t}%`)
-    if (medType && filterType !== 'alle') q = q.eq('type', filterType)
-    return q
-  }
-
-  // Last første (reset) eller neste side via .range() — ikke begrenset til 1000.
-  const loadList = async (reset = true) => {
-    reset ? setListBusy(true) : setLoadingMore(true)
+  const load = async () => {
+    setLoading(true)
     try {
-      const nextPage = reset ? 0 : page + 1
-      const from = nextPage * PAGE_SIZE, to = from + PAGE_SIZE - 1
-      let q = anvendKundeFilter(supabase.from('customers').select('*', { count:'exact' }))
-      const so = KUNDE_SORT[sortBy] || KUNDE_SORT.navn_asc
-      q = q.order(so.col, { ascending: so.asc, nullsFirst:false }).order('id', { ascending:true })
-      const { data, count } = await q.range(from, to)
-      const rows = data || []
-      setKunder(prev => reset ? rows : [...prev, ...rows])
-      if (typeof count === 'number') setListCount(count)
-      setPage(nextPage)
-    } catch(e) { console.error('[Kunder] loadList', e); if (reset) { setKunder([]); setListCount(0) } }
-    finally { if (!initedRef.current) { initedRef.current = true; setLoading(false) } reset ? setListBusy(false) : setLoadingMore(false) }
+      const [k, p, q, inv] = await Promise.all([
+        supabase.from('customers').select('*').order('name').then(r => r.data || []),
+        supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
+        supabase.from('quotes').select('id,title,status,total_amount,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
+        supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
+      ])
+      setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
+    } catch(e) { console.error(e) }
+    finally { setLoading(false) }
   }
 
-  // Type-tellere via DB-count, innenfor aktiv hvitliste + søk (uavhengig av valgt type).
-  const loadTypeCounts = async () => {
-    try {
-      const keys = Object.keys(KUNDE_TYPE)
-      const res = await Promise.all(keys.map(k => anvendKundeFilter(supabase.from('customers').select('id', { count:'exact', head:true }), { medType:false }).eq('type', k)))
-      const obj = {}; keys.forEach((k, i) => { obj[k] = res[i].count || 0 }); setTypeCounts(obj)
-    } catch(e) { console.error('[Kunder] typeCounts', e) }
-  }
+  useEffect(() => { load() }, [])
 
-  // Hjelpedata (prosjekt/tilbud/faktura) for detaljvisning + prosjektteller på rad.
-  const loadAux = async () => {
-    const [p, q, inv] = await Promise.all([
-      supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []).catch(()=>[]),
-      supabase.from('quotes').select('id,title,status,total_amount,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []).catch(()=>[]),
-      supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []).catch(()=>[]),
-    ])
-    setProsjekter(p); setTilbud(q); setFakturaer(inv)
-  }
-
-  // Full oppfriskning (etter ny/rediger/slett/import)
-  const load = async () => { await Promise.all([ loadList(true), loadTypeCounts(), loadAux() ]) }
-
-  useEffect(() => { const t = setTimeout(() => setDebSearch(search), 350); return () => clearTimeout(t) }, [search])
-  useEffect(() => { loadAux() }, [])
-  useEffect(() => { loadList(true) }, [sortBy, filterType, visLeads, debSearch])
-  useEffect(() => { loadTypeCounts() }, [visLeads, debSearch])
-
-  const noFilters = !debSearch && filterType === 'alle'
+  const filtered = kunder.filter(k => {
+    if (filterType !== 'alle' && k.type !== filterType) return false
+    if (search && ![k.name, k.email, k.phone, k.orgnr, k.city].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
+    return true
+  })
 
   const handleDelete = async (kunde) => {
     const ok = await confirm({ message: `Slett ${kunde.name}?`, subMessage: 'Kunden og all tilhørende informasjon slettes permanent.', danger: true })
@@ -36681,7 +36485,7 @@ function KunderPage() {
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', marginBottom: isMobK ? '10px' : '0' }}>
           <div>
             <h1 style={{ margin:0, fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
-            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{listCount.toLocaleString('nb-NO')} kunder{visLeads?' (inkl. leads)':''}</p>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{kunder.length} kunder</p>
           </div>
           <button data-tour="kunde-ny" onClick={() => setShowNew(true)}
             style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '8px 12px' : '10px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
@@ -36699,7 +36503,7 @@ function KunderPage() {
       {/* Stats */}
       <div style={{ background:'white', borderBottom:'1px solid #f1f5f9', padding: isMobK ? '10px 14px' : '12px 32px', display:'flex', gap: isMobK ? '6px' : '24px', flexWrap:'wrap' }}>
         {Object.entries(KUNDE_TYPE).map(([key, cfg]) => {
-          const count = typeCounts[key] || 0
+          const count = kunder.filter(k => k.type === key).length
           return (
             <button key={key} onClick={() => setFilterType(filterType === key ? 'alle' : key)}
               style={{ display:'flex', alignItems:'center', gap:'8px', background:'none', border:'none', cursor:'pointer', padding:'6px 12px', borderRadius:'10px',
@@ -36721,34 +36525,27 @@ function KunderPage() {
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk på navn, e-post, telefon, orgnr..."
             style={{ ...kundeInp, paddingLeft:'34px' }} />
         </div>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)} title="Sortering" style={{ ...kundeInp, maxWidth: isMobK ? '48%' : '160px' }}>
-          {Object.entries(KUNDE_SORT).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-        </select>
-        <label style={{ display:'flex', alignItems:'center', gap:'7px', fontSize:'13px', fontWeight:'600', color:'#374151', cursor:'pointer', whiteSpace:'nowrap' }}>
-          <input type="checkbox" checked={visLeads} onChange={e => { const v = e.target.checked; setVisLeads(v); try{ window.localStorage.setItem('kunder_vis_leads', v ? '1' : '0') }catch(_){} }} style={{ width:'16px', height:'16px', accentColor:'#059669', cursor:'pointer' }} />
-          Vis også leads
-        </label>
         {(search || filterType !== 'alle') && (
           <button onClick={() => { setSearch(''); setFilterType('alle') }}
             style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', cursor:'pointer', color:'#64748b' }}>
             Nullstill
           </button>
         )}
-        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>Viser {kunder.length.toLocaleString('nb-NO')} av {listCount.toLocaleString('nb-NO')}{listBusy?' …':''}</span>
+        <span style={{ marginLeft:'auto', fontSize:'13px', color:'#94a3b8' }}>{filtered.length} kunder</span>
       </div>
 
       {/* Customer list */}
       <div style={{ padding: isMobK ? '12px' : '20px 32px' }}>
-        {kunder.length === 0 ? (
+        {filtered.length === 0 ? (
           <div style={{ textAlign:'center', padding:'60px 20px', background:'white', borderRadius:'16px', border:'1px solid #f1f5f9' }}>
             <div style={{ fontSize:'48px', marginBottom:'12px' }}>🏢</div>
-            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{noFilters ? 'Ingen kunder ennå' : 'Ingen kunder funnet'}</h3>
-            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>{noFilters ? 'Registrer din første kunde' : 'Prøv et annet søk eller filter — eller slå på «Vis også leads».'}</p>
-            {noFilters && <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'11px 22px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde</button>}
+            <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>{search ? 'Ingen kunder funnet' : 'Ingen kunder ennå'}</h3>
+            <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>{search ? 'Prøv et annet søkeord' : 'Registrer din første kunde'}</p>
+            {!search && <button onClick={() => setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'11px 22px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>+ Ny kunde</button>}
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-            {kunder.map(kunde => {
+            {filtered.map(kunde => {
               const type = KUNDE_TYPE[kunde.type] || KUNDE_TYPE.bedrift
               const antallProsjekter = prosjekter.filter(p => p.customer_id === kunde.id).length
               return (
@@ -36795,13 +36592,6 @@ function KunderPage() {
                 </div>
               )
             })}
-            {kunder.length < listCount && (
-              <div style={{ textAlign:'center', paddingTop:'8px' }}>
-                <button onClick={() => loadList(false)} disabled={loadingMore} style={{ padding:'10px 24px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor: loadingMore?'wait':'pointer', fontSize:'14px', fontWeight:'700' }}>
-                  {loadingMore ? 'Laster…' : `Last inn flere (${(listCount - kunder.length).toLocaleString('nb-NO')} igjen)`}
-                </button>
-              </div>
-            )}
           </div>
         )}
       </div>
@@ -37642,7 +37432,6 @@ const CRM_STATUS = {
   kontaktet:     { label:'Kontaktet',     emoji:'📞', color:'#2563eb', bg:'#eff6ff', border:'#bfdbfe' },
   tilbud_sendt:  { label:'Tilbud sendt',  emoji:'📋', color:'#d97706', bg:'#fffbeb', border:'#fde68a' },
   vunnet:        { label:'Vunnet',        emoji:'🏆', color:'#16a34a', bg:'#f0fdf4', border:'#bbf7d0' },
-  kunde:         { label:'Kunde',         emoji:'✅', color:'#059669', bg:'#ecfdf5', border:'#a7f3d0' },
   tapt:          { label:'Tapt',          emoji:'❌', color:'#dc2626', bg:'#fef2f2', border:'#fecaca' },
   inaktiv:       { label:'Inaktiv',       emoji:'💤', color:'#94a3b8', bg:'#f8fafc', border:'#e2e8f0' },
 }
@@ -37794,16 +37583,8 @@ const CRM_SORT = {
   kontaktet_asc: { label:'📞 Sist kontaktet (eldst først)',col:'sist_kontaktet',   asc:true  },
   navn_asc:      { label:'🔤 Navn (A–Å)',                   col:'name',             asc:true  },
   nyeste:        { label:'🆕 Nyeste først',                 col:'created_at',       asc:false },
-  oppgave_asc:   { label:'📌 Oppgavefrist (tidligst)',      col:'neste_oppgave_frist', asc:true },
 }
 const CRM_SORT_DEFAULT = 'score_desc'
-// Filter på oppgavestatus i CRM-lista (bruker denormaliserte kolonner på customers)
-const CRM_OPPGAVE_FILTER = {
-  alle:    'Alle oppgaver',
-  apen:    'Har åpen oppgave',
-  forfalt: 'Har forfalt oppgave',
-  ingen:   'Ingen åpen oppgave',
-}
 function readCrmSort() {
   try { const v = window.localStorage.getItem('crm_sort'); if (v && CRM_SORT[v]) return v } catch(_) {}
   return CRM_SORT_DEFAULT
@@ -37826,7 +37607,6 @@ function CRMPage() {
   const [filterIndustry, setFilterIndustry] = useState('alle')
   const [filterKilde, setFilterKilde] = useState('alle')
   const [filterKommune, setFilterKommune] = useState('alle')
-  const [filterOppgave, setFilterOppgave] = useState('alle') // alle|apen|forfalt|ingen (DB-side via denorm-kolonner)
   const [visOppfolging, setVisOppfolging] = useState(false) // KPI-kort «Til oppfølging i dag» aktivt
   const [kilder, setKilder] = useState([])       // distinkte kilder (fra DB)
   const [kommuner, setKommuner] = useState([])   // distinkte kommuner/steder (fra DB, city-feltet)
@@ -37838,8 +37618,6 @@ function CRMPage() {
   const [visAssistent, setVisAssistent] = useState(false)
   const [visOppgaver, setVisOppgaver] = useState(false)
   const [hurtigRediger, setHurtigRediger] = useState(null) // lead for hurtigredigering fra lista
-  const [detailTab, setDetailTab] = useState(null)          // startfane i kundekortet (deep-link/banner)
-  const [visForfalteModal, setVisForfalteModal] = useState(false) // banner → liste over forfalte oppgaver
   const [sortBy, setSortBy] = useState(readCrmSort)
   const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -37864,10 +37642,6 @@ function CRMPage() {
     if (filterIndustry !== 'alle') q = q.eq('industry', filterIndustry)
     if (filterKilde !== 'alle') q = q.eq('kilde', filterKilde)
     if (filterKommune !== 'alle') q = q.eq('city', filterKommune) // geografi ligger i city (poststed)
-    // Oppgavefilter — DB-side via denormaliserte kolonner (vedlikeholdt av trigger)
-    if (filterOppgave === 'apen') q = q.eq('har_apen_oppgave', true)
-    else if (filterOppgave === 'forfalt') q = q.not('neste_oppgave_frist', 'is', null).lt('neste_oppgave_frist', idag)
-    else if (filterOppgave === 'ingen') q = q.or('har_apen_oppgave.is.null,har_apen_oppgave.eq.false')
     if (visOppfolging) q = q.not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag) // forfalt eller i dag
     const term = sanitizeSearch(debSearch)
     if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,city.ilike.%${term}%,orgnr.ilike.%${term}%`)
@@ -37921,7 +37695,7 @@ function CRMPage() {
     const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
     const [ct, act, proj, q, inv] = await Promise.all([
       supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
-      supabase.from('crm_activities').select('*, customers(id,name,city,status,score)').order('created_at',{ascending:false}).then(r=>r.data||[]).catch(()=>[]),
+      safeQuery('crm_activities'),
       supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
       safeQuery('quotes'),
       safeQuery('invoices'),
@@ -37955,7 +37729,7 @@ function CRMPage() {
   // Init: KPI + hjelpedata + facetter én gang
   useEffect(()=>{ loadKpis(); loadAux(); loadFacets() },[])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
-  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, filterOppgave, visOppfolging, debSearch])
+  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
 
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
   const activeKpi = visOppfolging ? 'oppfolging'
@@ -37981,44 +37755,15 @@ function CRMPage() {
     if (!user||activities.length===0) return
     const today = new Date().toISOString().split('T')[0]
     activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<today).forEach(async a=>{
-      const kundeNavn = a.customers?.name || customers.find(c=>c.id===a.customer_id)?.name || ''
+      const cust = customers.find(c=>c.id===a.customer_id)
       const { data } = await supabase.from('notifications').select('id').eq('user_id',user.id).ilike('title',`%${a.title}%`).gte('created_at',today+'T00:00:00').limit(1)
       if (!data||data.length===0) {
-        // link_id = customer_id → varselet dyplenker til kunden (Aktiviteter-fanen). Gamle varsler uten link_id → fallback til CRM-forsiden.
-        await supabase.from('notifications').insert({ user_id:user.id, title:`Forfalt oppgave: ${a.title}`, message:kundeNavn?`Kunde: ${kundeNavn}`:'', type:'warning', link_page:'crm', link_id: a.customer_id || null })
+        await supabase.from('notifications').insert({ user_id:user.id, title:`Forfalt oppgave: ${a.title}`, message:cust?`Kunde: ${cust.name}`:'', type:'warning', link_page:'crm' })
       }
     })
   },[activities])
 
-  // Åpne en kunde på Aktiviteter-fanen (fra banner-liste eller varsel). Henter ALLTID full kunde-rad
-  // (embed fra aktiviteter kan være delvis), fra lastet liste eller egen spørring.
-  const apneKundePaaAktiviteter = async (idEllerKunde) => {
-    const id = typeof idEllerKunde === 'string' ? idEllerKunde : idEllerKunde?.id
-    if (!id) return
-    let kunde = customers.find(c => c.id === id)
-    if (!kunde) { try { const { data } = await supabase.from('customers').select('*').eq('id', id).single(); kunde = data } catch(_) {} }
-    if (!kunde) return
-    setVisForfalteModal(false)
-    setDetailTab('aktiviteter')
-    setSelected(kunde)
-  }
-
-  // Marker en task fullført direkte fra banner-lista (uten å åpne kunden)
-  const fullforOppgave = async (a) => {
-    try { await supabase.from('crm_activities').update({ completed: true }).eq('id', a.id); await refreshAll() }
-    catch(e) { alert({ message:'Kunne ikke fullføre oppgaven: ' + e.message, kind:'error' }) }
-  }
-
-  // Deep-link fra varselbjella: window.__pendingLinkId = customer_id (nye varsler).
-  // Gamle varsler uten link_id → ingen id → blir stående på CRM-forsiden (ingen krasj).
-  useEffect(() => {
-    const id = typeof window !== 'undefined' ? window.__pendingLinkId : null
-    if (!id) return
-    try { window.__pendingLinkId = null } catch(_) {}
-    apneKundePaaAktiviteter(String(id))
-  }, [])
-
-  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && filterOppgave==='alle' && !visOppfolging
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !visOppfolging
   const overdueTasks = activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<new Date().toISOString().split('T')[0])
 
   const exportCSV = async () => {
@@ -38047,9 +37792,9 @@ function CRMPage() {
   if (loading) return <div style={{ display:'flex',alignItems:'center',justifyContent:'center',minHeight:'60vh',fontFamily:'system-ui,sans-serif' }}><div style={{ textAlign:'center' }}><div style={{ width:'36px',height:'36px',border:'3px solid #e2e8f0',borderTop:'3px solid #059669',borderRadius:'50%',margin:'0 auto 12px',animation:'spin 1s linear infinite' }}/><p style={{ color:'#94a3b8',fontSize:'14px' }}>Laster CRM...</p></div></div>
   // Detaljsiden har forrang: klikk på en lead i assistent/oppgaver setter `selected`,
   // og «Tilbake» derfra returnerer til undervisningen (som fortsatt er aktiv under).
-  if (selected) return <CRMDetaljer customer={selected} initialTab={detailTab} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);setDetailTab(null);refreshAll()}} />
+  if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
   if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
-  if (visOppgaver) return <MineOppgaver user={user} onOpenKunde={(c, t)=>{ setDetailTab(t||null); setSelected(c) }} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
+  if (visOppgaver) return <MineOppgaver user={user} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -38102,11 +37847,10 @@ function CRMPage() {
       <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
         {/* Overdue tasks warning */}
         {overdueTasks.length>0&&(
-          <button onClick={()=>setVisForfalteModal(true)} style={{ width:'100%', textAlign:'left', background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', fontFamily:'inherit' }}>
+          <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px' }}>
             <span style={{ fontSize:'18px' }}>🚨</span>
             <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626' }}>{overdueTasks.length} forfalt oppgave{overdueTasks.length>1?'r':''} krever oppfølging</span>
-            <span style={{ marginLeft:'auto', fontSize:'13px', color:'#dc2626', fontWeight:'700' }}>Se liste →</span>
-          </button>
+          </div>
         )}
 
         {/* Controls */}
@@ -38116,9 +37860,6 @@ function CRMPage() {
             <option value="alle">Alle statuser</option>
             <option value="aktive">📋 Aktive (kontaktet + tilbud)</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
-          </select>
-          <select value={filterOppgave} onChange={e=>setFilterOppgave(e.target.value)} title="Oppgavefilter" style={{ ...crmInp, maxWidth: mob?'none':'175px', flex: mob?'1 1 45%':'none' }}>
-            {Object.entries(CRM_OPPGAVE_FILTER).map(([k,label])=><option key={k} value={k}>{label}</option>)}
           </select>
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'140px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle typer</option>
@@ -38139,7 +37880,7 @@ function CRMPage() {
           <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth: mob?'none':'200px', flex: mob?'1 1 45%':'none' }}>
             {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
-          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setFilterOppgave('alle');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
@@ -38265,39 +38006,6 @@ function CRMPage() {
       {showImport&&<CRMImportModal user={user} onClose={()=>setShowImport(false)} onDone={()=>{setShowImport(false);refreshAll()}} />}
 
       {hurtigRediger&&<CRMHurtigRedigerModal customer={hurtigRediger} user={user} onClose={()=>setHurtigRediger(null)} onSaved={()=>{setHurtigRediger(null);refreshAll()}} />}
-
-      {visForfalteModal && (
-        <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui,sans-serif' }}>
-          <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e)=>{ if(e.target===e.currentTarget) setVisForfalteModal(false) }} />
-          <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'640px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
-            <div style={{ padding:'16px 22px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-              <h2 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#dc2626' }}>🚨 Forfalte oppgaver ({overdueTasks.length})</h2>
-              <button onClick={()=>setVisForfalteModal(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-            </div>
-            <div style={{ padding:'14px 22px', overflowY:'auto', display:'flex', flexDirection:'column', gap:'8px' }}>
-              {overdueTasks.length===0 ? <p style={{ margin:0, color:'#94a3b8', fontSize:'14px' }}>Ingen forfalte oppgaver 🎉</p> :
-                [...overdueTasks].sort((a,b)=>(a.due_date||'').localeCompare(b.due_date||'')).map(a=>{
-                  const dagerOver = Math.max(0, Math.round((new Date(new Date().toISOString().split('T')[0]) - new Date(a.due_date)) / 86400000))
-                  const kundeNavn = a.customers?.name || '(ukjent kunde)'
-                  return (
-                    <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'10px 12px' }}>
-                      <input type="checkbox" onChange={()=>fullforOppgave(a)} title="Marker fullført" style={{ width:'18px', height:'18px', accentColor:'#059669', cursor:'pointer', flexShrink:0 }} />
-                      <div onClick={()=>apneKundePaaAktiviteter(a.customer_id)} style={{ flex:1, minWidth:0, cursor:'pointer' }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-                          <span>{a.title}</span>
-                          <span style={{ fontSize:'11px', color:'#64748b', fontWeight:'600' }}>· {kundeNavn}</span>
-                        </div>
-                        {a.description&&<div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{a.description}</div>}
-                        <div style={{ fontSize:'11px', color:'#dc2626', fontWeight:'700', marginTop:'2px' }}>Frist {a.due_date} · {dagerOver} dag{dagerOver===1?'':'er'} på overtid</div>
-                      </div>
-                      <button onClick={()=>apneKundePaaAktiviteter(a.customer_id)} style={{ flexShrink:0, background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'9px', padding:'7px 11px', fontSize:'12px', fontWeight:'700', cursor:'pointer' }}>Åpne →</button>
-                    </div>
-                  )
-                })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Import fra tilbud modal */}
       {showImportQuotes && (()=>{
@@ -38439,7 +38147,7 @@ function CRMPage() {
   )
 }
 
-function CRMDetaljer({ customer: init, initialTab, contacts, activities, projects, quotes, invoices, user, onBack }) {
+function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, invoices, user, onBack }) {
   const alert = useAppAlert()
   const isMobBD = typeof window !== 'undefined' && window.innerWidth < 768
   const confirm = useConfirm()
@@ -38448,7 +38156,7 @@ function CRMDetaljer({ customer: init, initialTab, contacts, activities, project
   const [cts, setCts] = useState(contacts)
   const [acts, setActs] = useState(activities)
   const [docs, setDocs] = useState([])
-  const [tab, setTab] = useState(initialTab || 'oversikt')
+  const [tab, setTab] = useState('oversikt')
   const [editing, setEditing] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewActivity, setShowNewActivity] = useState(false)
@@ -39132,22 +38840,18 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
   const [vindu, setVindu] = useState(crmLesOppgaveVindu) // dager frem (0 = kun i dag)
   const idag = new Date().toISOString().split('T')[0]
 
-  // Henter BEGGE kilder: oppfølginger (customers.neste_oppfolging) OG tasks
-  // (crm_activities type=task, ikke fullført, med frist) — begge innen samme tidsvindu.
   const load = async () => {
     setLoading(true)
     try {
-      const grense = crmDatoPlussDager(vindu)
-      const [oppfRes, taskRes] = await Promise.all([
-        supabase.from('customers').select('*').not('neste_oppfolging','is',null).lte('neste_oppfolging', grense).order('neste_oppfolging',{ascending:true}).limit(500),
-        supabase.from('crm_activities').select('*, customers(*)').eq('type','task').eq('completed',false).not('due_date','is',null).lte('due_date', grense).order('due_date',{ascending:true}).limit(500),
-      ])
-      if (oppfRes.error) throw oppfRes.error
-      if (taskRes.error) throw taskRes.error
-      const oppf = (oppfRes.data||[]).map(c => ({ kind:'oppfolging', key:'o_'+c.id, dato:c.neste_oppfolging, kunde:c, raw:c }))
-      const tasks = (taskRes.data||[]).filter(a=>a.customers).map(a => ({ kind:'task', key:'t_'+a.id, dato:a.due_date, kunde:a.customers, raw:a }))
-      const merged = [...oppf, ...tasks].sort((a,b)=>(a.dato||'').localeCompare(b.dato||''))
-      setOppgaver(merged)
+      // DB-side: leads med oppfølging satt, t.o.m. valgt vindu frem. Overdue (< i dag) er
+      // alltid inkludert siden grensen ≥ i dag. Eldste først.
+      const { data, error } = await supabase.from('customers').select('*')
+        .not('neste_oppfolging', 'is', null)
+        .lte('neste_oppfolging', crmDatoPlussDager(vindu))
+        .order('neste_oppfolging', { ascending: true })
+        .limit(500)
+      if (error) throw error
+      setOppgaver(data || [])
     } catch (e) { console.error('[CRM-oppgaver] load', e); alert({ message:'Kunne ikke hente oppgaver: '+e.message, kind:'error' }); setOppgaver([]) }
     finally { setLoading(false) }
   }
@@ -39156,73 +38860,58 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
   const apneMail = (c) => { if (!c.email) { alert({ message:'Kontakten mangler e-postadresse', kind:'warning' }); return } const a=document.createElement('a'); a.href='mailto:'+encodeURIComponent(c.email); a.click() }
   const ring = (c) => { if (!c.phone) { alert({ message:'Kontakten mangler telefonnummer', kind:'warning' }); return } const a=document.createElement('a'); a.href='tel:'+String(c.phone).replace(/\s/g,''); a.click() }
 
-  // Marker fullført direkte i lista. Task → completed=true. Oppfølging → tøm neste_oppfolging + logg.
-  const fullforItem = async (item) => {
-    setBehandler(b => ({ ...b, [item.key]: true }))
+  const fullfor = async (c) => {
+    setBehandler(b => ({ ...b, [c.id]: true }))
     try {
       const today = new Date().toISOString().split('T')[0]
-      if (item.kind === 'task') {
-        const { error } = await supabase.from('crm_activities').update({ completed: true }).eq('id', item.raw.id)
-        if (error) throw error
-      } else {
-        const c = item.kunde
-        const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
-        let navn = null
-        try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
-        const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:c.id, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: c.oppfolging_notat||null, date: today, created_by: user?.id })
-        if (aErr) throw aErr
-        const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
-        if (navn) upd.kontaktet_av = navn
-        const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
-        if (cErr) throw cErr
-        crmVarsleOppfolging()
-      }
+      const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+      let navn = null
+      try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
+      const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:c.id, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: c.oppfolging_notat||null, date: today, created_by: user?.id })
+      if (aErr) throw aErr
+      const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
+      if (navn) upd.kontaktet_av = navn
+      const { error: cErr } = await supabase.from('customers').update(upd).eq('id', c.id)
+      if (cErr) throw cErr
       invalidateCustomerCache()
-      setOppgaver(o => o.filter(x => x.key !== item.key))
+      crmVarsleOppfolging()
+      setOppgaver(o => o.filter(x => x.id !== c.id))
     } catch (e) { console.error('[CRM-oppgaver] fullfor', e); alert({ message:'Kunne ikke fullføre: '+e.message, kind:'error' }) }
-    finally { setBehandler(b => { const n={...b}; delete n[item.key]; return n }) }
+    finally { setBehandler(b => { const n={...b}; delete n[c.id]; return n }) }
   }
 
   const grupper = {
-    overdue: oppgaver.filter(o => o.dato < idag),
-    idag:    oppgaver.filter(o => o.dato === idag),
-    kommende: oppgaver.filter(o => o.dato > idag),
+    overdue: oppgaver.filter(o => o.neste_oppfolging < idag),
+    idag:    oppgaver.filter(o => o.neste_oppfolging === idag),
+    kommende: oppgaver.filter(o => o.neste_oppfolging > idag),
   }
   const knapp = { padding:'7px 11px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }
 
-  const rad = (item, forfalt) => {
-    const c = item.kunde || {}
-    const erTask = item.kind === 'task'
-    const t = erTask ? null : CRM_OPPFOLGING_TYPER[c.oppfolging_type]
-    const aapneFane = erTask ? 'aktiviteter' : null
+  const rad = (c, forfalt) => {
+    const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
     return (
-      <div key={item.key} style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'flex-start', gap:'12px', flexWrap:'wrap', transition:'background 0.12s' }}
+      <div key={c.id} onClick={()=>onOpenKunde&&onOpenKunde(c)} title="Åpne kundekort"
+        style={{ background:'white', borderRadius:'12px', border:`1px solid ${forfalt?'#fecaca':'#f1f5f9'}`, padding:'12px 16px', display:'flex', alignItems:'center', gap:'14px', flexWrap:'wrap', cursor:'pointer', transition:'background 0.12s' }}
         onMouseEnter={e=>e.currentTarget.style.background='#f8fafc'} onMouseLeave={e=>e.currentTarget.style.background='white'}>
-        {/* Avkryssing — marker fullført direkte i lista */}
-        <input type="checkbox" disabled={!!behandler[item.key]} onChange={()=>fullforItem(item)} title="Marker fullført"
-          style={{ width:'20px', height:'20px', accentColor:'#059669', cursor: behandler[item.key]?'wait':'pointer', flexShrink:0, marginTop:'2px' }} />
-        <div onClick={()=>onOpenKunde&&onOpenKunde(c, aapneFane)} title="Åpne kundekort" style={{ flex: mob?'1 1 100%':'1 1 220px', minWidth:0, cursor:'pointer' }}>
+        <div style={{ flex: mob?'1 1 100%':'1 1 220px', minWidth:0 }}>
           <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'3px' }}>
-            <span style={{ fontSize:'11px', fontWeight:'800', color: erTask?'#7c3aed':'#059669', background: erTask?'#f5f3ff':'#f0fdf4', border:`1px solid ${erTask?'#ddd6fe':'#bbf7d0'}`, borderRadius:'999px', padding:'1px 8px' }}>{erTask?'✅ Oppgave':'📅 Oppfølging'}</span>
             <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'14px' }}>{c.name}</span>
             {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
-            <span style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#64748b' }}>Frist {item.dato}{!erTask&&c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}</span>
+            <span style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#64748b' }}>📅 {c.neste_oppfolging}{c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}</span>
             {t&&<span style={{ fontSize:'11px', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'1px 8px', fontWeight:'700' }}>{t.emoji} {t.label}</span>}
           </div>
-          {/* Hva oppgaven faktisk sier */}
-          {erTask ? (
-            <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600' }}>{item.raw.title}{item.raw.description ? <span style={{ fontWeight:'400', color:'#64748b' }}> — {item.raw.description}</span> : ''}</div>
-          ) : (c.oppfolging_notat && <div style={{ fontSize:'13px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>)}
-          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b', wordBreak:'break-word', marginTop:'3px' }}>
+          <div style={{ display:'flex', gap:'12px', flexWrap:'wrap', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
             {c.city&&<span>📍 {c.city}</span>}
             {c.email&&<span>📧 {c.email}</span>}
             {c.phone&&<span>📞 {c.phone}</span>}
           </div>
+          {c.oppfolging_notat&&<div style={{ marginTop:'4px', fontSize:'12px', color:'#475569', fontStyle:'italic' }}>“{c.oppfolging_notat}”</div>}
         </div>
-        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap', width: mob?'100%':'auto' }}>
+        <div style={{ display:'flex', gap:'6px', flexShrink:0, flexWrap:'wrap', width: mob?'100%':'auto' }} onClick={e=>e.stopPropagation()}>
           <button onClick={(e)=>{e.stopPropagation();setHurtig(c)}} title="Rediger" style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background:'white', color:'#64748b', border:'1px solid #e2e8f0' }}>✏️</button>
           <button onClick={(e)=>{e.stopPropagation();ring(c)}} disabled={!c.phone} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: c.phone?'#eff6ff':'#f1f5f9', color: c.phone?'#2563eb':'#94a3b8', border:'1px solid '+(c.phone?'#bfdbfe':'#e2e8f0'), cursor: c.phone?'pointer':'not-allowed' }}>📞 Ring</button>
           <button onClick={(e)=>{e.stopPropagation();apneMail(c)}} disabled={!c.email} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: c.email?'#eff6ff':'#f1f5f9', color: c.email?'#2563eb':'#94a3b8', border:'1px solid '+(c.email?'#bfdbfe':'#e2e8f0'), cursor: c.email?'pointer':'not-allowed' }}>✉️ E-post</button>
+          <button onClick={(e)=>{e.stopPropagation();fullfor(c)}} disabled={!!behandler[c.id]} style={{ ...knapp, flex: mob?'1 1 45%':'none', padding: mob?'11px 12px':'7px 11px', background: behandler[c.id]?'#6ee7b7':'#059669', color:'white', cursor: behandler[c.id]?'wait':'pointer' }}>{behandler[c.id]?'…':'✅ Fullført'}</button>
         </div>
       </div>
     )
@@ -39233,7 +38922,7 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
         <h3 style={{ margin:0, fontSize:'14px', fontWeight:'800', color: forfalt?'#dc2626':'#0f172a' }}>{emoji} {tittel}</h3>
         <span style={{ fontSize:'12px', fontWeight:'700', color:'white', background: forfalt?'#dc2626':'#64748b', borderRadius:'999px', padding:'1px 9px' }}>{liste.length}</span>
       </div>
-      {liste.length===0 ? <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{tomtekst}</p> : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(item=>rad(item, forfalt))}</div>}
+      {liste.length===0 ? <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{tomtekst}</p> : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(c=>rad(c, forfalt))}</div>}
     </div>
   )
 
@@ -39243,7 +38932,7 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
         <button onClick={onBack} style={{ padding:'8px 12px', borderRadius:'10px', border:'none', background:'#f1f5f9', color:'#64748b', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>← Tilbake</button>
         <div>
           <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>✅ Mine oppgaver</h1>
-          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Oppgaver og avtalte oppfølginger. Forfalte vises alltid øverst. Kryss av for å fullføre.</p>
+          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Forfalte vises alltid øverst.</p>
         </div>
         <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
           <select value={vindu} onChange={e=>{ const v=parseInt(e.target.value,10); setVindu(v); try{ window.localStorage.setItem('crm_oppgave_vindu', String(v)) }catch(_){} }} title="Tidsvindu" style={{ ...crmInp, maxWidth:'170px' }}>
@@ -47893,6 +47582,11 @@ function SuperAdminPage() {
   const [mrrSnapshots, setMrrSnapshots] = useState([])
   const [churnAlerts, setChurnAlerts] = useState([])
   const [savingNote, setSavingNote] = useState(false)
+  // Kildesporing («Hvor kommer brukerne fra»)
+  const [kildeStat, setKildeStat] = useState(null)      // [{ kilde_kanal, antall }] eller null (laster/feil)
+  const [kildeStatLaster, setKildeStatLaster] = useState(true)
+  const [kildePeriode, setKildePeriode] = useState('30') // '30' | '90' | 'alt'
+  const [kildeMap, setKildeMap] = useState({})          // id → { kanal, fritekst, dagens_system, hovedbehov, utm }
   const [isMobSA, setIsMobSA] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
   useEffect(() => {
     const onResize = () => setIsMobSA(window.innerWidth < 640)
@@ -47903,6 +47597,28 @@ function SuperAdminPage() {
       window.removeEventListener('orientationchange', onResize)
     }
   }, [])
+
+  // Kildestatistikk — all telling skjer i SQL (RPC kilde_statistikk), aldri i JS.
+  useEffect(() => {
+    let aktiv = true
+    setKildeStatLaster(true)
+    const idag = new Date()
+    let p_fra = null
+    if (kildePeriode !== 'alt') {
+      const d = new Date(idag); d.setDate(d.getDate() - (kildePeriode === '90' ? 90 : 30))
+      p_fra = d.toISOString().split('T')[0]
+    }
+    const p_til = idag.toISOString().split('T')[0]
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.rpc('kilde_statistikk', { p_fra, p_til })
+        if (!aktiv) return
+        setKildeStat(error ? null : (data || []))
+      } catch (_) { if (aktiv) setKildeStat(null) }
+      finally { if (aktiv) setKildeStatLaster(false) }
+    })()
+    return () => { aktiv = false }
+  }, [kildePeriode])
 
   const savePayment = async (companyId, paymentDate) => {
     try {
@@ -47983,6 +47699,14 @@ function SuperAdminPage() {
       ])
       setCompanies(comp); setAllUsers(users); setNotifications(notifs)
 
+      // Per-bruker kildesvar (kryssbedrift, kun eier via SECURITY DEFINER-RPC).
+      // De nye kilde_*-kolonnene finnes ikke i admin_list_users, derfor egen RPC.
+      try {
+        const { data: kb } = await supabase.rpc('kilde_per_bruker')
+        const map = {}
+        ;(kb || []).forEach(r => { map[r.id] = r })
+        setKildeMap(map)
+      } catch (_) { /* ikke kritisk — visning degraderer pent */ }
 
       // Storage check — via admin-funksjon (kryssbedrift, kun eier)
       try {
@@ -48291,6 +48015,54 @@ function SuperAdminPage() {
             <div style={{ display:'flex', alignItems:'center', gap:'10px', marginTop:'4px' }}>
               <span style={{ fontSize:'12px', fontWeight:'800', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.5px', whiteSpace:'nowrap' }}>📊 Nøkkeltall og analyse</span>
               <div style={{ flex:1, height:'1px', background:'#e2e8f0' }}/>
+            </div>
+
+            {/* Hvor kommer brukerne fra — kildesporing (aggregert i SQL) */}
+            <div style={saCard}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px', flexWrap:'wrap', marginBottom:'14px' }}>
+                <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', display:'flex', alignItems:'center', gap:'8px' }}>🌐 Hvor kommer brukerne fra</h3>
+                <div style={{ display:'flex', gap:'4px', background:'#f1f5f9', padding:'3px', borderRadius:'10px' }}>
+                  {[['30','30 dager'],['90','90 dager'],['alt','Alt']].map(([id,label])=>(
+                    <button key={id} onClick={()=>setKildePeriode(id)}
+                      style={{ padding:'5px 12px', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700',
+                        background: kildePeriode===id ? 'white' : 'transparent', color: kildePeriode===id ? '#059669' : '#64748b',
+                        boxShadow: kildePeriode===id ? '0 1px 3px rgba(0,0,0,0.08)' : 'none' }}>{label}</button>
+                  ))}
+                </div>
+              </div>
+              {kildeStatLaster ? (
+                <div style={{ fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>Laster …</div>
+              ) : !kildeStat ? (
+                <div style={{ fontSize:'13px', color:'#dc2626', padding:'8px 0' }}>Kunne ikke hente kildestatistikk.</div>
+              ) : kildeStat.length === 0 ? (
+                <div style={{ fontSize:'13px', color:'#94a3b8', padding:'8px 0' }}>Ingen kildesvar i denne perioden ennå.</div>
+              ) : (() => {
+                const total = kildeStat.reduce((s,r)=>s+Number(r.antall||0),0)
+                return (
+                  <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                    <div style={{ fontSize:'12px', color:'#64748b' }}>{total} svar totalt</div>
+                    {kildeStat.map(r=>{
+                      const antall = Number(r.antall||0)
+                      const pst = total>0 ? Math.round(antall/total*100) : 0
+                      const kanal = KILDE_KANALER.find(k=>k.id===r.kilde_kanal)
+                      return (
+                        <div key={r.kilde_kanal||'ukjent'} style={{ display:'flex', alignItems:'center', gap:'10px' }}>
+                          <span style={{ fontSize:'16px', flexShrink:0, width:'20px', textAlign:'center' }}>{kanal?.ikon||'❓'}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', marginBottom:'3px' }}>
+                              <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{kildeKanalLabel(r.kilde_kanal)}</span>
+                              <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0 }}>{antall} <span style={{ color:'#94a3b8', fontWeight:'500' }}>· {pst}%</span></span>
+                            </div>
+                            <div style={{ height:'6px', background:'#f1f5f9', borderRadius:'3px', overflow:'hidden' }}>
+                              <div style={{ height:'100%', width:`${pst}%`, background:'#059669', borderRadius:'3px' }}/>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
             </div>
 
             {/* Lagringsstatus */}
@@ -48738,12 +48510,6 @@ function SuperAdminPage() {
                           background: ['active','gratis'].includes(c.subscription_status)?'#f0fdf4':c.subscription_status==='trial'?'#fffbeb':c.subscription_status==='intern'?'#f1f5f9':'#fef2f2',
                           color: ['active','gratis'].includes(c.subscription_status)?'#059669':c.subscription_status==='trial'?'#d97706':c.subscription_status==='intern'?'#475569':'#dc2626'
                         }}>{c.subscription_status==='trial'?`Prøve (${daysLeft||0}d)`:c.subscription_status==='active'?'Aktiv':c.subscription_status==='intern'?'Intern':c.subscription_status==='gratis'?'Gratis':c.subscription_status==='past_due'?'Bet. feilet':'Utløpt'}</span>
-                        {/* BRREG-brikke — vises kun når feltene faktisk finnes på raden */}
-                        {c.org_number && (c.brreg_verifisert_at !== undefined || c.brreg_status !== undefined) && (
-                          (!!c.brreg_verifisert_at && (c.brreg_status || 'aktiv') === 'aktiv')
-                            ? <span title="Verifisert mot Brønnøysundregistrene" style={{ padding:'3px 8px', borderRadius:'999px', fontSize:'10px', fontWeight:'700', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0' }}>✅ BRREG</span>
-                            : <span title={'BRREG-status: ' + (c.brreg_status || 'ikke verifisert')} style={{ padding:'3px 8px', borderRadius:'999px', fontSize:'10px', fontWeight:'700', background:'#fffbeb', color:'#b45309', border:'1px solid #fde68a' }}>⚠️ Ikke verif.</span>
-                        )}
                         {c.admin_notes && <span title={c.admin_notes} style={{ fontSize:'14px', cursor:'help' }}>📝</span>}
                       </div>
                     </div>
@@ -48763,8 +48529,7 @@ function SuperAdminPage() {
                     {selectedCompany?.id===c.id && (
                       <div style={{ marginTop:'14px', paddingTop:'14px', borderTop:'1px solid #f1f5f9' }}>
                         <div style={{ display:'grid', gridTemplateColumns: isMobSA ? '1fr' : '1fr 1fr 1fr', gap:'10px', marginBottom:'14px' }}>
-                          {/* «Trial start» er fjernet her — prøvestart vises i tidslinjen under («Prøveperiode startet») */}
-                          {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
+                          {[['Org.nr',c.org_number],['Telefon',c.phone],['Adresse',c.address],['Registrert',c.created_at?new Date(c.created_at).toLocaleDateString('nb-NO'):'—'],['Trial start',c.trial_start_date?new Date(c.trial_start_date).toLocaleDateString('nb-NO'):'—'],['Trial slutt',c.trial_ends_at?new Date(c.trial_ends_at).toLocaleDateString('nb-NO'):'—']].filter(r=>r[1]).map(([k,v])=>(
                             <div key={k} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px' }}>
                               <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600', textTransform:'uppercase' }}>{k}</div>
                               <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginTop:'2px', wordBreak:'break-word' }}>{v}</div>
@@ -48772,33 +48537,28 @@ function SuperAdminPage() {
                           ))}
                         </div>
 
-                        {/* BRREG-verifisering — ren informasjon, ingen knapp */}
-                        {c.org_number && (() => {
-                          const verifisert = !!c.brreg_verifisert_at && (c.brreg_status || 'aktiv') === 'aktiv'
-                          const statusTekst = {
-                            aktiv: 'Aktiv i BRREG', ikke_funnet: 'Ikke funnet i BRREG', slettet: 'Slettet i BRREG',
-                            under_avvikling: 'Under avvikling', konkurs: 'Konkurs', ikke_verifisert: 'Ikke verifisert ennå',
-                          }[c.brreg_status] || (c.brreg_status || 'Ikke verifisert ennå')
-                          const avvik = c.brreg_navn && c.name && c.brreg_navn.trim().toLowerCase() !== c.name.trim().toLowerCase()
+                        {/* Hvor fant de oss — per bruker i bedriften (selvrapportert + UTM) */}
+                        {(() => {
+                          const cusers = allUsers.filter(u=>u.company_id===c.id).map(u=>({ u, k: kildeMap[u.id] })).filter(x=>x.k?.kilde_kanal)
+                          if (!cusers.length) return null
                           return (
-                            <div style={{ marginBottom:'14px' }}>
-                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>BRREG-VERIFISERING</div>
-                              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
-                                <span style={{ padding:'3px 10px', borderRadius:'999px', fontSize:'11px', fontWeight:'700',
-                                  background: verifisert ? '#f0fdf4' : '#fffbeb', color: verifisert ? '#059669' : '#b45309',
-                                  border: `1px solid ${verifisert ? '#bbf7d0' : '#fde68a'}` }}>
-                                  {verifisert ? '✅ Verifisert mot BRREG' : '⚠️ ' + statusTekst}
-                                </span>
-                                {c.brreg_organisasjonsform && <span style={{ fontSize:'11px', color:'#64748b' }}>{c.brreg_organisasjonsform}</span>}
-                                {c.brreg_verifisert_at && <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(c.brreg_verifisert_at).toLocaleDateString('nb-NO')}</span>}
+                            <div style={{ marginBottom:'12px' }}>
+                              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>HVOR FANT DE OSS</div>
+                              <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                                {cusers.map(({u,k})=>{
+                                  const utm = k.kilde_utm||{}
+                                  const spor = [utm.utm_source,utm.utm_medium,utm.utm_campaign].filter(Boolean).join(' / ')
+                                  let ref=''
+                                  if (utm.referrer) { try { ref = new URL(utm.referrer).hostname.replace(/^www\./,'') } catch(_){ ref='henvisning' } }
+                                  return (
+                                    <div key={u.id} style={{ background:'#f8fafc', borderRadius:'8px', padding:'8px 12px', display:'flex', flexWrap:'wrap', gap:'6px', alignItems:'center' }}>
+                                      <span style={{ fontSize:'11px', color:'#64748b' }}>{u.full_name||u.email}:</span>
+                                      <span style={{ fontSize:'11px', fontWeight:'700', color:'#059669', background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'1px 6px' }}>{kildeKanalLabel(k.kilde_kanal)}{k.kilde_kanal==='annet'&&k.kilde_fritekst?`: ${k.kilde_fritekst}`:''}</span>
+                                      {(spor||ref) && <span title={JSON.stringify(utm)} style={{ fontSize:'10px', color:'#64748b', background:'#eef2f7', borderRadius:'6px', padding:'1px 6px' }}>UTM: {spor||ref}</span>}
+                                    </div>
+                                  )
+                                })}
                               </div>
-                              {avvik && (
-                                <div style={{ marginTop:'8px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'8px', padding:'8px 12px' }}>
-                                  <div style={{ fontSize:'10px', color:'#b45309', fontWeight:'700', textTransform:'uppercase' }}>Avvik: oppgitt navn ≠ BRREG-navn</div>
-                                  <div style={{ fontSize:'12px', color:'#0f172a', marginTop:'2px' }}>Oppgitt: <strong>{c.name}</strong></div>
-                                  <div style={{ fontSize:'12px', color:'#0f172a' }}>BRREG: <strong>{c.brreg_navn}</strong></div>
-                                </div>
-                              )}
                             </div>
                           )
                         })()}
@@ -48953,6 +48713,20 @@ function SuperAdminPage() {
                 <div style={{ flex:1, minWidth:0 }}>
                   <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', wordBreak: isMobSA ? 'break-word' : 'normal', overflow: isMobSA ? 'visible' : 'hidden', textOverflow: isMobSA ? 'clip' : 'ellipsis', whiteSpace: isMobSA ? 'normal' : 'nowrap' }}>{u.full_name||u.email}</div>
                   <div style={{ fontSize:'11px', color:'#94a3b8', wordBreak: isMobSA ? 'break-all' : 'normal' }}>{u.email} · {u.role} · {u.status}</div>
+                  {kildeMap[u.id]?.kilde_kanal && (
+                    <div style={{ marginTop:'4px', display:'flex', flexWrap:'wrap', gap:'4px', alignItems:'center' }}>
+                      <span title="Selvrapportert kilde" style={{ fontSize:'10px', fontWeight:'700', color:'#059669', background:'#ecfdf5', border:'1px solid #bbf7d0', borderRadius:'6px', padding:'1px 6px' }}>
+                        {kildeKanalLabel(kildeMap[u.id].kilde_kanal)}{kildeMap[u.id].kilde_kanal==='annet' && kildeMap[u.id].kilde_fritekst ? `: ${kildeMap[u.id].kilde_fritekst}` : ''}
+                      </span>
+                      {(() => {
+                        const utm = kildeMap[u.id].kilde_utm || {}
+                        const spor = [utm.utm_source, utm.utm_medium, utm.utm_campaign].filter(Boolean).join(' / ')
+                        let vis = spor
+                        if (!vis && utm.referrer) { try { vis = new URL(utm.referrer).hostname.replace(/^www\./,'') } catch (_) { vis = 'henvisning' } }
+                        return vis ? <span title={JSON.stringify(utm)} style={{ fontSize:'10px', color:'#64748b', background:'#f1f5f9', borderRadius:'6px', padding:'1px 6px' }}>UTM: {vis}</span> : null
+                      })()}
+                    </div>
+                  )}
                 </div>
                 <div style={{ fontSize:'11px', color:'#64748b', flexShrink:0, textAlign:'right' }}>
                   {u.last_seen ? new Date(u.last_seen).toLocaleDateString('nb-NO') : 'Aldri'}
@@ -49303,8 +49077,129 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
   )
 }
 
+// ── TRIPLETEX-INTEGRASJON (Innstillinger → Integrasjoner) ──────────────────
+// Lar admin/eier lime inn bedriftens Tripletex employee-token. Tokenet sendes til
+// Edge Function tripletex-session (krypteres server-side) og kan ALDRI leses tilbake
+// til nettleseren. Status hentes via RPC tripletex_integration_status (kun trygge
+// felt — aldri selve nøkkelen). Tre tilstander: ikke satt opp / tilkoblet / feilet.
+function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
+  const appAlert = useAppAlert()
+  const [status, setStatus] = useState(null)
+  const [laster, setLaster] = useState(true)
+  const [tokenInput, setTokenInput] = useState('')
+  const [bytter, setBytter] = useState(false)
+  const [jobber, setJobber] = useState(false)
+
+  const loadStatus = async () => {
+    try {
+      const { data, error } = await supabase.rpc('tripletex_integration_status')
+      if (error) throw error
+      setStatus(data || { connection_status: 'not_configured', has_token: false })
+    } catch (e) {
+      console.error('[Tripletex] kunne ikke hente status:', e)
+      setStatus({ connection_status: 'not_configured', has_token: false })
+    } finally { setLaster(false) }
+  }
+  useEffect(() => { loadStatus() }, [])
+
+  const harToken = !!status?.has_token
+  const cs = status?.connection_status || 'not_configured'
+  const fmtTid = (t) => { try { return t ? new Date(t).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' }) : '' } catch (_) { return '' } }
+
+  const sv = {
+    connected:      { tekst: 'Tilkoblet',     farge: '#16a34a', bg: '#f0fdf4', kant: '#bbf7d0', emoji: '✅' },
+    failed:         { tekst: 'Feilet',        farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca', emoji: '⚠️' },
+    not_configured: { tekst: 'Ikke satt opp', farge: '#64748b', bg: '#f8fafc', kant: '#e2e8f0', emoji: '⚪' },
+  }[cs] || { tekst: 'Ikke satt opp', farge: '#64748b', bg: '#f8fafc', kant: '#e2e8f0', emoji: '⚪' }
+
+  const lagreNokkel = async () => {
+    const token = (tokenInput || '').replace(/\s+/g, '')  // fjern mellomrom, tab og linjeskift automatisk
+    if (!token) { appAlert({ message: 'Lim inn nøkkelen først', kind: 'warn' }); return }
+    if (!companyId) { appAlert({ message: 'Mangler bedrift', subMessage: 'Fant ikke bedriften din. Logg ut og inn igjen.', kind: 'error' }); return }
+    setJobber(true)
+    try {
+      const { error } = await supabase.functions.invoke('tripletex-session', { body: { companyId, employeeToken: token, force: true } })
+      if (error) { let d = error.message || 'Ukjent feil'; try { const b = await error.context.json(); if (b?.error) d = b.error } catch (_) {}; throw new Error(d) }
+      setTokenInput(''); setBytter(false)
+      await loadStatus()
+      appAlert({ message: 'Nøkkel lagret og testet', subMessage: 'Tripletex svarte OK — integrasjonen er tilkoblet.', kind: 'success' })
+    } catch (e) {
+      await loadStatus()
+      appAlert({ message: 'Kunne ikke koble til Tripletex', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setJobber(false) }
+  }
+
+  const testTilkobling = async () => {
+    if (!companyId) { appAlert({ message: 'Mangler bedrift', kind: 'error' }); return }
+    setJobber(true)
+    try {
+      const { error } = await supabase.functions.invoke('tripletex-session', { body: { companyId, force: true } })
+      if (error) { let d = error.message || 'Ukjent feil'; try { const b = await error.context.json(); if (b?.error) d = b.error } catch (_) {}; throw new Error(d) }
+      await loadStatus()
+      appAlert({ message: 'Tilkobling OK', subMessage: 'Tripletex svarte OK.', kind: 'success' })
+    } catch (e) {
+      await loadStatus()
+      appAlert({ message: 'Tilkobling feilet', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setJobber(false) }
+  }
+
+  const kort = { background: 'white', border: '1px solid #e2e8f0', borderRadius: '14px', padding: isMob ? '16px' : '24px' }
+  const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }
+  const btnPrimar = { background: jobber ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: jobber ? 'default' : 'pointer' }
+  const btnSekundar = { background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: jobber ? 'default' : 'pointer' }
+
+  return (
+    <div style={kort}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '4px', flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: isMob ? '16px' : '18px', fontWeight: '700', color: '#0f172a' }}>Tripletex</h2>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: sv.bg, color: sv.farge, border: `1px solid ${sv.kant}`, borderRadius: '999px', padding: '4px 12px', fontSize: '13px', fontWeight: '700' }}>{sv.emoji} {sv.tekst}</span>
+      </div>
+      <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+        Koble bedriften til Tripletex (regnskap) for å synke kunder, prosjekter og godkjente timer. Nøkkelen lagres kryptert og kan aldri leses tilbake.
+      </p>
+
+      {laster ? (
+        <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Laster status…</div>
+      ) : (
+        <>
+          {cs === 'connected' && status?.last_verified_at && (
+            <div style={{ fontSize: '13px', color: '#475569', marginBottom: '14px' }}>Sist vellykket tilkobling: <strong>{fmtTid(status.last_verified_at)}</strong></div>
+          )}
+          {cs === 'failed' && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', marginBottom: '14px', fontSize: '13px', color: '#991b1b' }}>
+              <div style={{ fontWeight: '700', marginBottom: '2px' }}>Siste forsøk feilet</div>
+              {status?.last_error && <div style={{ whiteSpace: 'pre-wrap' }}>{status.last_error}</div>}
+              {status?.last_verified_at && <div style={{ marginTop: '4px', color: '#b91c1c' }}>Sist vellykket: {fmtTid(status.last_verified_at)}</div>}
+            </div>
+          )}
+
+          {harToken && !bytter ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '8px 12px', fontSize: '13px', fontWeight: '600' }}>🔑 Nøkkel lagret</span>
+              <button onClick={() => setBytter(true)} disabled={jobber} style={btnSekundar}>Bytt nøkkel</button>
+              <button onClick={testTilkobling} disabled={jobber} style={btnPrimar}>{jobber ? 'Tester…' : 'Test tilkobling'}</button>
+            </div>
+          ) : (
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }}>
+                {harToken ? 'Lim inn ny employee-nøkkel fra Tripletex' : 'Lim inn employee-nøkkel fra Tripletex'}
+              </label>
+              <input type="password" value={tokenInput} onChange={e => setTokenInput(e.target.value)} placeholder="Lim inn nøkkelen her" autoComplete="off" style={{ ...inp, marginBottom: '10px' }} />
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button onClick={lagreNokkel} disabled={jobber} style={btnPrimar}>{jobber ? 'Lagrer og tester…' : 'Lagre og test tilkobling'}</button>
+                {harToken && <button onClick={() => { setBytter(false); setTokenInput('') }} disabled={jobber} style={btnSekundar}>Avbryt</button>}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 function MinBedriftPage() {
-  const { user } = useAuth()
+  const { user, companyId, role, isPlatformOwner } = useAuth()
+  const kanIntegrasjon = isPlatformOwner || role === 'admin' || role === 'superadmin'
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const [tab, setTab] = useState('info')
@@ -49632,6 +49527,7 @@ function MinBedriftPage() {
             ['info', isMobMB ? '🏢 Info' : '🏢 Bedriftsinformasjon'],
             ['epost', isMobMB ? '📧 E-post' : '📧 E-post-utsending'],
             ['moduler', isMobMB ? '📦 Moduler' : '📦 Moduler og priser'],
+            ...(kanIntegrasjon ? [['integrasjoner', isMobMB ? '🔗 Integrasjon' : '🔗 Integrasjoner']] : []),
             ['gdpr', isMobMB ? '🔒 Personvern' : '🔒 Personvern og data'],
           ].map(([id, label]) => (
             <button key={id} onClick={() => setTab(id)}
@@ -49729,6 +49625,11 @@ function MinBedriftPage() {
             isMob={isMobMB}
             onSaved={load}
           />
+        )}
+
+        {/* TAB: INTEGRASJONER (kun admin/eier) */}
+        {tab === 'integrasjoner' && kanIntegrasjon && (
+          <TripletexIntegrasjonSeksjon companyId={companyId} isMob={isMobMB} />
         )}
 
         {/* TAB: MODULER OG PRISER */}
@@ -76182,38 +76083,37 @@ function AppContent() {
   const [hoverTip, setHoverTip] = useState(null) // { label, top } | null
   const visSidebarTip = (e, label) => setHoverTip({ label, top: e.currentTarget.getBoundingClientRect().top + e.currentTarget.offsetHeight / 2 })
   const skjulSidebarTip = () => setHoverTip(null)
+
+  // ── Kilde-popup («Hvor fant du oss?») ──
+  // Fanger UTM ved første landing, og sjekker lettvekts om kilde er besvart.
+  // FAIL OPEN: feiler lesingen, vises IKKE popupen — markedsføring skal aldri
+  // kunne stoppe innlogging. Plattformeier holdes helt utenfor.
+  const [kildeSjekket, setKildeSjekket] = useState(false)
+  const [kildePopupVises, setKildePopupVises] = useState(false)
+  React.useEffect(() => { fangKildeUtm() }, [])
+  React.useEffect(() => {
+    if (!user) { setKildeSjekket(false); setKildePopupVises(false); return }
+    if (isPlatformOwner) { setKildeSjekket(true); setKildePopupVises(false); return }
+    let aktiv = true
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.from('user_profiles').select('kilde_besvart_at').eq('id', user.id).maybeSingle()
+        if (!aktiv) return
+        if (!error && data && !data.kilde_besvart_at) setKildePopupVises(true)
+      } catch (_) { /* fail open — ikke vis popup */ }
+      finally { if (aktiv) setKildeSjekket(true) }
+    })()
+    return () => { aktiv = false }
+  }, [user, isPlatformOwner])
+  // Tur-sperre: hold tilbake auto-start av omvisning til kilde-sjekken er ferdig
+  // OG popupen (hvis den vises) er unmountet. Eier er aldri sperret.
+  const kildeGateAktiv = !isPlatformOwner && (!kildeSjekket || kildePopupVises)
   // Registrer service worker (PWA + pushvarsler). Idempotent — trygt å kalle ved hver oppstart.
   React.useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(err => console.warn('SW-registrering feilet:', err))
     }
   }, [])
-  // Selvhelbredende BRREG-verifisering: kjører automatisk ved innlogging for
-  // bedrifter som ennå ikke er verifisert (f.eks. registrert mens BRREG var nede).
-  // Kjøres uansett — kan ikke skrus av fra UI. Fail-open: kaster aldri, blokkerer aldri.
-  const brregRetryKjort = React.useRef(false)
-  React.useEffect(() => {
-    if (!user || !companyId || isPlatformOwner) return
-    if (brregRetryKjort.current) return
-    brregRetryKjort.current = true
-    ;(async () => {
-      try {
-        const { data: cs } = await supabase.from('company_settings')
-          .select('id, org_number, brreg_verifisert_at').eq('id', companyId).maybeSingle()
-        if (!cs || cs.brreg_verifisert_at) return          // allerede verifisert → ferdig
-        if (!cs.org_number || !erGyldigOrgnr(cs.org_number)) return
-        const r = await hentBrreg(cs.org_number)
-        if (r.status === 'nede') return                     // fortsatt nede → prøv igjen neste innlogging
-        await supabase.from('company_settings').update({
-          brreg_status: r.status,
-          brreg_navn: r.navn || null,
-          brreg_organisasjonsform: r.organisasjonsform || null,
-          brreg_verifisert_at: r.status === 'aktiv' ? new Date().toISOString() : null,
-          updated_at: new Date().toISOString(),
-        }).eq('id', cs.id)
-      } catch (_) { /* fail-open: aldri blokker innlogging */ }
-    })()
-  }, [user, companyId, isPlatformOwner])
   // Offline Lag 2: forhåndslasting — hold cachen fersk mens vi har nett.
   React.useEffect(() => {
     if (!user) return
@@ -76720,6 +76620,10 @@ function AppContent() {
   const showDesktopTip = isMobile && !isFieldModule(page) && page !== 'prosjekt_detaljer' && page !== 'sjekkliste_detaljer' && page !== 'superadmin' && page !== 'crm'
 
   return (
+    <KildeGateContext.Provider value={kildeGateAktiv}>
+    {kildePopupVises && user && !isPlatformOwner && (
+      <KildePopup user={user} onFerdig={() => setKildePopupVises(false)} />
+    )}
     <div style={{ display: 'flex', minHeight: '100vh', background: '#f8fafc', fontFamily: 'system-ui, sans-serif', '--sidebar-width': sidebarWidth + 'px' }}>
 
       {/* ── Tilkoblingsindikator (Offline Lag 1) ── */}
@@ -77177,6 +77081,7 @@ function AppContent() {
         </>)}
       </main>
     </div>
+    </KildeGateContext.Provider>
   )
 }
 
