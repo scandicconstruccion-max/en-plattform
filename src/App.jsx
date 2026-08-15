@@ -5811,12 +5811,110 @@ function nextRevision(existingRevisions) {
   return `Rev${String(max+1).padStart(2,'0')}`
 }
 
+// Normaliser et filnavn for likhets-sammenligning: fjern filendelse, revisjons-
+// markører (rev01, r2, v3), kopi-suffikser og alt annet enn bokstaver/tall.
+function normDocName(name) {
+  return String(name || '')
+    .replace(/\.[a-z0-9]+$/i, '')                 // filendelse
+    .toLowerCase()
+    .replace(/[\s._-]*(rev|r|v|ver|versjon)\s*\d+/gi, '') // revisjonsmarkør
+    .replace(/[\s._-]*(final|endelig|kopi|copy|ny|new)\b/gi, '')
+    .replace(/[^a-z0-9æøå]/gi, '')
+    .trim()
+}
+
+// Foreslå et eksisterende (aktivt) dokument som denne fila kan være en revisjon av.
+// Matcher på normalisert navn innen samme prosjekt. Returnerer rad eller null.
+function suggestBaseDoc(fileName, activeRows) {
+  const norm = normDocName(fileName)
+  if (!norm || norm.length < 3) return null
+  return (activeRows || []).find(r => normDocName(r.name) === norm) || null
+}
+
+// Gjenbrukbar revisjons-opplasting — SAMME logikk som revisjonsmodalen (arkiver
+// gammel rad, last opp ny fil, bygg revision_log, sett inn ny rad). Kalles både
+// fra revisjonsmodalen og fra per-fil-opplasting i opplastingsdialogen.
+// Kaster ved feil; muterer ingen React-state.
+async function uploadRevisionRow({ baseFile, newFile, note, user }) {
+  const docGroup = baseFile.document_group || baseFile.id
+  // Hent alle revisjoner i gruppa fra DB, så neste-nummer blir korrekt uansett
+  // hvilken kaller som ber om revisjonen (modal eller per-fil-opplasting).
+  let siblings = [baseFile]
+  try {
+    const { data } = await supabase.from('project_files')
+      .select('id, revision_label, document_group')
+      .eq('project_id', baseFile.project_id)
+      .eq('document_group', docGroup)
+    if (Array.isArray(data) && data.length) {
+      siblings = data.some(d => d.id === baseFile.id) ? data : [...data, baseFile]
+    }
+  } catch (_) { /* faller tilbake til [baseFile] → Rev02 */ }
+  const newLabel = nextRevision(siblings)
+
+  // 1. Arkiver gammel revisjon
+  const { error: archErr } = await supabase.from('project_files')
+    .update({ archived: true, document_group: docGroup })
+    .eq('id', baseFile.id)
+  if (archErr) throw new Error('Kunne ikke arkivere gammel revisjon: ' + archErr.message)
+
+  // 2. Last opp ny fil til storage
+  const ext = newFile.name.split('.').pop()
+  const path = `projects/${baseFile.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+  const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, newFile)
+  if (upErr) throw new Error('Filopplasting feilet: ' + upErr.message)
+
+  // 3. Bygg endringslogg — kopier eksisterende + legg til ny
+  const existingLog = baseFile.revision_log || []
+  const newLog = [
+    ...existingLog,
+    {
+      revision: newLabel,
+      previous_revision: baseFile.revision_label || 'Rev01',
+      date: new Date().toISOString(),
+      user_email: user?.email || 'Ukjent',
+      note: (note || '').trim() || 'Ny revisjon lastet opp',
+      file_size: newFile.size,
+      prev_file_size: baseFile.file_size || null,
+    }
+  ]
+
+  // 4. Lagre ny revisjon i database
+  const { error: insErr } = await supabase.from('project_files').insert({
+    name: baseFile.name,
+    project_id: baseFile.project_id,
+    file_url: path,
+    file_type: ext,
+    file_size: newFile.size,
+    category: baseFile.category,
+    sub_folder: baseFile.sub_folder || null,
+    description: baseFile.description || null,
+    access_level: baseFile.access_level || 'alle',
+    uploaded_by: user?.id,
+    revision_label: newLabel,
+    document_group: docGroup,
+    archived: false,
+    revision_note: (note || '').trim() || null,
+    revision_log: newLog,
+  })
+  if (insErr) throw new Error('Lagring feilet: ' + insErr.message)
+}
+
 function ProsjektfilerPage() {
   const { user } = useAuth()
   const appAlert = useAppAlert()
-  const [files, setFiles] = useState([])
   const [projects, setProjects] = useState([])
-  const [loading, setLoading] = useState(true)
+  // Paginering: fillista lastes per prosjekt+kategori fra DB (ikke hele bedriften)
+  const [panelFiles, setPanelFiles] = useState([])       // aktive dokumenter (én rad = ett dokument), paginert
+  const [archivedRows, setArchivedRows] = useState([])   // arkiverte revisjoner for synlig kategori (kun ved showArchive)
+  const [totalCount, setTotalCount] = useState(0)        // count:'exact' på fillista
+  const [page, setPage] = useState(0)
+  const PAGE_SIZE = 50
+  // Tellere per kategori/undermappe fra RPC (unike dokumenter, ikke rader)
+  const [catCounts, setCatCounts] = useState({})         // { [category]: antall }
+  const [subCounts, setSubCounts] = useState({})         // { [category]: { [sub]: antall } }
+  const [existingDocs, setExistingDocs] = useState([])   // aktive dokumenter i opplastingsprosjektet (revisjonsforslag)
+  const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const [uploading, setUploading] = useState(false)
   const [search, setSearch] = useState('')
@@ -5825,7 +5923,7 @@ function ProsjektfilerPage() {
   const [selectedSub, setSelectedSub] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
   const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
-  const [uploadFiles, setUploadFiles] = useState([])
+  const [uploadFiles, setUploadFiles] = useState([])     // [{ file, mode:'auto'|'new'|'revision', baseId, note, progress }]
   const [expandedCats, setExpandedCats] = useState({})
   const [showArchive, setShowArchive] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null) // file to confirm delete
@@ -5833,6 +5931,17 @@ function ProsjektfilerPage() {
   const dragCounter = React.useRef(0)
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
   const fileInputRef = React.useRef()
+  // Bygg en opplastings-oppføring fra en rå File. mode:'auto' = bruk forslag ved render.
+  const mkEntry = (file) => ({ file, mode: 'auto', baseId: null, note: '', progress: null })
+  // Løs effektiv modus for en oppføring (bruk forslag når mode==='auto').
+  const effMode = (entry) => {
+    if (entry.mode === 'auto') {
+      const base = suggestBaseDoc(entry.file.name, existingDocs)
+      return base ? { mode: 'revision', baseId: base.id, base, suggested: true } : { mode: 'new', baseId: null, base: null, suggested: false }
+    }
+    const base = entry.baseId ? existingDocs.find(d => d.id === entry.baseId) : null
+    return { mode: entry.mode, baseId: entry.baseId, base, suggested: false }
+  }
   const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
 
   // ── Drag-and-drop handlers for hele siden ──────────────────────────────
@@ -5853,7 +5962,7 @@ function ProsjektfilerPage() {
     setIsDraggingOver(false)
     const droppedFiles = Array.from(e.dataTransfer?.files || [])
     if (droppedFiles.length === 0) return
-    setUploadFiles(droppedFiles)
+    setUploadFiles(droppedFiles.map(mkEntry))
     // Pre-fill prosjekt og kategori hvis allerede valgt
     setUploadForm(f => ({
       ...f,
@@ -5865,78 +5974,112 @@ function ProsjektfilerPage() {
   }
 
   // ── Data loading ──────────────────────────────────────────────────────────
-  const loadData = async () => {
-    setLoading(true)
+  // Prosjektlista (én gang) — matet fra prosjektmodulen.
+  useEffect(() => {
+    let cancelled = false
+    lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'), (fersk) => { if (!cancelled) setProjects(fersk) })
+      .then(res => { if (!cancelled) setProjects(res.data || []) })
+      .catch(e => console.warn('[prosjektfiler] prosjekter feilet', e))
+    return () => { cancelled = true }
+  }, [])
+
+  // Tellere per kategori/undermappe via RPC (unike dokumenter, ikke rader).
+  const loadCounts = async (projectId) => {
+    if (!projectId || projectId === 'all') { setCatCounts({}); setSubCounts({}); return }
     try {
-      // Offline Lag 2: network-first med fallback til IndexedDB + stale-while-revalidate
-      const [filesRes, projRes] = await Promise.all([
-        lesMedCache('prosjektfiler:liste', () => supabase.from('project_files').select('*').order('created_at', { ascending: false }), (fersk, lagretAt) => { setFiles(fersk); setCacheInfo({ fraCache: false, lagretAt }) }),
-        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'), (fersk) => setProjects(fersk))
-      ])
-      setFiles(filesRes.data)
-      setProjects(projRes.data)
-      setCacheInfo({ fraCache: filesRes.fraCache, lagretAt: filesRes.lagretAt })
-    } catch(e) { console.error(e) }
-    finally { setLoading(false) }
+      const { data, error } = await supabase.rpc('prosjektfiler_kategori_tellere', { p_project_id: projectId })
+      if (error) throw error
+      const cat = {}, sub = {}
+      ;(data || []).forEach(r => {
+        const n = Number(r.antall || 0)
+        cat[r.category] = (cat[r.category] || 0) + n
+        if (r.sub_folder) { (sub[r.category] = sub[r.category] || {})[r.sub_folder] = n }
+      })
+      setCatCounts(cat); setSubCounts(sub)
+    } catch (e) { console.warn('[prosjektfiler] tellere feilet', e); setCatCounts({}); setSubCounts({}) }
   }
 
-  useEffect(() => { loadData() }, [])
+  // Fillista: aktive dokumenter for valgt kategori/undermappe/søk, paginert fra DB.
+  const loadPanel = async (reset) => {
+    if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); return }
+    const pageToLoad = reset ? 0 : page + 1
+    reset ? setLoading(true) : setLoadingMore(true)
+    try {
+      let q = supabase.from('project_files')
+        .select('*', { count: 'exact' })
+        .eq('project_id', selectedProject)
+        .eq('category', selectedCategory)
+        .or('archived.is.null,archived.eq.false')
+      if (selectedSub) q = q.eq('sub_folder', selectedSub)
+      if (search.trim()) q = q.ilike('name', `%${search.trim()}%`)
+      const from = pageToLoad * PAGE_SIZE
+      q = q.order('name', { ascending: true }).range(from, from + PAGE_SIZE - 1)
+      const { data, count, error } = await q
+      if (error) throw error
+      setTotalCount(count || 0)
+      setPage(pageToLoad)
+      setPanelFiles(prev => reset ? (data || []) : [...prev, ...(data || [])])
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke laste filer', subMessage: e.message, kind: 'error' })
+    } finally { reset ? setLoading(false) : setLoadingMore(false) }
+  }
+
+  // Arkiverte revisjoner for synlig kategori (kun når showArchive er på).
+  const loadArchived = async () => {
+    if (selectedProject === 'all' || !selectedCategory) { setArchivedRows([]); return }
+    try {
+      let q = supabase.from('project_files').select('*')
+        .eq('project_id', selectedProject).eq('category', selectedCategory).eq('archived', true)
+      if (selectedSub) q = q.eq('sub_folder', selectedSub)
+      const { data } = await q
+      setArchivedRows(data || [])
+    } catch (e) { console.warn('[prosjektfiler] arkiv feilet', e); setArchivedRows([]) }
+  }
+
+  const refresh = async () => {
+    if (selectedProject === 'all') return
+    await loadCounts(selectedProject)
+    await loadPanel(true)
+    if (showArchive) await loadArchived()
+  }
+
+  // Bytt prosjekt → last tellere. (Kategori/undermappe nullstilles i velgeren.)
+  useEffect(() => {
+    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setPanelFiles([]); setTotalCount(0); return }
+    loadCounts(selectedProject)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject])
+
+  // Bytt kategori/undermappe → last første side. Søk er debouncet.
+  useEffect(() => {
+    if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); return }
+    const t = setTimeout(() => { loadPanel(true); if (showArchive) loadArchived() }, search ? 300 : 0)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject, selectedCategory, selectedSub, search, showArchive])
+
+  // Aktive dokumenter i opplastingsprosjektet — grunnlag for revisjonsforslag.
+  useEffect(() => {
+    if (!showUpload || !uploadForm.project_id) { setExistingDocs([]); return }
+    let cancelled = false
+    ;(async () => {
+      const { data } = await supabase.from('project_files')
+        .select('id, name, document_group, revision_label, revision_log, category, sub_folder, file_size, description, access_level, project_id, file_url')
+        .eq('project_id', uploadForm.project_id)
+        .or('archived.is.null,archived.eq.false')
+      if (!cancelled) setExistingDocs(data || [])
+    })()
+    return () => { cancelled = true }
+  }, [showUpload, uploadForm.project_id])
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  const projectFiles = React.useMemo(() =>
-    files.filter(f => selectedProject === 'all' || f.project_id === selectedProject),
-    [files, selectedProject]
-  )
+  const countForCat = (catId) => catCounts[catId] || 0
+  const countForSub = (catId, sub) => (subCounts[catId] && subCounts[catId][sub]) || 0
 
-  const countForCat = (catId) => {
-    if (selectedProject === 'all') return 0
-    const active = projectFiles.filter(f => f.category === catId && !f.archived)
-    const unique = new Set(active.map(f => f.document_group || f.id))
-    return unique.size
-  }
-
-  const countForSub = (catId, sub) => {
-    if (selectedProject === 'all') return 0
-    const active = projectFiles.filter(f => f.category === catId && f.sub_folder === sub && !f.archived)
-    const unique = new Set(active.map(f => f.document_group || f.id))
-    return unique.size
-  }
-
-  const allPanelFiles = React.useMemo(() => {
-    if (!selectedCategory) return []
-    return projectFiles.filter(f => {
-      if (f.category !== selectedCategory) return false
-      if (selectedSub && f.sub_folder !== selectedSub) return false
-      if (search && !f.name?.toLowerCase().includes(search.toLowerCase())) return false
-      return true
-    })
-  }, [projectFiles, selectedCategory, selectedSub, search])
-
-  // archived can be true, false, null, or undefined (if column doesn't exist yet)
-  const activePanelFiles = React.useMemo(() =>
-    allPanelFiles.filter(f => f.archived !== true),
-    [allPanelFiles]
-  )
-  const archivedPanelFiles = React.useMemo(() =>
-    allPanelFiles.filter(f => f.archived === true),
-    [allPanelFiles]
-  )
-
-  // Group by document_group — each group shows as one document with revisions
-  const fileGroups = React.useMemo(() => {
-    const groups = {}
-    activePanelFiles.forEach(f => {
-      const key = f.document_group || f.id
-      if (!groups[key]) groups[key] = []
-      groups[key].push(f)
-    })
-    Object.values(groups).forEach(g => g.sort((a,b) => {
-      const an = parseInt((a.revision_label||'Rev00').replace(/\D/g,''))||0
-      const bn = parseInt((b.revision_label||'Rev00').replace(/\D/g,''))||0
-      return bn - an
-    }))
-    return Object.values(groups)
-  }, [activePanelFiles])
+  // Aktive rader er 1:1 med dokumenter (kun gjeldende revisjon har archived=false),
+  // så hvert panelFiles-element blir én dokument-gruppe.
+  const fileGroups = React.useMemo(() => panelFiles.map(f => [f]), [panelFiles])
+  const archivedPanelFiles = archivedRows
 
   const selectedCat = FILE_CATEGORIES.find(c => c.id === selectedCategory)
   const catSupportsRevision = selectedCat?.revisjon || false
@@ -5946,35 +6089,68 @@ function ProsjektfilerPage() {
     e.preventDefault()
     if (uploadFiles.length === 0) { await appAlert({ message: 'Velg minst én fil', kind: 'warn' }); return }
     if (!uploadForm.project_id) { await appAlert({ message: 'Velg et prosjekt', kind: 'warn' }); return }
+    // Revisjon uten valgt måldokument skal stoppes (ikke stille bli nytt dokument)
+    const manglerMaal = uploadFiles.some(en => { const m = effMode(en); return m.mode === 'revision' && !m.baseId })
+    if (manglerMaal) { await appAlert({ message: 'Velg dokument for revisjon', subMessage: 'Én eller flere filer er merket som «ny revisjon», men mangler hvilket dokument revisjonen gjelder.', kind: 'warn' }); return }
     setUploading(true)
-    try {
-      for (const file of uploadFiles) {
-        const ext = file.name.split('.').pop()
-        const path = `projects/${uploadForm.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
-        if (upErr) throw upErr
-        const { error: dbErr } = await supabase.from('project_files').insert({
-          name: file.name,
-          project_id: uploadForm.project_id,
-          file_url: path,
-          file_type: ext,
-          file_size: file.size,
-          category: uploadForm.category,
-          sub_folder: uploadForm.sub || null,
-          description: uploadForm.description || null,
-          access_level: uploadForm.access_level,
-          uploaded_by: user?.id,
-          revision_label: 'Rev01',
-          archived: false,
-        })
-        if (dbErr) throw dbErr
+    // Nullstill fremdrift til «venter» for alle
+    setUploadFiles(prev => prev.map(en => ({ ...en, progress: 'pending' })))
+    let anyErr = null
+    let anyOk = false
+    for (let i = 0; i < uploadFiles.length; i++) {
+      const entry = uploadFiles[i]
+      const { mode, baseId } = effMode(entry)
+      setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, progress: 'uploading' } : en))
+      try {
+        if (mode === 'revision' && baseId) {
+          const baseFile = existingDocs.find(d => d.id === baseId)
+          if (!baseFile) throw new Error('Fant ikke dokumentet å revidere')
+          // Ny revisjon: merknad → revision_note. GJENBRUK delt helper.
+          await uploadRevisionRow({ baseFile, newFile: entry.file, note: entry.note, user })
+        } else {
+          // Nytt dokument — som i dag (description beholdes for nye dokumenter).
+          const file = entry.file
+          const ext = file.name.split('.').pop()
+          const path = `projects/${uploadForm.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+          const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+          if (upErr) throw upErr
+          const { error: dbErr } = await supabase.from('project_files').insert({
+            name: file.name,
+            project_id: uploadForm.project_id,
+            file_url: path,
+            file_type: ext,
+            file_size: file.size,
+            category: uploadForm.category,
+            sub_folder: uploadForm.sub || null,
+            description: uploadForm.description || null,
+            access_level: uploadForm.access_level,
+            uploaded_by: user?.id,
+            revision_label: 'Rev01',
+            archived: false,
+          })
+          if (dbErr) throw dbErr
+        }
+        anyOk = true
+        setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, progress: 'done' } : en))
+      } catch (err) {
+        anyErr = err
+        setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, progress: 'error' } : en))
       }
+    }
+    setUploading(false)
+    // Oppdater tellere + liste for prosjektet det ble lastet opp til
+    const uploadedProject = uploadForm.project_id
+    if (anyOk) {
+      await loadCounts(uploadedProject)
+      if (uploadedProject === selectedProject) { await loadPanel(true); if (showArchive) await loadArchived() }
+    }
+    if (anyErr) {
+      await appAlert({ message: 'Noen filer ble ikke lastet opp', subMessage: anyErr.message, kind: 'error' })
+    } else {
       setShowUpload(false)
       setUploadFiles([])
       setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
-      await loadData()
-    } catch(e) { await appAlert({ message: 'Feil ved opplasting', subMessage: e.message, kind: 'error' }) }
-    finally { setUploading(false) }
+    }
   }
 
   // ── Ny revisjon med endringsmerknad ─────────────────────────────────────
@@ -5994,67 +6170,11 @@ function ProsjektfilerPage() {
     const { baseFile, newFile } = revisionTarget
     setUploading(true)
     try {
-      const docGroup = baseFile.document_group || baseFile.id
-      const allRevisions = files.filter(f => (f.document_group || f.id) === docGroup)
-      const newLabel = nextRevision(allRevisions)
-
-      // 1. Arkiver gammel revisjon
-      const { error: archErr } = await supabase.from('project_files')
-        .update({ archived: true, document_group: docGroup })
-        .eq('id', baseFile.id)
-      if (archErr) {
-        await appAlert({
-          message: 'Kunne ikke arkivere gammel revisjon',
-          subMessage: 'Kjør denne SQL-en i Supabase:\n\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS archived boolean DEFAULT false;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS document_group text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_label text DEFAULT \'Rev01\';\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS sub_folder text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_note text;\nALTER TABLE project_files ADD COLUMN IF NOT EXISTS revision_log jsonb DEFAULT \'[]\'::jsonb;',
-          kind: 'error',
-        })
-        return
-      }
-
-      // 2. Last opp ny fil til storage
-      const ext = newFile.name.split('.').pop()
-      const path = `projects/${baseFile.project_id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-      const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, newFile)
-      if (upErr) throw new Error('Filopplasting feilet: ' + upErr.message)
-
-      // 3. Bygg endringslogg — kopier eksisterende + legg til ny
-      const existingLog = baseFile.revision_log || []
-      const newLog = [
-        ...existingLog,
-        {
-          revision: newLabel,
-          previous_revision: baseFile.revision_label || 'Rev01',
-          date: new Date().toISOString(),
-          user_email: user?.email || 'Ukjent',
-          note: revisionNote.trim() || 'Ny revisjon lastet opp',
-          file_size: newFile.size,
-          prev_file_size: baseFile.file_size || null,
-        }
-      ]
-
-      // 4. Lagre ny revisjon i database
-      const { error: insErr } = await supabase.from('project_files').insert({
-        name: baseFile.name,
-        project_id: baseFile.project_id,
-        file_url: path,
-        file_type: ext,
-        file_size: newFile.size,
-        category: baseFile.category,
-        sub_folder: baseFile.sub_folder || null,
-        description: baseFile.description || null,
-        access_level: baseFile.access_level || 'alle',
-        uploaded_by: user?.id,
-        revision_label: newLabel,
-        document_group: docGroup,
-        archived: false,
-        revision_note: revisionNote.trim() || null,
-        revision_log: newLog,
-      })
-      if (insErr) throw new Error('Lagring feilet: ' + insErr.message)
-
+      // GJENBRUK delt helper — samme arkiver/last opp/logg/insert som før.
+      await uploadRevisionRow({ baseFile, newFile, note: revisionNote, user })
       setRevisionTarget(null)
       setRevisionNote('')
-      await loadData()
+      await refresh()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
     finally { setUploading(false) }
   }
@@ -6090,7 +6210,7 @@ function ProsjektfilerPage() {
       try { await supabase.storage.from('plattform-files').remove([file.file_url]) } catch(_) {}
       const { error } = await supabase.from('project_files').delete().eq('id', file.id)
       if (error) { await appAlert({ message: 'Feil ved sletting', subMessage: error.message, kind: 'error' }); return }
-      await loadData()
+      await refresh()
     } catch(e) { await appAlert({ message: 'Feil ved sletting', subMessage: e.message, kind: 'error' }) }
   }
 
@@ -6115,22 +6235,29 @@ function ProsjektfilerPage() {
         </div>
       )}
       {/* Sticky header + prosjektvelger — st\u00e5r i ro n\u00e5r man scroller i filpanelet */}
-      <div style={{ position: 'sticky', top: isMob ? '52px' : '56px', zIndex: 20, background: 'white', flexShrink: 0 }}>
-        {/* Header */}
-        <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '14px 16px' : '20px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
+      <div style={{ position: 'sticky', top: isMob ? '52px' : '56px', zIndex: 20, background: 'white', flexShrink: 0, borderBottom: '1px solid #e2e8f0' }}>
+        {/* Header: tittel til venstre; prosjektvelger (desktop) + «Last opp» til høyre */}
+        <div style={{ background: 'white', padding: isMob ? '12px 16px' : '16px 32px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+          <div style={{ minWidth: 0 }}>
             <h1 style={{ margin: 0, fontSize: isMob ? '18px' : '22px', fontWeight: 'bold', color: '#0f172a' }}>Prosjektfiler</h1>
             {cacheInfo.fraCache && <div style={{ marginTop:'6px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
-          <button data-tour="fil-opplast" onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '8px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer' }}>
-            ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+            {!isMob && (
+              <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '240px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+            )}
+            <button data-tour="fil-opplast" onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+              ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
+            </button>
+          </div>
         </div>
 
-        {/* Project selector */}
-        <div style={{ background: 'white', borderBottom: '1px solid #f1f5f9', padding: isMob ? '10px 16px' : '12px 32px' }}>
-          <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: isMob ? '100%' : 'auto', minWidth: isMob ? 'auto' : '200px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
-        </div>
+        {/* Mobil: prosjektvelger på egen full-bredde rad rett under */}
+        {isMob && (
+          <div style={{ background: 'white', borderTop: '1px solid #f1f5f9', padding: '10px 16px' }}>
+            <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: '100%', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+          </div>
+        )}
       </div>
 
       {/* MOBIL: Stacked layout */}
@@ -6214,7 +6341,7 @@ function ProsjektfilerPage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({fileGroups.length})</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({totalCount})</div>
                   {fileGroups.map(group => {
                     const current = group[0]
                     const docGroup = current.document_group || current.id
@@ -6230,6 +6357,12 @@ function ProsjektfilerPage() {
                       </div>
                     )
                   })}
+                  {panelFiles.length < totalCount && (
+                    <button onClick={() => loadPanel(false)} disabled={loadingMore}
+                      style={{ marginTop: '6px', padding: '10px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: loadingMore ? 'default' : 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                      {loadingMore ? 'Laster…' : `Last inn flere (${totalCount - panelFiles.length} igjen)`}
+                    </button>
+                  )}
                 </div>
               )}
             </>
@@ -6347,7 +6480,7 @@ function ProsjektfilerPage() {
               ) : (
                 <div data-tour="fil-dokumenter" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.06em' }}>
-                    DOKUMENTER ({fileGroups.length})
+                    DOKUMENTER ({totalCount})
                   </div>
                   {/* Each group: current revision + archived revisions inline below */}
                   {fileGroups.map(group => {
@@ -6384,6 +6517,12 @@ function ProsjektfilerPage() {
                       </div>
                     )
                   })}
+                  {panelFiles.length < totalCount && (
+                    <button onClick={() => loadPanel(false)} disabled={loadingMore}
+                      style={{ marginTop: '8px', alignSelf: 'flex-start', padding: '10px 18px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: loadingMore ? 'default' : 'pointer', fontSize: '13px', fontWeight: '600' }}>
+                      {loadingMore ? 'Laster…' : `Last inn flere (${totalCount - panelFiles.length} igjen)`}
+                    </button>
+                  )}
                 </div>
               )}
             </>
@@ -6458,7 +6597,7 @@ function ProsjektfilerPage() {
               <button onClick={() => { setShowUpload(false); setUploadFiles([]) }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '22px', color: '#94a3b8' }}>×</button>
             </div>
             <form onSubmit={handleUpload} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px', overflowY: 'auto' }}>
-              {/* Drag-and-drop sone */}
+              {/* Drag-and-drop sone (klikkbar — åpner filvelger) */}
               <div
                 onClick={() => fileInputRef.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); e.currentTarget.style.borderColor = '#059669'; e.currentTarget.style.background = '#f0fdf4' }}
@@ -6467,9 +6606,9 @@ function ProsjektfilerPage() {
                   e.preventDefault(); e.stopPropagation()
                   e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.background = '#f8fafc'
                   const dropped = Array.from(e.dataTransfer?.files || [])
-                  if (dropped.length > 0) setUploadFiles(prev => [...prev, ...dropped])
+                  if (dropped.length > 0) setUploadFiles(prev => [...prev, ...dropped.map(mkEntry)])
                 }}
-                style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: uploadFiles.length > 0 ? '16px' : '32px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc', transition: 'border-color 0.2s, background 0.2s' }}>
+                style={{ border: '2px dashed #e2e8f0', borderRadius: '12px', padding: uploadFiles.length > 0 ? '14px' : '32px', textAlign: 'center', cursor: 'pointer', background: '#f8fafc', transition: 'border-color 0.2s, background 0.2s' }}>
                 {uploadFiles.length === 0 ? (
                   <>
                     <div style={{ fontSize: '36px', marginBottom: '8px' }}>📂</div>
@@ -6477,35 +6616,73 @@ function ProsjektfilerPage() {
                     <p style={{ margin: 0, color: '#94a3b8', fontSize: '13px' }}>eller klikk for å velge fra maskinen</p>
                   </>
                 ) : (
-                  <>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', textAlign: 'left' }}>
-                      {uploadFiles.map((f, i) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'white', borderRadius: '8px', padding: '8px 12px', border: '1px solid #f1f5f9' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-                            <span style={{ fontSize: '16px', flexShrink: 0 }}>{getFileEmoji(f.name)}</span>
-                            <span style={{ fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
-                            <span style={{ fontSize: '12px', color: '#94a3b8' }}>{formatFileSize(f.size)}</span>
-                            <button type="button" onClick={(e) => { e.stopPropagation(); setUploadFiles(prev => prev.filter((_, idx) => idx !== i)) }}
-                              style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', width: '22px', height: '22px', cursor: 'pointer', color: '#dc2626', fontSize: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed #e2e8f0' }}>
-                      <p style={{ margin: 0, color: '#94a3b8', fontSize: '12px' }}>
-                        {uploadFiles.length} fil{uploadFiles.length > 1 ? 'er' : ''} valgt ({formatFileSize(uploadFiles.reduce((a, f) => a + f.size, 0))}) · Klikk eller dra for å legge til flere
-                      </p>
-                    </div>
-                  </>
+                  <p style={{ margin: 0, color: '#059669', fontSize: '13px', fontWeight: '600' }}>
+                    ➕ Klikk eller dra for å legge til flere · {uploadFiles.length} fil{uploadFiles.length > 1 ? 'er' : ''} valgt ({formatFileSize(uploadFiles.reduce((a, en) => a + en.file.size, 0))})
+                  </p>
                 )}
               </div>
               <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display: 'none' }} onChange={e => {
                 const newFiles = Array.from(e.target.files || [])
-                setUploadFiles(prev => [...prev, ...newFiles])
+                setUploadFiles(prev => [...prev, ...newFiles.map(mkEntry)])
                 e.target.value = ''
               }} />
+              {/* Per-fil: nytt dokument vs. ny revisjon + merknad + fremdrift */}
+              {uploadFiles.length > 0 && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {uploadFiles.map((entry, i) => {
+                    const em = effMode(entry)
+                    const prog = entry.progress
+                    const progView = prog === 'uploading'
+                      ? <span style={{ display:'flex', alignItems:'center', gap:'5px', fontSize:'12px', color:'#059669', fontWeight:'600' }}><span style={{ width:'12px', height:'12px', border:'2px solid #bbf7d0', borderTop:'2px solid #059669', borderRadius:'50%', display:'inline-block', animation:'spin 1s linear infinite' }} />Laster opp…</span>
+                      : prog === 'done' ? <span style={{ fontSize:'12px', color:'#059669', fontWeight:'700' }}>✓ Ferdig</span>
+                      : prog === 'error' ? <span style={{ fontSize:'12px', color:'#dc2626', fontWeight:'700' }}>✕ Feil</span>
+                      : prog === 'pending' ? <span style={{ fontSize:'12px', color:'#94a3b8' }}>Venter…</span>
+                      : null
+                    return (
+                      <div key={i} style={{ border: '1px solid #f1f5f9', borderRadius: '10px', padding: '10px 12px', background: 'white' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                          <span style={{ fontSize: '16px', flexShrink: 0 }}>{getFileEmoji(entry.file.name)}</span>
+                          <span style={{ flex: 1, fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{entry.file.name}</span>
+                          <span style={{ fontSize: '12px', color: '#94a3b8', flexShrink: 0 }}>{formatFileSize(entry.file.size)}</span>
+                          {progView}
+                          {!uploading && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); setUploadFiles(prev => prev.filter((_, idx) => idx !== i)) }}
+                              style={{ background: '#fef2f2', border: 'none', borderRadius: '6px', width: '22px', height: '22px', cursor: 'pointer', color: '#dc2626', fontSize: '12px', flexShrink: 0 }}>×</button>
+                          )}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+                          <select value={em.mode}
+                            onChange={(e) => e.target.value === 'new'
+                              ? setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, mode: 'new', baseId: null } : en))
+                              : setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, mode: 'revision', baseId: em.baseId || '' } : en))}
+                            style={{ padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', background: 'white', fontWeight: '600', color: '#374151' }}>
+                            <option value="new">Nytt dokument</option>
+                            <option value="revision" disabled={existingDocs.length === 0}>Ny revisjon av…</option>
+                          </select>
+                          {em.mode === 'revision' && (
+                            <select value={em.baseId || ''}
+                              onChange={(e) => setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, mode: 'revision', baseId: e.target.value } : en))}
+                              style={{ flex: 1, minWidth: '160px', padding: '6px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', background: 'white', color: '#374151' }}>
+                              <option value="">Velg dokument…</option>
+                              {existingDocs.map(d => <option key={d.id} value={d.id}>{d.name} ({d.revision_label || 'Rev01'})</option>)}
+                            </select>
+                          )}
+                          {em.suggested && em.mode === 'revision' && (
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: '#059669', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '999px', padding: '2px 8px' }}>Foreslått</span>
+                          )}
+                        </div>
+                        {em.mode === 'revision' && (
+                          <textarea value={entry.note}
+                            onChange={(e) => setUploadFiles(prev => prev.map((en, idx) => idx === i ? { ...en, note: e.target.value } : en))}
+                            placeholder="Hva er endret i denne revisjonen? (lagres som merknad)"
+                            rows={2}
+                            style={{ width: '100%', marginTop: '8px', padding: '8px 10px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '13px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }} />
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Prosjekt *</label>
