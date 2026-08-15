@@ -5909,9 +5909,13 @@ function ProsjektfilerPage() {
   const [totalCount, setTotalCount] = useState(0)        // count:'exact' på fillista
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 50
+  const [panelFromCache, setPanelFromCache] = useState(false) // fillista vises fra offline-cache
+  const [panelCacheAt, setPanelCacheAt] = useState(null)      // når cachen sist ble lagret
   // Tellere per kategori/undermappe fra RPC (unike dokumenter, ikke rader)
   const [catCounts, setCatCounts] = useState({})         // { [category]: antall }
   const [subCounts, setSubCounts] = useState({})         // { [category]: { [sub]: antall } }
+  const [countsKnown, setCountsKnown] = useState(false)  // har vi tellere (ferske ell. cache)? ellers: vis ingen tall
+  const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine !== false : true)
   const [existingDocs, setExistingDocs] = useState([])   // aktive dokumenter i opplastingsprosjektet (revisjonsforslag)
   const [loading, setLoading] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -5985,7 +5989,8 @@ function ProsjektfilerPage() {
 
   // Tellere per kategori/undermappe via RPC (unike dokumenter, ikke rader).
   const loadCounts = async (projectId) => {
-    if (!projectId || projectId === 'all') { setCatCounts({}); setSubCounts({}); return }
+    if (!projectId || projectId === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); return }
+    const cacheKey = `pf:tellere:${projectId}`
     try {
       const { data, error } = await supabase.rpc('prosjektfiler_kategori_tellere', { p_project_id: projectId })
       if (error) throw error
@@ -5995,14 +6000,26 @@ function ProsjektfilerPage() {
         cat[r.category] = (cat[r.category] || 0) + n
         if (r.sub_folder) { (sub[r.category] = sub[r.category] || {})[r.sub_folder] = n }
       })
-      setCatCounts(cat); setSubCounts(sub)
-    } catch (e) { console.warn('[prosjektfiler] tellere feilet', e); setCatCounts({}); setSubCounts({}) }
+      setCatCounts(cat); setSubCounts(sub); setCountsKnown(true)
+      idbSett(cacheKey, { cat, sub })            // offline: sist kjente tall
+    } catch (e) {
+      // RPC svarer ikke (offline/feil): vis sist kjente tall fra cache.
+      const cachet = await idbHent(cacheKey)
+      if (cachet && cachet.data) {
+        setCatCounts(cachet.data.cat || {}); setSubCounts(cachet.data.sub || {}); setCountsKnown(true)
+      } else {
+        // Ingenting lagret → vis ingen tall (tomt er ærligere enn 0)
+        setCatCounts({}); setSubCounts({}); setCountsKnown(false)
+      }
+    }
   }
 
   // Fillista: aktive dokumenter for valgt kategori/undermappe/søk, paginert fra DB.
+  // Første side (uten søk) speiles til IndexedDB, så lista kan leses offline.
   const loadPanel = async (reset) => {
-    if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); return }
+    if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); setPanelFromCache(false); return }
     const pageToLoad = reset ? 0 : page + 1
+    const cacheKey = `pf:liste:${selectedProject}:${selectedCategory}:${selectedSub || '_'}`
     reset ? setLoading(true) : setLoadingMore(true)
     try {
       let q = supabase.from('project_files')
@@ -6019,8 +6036,27 @@ function ProsjektfilerPage() {
       setTotalCount(count || 0)
       setPage(pageToLoad)
       setPanelFiles(prev => reset ? (data || []) : [...prev, ...(data || [])])
+      setPanelFromCache(false)
+      // Speil kun første side uten søk (det brukeren ser når hen åpner kategorien offline)
+      if (reset && !search.trim()) idbSett(cacheKey, { rows: data || [], count: count || 0 })
     } catch (e) {
-      await appAlert({ message: 'Kunne ikke laste filer', subMessage: e.message, kind: 'error' })
+      // Offline/feil på første side uten søk → vis sist lagrede liste i stedet for feil/tom side
+      if (reset && !search.trim()) {
+        const cachet = await idbHent(cacheKey)
+        if (cachet && cachet.data) {
+          setPanelFiles(cachet.data.rows || [])
+          setTotalCount(cachet.data.count || 0)
+          setPage(0)
+          setPanelFromCache(true)
+          setPanelCacheAt(cachet.lagretAt || null)
+          return
+        }
+      }
+      // Ingen cache å falle tilbake på: rens til tomt. Offline → ingen feil; online → vis feil.
+      if (reset) {
+        setPanelFiles([]); setTotalCount(0); setPage(0); setPanelFromCache(false)
+        if (navigator.onLine !== false) await appAlert({ message: 'Kunne ikke laste filer', subMessage: e.message, kind: 'error' })
+      }
     } finally { reset ? setLoading(false) : setLoadingMore(false) }
   }
 
@@ -6043,16 +6079,34 @@ function ProsjektfilerPage() {
     if (showArchive) await loadArchived()
   }
 
+  // Nett av/på — styrer «Last inn flere», søk og reconnect-oppfriskning.
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false)
+    window.addEventListener('online', on); window.addEventListener('offline', off)
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+  }, [])
+
+  // Kom tilbake på nett → frisk opp tellere + liste (bytter cache-visning til ferskt).
+  const wasOnline = React.useRef(online)
+  useEffect(() => {
+    if (online && !wasOnline.current && selectedProject !== 'all') {
+      loadCounts(selectedProject)
+      if (selectedCategory) loadPanel(true)
+    }
+    wasOnline.current = online
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
   // Bytt prosjekt → last tellere. (Kategori/undermappe nullstilles i velgeren.)
   useEffect(() => {
-    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setPanelFiles([]); setTotalCount(0); return }
+    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); return }
     loadCounts(selectedProject)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
 
   // Bytt kategori/undermappe → last første side. Søk er debouncet.
   useEffect(() => {
-    if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); return }
+    if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); setPanelFromCache(false); return }
     const t = setTimeout(() => { loadPanel(true); if (showArchive) loadArchived() }, search ? 300 : 0)
     return () => clearTimeout(t)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -6285,7 +6339,7 @@ function ProsjektfilerPage() {
                         <div style={{ fontSize: '12px', color: '#94a3b8' }}>{cat.label}</div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span style={{ fontSize: '13px', fontWeight: '600', color: catCount > 0 ? '#059669' : '#94a3b8' }}>{catCount} fil{catCount !== 1 ? 'er' : ''}</span>
+                        {countsKnown && <span style={{ fontSize: '13px', fontWeight: '600', color: catCount > 0 ? '#059669' : '#94a3b8' }}>{catCount} fil{catCount !== 1 ? 'er' : ''}</span>}
                         <span style={{ color: '#cbd5e1', fontSize: '16px' }}>{hasSubs ? (isExpanded ? '▾' : '▸') : '›'}</span>
                       </div>
                     </button>
@@ -6298,7 +6352,7 @@ function ProsjektfilerPage() {
                               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', borderRadius: '10px', border: '1px solid #f1f5f9', background: '#f8fafc', cursor: 'pointer', textAlign: 'left' }}>
                               <span style={{ fontSize: '14px' }}>📂</span>
                               <span style={{ flex: 1, fontSize: '13px', fontWeight: '500', color: '#374151' }}>{sub}</span>
-                              <span style={{ fontSize: '12px', color: '#94a3b8' }}>{subCount}</span>
+                              {countsKnown && <span style={{ fontSize: '12px', color: '#94a3b8' }}>{subCount}</span>}
                               <span style={{ color: '#cbd5e1' }}>›</span>
                             </button>
                           )
@@ -6318,8 +6372,8 @@ function ProsjektfilerPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
                 <div style={{ position: 'relative', flex: 1 }}>
                   <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
-                  <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..."
-                    style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }} />
+                  <input value={search} onChange={e => setSearch(e.target.value)} disabled={!online} placeholder={online ? 'Søk etter filer...' : 'Søk krever nett'}
+                    style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
                 </div>
                 <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
                   style={{ padding: '8px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '18px', flexShrink: 0 }}>⬆️</button>
@@ -6330,6 +6384,7 @@ function ProsjektfilerPage() {
                   🗄️ {showArchive ? 'Skjul arkiverte revisjoner' : 'Vis arkiverte revisjoner'}
                 </button>
               )}
+              {panelFromCache && <div style={{ marginBottom: '10px' }}><SistOppdatert fraCache={true} lagretAt={panelCacheAt} /></div>}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
               ) : fileGroups.length === 0 ? (
@@ -6357,7 +6412,7 @@ function ProsjektfilerPage() {
                       </div>
                     )
                   })}
-                  {panelFiles.length < totalCount && (
+                  {online && !panelFromCache && panelFiles.length < totalCount && (
                     <button onClick={() => loadPanel(false)} disabled={loadingMore}
                       style={{ marginTop: '6px', padding: '10px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: loadingMore ? 'default' : 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {loadingMore ? 'Laster…' : `Last inn flere (${totalCount - panelFiles.length} igjen)`}
@@ -6394,7 +6449,7 @@ function ProsjektfilerPage() {
                   <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{cat.emoji}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: isActive ? '600' : '500', color: isActive ? cat.color : '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.name}</div>
-                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : `${catCount} fil${catCount !== 1 ? 'er' : ''}`}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : (countsKnown ? `${catCount} fil${catCount !== 1 ? 'er' : ''}` : '')}</div>
                   </div>
                   {hasSubs && <span style={{ fontSize: '16px', color: '#64748b', fontWeight: '700' }}>{isExpanded ? '▾' : '▸'}</span>}
                 </div>
@@ -6411,7 +6466,7 @@ function ProsjektfilerPage() {
                       <span style={{ fontSize: '13px' }}>📂</span>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: '12px', fontWeight: isSubActive ? '600' : '400', color: isSubActive ? cat.color : '#475569' }}>{sub}</div>
-                        <div style={{ fontSize: '11px', color: '#94a3b8' }}>{subCount} fil{subCount !== 1 ? 'er' : ''}</div>
+                        {countsKnown && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{subCount} fil{subCount !== 1 ? 'er' : ''}</div>}
                       </div>
                     </div>
                   )
@@ -6442,8 +6497,8 @@ function ProsjektfilerPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Søk etter filer..."
-                      style={{ paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px' }} />
+                    <input value={search} onChange={e => setSearch(e.target.value)} disabled={!online} placeholder={online ? 'Søk etter filer...' : 'Søk krever nett'}
+                      style={{ paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
                   </div>
                   {catSupportsRevision && (
                     <button onClick={() => setShowArchive(v => !v)}
@@ -6462,6 +6517,7 @@ function ProsjektfilerPage() {
                 </button>
               </div>
 
+              {panelFromCache && <div style={{ marginBottom: '12px' }}><SistOppdatert fraCache={true} lagretAt={panelCacheAt} /></div>}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
                   <div style={{ width: '32px', height: '32px', border: '3px solid #e2e8f0', borderTop: '3px solid #059669', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
@@ -6517,7 +6573,7 @@ function ProsjektfilerPage() {
                       </div>
                     )
                   })}
-                  {panelFiles.length < totalCount && (
+                  {online && !panelFromCache && panelFiles.length < totalCount && (
                     <button onClick={() => loadPanel(false)} disabled={loadingMore}
                       style={{ marginTop: '8px', alignSelf: 'flex-start', padding: '10px 18px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: loadingMore ? 'default' : 'pointer', fontSize: '13px', fontWeight: '600' }}>
                       {loadingMore ? 'Laster…' : `Last inn flere (${totalCount - panelFiles.length} igjen)`}
