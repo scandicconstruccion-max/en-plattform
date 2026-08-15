@@ -4857,6 +4857,7 @@ const emptyProsjekt = {
   project_manager_name:'', project_manager_email:'', project_manager_phone:'', customer_id:'',
   time_approver_id: null,
   subcontractors:[], architects:[], consultants:[],
+  document_template_id: null,
 }
 
 function FLabel({ label, children }) {
@@ -4908,6 +4909,16 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
   const [form, setForm] = useState(initial || emptyProsjekt)
   const [pnrError, setPnrError] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // Dokumentmaler (systemmaler + bedriftens egne). «Uten mal» = ingen fase-system.
+  const [docTemplates, setDocTemplates] = useState([])
+  useEffect(() => {
+    let avbrutt = false
+    supabase.from('document_templates').select('id, name, description, phases, required_docs, sort_order').order('sort_order').order('name')
+      .then(({ data }) => { if (!avbrutt) setDocTemplates(data || []) })
+      .catch(() => {})
+    return () => { avbrutt = true }
+  }, [])
   const g2 = { display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'12px' }
   const sec = (label) => <h3 style={{ margin:'8px 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a', borderBottom:'1px solid #f1f5f9', paddingBottom:'8px' }}>{label}</h3>
   // Filtrer ut seg selv fra overordnet-listen (kan ikke være sitt eget parent)
@@ -4927,7 +4938,30 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
   const handleSubmit = (e) => {
     e.preventDefault()
     if (pnrError) return
-    onSave(form)
+    // Snapshot av malen på prosjektet (så senere mal-endringer ikke forstyrrer
+    // pågående prosjekt). «Uten mal» → null → nøyaktig dagens Prosjektfiler.
+    let payload
+    if (!form.document_template_id) {
+      // Uten mal
+      payload = { ...form, document_template_id: null, phases: null, required_docs: null, active_phase: null }
+    } else {
+      const tmpl = docTemplates.find(t => t.id === form.document_template_id)
+      if (tmpl) {
+        const faser = sorterFaser(tmpl.phases || [])
+        payload = {
+          ...form,
+          document_template_id: tmpl.id,
+          phases: faser,
+          required_docs: tmpl.required_docs || [],
+          active_phase: (initial?.active_phase && faser.includes(initial.active_phase)) ? initial.active_phase : (faser[0] || null),
+        }
+      } else {
+        // Mal valgt, men ikke i lista (ikke lastet ennå / annet) → behold eksisterende
+        // snapshot fra form. Aldri nullstill en mal som allerede er satt.
+        payload = { ...form }
+      }
+    }
+    onSave(payload)
   }
 
   return (
@@ -4961,6 +4995,21 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
                   <ProjectSelect value={form.parent_id} onChange={v => set('parent_id', v)} projects={parentProjects} placeholder="Ingen (toppnivå-prosjekt)" />
                 </FLabel>
                 {form.parent_id && <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#059669' }}>Dette blir et underprosjekt. Prosjektnummer genereres automatisk.</p>}
+              </div>
+              <div style={{ gridColumn:'1/-1' }}>
+                <FLabel label="Prosjektmal (dokumentkrav)">
+                  <select value={form.document_template_id || ''} onChange={e => set('document_template_id', e.target.value || null)}
+                    style={{ width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white' }}>
+                    <option value="">Uten mal (kun mapper – som i dag)</option>
+                    {docTemplates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </FLabel>
+                {(() => {
+                  const t = docTemplates.find(x => x.id === form.document_template_id)
+                  if (!t) return <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#94a3b8' }}>Uten mal: ingen faser eller påkrevde dokumenter – ren filmappe.</p>
+                  const faser = sorterFaser(t.phases || [])
+                  return <p style={{ margin:'4px 0 0', fontSize:'12px', color:'#64748b' }}>{t.description ? t.description + ' ' : ''}{faser.length > 0 ? `· Faser: ${faser.map(faseLabel).join(' → ')}` : ''}</p>
+                })()}
               </div>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Gateadresse"><FInput value={form.address_street} onChange={e => set('address_street', e.target.value)} placeholder="Gatenavn og nummer" /></FLabel></div>
               <FLabel label="Postnummer"><FInput value={form.address_postal} onChange={e => set('address_postal', e.target.value)} placeholder="0000" /></FLabel>
@@ -5784,9 +5833,23 @@ const FILE_CATEGORIES = [
   { id: 'okonomi',      name: 'Økonomi',                        emoji: '💰', color: '#ef4444', bg: '#fef2f2', sub: [], revisjon: false },
   { id: 'motereferater',name: 'Møtereferater / Kommunikasjon',  emoji: '📝', color: '#8b5cf6', bg: '#f5f3ff', sub: [], revisjon: false },
   { id: 'tillatelser',  name: 'Tillatelser / Sertifikater',     emoji: '🏅', color: '#06b6d4', bg: '#ecfeff', sub: [], revisjon: false },
+  { id: 'kontroll',     name: 'Kontroll',                       emoji: '✅', color: '#0ea5e9', bg: '#f0f9ff', sub: [], revisjon: false },
   { id: 'bilder',       name: 'Bilder',                         emoji: '🖼️', color: '#ec4899', bg: '#fdf2f8', sub: [], revisjon: false },
   { id: 'annet',        name: 'Annet',                          emoji: '📎', color: '#6b7280', bg: '#f8fafc', sub: [], revisjon: false },
 ]
+
+// Prosjektfaser — FAST rekkefølge (faglig begrunnet; FDV før Overlevering fordi
+// FDV-dokumentasjon kreves for ferdigattest). Selve MALENE ligger i DB, ikke her.
+const PROSJEKT_FASER = [
+  { id: 'anbud',        label: 'Anbud' },
+  { id: 'kontrakt',     label: 'Kontrakt' },
+  { id: 'utforelse',    label: 'Utførelse' },
+  { id: 'fdv',          label: 'FDV' },
+  { id: 'overlevering', label: 'Overlevering' },
+]
+const faseLabel = (id) => PROSJEKT_FASER.find(f => f.id === id)?.label || id
+// Sorter en liste av fase-id-er i den faste rekkefølgen.
+const sorterFaser = (ids) => PROSJEKT_FASER.filter(f => (ids || []).includes(f.id)).map(f => f.id)
 
 const formatFileSize = (bytes) => {
   if (!bytes) return ''
@@ -5893,6 +5956,8 @@ async function uploadRevisionRow({ baseFile, newFile, note, user }) {
     revision_label: newLabel,
     document_group: docGroup,
     archived: false,
+    fase: baseFile.fase || null,          // revisjon arver fase/doc_type fra basen
+    doc_type: baseFile.doc_type || null,
     revision_note: (note || '').trim() || null,
     revision_log: newLog,
   })
@@ -5915,6 +5980,12 @@ function ProsjektfilerPage() {
   const [catCounts, setCatCounts] = useState({})         // { [category]: antall }
   const [subCounts, setSubCounts] = useState({})         // { [category]: { [sub]: antall } }
   const [countsKnown, setCountsKnown] = useState(false)  // har vi tellere (ferske ell. cache)? ellers: vis ingen tall
+  // Fase-/malsystem (steg 2a). Kun aktivt når prosjektet har en mal.
+  const [phaseFileCounts, setPhaseFileCounts] = useState({}) // { [fase]: antall filer } — faselinje-teller
+  const [fulfilled, setFulfilled] = useState(() => new Set()) // Set("fase|doc_type") som er oppfylt
+  const [projectMeta, setProjectMeta] = useState(null)       // { phases, required_docs, active_phase, document_template_id }
+  const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
+  const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine !== false : true)
   const [existingDocs, setExistingDocs] = useState([])   // aktive dokumenter i opplastingsprosjektet (revisjonsforslag)
   const [loading, setLoading] = useState(false)
@@ -5926,7 +5997,7 @@ function ProsjektfilerPage() {
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [selectedSub, setSelectedSub] = useState(null)
   const [showUpload, setShowUpload] = useState(false)
-  const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
+  const [uploadForm, setUploadForm] = useState({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle', fase: '', doc_type: '' })
   const [uploadFiles, setUploadFiles] = useState([])     // [{ file, mode:'auto'|'new'|'revision', baseId, note, progress }]
   const [expandedCats, setExpandedCats] = useState({})
   const [showArchive, setShowArchive] = useState(false)
@@ -5994,24 +6065,44 @@ function ProsjektfilerPage() {
     try {
       const { data, error } = await supabase.rpc('prosjektfiler_kategori_tellere', { p_project_id: projectId })
       if (error) throw error
-      const cat = {}, sub = {}
+      const cat = {}, sub = {}, faseCnt = {}, oppfylt = []
       ;(data || []).forEach(r => {
         const n = Number(r.antall || 0)
         cat[r.category] = (cat[r.category] || 0) + n
-        if (r.sub_folder) { (sub[r.category] = sub[r.category] || {})[r.sub_folder] = n }
+        if (r.sub_folder) { const m = (sub[r.category] = sub[r.category] || {}); m[r.sub_folder] = (m[r.sub_folder] || 0) + n }
+        if (r.phase) faseCnt[r.phase] = (faseCnt[r.phase] || 0) + n
+        if (r.phase && r.doc_type && n > 0) oppfylt.push(r.phase + '|' + r.doc_type)
       })
-      setCatCounts(cat); setSubCounts(sub); setCountsKnown(true)
-      idbSett(cacheKey, { cat, sub })            // offline: sist kjente tall
+      setCatCounts(cat); setSubCounts(sub); setPhaseFileCounts(faseCnt); setFulfilled(new Set(oppfylt)); setCountsKnown(true)
+      idbSett(cacheKey, { cat, sub, faseCnt, oppfylt })   // offline: sist kjente tall
     } catch (e) {
       // RPC svarer ikke (offline/feil): vis sist kjente tall fra cache.
       const cachet = await idbHent(cacheKey)
       if (cachet && cachet.data) {
-        setCatCounts(cachet.data.cat || {}); setSubCounts(cachet.data.sub || {}); setCountsKnown(true)
+        setCatCounts(cachet.data.cat || {}); setSubCounts(cachet.data.sub || {})
+        setPhaseFileCounts(cachet.data.faseCnt || {}); setFulfilled(new Set(cachet.data.oppfylt || []))
+        setCountsKnown(true)
       } else {
         // Ingenting lagret → vis ingen tall (tomt er ærligere enn 0)
-        setCatCounts({}); setSubCounts({}); setCountsKnown(false)
+        setCatCounts({}); setSubCounts({}); setPhaseFileCounts({}); setFulfilled(new Set()); setCountsKnown(false)
       }
     }
+  }
+
+  // Last prosjektets mal-snapshot (faser/påkrevde dok/aktiv fase) + waivers.
+  const loadProjectMeta = async (projectId) => {
+    if (!projectId || projectId === 'all') { setProjectMeta(null); setWaivers([]); setViewedPhase(null); return }
+    try {
+      const [{ data: prj }, { data: wv }] = await Promise.all([
+        supabase.from('projects').select('phases, required_docs, active_phase, document_template_id').eq('id', projectId).single(),
+        supabase.from('project_doc_waivers').select('*').eq('project_id', projectId),
+      ])
+      const meta = prj || null
+      setProjectMeta(meta)
+      setWaivers(wv || [])
+      const faser = sorterFaser(meta?.phases || [])
+      setViewedPhase(faser.length ? (meta?.active_phase && faser.includes(meta.active_phase) ? meta.active_phase : faser[0]) : null)
+    } catch (e) { console.warn('[prosjektfiler] prosjektmeta feilet', e); setProjectMeta(null); setWaivers([]); setViewedPhase(null) }
   }
 
   // Fillista: aktive dokumenter for valgt kategori/undermappe/søk, paginert fra DB.
@@ -6075,6 +6166,7 @@ function ProsjektfilerPage() {
   const refresh = async () => {
     if (selectedProject === 'all') return
     await loadCounts(selectedProject)
+    await loadProjectMeta(selectedProject)
     await loadPanel(true)
     if (showArchive) await loadArchived()
   }
@@ -6097,10 +6189,11 @@ function ProsjektfilerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
 
-  // Bytt prosjekt → last tellere. (Kategori/undermappe nullstilles i velgeren.)
+  // Bytt prosjekt → last tellere + mal-snapshot. (Kategori/undermappe nullstilles i velgeren.)
   useEffect(() => {
-    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); return }
+    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); setProjectMeta(null); setWaivers([]); setViewedPhase(null); return }
     loadCounts(selectedProject)
+    loadProjectMeta(selectedProject)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
 
@@ -6118,13 +6211,22 @@ function ProsjektfilerPage() {
     let cancelled = false
     ;(async () => {
       const { data } = await supabase.from('project_files')
-        .select('id, name, document_group, revision_label, revision_log, category, sub_folder, file_size, description, access_level, project_id, file_url')
+        .select('id, name, document_group, revision_label, revision_log, category, sub_folder, file_size, description, access_level, project_id, file_url, fase, doc_type')
         .eq('project_id', uploadForm.project_id)
         .or('archived.is.null,archived.eq.false')
       if (!cancelled) setExistingDocs(data || [])
     })()
     return () => { cancelled = true }
   }, [showUpload, uploadForm.project_id])
+
+  // Forhåndsvelg aktiv fase i opplastingsdialogen når prosjektet har faser og
+  // fase ikke allerede er satt (openUploadForReq setter fase eksplisitt før åpning).
+  useEffect(() => {
+    if (showUpload && hasFaser && !uploadForm.fase) {
+      setUploadForm(f => ({ ...f, fase: projectMeta?.active_phase || projectFaser[0] || '' }))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showUpload])
 
   // ── Derived data ──────────────────────────────────────────────────────────
   const countForCat = (catId) => catCounts[catId] || 0
@@ -6137,6 +6239,130 @@ function ProsjektfilerPage() {
 
   const selectedCat = FILE_CATEGORIES.find(c => c.id === selectedCategory)
   const catSupportsRevision = selectedCat?.revisjon || false
+
+  // ── Fase-/malsystem (derived) ───────────────────────────────────────────────
+  const hasFaser = Array.isArray(projectMeta?.phases) && projectMeta.phases.length > 0
+  const projectFaser = hasFaser ? sorterFaser(projectMeta.phases) : []
+  const requiredDocs = Array.isArray(projectMeta?.required_docs) ? projectMeta.required_docs : []
+  const isWaived = (phase, doc_type) => waivers.some(w => w.phase === phase && w.doc_type === doc_type)
+  const isFulfilled = (phase, doc_type) => fulfilled.has(phase + '|' + doc_type)
+  const reqForPhase = (phase) => requiredDocs.filter(r => r.phase === phase)
+  // X av Y for en fase (Y = påkrevde minus «ikke aktuelt», X = oppfylte)
+  const faseProgress = (phase) => {
+    const reqs = reqForPhase(phase)
+    const aktive = reqs.filter(r => !isWaived(phase, r.doc_type))
+    const done = aktive.filter(r => isFulfilled(phase, r.doc_type))
+    return { x: done.length, y: aktive.length, waived: reqs.length - aktive.length }
+  }
+  // Manglende / waivede krav i valgt fase for valgt kategori (vises nederst i lista)
+  const missingForView = viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === selectedCategory && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)) : []
+  const waivedForView = viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === selectedCategory && isWaived(viewedPhase, r.doc_type)) : []
+  const waiverFor = (phase, doc_type) => waivers.find(w => w.phase === phase && w.doc_type === doc_type)
+  // Antall manglende krav i valgt fase for en kategori (0 = ingen mangler).
+  const catManglerAntall = (catId) => viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === catId && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)).length : 0
+
+  // ── Fase-/mal-handlere ──────────────────────────────────────────────────────
+  const [waiveTarget, setWaiveTarget] = useState(null)   // { phase, doc_type, label }
+  const [waiveReason, setWaiveReason] = useState('')
+  const [linkTarget, setLinkTarget] = useState(null)     // { phase, doc_type, label, category }
+  const [linkChoices, setLinkChoices] = useState([])
+  const [showMalBytte, setShowMalBytte] = useState(false)
+  const [malListe, setMalListe] = useState([])
+  const [malValg, setMalValg] = useState('')          // valgt mal i dialogen (før Bekreft); '' = uten mal
+  const [malLagrer, setMalLagrer] = useState(false)
+
+  const confirmWaive = async () => {
+    if (!waiveTarget) return
+    try {
+      const { error } = await supabase.from('project_doc_waivers').insert({
+        project_id: selectedProject, phase: waiveTarget.phase, doc_type: waiveTarget.doc_type,
+        reason: waiveReason.trim() || null, waived_by: user?.id,
+      })
+      if (error) throw error
+      setWaiveTarget(null); setWaiveReason('')
+      await loadProjectMeta(selectedProject)
+    } catch (e) { await appAlert({ message: 'Kunne ikke sette «Ikke aktuelt»', subMessage: e.message, kind: 'error' }) }
+  }
+  const undoWaive = async (phase, doc_type) => {
+    try {
+      const { error } = await supabase.from('project_doc_waivers').delete()
+        .eq('project_id', selectedProject).eq('phase', phase).eq('doc_type', doc_type)
+      if (error) throw error
+      await loadProjectMeta(selectedProject)
+    } catch (e) { await appAlert({ message: 'Kunne ikke angre', subMessage: e.message, kind: 'error' }) }
+  }
+  const openLinkExisting = async (req) => {
+    setLinkTarget({ ...req, phase: viewedPhase })
+    try {
+      const { data } = await supabase.from('project_files')
+        .select('id, name, category, sub_folder, revision_label, fase, doc_type')
+        .eq('project_id', selectedProject).or('archived.is.null,archived.eq.false').order('name')
+      // Foreslå samme kategori øverst
+      const rows = data || []
+      rows.sort((a, b) => (a.category === req.category ? -1 : 0) - (b.category === req.category ? -1 : 0))
+      setLinkChoices(rows)
+    } catch (e) { setLinkChoices([]) }
+  }
+  const confirmLink = async (fileId) => {
+    if (!linkTarget || !fileId) return
+    try {
+      const { error } = await supabase.from('project_files')
+        .update({ fase: linkTarget.phase, doc_type: linkTarget.doc_type }).eq('id', fileId)
+      if (error) throw error
+      setLinkTarget(null); setLinkChoices([])
+      await refresh()
+    } catch (e) { await appAlert({ message: 'Kunne ikke knytte fil til kravet', subMessage: e.message, kind: 'error' }) }
+  }
+  const setActivePhase = async (phase) => {
+    try {
+      await supabase.from('projects').update({ active_phase: phase }).eq('id', selectedProject)
+      setProjectMeta(m => m ? { ...m, active_phase: phase } : m)
+    } catch (e) { await appAlert({ message: 'Kunne ikke sette aktiv fase', subMessage: e.message, kind: 'error' }) }
+  }
+  const openMalBytte = async () => {
+    // Forhåndsvelg prosjektets gjeldende mal, så «Bekreft uten endring» ikke nuller.
+    setMalValg(projectMeta?.document_template_id || '')
+    setShowMalBytte(true)
+    try {
+      const { data } = await supabase.from('document_templates').select('id, name, description, phases, required_docs, sort_order').order('sort_order').order('name')
+      setMalListe(data || [])
+    } catch (e) { setMalListe([]) }
+  }
+  // Bruk valget i dialogen. Nuller KUN når «Uten mal» er eksplisitt valgt ('').
+  // Rører aldri project_files → fase/doc_type på filene beholdes.
+  const applyMal = async () => {
+    const naavaerende = projectMeta?.document_template_id || ''
+    if (malValg === naavaerende) { setShowMalBytte(false); return }  // ingen endring → ingen skriving
+    setMalLagrer(true)
+    try {
+      let oppdatering
+      if (!malValg) {
+        // Eksplisitt «Uten mal»
+        oppdatering = { document_template_id: null, phases: null, required_docs: null, active_phase: null }
+      } else {
+        const tmpl = malListe.find(t => t.id === malValg)
+        if (!tmpl) throw new Error('Fant ikke malen. Prøv igjen.')  // ALDRI null pga. mislykket oppslag
+        const faser = sorterFaser(tmpl.phases || [])
+        oppdatering = {
+          document_template_id: tmpl.id,
+          phases: faser,
+          required_docs: tmpl.required_docs || [],
+          // Behold aktiv fase hvis den finnes i den nye malen; ellers første fase.
+          active_phase: (projectMeta?.active_phase && faser.includes(projectMeta.active_phase)) ? projectMeta.active_phase : (faser[0] || null),
+        }
+      }
+      const { error } = await supabase.from('projects').update(oppdatering).eq('id', selectedProject)
+      if (error) throw error
+      setShowMalBytte(false)
+      await loadProjectMeta(selectedProject)
+    } catch (e) { await appAlert({ message: 'Kunne ikke endre mal', subMessage: e.message, kind: 'error' }) }
+    finally { setMalLagrer(false) }
+  }
+  // Åpne opplasting forhåndsvalgt for et påkrevd dokument (fase + mappe + doc_type)
+  const openUploadForReq = (req) => {
+    setUploadForm(f => ({ ...f, project_id: selectedProject, category: req.category || 'annet', sub: '', fase: req.phase || viewedPhase || (projectMeta?.active_phase || ''), doc_type: req.doc_type || '' }))
+    setShowUpload(true)
+  }
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleUpload = async (e) => {
@@ -6181,6 +6407,8 @@ function ProsjektfilerPage() {
             uploaded_by: user?.id,
             revision_label: 'Rev01',
             archived: false,
+            fase: uploadForm.fase || null,
+            doc_type: uploadForm.doc_type || null,
           })
           if (dbErr) throw dbErr
         }
@@ -6203,7 +6431,7 @@ function ProsjektfilerPage() {
     } else {
       setShowUpload(false)
       setUploadFiles([])
-      setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle' })
+      setUploadForm({ project_id: '', category: 'annet', sub: '', description: '', access_level: 'alle', fase: '', doc_type: '' })
     }
   }
 
@@ -6270,6 +6498,48 @@ function ProsjektfilerPage() {
 
   const toggleCat = (catId) => setExpandedCats(p => ({ ...p, [catId]: !p[catId] }))
 
+  // Manglende + «ikke aktuelt»-krav for valgt fase og kategori — vises nederst i lista.
+  const renderKravBlokk = () => {
+    if (!hasFaser || !viewedPhase || !selectedCategory) return null
+    if (missingForView.length === 0 && waivedForView.length === 0) return null
+    return (
+      <div style={{ marginTop: '16px' }}>
+        {missingForView.length > 0 && (
+          <div style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', letterSpacing: '0.06em', marginBottom: '6px' }}>
+            MANGLER I {faseLabel(viewedPhase).toUpperCase()} ({missingForView.length})
+          </div>
+        )}
+        {missingForView.map(req => (
+          <div key={req.doc_type} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '16px' }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: '140px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{req.label}</div>
+              <div style={{ fontSize: '11px', color: '#b45309' }}>Påkrevd · {faseLabel(req.phase)}</div>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+              <button onClick={() => openUploadForReq(req)} style={{ padding: '6px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>⬆️ Last opp</button>
+              <button onClick={() => openLinkExisting(req)} style={{ padding: '6px 12px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Velg eksisterende</button>
+              <button onClick={() => { setWaiveTarget({ phase: viewedPhase, doc_type: req.doc_type, label: req.label }); setWaiveReason('') }} style={{ padding: '6px 12px', background: 'white', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Ikke aktuelt</button>
+            </div>
+          </div>
+        ))}
+        {waivedForView.map(req => {
+          const w = waiverFor(viewedPhase, req.doc_type)
+          return (
+            <div key={req.doc_type} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '12px', marginBottom: '6px', opacity: 0.75, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '14px' }}>🚫</span>
+              <div style={{ flex: 1, minWidth: '140px' }}>
+                <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', textDecoration: 'line-through' }}>{req.label}</div>
+                <div style={{ fontSize: '11px', color: '#94a3b8' }}>Ikke aktuelt{w?.reason ? ` · ${w.reason}` : ''}</div>
+              </div>
+              <button onClick={() => undoWaive(viewedPhase, req.doc_type)} style={{ padding: '6px 12px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Angre</button>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
@@ -6300,19 +6570,96 @@ function ProsjektfilerPage() {
             {!isMob && (
               <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '240px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
             )}
+            {!isMob && selectedProject !== 'all' && (
+              <button onClick={openMalBytte} title="Velg eller bytt prosjektmal"
+                style={{ padding: '10px 14px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
+            )}
             <button data-tour="fil-opplast" onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
             </button>
           </div>
         </div>
 
-        {/* Mobil: prosjektvelger på egen full-bredde rad rett under */}
+        {/* Mobil: prosjektvelger på egen rad, med «⚙ Mal» ved siden (alltid tilgjengelig) */}
         {isMob && (
-          <div style={{ background: 'white', borderTop: '1px solid #f1f5f9', padding: '10px 16px' }}>
-            <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: '100%', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+          <div style={{ background: 'white', borderTop: '1px solid #f1f5f9', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+            </div>
+            {selectedProject !== 'all' && (
+              <button onClick={openMalBytte} aria-label="Velg eller bytt prosjektmal" title="Velg eller bytt prosjektmal"
+                style={{ flexShrink: 0, minHeight: '40px', padding: '8px 14px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
+            )}
           </div>
         )}
       </div>
+
+      {/* FASELINJE — vises kun når prosjektet har en mal med faser */}
+      {selectedProject !== 'all' && hasFaser && (
+        <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '10px 16px' : '12px 32px', flexShrink: 0 }}>
+          {isMob ? (
+            /* MOBIL: rutenett 3×2 — alle faser synlige hele tiden, klikk rett inn.
+               «⚙ Bytt prosjektmal» ligger under rutenettet, ikke blant fasene. */
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
+                {projectFaser.map(fid => {
+                  const pr = faseProgress(fid)
+                  const gronn = viewedPhase === fid            // grønn = valgt/vist fase (default = aktiv ved lasting)
+                  const harMangler = pr.y > 0 && pr.x < pr.y
+                  return (
+                    <button key={fid} onClick={() => setViewedPhase(fid)}
+                      style={{ position: 'relative', height: '64px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', padding: '6px 4px', borderRadius: '12px', border: `1px solid ${gronn ? '#059669' : '#e2e8f0'}`, background: gronn ? '#f0fdf4' : 'white', cursor: 'pointer', boxSizing: 'border-box' }}>
+                      {harMangler && <span title="Mangler påkrevd dokument" style={{ position: 'absolute', top: '6px', right: '6px', width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />}
+                      <span style={{ maxWidth: '100%', fontSize: '13.5px', fontWeight: '600', color: gronn ? '#047857' : '#374151', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{faseLabel(fid)}</span>
+                      {pr.y > 0 && <span style={{ fontSize: '12.5px', fontWeight: '700', color: gronn ? '#059669' : (pr.x >= pr.y ? '#059669' : '#94a3b8') }}>{pr.x}/{pr.y}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          ) : (
+            /* DESKTOP: fem piller på én linje (uendret) */
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {projectFaser.map(fid => {
+                const pr = faseProgress(fid)
+                const isActive = projectMeta?.active_phase === fid
+                const isViewed = viewedPhase === fid
+                const komplett = pr.y > 0 && pr.x >= pr.y
+                return (
+                  <button key={fid} onClick={() => setViewedPhase(fid)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '999px', border: `1px solid ${isViewed ? '#059669' : '#e2e8f0'}`, background: isViewed ? '#f0fdf4' : 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: isViewed ? '#059669' : '#475569', whiteSpace: 'nowrap' }}>
+                    {isActive && <span title="Aktiv fase">⚑</span>}
+                    {faseLabel(fid)}
+                    {pr.y > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: komplett ? '#059669' : '#94a3b8', background: komplett ? '#dcfce7' : '#f1f5f9', borderRadius: '999px', padding: '1px 7px' }}>{pr.x}/{pr.y}</span>}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+          {viewedPhase && (() => {
+            const pr = faseProgress(viewedPhase)
+            const pct = pr.y > 0 ? Math.round(100 * pr.x / pr.y) : 100
+            return (
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>
+                    {pr.y > 0 ? `${pr.x} av ${pr.y} påkrevde dokumenter i ${faseLabel(viewedPhase)}` : `Ingen påkrevde dokumenter i ${faseLabel(viewedPhase)}`}
+                    {pr.waived > 0 ? ` · ${pr.waived} ikke aktuelt` : ''}
+                  </span>
+                  {projectMeta?.active_phase !== viewedPhase && (
+                    <button onClick={() => setActivePhase(viewedPhase)} style={{ background: 'none', border: 'none', color: '#059669', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>⚑ Sett som aktiv fase</button>
+                  )}
+                </div>
+                {pr.y > 0 && (
+                  <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: pct >= 100 ? '#059669' : '#22c55e', transition: 'width 0.3s' }} />
+                  </div>
+                )}
+              </div>
+            )
+          })()}
+        </div>
+      )}
 
       {/* MOBIL: Stacked layout */}
       {isMob ? (
@@ -6329,16 +6676,18 @@ function ProsjektfilerPage() {
                 const catCount = countForCat(cat.id)
                 const hasSubs = cat.sub.length > 0
                 const isExpanded = expandedCats[cat.id]
+                const mangler = hasFaser ? catManglerAntall(cat.id) : 0
                 return (
                   <div key={cat.id}>
                     <button onClick={() => { if (hasSubs) { toggleCat(cat.id) } else { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false) } }}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #f1f5f9', background: 'white', cursor: 'pointer', textAlign: 'left' }}>
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #f1f5f9', borderLeft: mangler > 0 ? '3px solid #dc2626' : '1px solid #f1f5f9', background: mangler > 0 ? '#fef2f2' : 'white', cursor: 'pointer', textAlign: 'left' }}>
                       <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>{cat.emoji}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{cat.name}</div>
                         <div style={{ fontSize: '12px', color: '#94a3b8' }}>{cat.label}</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {mangler > 0 && <span title={`${mangler} manglende påkrevd dokument`} style={{ fontSize: '13px', fontWeight: '700', color: '#dc2626', background: '#fee2e2', borderRadius: '999px', padding: '2px 9px', minWidth: '22px', textAlign: 'center', flexShrink: 0 }}>{mangler}</span>}
                         {countsKnown && <span style={{ fontSize: '13px', fontWeight: '600', color: catCount > 0 ? '#059669' : '#94a3b8' }}>{catCount} fil{catCount !== 1 ? 'er' : ''}</span>}
                         <span style={{ color: '#cbd5e1', fontSize: '16px' }}>{hasSubs ? (isExpanded ? '▾' : '▸') : '›'}</span>
                       </div>
@@ -6420,6 +6769,7 @@ function ProsjektfilerPage() {
                   )}
                 </div>
               )}
+              {renderKravBlokk()}
             </>
           )}
         </div>
@@ -6438,19 +6788,25 @@ function ProsjektfilerPage() {
             const isActive = selectedCategory === cat.id && !selectedSub
             const isExpanded = expandedCats[cat.id]
             const hasSubs = cat.sub.length > 0
+            const mangler = hasFaser ? catManglerAntall(cat.id) : 0
+            // Hvile-bakgrunn: valgt (grønn) vinner, ellers rød ved mangler, ellers ingen.
+            const restBg = isActive ? (mangler > 0 ? '#fef2f2' : '#f0fdf4') : (mangler > 0 ? '#fef2f2' : 'transparent')
             return (
               <div key={cat.id}>
                 <div onClick={() => { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false); if (hasSubs) toggleCat(cat.id) }}
                   style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px', cursor: 'pointer',
-                    background: isActive ? '#f0fdf4' : 'transparent',
-                    borderLeft: isActive ? `3px solid ${cat.color}` : '3px solid transparent' }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+                    background: restBg,
+                    // Valgt beholder grønn venstrekant ved mangler (så «du er her» ikke forsvinner
+                    // under rød bakgrunn); valgt uten mangler ser ut som før (cat.color).
+                    borderLeft: isActive ? (mangler > 0 ? '3px solid #059669' : `3px solid ${cat.color}`) : (mangler > 0 ? '3px solid #dc2626' : '3px solid transparent') }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = mangler > 0 ? '#fee2e2' : '#f8fafc' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = restBg }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{cat.emoji}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: isActive ? '600' : '500', color: isActive ? cat.color : '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.name}</div>
                     <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : (countsKnown ? `${catCount} fil${catCount !== 1 ? 'er' : ''}` : '')}</div>
                   </div>
+                  {mangler > 0 && <span title={`${mangler} manglende påkrevd dokument i valgt fase`} style={{ fontSize: '12px', fontWeight: '700', color: '#dc2626', background: '#fee2e2', borderRadius: '999px', padding: '1px 8px', minWidth: '20px', textAlign: 'center', flexShrink: 0 }}>{mangler}</span>}
                   {hasSubs && <span style={{ fontSize: '16px', color: '#64748b', fontWeight: '700' }}>{isExpanded ? '▾' : '▸'}</span>}
                 </div>
                 {hasSubs && isExpanded && cat.sub.map(sub => {
@@ -6581,6 +6937,7 @@ function ProsjektfilerPage() {
                   )}
                 </div>
               )}
+              {renderKravBlokk()}
             </>
           )}
         </div>
@@ -6751,6 +7108,21 @@ function ProsjektfilerPage() {
                   </select>
                 </div>
               </div>
+              {hasFaser && uploadForm.project_id === selectedProject && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Fase</label>
+                  <select value={uploadForm.fase || ''} onChange={e => setUploadForm(f => ({...f, fase: e.target.value}))} style={{ ...inp, background: 'white' }}>
+                    <option value="">Ingen fase</option>
+                    {projectFaser.map(fid => <option key={fid} value={fid}>{faseLabel(fid)}</option>)}
+                  </select>
+                </div>
+              )}
+              {uploadForm.doc_type && (
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '8px 12px', fontSize: '12px', color: '#059669', fontWeight: '600', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                  <span>✓ Oppfyller krav: {(requiredDocs.find(r => r.doc_type === uploadForm.doc_type && r.phase === uploadForm.fase)?.label) || uploadForm.doc_type}</span>
+                  <button type="button" onClick={() => setUploadForm(f => ({...f, doc_type: ''}))} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '12px', textDecoration: 'underline' }}>fjern</button>
+                </div>
+              )}
               {FILE_CATEGORIES.find(c => c.id === uploadForm.category)?.sub?.length > 0 && (
                 <div>
                   <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Undermappe</label>
@@ -6783,6 +7155,99 @@ function ProsjektfilerPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </>
+      )}
+
+      {/* «Ikke aktuelt»-modal (waiver med begrunnelse) */}
+      {waiveTarget && (
+        <>
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) { setWaiveTarget(null); setWaiveReason('') } }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(440px, calc(100vw - 32px))', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Merk som ikke aktuelt</h2>
+            </div>
+            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <p style={{ margin: 0, fontSize: '13px', color: '#64748b' }}>«{waiveTarget.label}» regnes ikke med i «X av Y» for {faseLabel(waiveTarget.phase)}. Du kan angre når som helst.</p>
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Begrunnelse (valgfri)</label>
+                <textarea value={waiveReason} onChange={e => setWaiveReason(e.target.value)} rows={2} placeholder="F.eks. «Ikke søknadspliktig»" style={{ width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', resize: 'vertical', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }} />
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button onClick={() => { setWaiveTarget(null); setWaiveReason('') }} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+                <button onClick={confirmWaive} style={{ padding: '10px 24px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>Merk ikke aktuelt</button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* «Velg eksisterende fil»-modal (knytt fil til krav) */}
+      {linkTarget && (
+        <>
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) { setLinkTarget(null); setLinkChoices([]) } }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(520px, calc(100vw - 32px))', maxHeight: '80vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Velg eksisterende fil</h2>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Knytt en fil som allerede ligger i prosjektet til kravet «{linkTarget.label}».</p>
+            </div>
+            <div style={{ padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {linkChoices.length === 0 ? (
+                <div style={{ padding: '24px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>Ingen filer i prosjektet ennå.</div>
+              ) : linkChoices.map(fl => {
+                const cat = FILE_CATEGORIES.find(c => c.id === fl.category)
+                const alt = fl.doc_type && fl.doc_type !== linkTarget.doc_type
+                return (
+                  <button key={fl.id} onClick={() => confirmLink(fl.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #f1f5f9', borderRadius: '10px', background: 'white', cursor: 'pointer', textAlign: 'left' }}>
+                    <span style={{ fontSize: '16px' }}>{cat?.emoji || '📄'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fl.name}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>{cat?.name || fl.category}{fl.sub_folder ? ' · ' + fl.sub_folder : ''}{alt ? ' · knyttet til annet krav' : ''}</div>
+                    </div>
+                    <span style={{ fontSize: '12px', color: '#059669', fontWeight: '600', whiteSpace: 'nowrap' }}>Velg →</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
+              <button onClick={() => { setLinkTarget(null); setLinkChoices([]) }} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Bytt prosjektmal (re-snapshot uten å miste filer) */}
+      {showMalBytte && (
+        <>
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget) setShowMalBytte(false) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(520px, calc(100vw - 32px))', maxHeight: '80vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Prosjektmal</h2>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Velg en mal og bekreft. Endrer mal uten å miste filer – eksisterende dokumenter og fase-merking beholdes.</p>
+            </div>
+            <div style={{ padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <button onClick={() => setMalValg('')} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', minHeight: '56px', border: `1px solid ${malValg === '' ? '#059669' : '#f1f5f9'}`, borderRadius: '10px', background: malValg === '' ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                <div style={{ flex: 1 }}><div style={{ fontSize: '13px', fontWeight: '600', color: malValg === '' ? '#047857' : '#374151' }}>Uten mal</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Kun mapper – ingen faser eller påkrevde dokumenter</div></div>
+                {malValg === '' && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '700' }}>✓ Valgt</span>}
+              </button>
+              {malListe.map(t => {
+                const valgt = malValg === t.id
+                const faser = sorterFaser(t.phases || [])
+                return (
+                  <button key={t.id} onClick={() => setMalValg(t.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', minHeight: '56px', border: `1px solid ${valgt ? '#059669' : '#f1f5f9'}`, borderRadius: '10px', background: valgt ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: '13px', fontWeight: '600', color: valgt ? '#047857' : '#374151' }}>{t.name}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{faser.map(faseLabel).join(' → ')}</div></div>
+                    {valgt && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '700' }}>✓ Valgt</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowMalBytte(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+              <button onClick={applyMal} disabled={malLagrer || (malValg === (projectMeta?.document_template_id || ''))}
+                style={{ padding: '10px 24px', background: (malLagrer || (malValg === (projectMeta?.document_template_id || ''))) ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (malLagrer || (malValg === (projectMeta?.document_template_id || ''))) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+                {malLagrer ? 'Lagrer…' : 'Bekreft'}
+              </button>
+            </div>
           </div>
         </>
       )}
