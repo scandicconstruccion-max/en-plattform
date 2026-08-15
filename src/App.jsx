@@ -6268,6 +6268,8 @@ function ProsjektfilerPage() {
   const [linkChoices, setLinkChoices] = useState([])
   const [showMalBytte, setShowMalBytte] = useState(false)
   const [malListe, setMalListe] = useState([])
+  const [malValg, setMalValg] = useState('')          // valgt mal i dialogen (før Bekreft); '' = uten mal
+  const [malLagrer, setMalLagrer] = useState(false)
 
   const confirmWaive = async () => {
     if (!waiveTarget) return
@@ -6318,26 +6320,43 @@ function ProsjektfilerPage() {
     } catch (e) { await appAlert({ message: 'Kunne ikke sette aktiv fase', subMessage: e.message, kind: 'error' }) }
   }
   const openMalBytte = async () => {
+    // Forhåndsvelg prosjektets gjeldende mal, så «Bekreft uten endring» ikke nuller.
+    setMalValg(projectMeta?.document_template_id || '')
     setShowMalBytte(true)
     try {
       const { data } = await supabase.from('document_templates').select('id, name, description, phases, required_docs, sort_order').order('sort_order').order('name')
       setMalListe(data || [])
     } catch (e) { setMalListe([]) }
   }
-  const changeMal = async (templateId) => {
+  // Bruk valget i dialogen. Nuller KUN når «Uten mal» er eksplisitt valgt ('').
+  // Rører aldri project_files → fase/doc_type på filene beholdes.
+  const applyMal = async () => {
+    const naavaerende = projectMeta?.document_template_id || ''
+    if (malValg === naavaerende) { setShowMalBytte(false); return }  // ingen endring → ingen skriving
+    setMalLagrer(true)
     try {
-      const tmpl = malListe.find(t => t.id === templateId) || null
-      const faser = tmpl ? sorterFaser(tmpl.phases || []) : null
-      const { error } = await supabase.from('projects').update({
-        document_template_id: tmpl ? tmpl.id : null,
-        phases: tmpl ? faser : null,
-        required_docs: tmpl ? (tmpl.required_docs || []) : null,
-        active_phase: tmpl ? ((projectMeta?.active_phase && faser?.includes(projectMeta.active_phase)) ? projectMeta.active_phase : (faser?.[0] || null)) : null,
-      }).eq('id', selectedProject)
+      let oppdatering
+      if (!malValg) {
+        // Eksplisitt «Uten mal»
+        oppdatering = { document_template_id: null, phases: null, required_docs: null, active_phase: null }
+      } else {
+        const tmpl = malListe.find(t => t.id === malValg)
+        if (!tmpl) throw new Error('Fant ikke malen. Prøv igjen.')  // ALDRI null pga. mislykket oppslag
+        const faser = sorterFaser(tmpl.phases || [])
+        oppdatering = {
+          document_template_id: tmpl.id,
+          phases: faser,
+          required_docs: tmpl.required_docs || [],
+          // Behold aktiv fase hvis den finnes i den nye malen; ellers første fase.
+          active_phase: (projectMeta?.active_phase && faser.includes(projectMeta.active_phase)) ? projectMeta.active_phase : (faser[0] || null),
+        }
+      }
+      const { error } = await supabase.from('projects').update(oppdatering).eq('id', selectedProject)
       if (error) throw error
       setShowMalBytte(false)
       await loadProjectMeta(selectedProject)
-    } catch (e) { await appAlert({ message: 'Kunne ikke bytte mal', subMessage: e.message, kind: 'error' }) }
+    } catch (e) { await appAlert({ message: 'Kunne ikke endre mal', subMessage: e.message, kind: 'error' }) }
+    finally { setMalLagrer(false) }
   }
   // Åpne opplasting forhåndsvalgt for et påkrevd dokument (fase + mappe + doc_type)
   const openUploadForReq = (req) => {
@@ -6551,16 +6570,26 @@ function ProsjektfilerPage() {
             {!isMob && (
               <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', minWidth: '240px', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
             )}
+            {!isMob && selectedProject !== 'all' && (
+              <button onClick={openMalBytte} title="Velg eller bytt prosjektmal"
+                style={{ padding: '10px 14px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
+            )}
             <button data-tour="fil-opplast" onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
             </button>
           </div>
         </div>
 
-        {/* Mobil: prosjektvelger på egen full-bredde rad rett under */}
+        {/* Mobil: prosjektvelger på egen rad, med «⚙ Mal» ved siden (alltid tilgjengelig) */}
         {isMob && (
-          <div style={{ background: 'white', borderTop: '1px solid #f1f5f9', padding: '10px 16px' }}>
-            <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', width: '100%', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+          <div style={{ background: 'white', borderTop: '1px solid #f1f5f9', padding: '10px 16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <SearchableProjectSelect value={selectedProject} onChange={v => { setSelectedProject(v); setSelectedCategory(null); setSelectedSub(null) }} projects={projects} style={{ width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', background: 'white', cursor: 'pointer', fontWeight: '500', color: selectedProject === 'all' ? '#94a3b8' : '#0f172a', boxSizing: 'border-box' }} placeholder="Velg prosjekt" emptyValue="all" />
+            </div>
+            {selectedProject !== 'all' && (
+              <button onClick={openMalBytte} aria-label="Velg eller bytt prosjektmal" title="Velg eller bytt prosjektmal"
+                style={{ flexShrink: 0, minHeight: '40px', padding: '8px 14px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
+            )}
           </div>
         )}
       </div>
@@ -6587,9 +6616,6 @@ function ProsjektfilerPage() {
                   )
                 })}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '10px' }}>
-                <button onClick={openMalBytte} style={{ minHeight: '44px', padding: '8px 16px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '12px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>⚙ Bytt prosjektmal</button>
-              </div>
             </>
           ) : (
             /* DESKTOP: fem piller på én linje (uendret) */
@@ -6608,9 +6634,6 @@ function ProsjektfilerPage() {
                   </button>
                 )
               })}
-              <div style={{ flex: 1 }} />
-              <button onClick={openMalBytte} title="Bytt prosjektmal"
-                style={{ padding: '6px 12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
             </div>
           )}
           {viewedPhase && (() => {
@@ -7200,25 +7223,30 @@ function ProsjektfilerPage() {
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(520px, calc(100vw - 32px))', maxHeight: '80vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Prosjektmal</h2>
-              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Bytt mal uten å miste filer. Eksisterende dokumenter og fase-merking beholdes.</p>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Velg en mal og bekreft. Endrer mal uten å miste filer – eksisterende dokumenter og fase-merking beholdes.</p>
             </div>
             <div style={{ padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <button onClick={() => changeMal('')} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: `1px solid ${!projectMeta?.document_template_id ? '#059669' : '#f1f5f9'}`, borderRadius: '10px', background: !projectMeta?.document_template_id ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left' }}>
-                <div style={{ flex: 1 }}><div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>Uten mal</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Kun mapper – ingen faser eller påkrevde dokumenter</div></div>
+              <button onClick={() => setMalValg('')} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', minHeight: '56px', border: `1px solid ${malValg === '' ? '#059669' : '#f1f5f9'}`, borderRadius: '10px', background: malValg === '' ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                <div style={{ flex: 1 }}><div style={{ fontSize: '13px', fontWeight: '600', color: malValg === '' ? '#047857' : '#374151' }}>Uten mal</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>Kun mapper – ingen faser eller påkrevde dokumenter</div></div>
+                {malValg === '' && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '700' }}>✓ Valgt</span>}
               </button>
               {malListe.map(t => {
-                const valgt = projectMeta?.document_template_id === t.id
+                const valgt = malValg === t.id
                 const faser = sorterFaser(t.phases || [])
                 return (
-                  <button key={t.id} onClick={() => changeMal(t.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', border: `1px solid ${valgt ? '#059669' : '#f1f5f9'}`, borderRadius: '10px', background: valgt ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{t.name}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{faser.map(faseLabel).join(' → ')}</div></div>
-                    {valgt && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '700' }}>Valgt</span>}
+                  <button key={t.id} onClick={() => setMalValg(t.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px', minHeight: '56px', border: `1px solid ${valgt ? '#059669' : '#f1f5f9'}`, borderRadius: '10px', background: valgt ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: '13px', fontWeight: '600', color: valgt ? '#047857' : '#374151' }}>{t.name}</div><div style={{ fontSize: '11px', color: '#94a3b8' }}>{faser.map(faseLabel).join(' → ')}</div></div>
+                    {valgt && <span style={{ fontSize: '12px', color: '#059669', fontWeight: '700' }}>✓ Valgt</span>}
                   </button>
                 )
               })}
             </div>
-            <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end' }}>
-              <button onClick={() => setShowMalBytte(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Lukk</button>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowMalBytte(false)} style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>Avbryt</button>
+              <button onClick={applyMal} disabled={malLagrer || (malValg === (projectMeta?.document_template_id || ''))}
+                style={{ padding: '10px 24px', background: (malLagrer || (malValg === (projectMeta?.document_template_id || ''))) ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (malLagrer || (malValg === (projectMeta?.document_template_id || ''))) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+                {malLagrer ? 'Lagrer…' : 'Bekreft'}
+              </button>
             </div>
           </div>
         </>
