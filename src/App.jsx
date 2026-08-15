@@ -6259,8 +6259,8 @@ function ProsjektfilerPage() {
   const missingForView = viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === selectedCategory && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)) : []
   const waivedForView = viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === selectedCategory && isWaived(viewedPhase, r.doc_type)) : []
   const waiverFor = (phase, doc_type) => waivers.find(w => w.phase === phase && w.doc_type === doc_type)
-  // Har en kategori manglende krav i valgt fase? (rød prikk i venstre kolonne)
-  const catHarMangler = (catId) => viewedPhase ? reqForPhase(viewedPhase).some(r => r.category === catId && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)) : false
+  // Antall manglende krav i valgt fase for en kategori (0 = ingen mangler).
+  const catManglerAntall = (catId) => viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === catId && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)).length : 0
 
   // ── Fase-/mal-handlere ──────────────────────────────────────────────────────
   const [waiveTarget, setWaiveTarget] = useState(null)   // { phase, doc_type, label }
@@ -6579,7 +6579,7 @@ function ProsjektfilerPage() {
                 <button onClick={() => setFaseSheetOpen(true)}
                   style={{ width: '100%', minHeight: '56px', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderRadius: '14px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
                   {erAktiv && <span title="Aktiv fase" style={{ fontSize: '15px' }}>⚑</span>}
-                  <span style={{ flex: 1, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>{viewedPhase ? faseLabel(viewedPhase) : 'Velg fase'}</span>
+                  <span style={{ flex: 1, fontSize: '16px', fontWeight: '700', color: '#059669' }}>{viewedPhase ? faseLabel(viewedPhase) : 'Velg fase'}</span>
                   {pr.y > 0 && <span style={{ fontSize: '14px', fontWeight: '700', color: pr.x >= pr.y ? '#059669' : '#64748b', whiteSpace: 'nowrap' }}>{pr.x} av {pr.y}</span>}
                   <span style={{ color: '#94a3b8', fontSize: '18px' }}>▾</span>
                 </button>
@@ -6650,14 +6650,14 @@ function ProsjektfilerPage() {
                   <button key={fid} onClick={() => { setViewedPhase(fid); setFaseSheetOpen(false) }}
                     style={{ width: '100%', minHeight: '60px', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', marginTop: '8px', borderRadius: '12px', border: erAktiv ? '1px solid #bbf7d0' : '1px solid #f1f5f9', borderLeft: erAktiv ? '4px solid #059669' : '4px solid transparent', background: erAktiv ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
                     {erAktiv && <span title="Aktiv fase" style={{ fontSize: '16px' }}>⚑</span>}
-                    <span style={{ flex: 1, fontSize: '16px', fontWeight: '700', color: erAktiv ? '#059669' : '#0f172a' }}>{faseLabel(fid)}</span>
+                    <span style={{ flex: 1, fontSize: '16px', fontWeight: '700', color: erAktiv ? '#059669' : '#374151' }}>{faseLabel(fid)}</span>
                     {harMangler && <span title="Mangler påkrevd dokument" style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />}
                     {pr.y > 0 && <span style={{ fontSize: '15px', fontWeight: '700', color: pr.x >= pr.y ? '#059669' : '#64748b', whiteSpace: 'nowrap' }}>{pr.x} av {pr.y}</span>}
                   </button>
                 )
               })}
               <button onClick={() => { setFaseSheetOpen(false); openMalBytte() }}
-                style={{ width: '100%', minHeight: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: '600', color: '#475569', boxSizing: 'border-box' }}>⚙ Bytt prosjektmal</button>
+                style={{ width: '100%', minHeight: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '14px', borderRadius: '12px', border: '1px solid #bbf7d0', background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: '600', color: '#059669', boxSizing: 'border-box' }}>⚙ Bytt prosjektmal</button>
             </div>
           </div>
         </>
@@ -6678,17 +6678,18 @@ function ProsjektfilerPage() {
                 const catCount = countForCat(cat.id)
                 const hasSubs = cat.sub.length > 0
                 const isExpanded = expandedCats[cat.id]
+                const mangler = hasFaser ? catManglerAntall(cat.id) : 0
                 return (
                   <div key={cat.id}>
                     <button onClick={() => { if (hasSubs) { toggleCat(cat.id) } else { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false) } }}
-                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #f1f5f9', background: 'white', cursor: 'pointer', textAlign: 'left' }}>
+                      style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 16px', borderRadius: '12px', border: '1px solid #f1f5f9', borderLeft: mangler > 0 ? '3px solid #dc2626' : '1px solid #f1f5f9', background: mangler > 0 ? '#fef2f2' : 'white', cursor: 'pointer', textAlign: 'left' }}>
                       <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', flexShrink: 0 }}>{cat.emoji}</div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>{cat.name}</div>
                         <div style={{ fontSize: '12px', color: '#94a3b8' }}>{cat.label}</div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {hasFaser && catHarMangler(cat.id) && <span title="Mangler påkrevd dokument" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {mangler > 0 && <span title={`${mangler} manglende påkrevd dokument`} style={{ fontSize: '13px', fontWeight: '700', color: '#dc2626', background: '#fee2e2', borderRadius: '999px', padding: '2px 9px', minWidth: '22px', textAlign: 'center', flexShrink: 0 }}>{mangler}</span>}
                         {countsKnown && <span style={{ fontSize: '13px', fontWeight: '600', color: catCount > 0 ? '#059669' : '#94a3b8' }}>{catCount} fil{catCount !== 1 ? 'er' : ''}</span>}
                         <span style={{ color: '#cbd5e1', fontSize: '16px' }}>{hasSubs ? (isExpanded ? '▾' : '▸') : '›'}</span>
                       </div>
@@ -6789,20 +6790,25 @@ function ProsjektfilerPage() {
             const isActive = selectedCategory === cat.id && !selectedSub
             const isExpanded = expandedCats[cat.id]
             const hasSubs = cat.sub.length > 0
+            const mangler = hasFaser ? catManglerAntall(cat.id) : 0
+            // Hvile-bakgrunn: valgt (grønn) vinner, ellers rød ved mangler, ellers ingen.
+            const restBg = isActive ? (mangler > 0 ? '#fef2f2' : '#f0fdf4') : (mangler > 0 ? '#fef2f2' : 'transparent')
             return (
               <div key={cat.id}>
                 <div onClick={() => { setSelectedCategory(cat.id); setSelectedSub(null); setShowArchive(false); if (hasSubs) toggleCat(cat.id) }}
                   style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '9px 16px', cursor: 'pointer',
-                    background: isActive ? '#f0fdf4' : 'transparent',
-                    borderLeft: isActive ? `3px solid ${cat.color}` : '3px solid transparent' }}
-                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = '#f8fafc' }}
-                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = 'transparent' }}>
+                    background: restBg,
+                    // Valgt beholder grønn venstrekant ved mangler (så «du er her» ikke forsvinner
+                    // under rød bakgrunn); valgt uten mangler ser ut som før (cat.color).
+                    borderLeft: isActive ? (mangler > 0 ? '3px solid #059669' : `3px solid ${cat.color}`) : (mangler > 0 ? '3px solid #dc2626' : '3px solid transparent') }}
+                  onMouseEnter={e => { if (!isActive) e.currentTarget.style.background = mangler > 0 ? '#fee2e2' : '#f8fafc' }}
+                  onMouseLeave={e => { if (!isActive) e.currentTarget.style.background = restBg }}>
                   <div style={{ width: '28px', height: '28px', borderRadius: '7px', background: cat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', flexShrink: 0 }}>{cat.emoji}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '13px', fontWeight: isActive ? '600' : '500', color: isActive ? cat.color : '#374151', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.name}</div>
                     <div style={{ fontSize: '11px', color: '#94a3b8' }}>{hasSubs ? `${cat.sub.length} undermapper` : (countsKnown ? `${catCount} fil${catCount !== 1 ? 'er' : ''}` : '')}</div>
                   </div>
-                  {hasFaser && catHarMangler(cat.id) && <span title="Mangler påkrevd dokument i valgt fase" style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />}
+                  {mangler > 0 && <span title={`${mangler} manglende påkrevd dokument i valgt fase`} style={{ fontSize: '12px', fontWeight: '700', color: '#dc2626', background: '#fee2e2', borderRadius: '999px', padding: '1px 8px', minWidth: '20px', textAlign: 'center', flexShrink: 0 }}>{mangler}</span>}
                   {hasSubs && <span style={{ fontSize: '16px', color: '#64748b', fontWeight: '700' }}>{isExpanded ? '▾' : '▸'}</span>}
                 </div>
                 {hasSubs && isExpanded && cat.sub.map(sub => {
