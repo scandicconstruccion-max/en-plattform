@@ -5986,6 +5986,7 @@ function ProsjektfilerPage() {
   const [projectMeta, setProjectMeta] = useState(null)       // { phases, required_docs, active_phase, document_template_id }
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
   const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
+  const [faseSheetOpen, setFaseSheetOpen] = useState(false)  // mobil: bunn-ark for fasevalg
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine !== false : true)
   const [existingDocs, setExistingDocs] = useState([])   // aktive dokumenter i opplastingsprosjektet (revisjonsforslag)
   const [loading, setLoading] = useState(false)
@@ -6568,25 +6569,44 @@ function ProsjektfilerPage() {
       {/* FASELINJE — vises kun når prosjektet har en mal med faser */}
       {selectedProject !== 'all' && hasFaser && (
         <div style={{ background: 'white', borderBottom: '1px solid #e2e8f0', padding: isMob ? '10px 16px' : '12px 32px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {projectFaser.map(fid => {
-              const pr = faseProgress(fid)
-              const isActive = projectMeta?.active_phase === fid
-              const isViewed = viewedPhase === fid
-              const komplett = pr.y > 0 && pr.x >= pr.y
+          {isMob ? (
+            /* MOBIL: én bred knapp (≥56px) over hele bredden — åpner bunn-ark.
+               «⚙ Mal» ligger IKKE her, men i arket (unngå samme rad som fasevelgeren). */
+            (() => {
+              const pr = viewedPhase ? faseProgress(viewedPhase) : { x: 0, y: 0 }
+              const erAktiv = projectMeta?.active_phase === viewedPhase
               return (
-                <button key={fid} onClick={() => setViewedPhase(fid)}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '999px', border: `1px solid ${isViewed ? '#059669' : '#e2e8f0'}`, background: isViewed ? '#f0fdf4' : 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: isViewed ? '#059669' : '#475569', whiteSpace: 'nowrap' }}>
-                  {isActive && <span title="Aktiv fase">⚑</span>}
-                  {faseLabel(fid)}
-                  {pr.y > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: komplett ? '#059669' : '#94a3b8', background: komplett ? '#dcfce7' : '#f1f5f9', borderRadius: '999px', padding: '1px 7px' }}>{pr.x}/{pr.y}</span>}
+                <button onClick={() => setFaseSheetOpen(true)}
+                  style={{ width: '100%', minHeight: '56px', display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 16px', borderRadius: '14px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                  {erAktiv && <span title="Aktiv fase" style={{ fontSize: '15px' }}>⚑</span>}
+                  <span style={{ flex: 1, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>{viewedPhase ? faseLabel(viewedPhase) : 'Velg fase'}</span>
+                  {pr.y > 0 && <span style={{ fontSize: '14px', fontWeight: '700', color: pr.x >= pr.y ? '#059669' : '#64748b', whiteSpace: 'nowrap' }}>{pr.x} av {pr.y}</span>}
+                  <span style={{ color: '#94a3b8', fontSize: '18px' }}>▾</span>
                 </button>
               )
-            })}
-            <div style={{ flex: 1 }} />
-            <button onClick={openMalBytte} title="Bytt prosjektmal"
-              style={{ padding: '6px 12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
-          </div>
+            })()
+          ) : (
+            /* DESKTOP: fem piller på én linje (uendret) */
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              {projectFaser.map(fid => {
+                const pr = faseProgress(fid)
+                const isActive = projectMeta?.active_phase === fid
+                const isViewed = viewedPhase === fid
+                const komplett = pr.y > 0 && pr.x >= pr.y
+                return (
+                  <button key={fid} onClick={() => setViewedPhase(fid)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '999px', border: `1px solid ${isViewed ? '#059669' : '#e2e8f0'}`, background: isViewed ? '#f0fdf4' : 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: isViewed ? '#059669' : '#475569', whiteSpace: 'nowrap' }}>
+                    {isActive && <span title="Aktiv fase">⚑</span>}
+                    {faseLabel(fid)}
+                    {pr.y > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: komplett ? '#059669' : '#94a3b8', background: komplett ? '#dcfce7' : '#f1f5f9', borderRadius: '999px', padding: '1px 7px' }}>{pr.x}/{pr.y}</span>}
+                  </button>
+                )
+              })}
+              <div style={{ flex: 1 }} />
+              <button onClick={openMalBytte} title="Bytt prosjektmal"
+                style={{ padding: '6px 12px', background: 'white', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
+            </div>
+          )}
           {viewedPhase && (() => {
             const pr = faseProgress(viewedPhase)
             const pct = pr.y > 0 ? Math.round(100 * pr.x / pr.y) : 100
@@ -6610,6 +6630,37 @@ function ProsjektfilerPage() {
             )
           })()}
         </div>
+      )}
+
+      {/* MOBIL: bunn-ark for fasevalg (store trykkflater for hansker) */}
+      {isMob && faseSheetOpen && hasFaser && (
+        <>
+          <div onMouseDown={() => setFaseSheetOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 200 }} />
+          <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: 'white', borderTopLeftRadius: '20px', borderTopRightRadius: '20px', zIndex: 201, boxShadow: '0 -8px 40px rgba(0,0,0,0.2)', maxHeight: '85vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>Velg fase</h3>
+              <button onClick={() => setFaseSheetOpen(false)} aria-label="Lukk" style={{ width: '48px', height: '48px', flexShrink: 0, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', cursor: 'pointer', fontSize: '20px', color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+            </div>
+            <div style={{ overflowY: 'auto', padding: '4px 12px 16px' }}>
+              {projectFaser.map(fid => {
+                const pr = faseProgress(fid)
+                const erAktiv = projectMeta?.active_phase === fid
+                const harMangler = pr.y > 0 && pr.x < pr.y
+                return (
+                  <button key={fid} onClick={() => { setViewedPhase(fid); setFaseSheetOpen(false) }}
+                    style={{ width: '100%', minHeight: '60px', display: 'flex', alignItems: 'center', gap: '12px', padding: '12px 14px', marginTop: '8px', borderRadius: '12px', border: erAktiv ? '1px solid #bbf7d0' : '1px solid #f1f5f9', borderLeft: erAktiv ? '4px solid #059669' : '4px solid transparent', background: erAktiv ? '#f0fdf4' : 'white', cursor: 'pointer', textAlign: 'left', boxSizing: 'border-box' }}>
+                    {erAktiv && <span title="Aktiv fase" style={{ fontSize: '16px' }}>⚑</span>}
+                    <span style={{ flex: 1, fontSize: '16px', fontWeight: '700', color: erAktiv ? '#059669' : '#0f172a' }}>{faseLabel(fid)}</span>
+                    {harMangler && <span title="Mangler påkrevd dokument" style={{ width: '9px', height: '9px', borderRadius: '50%', background: '#dc2626', flexShrink: 0 }} />}
+                    {pr.y > 0 && <span style={{ fontSize: '15px', fontWeight: '700', color: pr.x >= pr.y ? '#059669' : '#64748b', whiteSpace: 'nowrap' }}>{pr.x} av {pr.y}</span>}
+                  </button>
+                )
+              })}
+              <button onClick={() => { setFaseSheetOpen(false); openMalBytte() }}
+                style={{ width: '100%', minHeight: '56px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: '600', color: '#475569', boxSizing: 'border-box' }}>⚙ Bytt prosjektmal</button>
+            </div>
+          </div>
+        </>
       )}
 
       {/* MOBIL: Stacked layout */}
