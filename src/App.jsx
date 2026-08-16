@@ -19055,6 +19055,9 @@ function EndringsmeldingPage() {
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: em.title || `Faktura for ${emNr}`,
         invoice_number: newInvoiceNumber,
+        // Kobling til endringsmeldingen. invoices.em_id har ON DELETE RESTRICT,
+        // så EM-en kan ikke slettes bort under fakturaen når denne er satt.
+        em_id: em.id,
         project_id: em.project_id || null,
         customer_id: em.customer_id || null,
         customer_name: em.customer_name || '',
@@ -26855,6 +26858,12 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
         invoice_date:new Date().toISOString().split('T')[0],
         due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(ord.payment_terms)),
         lines, status:'Utkast', created_by:user?.id,
+        // em_id er én uuid, mens denne veien kan fakturere FLERE endringsmeldinger
+        // samtidig. Er det nøyaktig én, settes koblingen og ON DELETE RESTRICT
+        // verner den. Er det flere, kan ikke kolonnen holde dem alle — da settes
+        // den ikke, og ingen av dem får slettevern. Se rapport: dette krever en
+        // koblingstabell for å løses helt.
+        em_id: selChanges.length === 1 ? selChanges[0].id : null,
       })
       const { error } = await supabase.from('invoices').insert(beriket3)
       if (error) throw error
@@ -26928,6 +26937,8 @@ function FakturaFraEndringModal({ endringer, projects, user, onClose, onSaved })
       const nextInvNr = (nextInvoiceNumber(existingInv || []) || '1')
       const beriket = await berikFakturaMedInnstillinger({
         title: em.title || ('Endringsmelding ' + emNr), invoice_number: nextInvNr,
+        // ON DELETE RESTRICT: EM-en kan ikke slettes bort under fakturaen.
+        em_id: em.id,
         project_id: em.project_id || null,
         customer_name: em.customer_name || '', customer_email: em.customer_email || '',
         payment_terms: '30 dager netto',
@@ -38384,6 +38395,11 @@ function KunderPage() {
   )
 }
 
+// Kundetidslinjen henter chapters for å regne ut ordrebeløp. Det er tung jsonb,
+// så antallet er bundet. En kronologisk historikk trenger ikke vise mer enn
+// dette; ordrene ut over grensen er de eldste, og de vises i Ordre-modulen.
+const CRM_ORDRE_GRENSE = 100
+
 function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
@@ -38405,7 +38421,13 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
       const [k, n, ord, avv] = await Promise.all([
         supabase.from('customer_contacts').select('*').eq('customer_id', kunde.id).order('name').then(r => r.data || []),
         supabase.from('customer_notes').select('*').eq('customer_id', kunde.id).order('created_at', {ascending:false}).then(r => r.data || []),
-        supabase.from('orders').select('id,title,status,total_amount,customer_id,created_at').eq('customer_id', kunde.id).order('created_at',{ascending:false}).then(r => r.data || []),
+        // Beløpet regnes fra chapters, ikke fra orders.total_amount. Den kolonnen
+        // vedlikeholdes ikke — den settes kun ved revisjon og anbudstildeling, og
+        // står urørt når ordren redigeres. Den ville vist et gammelt beløp som
+        // fakta i kundebildet.
+        // chapters er tung jsonb, så spørringen er dobbelt avgrenset: kun denne
+        // kundens ordrer, og maks CRM_ORDRE_GRENSE av de nyeste.
+        supabase.from('orders').select('id,title,status,customer_id,created_at,chapters').eq('customer_id', kunde.id).order('created_at',{ascending:false}).limit(CRM_ORDRE_GRENSE).then(r => r.data || []),
         projIds.length > 0
           ? supabase.from('deviations').select('id,title,status,severity,project_id,created_at').in('project_id', projIds).order('created_at',{ascending:false}).then(r => r.data || [])
           : Promise.resolve([]),
@@ -38457,7 +38479,12 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
       const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
       events.push({ date: f.created_at, type: 'faktura', icon: '🧾', color: isOverdue ? '#dc2626' : f.status === 'Betalt' ? '#059669' : '#d97706', title: f.title, sub: `${isOverdue ? 'Forfalt' : f.status}${fakturaBelop(f) ? ' · ' + Math.round(fakturaBelop(f)).toLocaleString('nb-NO') + ' kr' : ''}` })
     })
-    ordrer.forEach(o => events.push({ date: o.created_at, type: 'ordre', icon: '📦', color: '#7c3aed', title: o.title, sub: `${o.status || 'Aktiv'}${o.total_amount ? ' · ' + Math.round(o.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` }))
+    ordrer.forEach(o => {
+      // Samme fasit som ordremodulen selv viser. calcOrder ignorerer globalt
+      // påslag på ordre med vilje, derfor 0 som andre argument.
+      const belop = calcOrder(o.chapters || [], 0).grandTotal
+      events.push({ date: o.created_at, type: 'ordre', icon: '📦', color: '#7c3aed', title: o.title, sub: `${o.status || 'Aktiv'}${belop ? ' · ' + Math.round(belop).toLocaleString('nb-NO') + ' kr' : ''}` })
+    })
     avvik.forEach(a => {
       const proj = prosjekter.find(p => p.id === a.project_id)
       events.push({ date: a.created_at, type: 'avvik', icon: '⚠️', color: '#ea580c', title: a.title, sub: `${a.severity} · ${a.status}${proj ? ' · ' + proj.name : ''}` })
