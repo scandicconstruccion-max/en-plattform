@@ -20365,10 +20365,11 @@ function EndringsmeldingPage() {
             em={sendDialogEm}
             sendType="send"
             onClose={() => setSendDialogEm(null)}
-            onConfirm={async (reminderDays) => {
+            onConfirm={async (reminderDays, epost) => {
               const em = sendDialogEm
               setSendDialogEm(null)
-              await sendToCustomer(em, reminderDays)
+              // Dialogen har allerede lagret adressen; send med den ferske.
+              await sendToCustomer({ ...em, customer_email: epost || em.customer_email }, reminderDays)
             }}
           />
         )}
@@ -20377,10 +20378,10 @@ function EndringsmeldingPage() {
             em={resendDialogEm.em}
             sendType={resendDialogEm.type}
             onClose={() => setResendDialogEm(null)}
-            onConfirm={async (reminderDays) => {
+            onConfirm={async (reminderDays, epost) => {
               const { em, type } = resendDialogEm
               setResendDialogEm(null)
-              await resendToCustomer(em, type, reminderDays)
+              await resendToCustomer({ ...em, customer_email: epost || em.customer_email }, type, reminderDays)
             }}
           />
         )}
@@ -20721,7 +20722,12 @@ function EndringsmeldingPage() {
 // ─── SEND-EM-DIALOG ───────────────────────────────────────────────────────────
 function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   // sendType: 'send' (første), 'resend', 'revision', 'copy'
+  const appAlert = useAppAlert()
   const [sending, setSending] = useState(false)
+  // Mottaker kan skrives rett i dialogen. Mangler prosjektet kunde, sto det bare
+  // en strek her, og man måtte ut av dialogen for å redigere endringsmeldingen.
+  const [epost, setEpost] = useState(em.customer_email || '')
+  const gyldigEpost = erGyldigEpost(epost)
 
   const isCopy = sendType === 'copy'
   const showReminder = !isCopy // Kopi har ikke purringsfrist
@@ -20744,8 +20750,24 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   const cfg = typeLabels[sendType] || typeLabels.send
 
   const handleConfirm = async () => {
+    if (!gyldigEpost) return
     setSending(true)
-    try { await onConfirm(null) }
+    const ren = epost.trim()
+    try {
+      // Adressen LAGRES på endringsmeldingen, ikke bare brukes i sendeøyeblikket.
+      // Purringene (reminder_due_date, «Purr ubesvarte») leser mottaker herfra —
+      // uten lagring ville EM-en stått igjen uten mottaker etter sending.
+      if (ren !== (em.customer_email || '')) {
+        const { error } = await supabase.from('endringsmeldinger')
+          .update({ customer_email: ren, updated_at: new Date().toISOString() }).eq('id', em.id)
+        if (error) {
+          await appAlert({ message: 'Kunne ikke lagre mottakeren', subMessage: error.message, kind: 'error' })
+          setSending(false)
+          return
+        }
+      }
+      await onConfirm(null, ren)
+    }
     finally { setSending(false) }
   }
 
@@ -20766,8 +20788,21 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
           )}
 
           <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
-            <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER</div>
-            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{em.customer_email || '—'}</div>
+            <label style={{ display:'block', fontSize:'12px', color:'#64748b', marginBottom:'6px' }}>MOTTAKER</label>
+            <input type="email" inputMode="email" autoComplete="email" value={epost}
+              onChange={e => setEpost(e.target.value)} placeholder="kunde@eksempel.no"
+              style={{ width:'100%', minHeight:'48px', padding:'10px 12px', boxSizing:'border-box',
+                border:`1px solid ${epost && !gyldigEpost ? '#fecaca' : '#e2e8f0'}`, borderRadius:'10px',
+                fontSize:'14px', fontWeight:'600', color:'#0f172a', background:'white', outline:'none',
+                fontFamily:'inherit' }} />
+            {epost && !gyldigEpost && (
+              <div style={{ fontSize:'12px', color:'#dc2626', marginTop:'6px' }}>Ugyldig e-postadresse.</div>
+            )}
+            {!em.customer_email && (
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'6px', lineHeight:1.45 }}>
+                Endringsmeldingen har ingen mottaker. Adressen du skriver her lagres på den, så purringer finner den senere.
+              </div>
+            )}
           </div>
 
           {showReminder && em.svarfrist && (
@@ -20798,9 +20833,10 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
         </div>
 
         <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end' }}>
-          <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button type="button" onClick={handleConfirm} disabled={sending || !em.customer_email}
-            style={{ padding:'10px 20px', background: sending ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
+          <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', minHeight:'48px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="button" onClick={handleConfirm} disabled={sending || !gyldigEpost}
+            title={!gyldigEpost ? 'Skriv en gyldig e-postadresse for å sende' : undefined}
+            style={{ flex:1, padding:'10px 20px', minHeight:'56px', background: (sending || !gyldigEpost) ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: (sending || !gyldigEpost)?'not-allowed':'pointer', fontSize:'15px', fontWeight:'700' }}>
             {sending ? 'Sender...' : cfg.button}
           </button>
         </div>
