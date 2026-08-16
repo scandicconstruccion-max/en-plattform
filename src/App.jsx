@@ -1718,7 +1718,8 @@ async function byggFakturaPdfDoc(inv, opts = {}) {
       head: [['Beskrivelse','Enhetspris','Antall','Mva','Sum']],
       body: (inv.lines||[]).map(l => {
         const qty = parseFloat(l.qty)||0, up = parseFloat(l.unitPrice)||0
-        return [ l.description||'', fmtN(up), qty.toLocaleString('nb-NO'), `${Math.round((parseFloat(l.mvaRate)||0)*100)} %`, fmtN(qty*up) ]
+        const just = linjeJustering(l)
+        return [ (l.description||'') + (just ? ` (${just})` : ''), fmtN(up), qty.toLocaleString('nb-NO'), `${Math.round((parseFloat(l.mvaRate)||0)*100)} %`, fmtN(qty*up) ]
       }),
       theme: 'plain',
       styles: { fontSize: 9, cellPadding: { top:2.6, bottom:2.6, left:0, right:0 }, textColor: hex('#0f172a') },
@@ -13928,6 +13929,152 @@ function postSum(p) {
   return medRabatt
 }
 
+// ─── FAKTURALINJER FRA KILDE ────────────────────────────────────────────────
+// Fakturaen HENTER det ferdige beløpet fra kilden. Den regner ALDRI på nytt fra
+// grunnpris, påslag eller rabatt — postSum() har allerede produsert fasit.
+//
+// Påslag, rabatt og show_markup blir med på fakturalinja som REN VISNINGSDATA.
+// calcLines() leser kun qty × unitPrice, så et skjult påslag kan strukturelt
+// ikke falle ut av summen. «Skjult» er en visningsinnstilling, aldri et beløp.
+
+// Kroner → hele øre. All sammenligning skjer i heltall øre, aldri i flyttall.
+const tilOere = (n) => Math.round((parseFloat(n) || 0) * 100)
+
+// En post uten tekst, uten beløp og uten mengde tas ikke med på fakturaen.
+const erTomPost = (p) => !String(p.description || '').trim() && tilOere(postSum(p)) === 0 && (parseFloat(p.qty) || 0) === 0
+
+// Bygger én fakturalinje med et gitt målbeløp (i øre).
+// GARANTI: qty × unitPrice er nøyaktig lik målbeløpet. Går beløpet ikke opp på
+// mengden med 2 desimaler, settes qty = 1 og hele beløpet i unitPrice — med
+// opprinnelig mengde og enhet bevart i beskrivelsen. Ingen ørefeil.
+function postTilFakturalinje(p, opts = {}) {
+  const maalOere = opts.maalOere != null ? opts.maalOere : tilOere(postSum(p))
+  const kildeQty = parseFloat(p.qty) || 0
+  const enhet = p.unit || 'stk'
+  const tekst = (opts.prefiks || '') + (String(p.description || '').trim() || 'Uten beskrivelse')
+
+  let qty = 1
+  let unitPrice = maalOere / 100
+  let beskrivelse = tekst
+  let vistEnhet = kildeQty > 0 ? enhet : 'stk'
+
+  if (kildeQty > 0) {
+    const enhetsprisOere = Math.round(maalOere / kildeQty)
+    if (Math.abs(enhetsprisOere * kildeQty - maalOere) < 1e-9) {
+      qty = kildeQty
+      unitPrice = enhetsprisOere / 100
+    } else {
+      // Beløpet lar seg ikke fordele eksakt på mengden — samle alt på én linje
+      // og behold mengde/enhet som opplysning i teksten.
+      beskrivelse = `${tekst} (${kildeQty} ${enhet})`
+      vistEnhet = 'stk'
+    }
+  }
+
+  return {
+    id: Date.now() + Math.random(),
+    description: beskrivelse,
+    qty,
+    unit: vistEnhet,
+    unitPrice,
+    mvaRate: opts.mvaRate != null ? opts.mvaRate : 0.25,
+    // ── Visningsdata arvet fra kilden. Inngår ALDRI i noen sumberegning. ──
+    markup: parseFloat(p.markup) || 0,
+    discount: parseFloat(p.discount) || 0,
+    show_markup: !!p.show_markup,
+  }
+}
+
+// Bygger alle linjene og legger en eventuell avrundingsrest på siste linje,
+// slik at summen av linjene blir nøyaktig lik kildens sum.
+function byggFakturalinjer(raa, opts = {}) {
+  const poster = raa.filter(r => !erTomPost(r.p))
+  if (poster.length === 0) return []
+  const maal = poster.map(r => Math.round(tilOere(postSum(r.p)) * r.faktor))
+  const fasitOere = Math.round(poster.reduce((a, r) => a + tilOere(postSum(r.p)) * r.faktor, 0))
+  const sumMaal = maal.reduce((a, n) => a + n, 0)
+  if (sumMaal !== fasitOere) maal[maal.length - 1] += fasitOere - sumMaal
+  return poster.map((r, i) => postTilFakturalinje(r.p, { ...opts, prefiks: r.prefiks, maalOere: maal[i] }))
+}
+
+// Fakturalinjer fra et kapittel-dokument (tilbud/ordre).
+//   medKapittel        → «[Kapittelnavn] » foran beskrivelsen
+//   medKapittelPaaslag → gang inn ch.markup (tilbud gjør det, ordre gjør IKKE)
+//   globalMarkup       → gang inn globalt påslag (kun tilbud)
+function kapitlerTilFakturalinjer(chapters, opts = {}) {
+  const globalFaktor = 1 + (parseFloat(opts.globalMarkup) || 0) / 100
+  const raa = []
+  ;(chapters || []).forEach(ch => {
+    const kapittel = ch.name || ch.title || ''
+    const kapFaktor = opts.medKapittelPaaslag ? 1 + (parseFloat(ch.markup) || 0) / 100 : 1
+    ;(ch.posts || ch.lines || []).forEach(p => {
+      raa.push({ p, faktor: kapFaktor * globalFaktor, prefiks: opts.medKapittel && kapittel ? `[${kapittel}] ` : '' })
+    })
+  })
+  return byggFakturalinjer(raa, opts)
+}
+
+// Fakturalinjer fra et flatt post-dokument (endringsmelding).
+function posterTilFakturalinjer(posts, opts = {}) {
+  return byggFakturalinjer((posts || []).map(p => ({ p, faktor: 1, prefiks: '' })), opts)
+}
+
+// Kildens fasit-sum for et flatt post-dokument.
+function kildeSumPoster(posts) {
+  return (posts || []).reduce((a, p) => a + postSum(p), 0)
+}
+
+// Sumkontroll ved opprettelse: fakturaens netto skal være identisk med kildens.
+// Et beløpsavvik skal aldri kunne oppstå ubemerket igjen. andel < 1 ved delfaktura.
+function kontrollerFakturaSum(kildeSum, lines, andel = 1) {
+  const forventetOere = Math.round(tilOere(kildeSum) * andel)
+  const faktiskOere = tilOere(calcLines(lines).net)
+  const diffOere = faktiskOere - forventetOere
+  return {
+    forventet: forventetOere / 100,
+    faktisk: faktiskOere / 100,
+    differanse: diffOere / 100,
+    avvik: Math.abs(diffOere) >= 1,   // ett øre eller mer
+  }
+}
+
+// Logglinje for sumkontrollen. Returnerer null når alt stemmer — da skal det
+// ikke ligge støy i aktivitetsloggen.
+function sumkontrollLogg(user, kontroll, kildeTekst) {
+  if (!kontroll || !kontroll.avvik) return null
+  return fakturaLogg(user, 'Beløpsavvik mot kilde', {
+    kilde: kildeTekst,
+    kildesum: kontroll.forventet,
+    fakturasum: kontroll.faktisk,
+    differanse: kontroll.differanse,
+  })
+}
+
+// Justeringstekst for en fakturalinje. Speiler kildens valg: rabatt vises alltid,
+// påslag kun når øyet var på ved kilden. Rent kosmetisk — beløpet på linja er
+// nøyaktig det samme enten dette vises eller ikke.
+const linjeJustering = (l) => {
+  if (!l) return ''
+  if ((parseFloat(l.discount) || 0) > 0) return `-${l.discount}% rabatt`
+  if ((parseFloat(l.markup) || 0) > 0 && l.show_markup) return `+${l.markup}% påslag`
+  return ''
+}
+
+// Beløp med øre — sumkontrollen kan avvike med mindre enn én krone, og da skal
+// det ikke vises som «0 kr».
+const fmtOere = (n) => (Math.round((parseFloat(n) || 0) * 100) / 100).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr'
+
+// Viser beløpsavviket for brukeren umiddelbart. Fakturaen er opprettet som
+// utkast, så avviket skal fanges opp før den sendes — ikke etterpå.
+async function varsleBelopsavvik(appAlert, kontroll, kildeTekst) {
+  if (!kontroll || !kontroll.avvik) return
+  await appAlert({
+    message: 'Beløpet avviker fra kilden',
+    subMessage: `${kildeTekst} har sum ${fmtOere(kontroll.forventet)}, men fakturaen ble ${fmtOere(kontroll.faktisk)} — differanse ${fmtOere(kontroll.differanse)}. Avviket er loggført på fakturaen. Kontroller linjene før du sender den.`,
+    kind: 'warn',
+  })
+}
+
 function calcChapter(ch) {
   const sum = (ch.posts || []).reduce((acc, p) => acc + postSum(p), 0)
   const markup = parseFloat(ch.markup) || 0
@@ -18348,17 +18495,10 @@ function EndringsmeldingPage() {
       const { data: existingInvoices } = await supabase.from('invoices').select('invoice_number')
       const newInvoiceNumber = (nextInvoiceNumber(existingInvoices || []) || '1')
 
-      // Bygg fakturalinjer fra EM-postene
-      const lines = []
-      ;(em.posts || []).forEach(p => {
-        const qty = parseFloat(p.qty) || 0
-        const priceWork = parseFloat(p.unitPriceWork ?? p.unit_price_work) || 0
-        const priceMat = parseFloat(p.unitPriceMaterial ?? p.unit_price_material) || 0
-        const unitPrice = priceWork + priceMat
-        if (p.description || qty > 0 || unitPrice > 0) {
-          lines.push({ description: p.description || 'Uten beskrivelse', qty: qty || 1, unit: p.unit || 'stk', unitPrice, mvaRate: 0.25 })
-        }
-      })
+      // Fakturalinjene HENTES fra endringsmeldingens poster — beløpet er
+      // allerede ferdig regnet i postSum(). Påslag og rabatt regnes aldri om.
+      const lines = posterTilFakturalinjer(em.posts)
+      const kontroll = kontrollerFakturaSum(kildeSumPoster(em.posts), lines)
 
       let cs = null
       try { const { data } = await supabase.from('company_settings').select('*').limit(1).single(); cs = data } catch (_) {}
@@ -18388,9 +18528,11 @@ function EndringsmeldingPage() {
         notes: `Faktura basert på endringsmelding ${emNr}`,
         status: 'Utkast',
         created_by: user?.id,
-        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `endringsmelding ${emNr}` })],
+        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `endringsmelding ${emNr}` }), sumkontrollLogg(user, kontroll, `endringsmelding ${emNr}`)].filter(Boolean),
       }).select().single()
       if (error) throw error
+
+      if (kontroll.avvik) await varsleBelopsavvik(appAlert, kontroll, `Endringsmelding ${emNr}`)
 
       // Marker endringsmeldingen som fakturert
       await supabase.from('endringsmeldinger').update({ status: 'Fakturert', activity_log: [...(em.activity_log||[]), { action: 'Fakturert', at: new Date().toISOString(), by: user?.email || 'System' }], updated_at: new Date().toISOString() }).eq('id', em.id)
@@ -20690,35 +20832,11 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       const { data: existingInvoices } = await supabase.from('invoices').select('invoice_number')
       const newInvoiceNumber = (nextInvoiceNumber(existingInvoices || []) || '1')
 
-      // Bygg fakturalinjer fra ordrens kapitler
-      // MERK: Ordrer bruker ch.posts (ikke ch.lines)
-      console.log('[createInvoice] Ordrens chapters:', o.chapters)
-      const lines = []
-      ;(o.chapters || []).forEach((ch, chIdx) => {
-        // Støtt både 'posts' (ny struktur) og 'lines' (evt. gammel struktur) — bakoverkompatibelt
-        const items = ch.posts || ch.lines || []
-        console.log(`[createInvoice] Kapittel ${chIdx} "${ch.name || ch.title || ''}" har ${items.length} linjer`)
-        items.forEach((p, pIdx) => {
-          const qty = parseFloat(p.qty) || 0
-          const priceWork = parseFloat(p.unitPriceWork ?? p.unit_price_work) || 0
-          const priceMat = parseFloat(p.unitPriceMaterial ?? p.unit_price_material) || 0
-          const unitPrice = priceWork + priceMat
-          console.log(`[createInvoice]   Post ${pIdx}: qty=${qty}, work=${priceWork}, mat=${priceMat}, total=${unitPrice}`, p)
-
-          // Legg til linjen selv om pris er 0 — bruker kan justere i fakturautkastet
-          if (p.description || qty > 0 || unitPrice > 0) {
-            const chapterLabel = ch.name || ch.title || ''
-            lines.push({
-              description: (chapterLabel ? `[${chapterLabel}] ` : '') + (p.description || 'Uten beskrivelse'),
-              qty: qty || 1,
-              unit: p.unit || 'stk',
-              unitPrice: unitPrice, // MERK: invoice-koden bruker camelCase (l.unitPrice)
-              mvaRate: 0.25, // MERK: mvaRate lagres som desimal (0.25), ikke prosent (25)
-            })
-          }
-        })
-      })
-      console.log('[createInvoice] Bygde', lines.length, 'fakturalinjer fra ordren:', lines)
+      // Fakturalinjene HENTES fra ordrens poster. Ordrens viste sum (calcOrder)
+      // er fasit — påslag og rabatt er allerede regnet inn per post av postSum().
+      // MERK: ordre bruker IKKE kapittelpåslag eller globalt påslag, jf. calcOrder.
+      const lines = kapitlerTilFakturalinjer(o.chapters, { medKapittel: true })
+      const kontroll = kontrollerFakturaSum(calcOrder(o.chapters || [], o.global_markup).grandTotal, lines)
 
       // Hent selskapsinfo — gjør dette feiltolerant for å unngå at manglende kolonner
       // sprengaerhele createInvoice-flyten
@@ -20761,10 +20879,12 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
         from_order_id: o.id,
         from_order_number: o.order_number,
         created_by: user?.id,
-        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `ordre ${o.order_number}` })],
+        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `ordre ${o.order_number}` }), sumkontrollLogg(user, kontroll, `ordre ${o.order_number}`)].filter(Boolean),
       }).select().single()
 
       if (error) throw error
+
+      if (kontroll.avvik) await varsleBelopsavvik(appAlert, kontroll, `Ordre ${o.order_number}`)
 
       // Marker ordren som fakturert + loggfør tidspunkt i ordrens aktivitetslogg
       try {
@@ -25187,6 +25307,7 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                         <span>{l.qty} {l.unit} × {fmtI(l.unitPrice)}</span>
                         <span>MVA {Math.round((parseFloat(l.mvaRate)||0)*100)}%</span>
                         <span>Netto: {fmtI(lineNet)}</span>
+                        {linjeJustering(l) && <span style={{ color:'#059669', fontWeight:'600' }}>{linjeJustering(l)}</span>}
                       </div>
                     </div>
                   )
@@ -25204,7 +25325,10 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                   const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
                   const lineMva=lineNet*(parseFloat(l.mvaRate)||0)
                   return <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
-                    <td style={{ padding:'10px', color:'#0f172a', fontWeight:'500' }}>{l.description||'—'}</td>
+                    <td style={{ padding:'10px', color:'#0f172a', fontWeight:'500' }}>
+                      {l.description||'—'}
+                      {linjeJustering(l) && <span style={{ marginLeft:'8px', fontSize:'11px', color:'#059669', fontWeight:'600' }}>{linjeJustering(l)}</span>}
+                    </td>
                     <td style={{ padding:'10px', textAlign:'right', color:'#475569' }}>{l.qty}</td>
                     <td style={{ padding:'10px', color:'#475569' }}>{l.unit}</td>
                     <td style={{ padding:'10px', textAlign:'right', color:'#475569' }}>{fmtI(l.unitPrice)}</td>
@@ -25842,14 +25966,12 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
     if (!ord) { await appAlert({ message: 'Velg en ordre', kind: 'warn' }); return }
     setSaving(true)
     try {
+      // Delfaktura: én oppsummeringslinje på prosent av ordrens fasit-sum.
+      // Full faktura: linjene HENTES fra ordrens poster med ferdig beløp.
       const lines = mode==='partial'
-        ? [{ id:Date.now(), description:`${ord.title} – ${partialPct}% delfakturering`, qty:1, unit:'stk', unitPrice:Math.round(invoiceAmount), mvaRate:0.25 }]
-        : (ord.chapters||[]).flatMap(ch=>(ch.posts||[]).map(p=>({
-            id:Date.now()+Math.random(), description:p.description,
-            qty:parseFloat(p.qty)||1, unit:p.unit||'stk',
-            unitPrice:((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))*(1+(parseFloat(ch.markup)||0)/100),
-            mvaRate:0.25
-          })))
+        ? [{ id:Date.now(), description:`${ord.title} – ${partialPct}% delfakturering`, qty:1, unit:'stk', unitPrice:tilOere(invoiceAmount)/100, mvaRate:0.25 }]
+        : kapitlerTilFakturalinjer(ord.chapters, { medKapittel: true })
+      const kontroll = kontrollerFakturaSum(grandTotal, lines, mode==='partial' ? partialPct/100 : 1)
       const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr = (nextInvoiceNumber(existingInv || []) || '1')
       const beriket = await berikFakturaMedInnstillinger({
@@ -25863,9 +25985,11 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
         due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(ord.payment_terms)),
         partial_percent:mode==='partial'?partialPct:null,
         lines, status:'Utkast', created_by:user?.id,
+        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `ordre ${ord.order_number}${mode==='partial'?` (${partialPct}% delfaktura)`:''}` }), sumkontrollLogg(user, kontroll, `ordre ${ord.order_number}`)].filter(Boolean),
       })
       const { data: nyFaktura, error } = await supabase.from('invoices').insert(beriket).select().single()
       if (error) throw error
+      if (kontroll.avvik) await varsleBelopsavvik(appAlert, kontroll, `Ordre ${ord.order_number}`)
       // Full fakturering markerer ordren som fakturert (ikke ved delfakturering)
       if (mode !== 'partial') {
         await supabase.from('orders').update({ status: 'Fakturert', updated_at: new Date().toISOString(), activity_log: [...(ord.activity_log||[]), { action: 'Fakturert', at: new Date().toISOString(), by: user?.email || user?.id || 'System' }] }).eq('id', ord.id)
@@ -25932,12 +26056,11 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
     if (!q) { await appAlert({ message: 'Velg et tilbud', kind: 'warn' }); return }
     setSaving(true)
     try {
-      const lines = (q.chapters||[]).flatMap(ch=>(ch.posts||[]).map(p=>({
-        id:Date.now()+Math.random(), description:p.description,
-        qty:parseFloat(p.qty)||1, unit:p.unit||'stk',
-        unitPrice:((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))*(1+(parseFloat(ch.markup)||0)/100),
-        mvaRate:0.25
-      })))
+      // Linjene HENTES fra tilbudets poster. Tilbudets viste sum (calcQuote) er
+      // fasit, og den inkluderer kapittelpåslag og generelt påslag — derfor
+      // ganges begge inn her, slik at fakturaen treffer det kunden fikk tilbud om.
+      const lines = kapitlerTilFakturalinjer(q.chapters, { medKapittel: true, medKapittelPaaslag: true, globalMarkup: q.global_markup })
+      const kontroll = kontrollerFakturaSum(calcQuote(q.chapters || [], q.global_markup).grandTotal, lines)
       const { data: existingInv2 } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr2 = (nextInvoiceNumber(existingInv2 || []) || '1')
       const beriket2 = await berikFakturaMedInnstillinger({
@@ -25949,9 +26072,11 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
         invoice_date:new Date().toISOString().split('T')[0],
         due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(q.payment_terms)),
         lines, status:'Utkast', created_by:user?.id,
+        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `tilbud ${q.quote_number}` }), sumkontrollLogg(user, kontroll, `tilbud ${q.quote_number}`)].filter(Boolean),
       })
       const { data: nyFaktura, error } = await supabase.from('invoices').insert(beriket2).select().single()
       if (error) throw error
+      if (kontroll.avvik) await varsleBelopsavvik(appAlert, kontroll, `Tilbud ${q.quote_number}`)
       // Marker tilbudet som fakturert + sett tidspunkt (vises i aktivitetsloggen).
       // Faller tilbake til kun status dersom fakturert_at-kolonnen ikke finnes ennå.
       const naa = new Date().toISOString()
@@ -25974,7 +26099,8 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {quotes.map(q=>{
               const proj=projects.find(p=>p.id===q.project_id)
-              const {grandTotal:gt}=calcOrder(q.chapters||[],q.global_markup)
+              // Tilbud vises med calcQuote — samme sum som fakturaen vil få.
+              const {grandTotal:gt}=calcQuote(q.chapters||[],q.global_markup)
               return (
                 <button key={q.id} onClick={()=>setSelectedQuote(q.id)}
                   style={{ padding:'12px 16px', borderRadius:'12px', border:`2px solid ${selectedQuote===q.id?'#059669':'#e2e8f0'}`, background:selectedQuote===q.id?'#f0fdf4':'white', cursor:'pointer', display:'flex', justifyContent:'space-between', alignItems:'center', textAlign:'left' }}>
@@ -26086,20 +26212,17 @@ function FakturaFraEndringModal({ endringer, projects, user, onClose, onSaved })
   const [selected, setSelected] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const emSum = (em) => (em.posts||[]).reduce((a,p)=>a+((parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork ?? p.unit_price_work)||0)+(parseFloat(p.unitPriceMaterial ?? p.unit_price_material)||0))),0)
+  // Samme fasit som endringsmeldingen selv viser (postSum — påslag og rabatt inkludert).
+  const emSum = (em) => kildeSumPoster(em.posts)
 
   const handleCreate = async () => {
     const em = endringer.find(x=>x.id===selected)
     if (!em) { await appAlert({ message: 'Velg en endringsmelding', kind: 'warn' }); return }
     setSaving(true)
     try {
-      const lines = (em.posts||[]).map(p=>({
-        id: Date.now()+Math.random(),
-        description: p.description || 'Uten beskrivelse',
-        qty: parseFloat(p.qty)||1, unit: p.unit||'stk',
-        unitPrice: (parseFloat(p.unitPriceWork ?? p.unit_price_work)||0)+(parseFloat(p.unitPriceMaterial ?? p.unit_price_material)||0),
-        mvaRate: 0.25,
-      }))
+      // Linjene HENTES fra endringsmeldingens poster med ferdig beløp fra postSum().
+      const lines = posterTilFakturalinjer(em.posts)
+      const kontroll = kontrollerFakturaSum(kildeSumPoster(em.posts), lines)
       const emNr = (em.em_number||'') + emRevSuffix(em.revision_number)
       const { data: existingInv } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr = (nextInvoiceNumber(existingInv || []) || '1')
@@ -26112,9 +26235,11 @@ function FakturaFraEndringModal({ endringer, projects, user, onClose, onSaved })
         due_date: addDays(new Date().toISOString().split('T')[0], 30),
         lines, status: 'Utkast', created_by: user?.id,
         notes: 'Faktura basert på endringsmelding ' + emNr,
+        activity_log: [fakturaLogg(user, 'Opprettet', { fra: `endringsmelding ${emNr}` }), sumkontrollLogg(user, kontroll, `endringsmelding ${emNr}`)].filter(Boolean),
       })
       const { data: nyFaktura, error } = await supabase.from('invoices').insert(beriket).select().single()
       if (error) throw error
+      if (kontroll.avvik) await varsleBelopsavvik(appAlert, kontroll, `Endringsmelding ${emNr}`)
       await supabase.from('endringsmeldinger').update({ status: 'Fakturert', activity_log: [...(em.activity_log||[]), { action: 'Fakturert', at: new Date().toISOString(), by: user?.email || 'System' }], updated_at: new Date().toISOString() }).eq('id', em.id)
       onSaved(nyFaktura?.id)
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
