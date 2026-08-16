@@ -19829,8 +19829,14 @@ function EndringsmeldingPage() {
   }
 
   // ── Send til kunde ─────────────────────────────────────────────────────────
-  const sendToCustomer = async (em, reminderDays = null) => {
-    if (!erGyldigEpost(em.customer_email)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', subMessage: 'Sjekk kundens e-postadresse før utsending.', kind: 'warn' })
+  // epostOverstyring: adressen brukeren skrev i sendedialogen. Mottakeren løses
+  // ÉN gang her og brukes hele veien — validering, utsending, logg og kvittering.
+  // Tidligere validerte denne mot em.customer_email fra den innlastede raden,
+  // mens dialogen validerte mot det brukeren skrev. To kilder som kunne være
+  // uenige: dialogen sa ja, handleren sa nei.
+  const sendToCustomer = async (em, reminderDays = null, epostOverstyring = null) => {
+    const mottaker = String(epostOverstyring || em.customer_email || '').trim()
+    if (!erGyldigEpost(mottaker)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', subMessage: 'Sjekk kundens e-postadresse før utsending.', kind: 'warn' })
     try {
       const proj = projects.find(p => p.id === em.project_id)
 
@@ -19859,7 +19865,7 @@ function EndringsmeldingPage() {
 
       // PDF er ikke lenger vedlagt e-posten — byggherren laster den ned på svarsiden (/em-view).
       const payload = {
-        to: em.customer_email,
+        to: mottaker,
         subject: `Endringsmelding ${em.em_number}${emRevSuffix(em.revision_number)} – ${em.title}`,
         html,
       }
@@ -19867,7 +19873,7 @@ function EndringsmeldingPage() {
       const resp = await sendEpost({ ...payload, ...epostCtx_auto })
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
-      const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
+      const log = [...(em.activity_log || []), { action: 'Sendt til kunde', by: user?.email, at: new Date().toISOString(), to: mottaker }]
 
       // Lag snapshot av nåværende tilstand for versjonshistorikk
       const newVersion = buildEmSnapshot(em, 'send')
@@ -19885,7 +19891,7 @@ function EndringsmeldingPage() {
 
       await supabase.from('endringsmeldinger').update(updates).eq('id', em.id)
       const reminderText = reminderDays ? ` · Purring settes til ${reminderDays} dager` : ''
-      await appAlert({ message: 'Endringsmelding sendt', subMessage: `Sendt til ${em.customer_email}${reminderText}`, kind: 'success' })
+      await appAlert({ message: 'Endringsmelding sendt', subMessage: `Sendt til ${mottaker}${reminderText}`, kind: 'success' })
       load()
     } catch(e) { await appAlert({ message: 'Kunne ikke sende endringsmelding', subMessage: e.message, kind: 'error' }) }
   }
@@ -19960,9 +19966,11 @@ function EndringsmeldingPage() {
   }
 
   // ── Send på nytt / Revisjon / Kopi ─────────────────────────────────────────
-  const resendToCustomer = async (em, sendType, reminderDays = null) => {
+  const resendToCustomer = async (em, sendType, reminderDays = null, epostOverstyring = null) => {
     // sendType: 'resend' | 'revision' | 'copy'
-    if (!erGyldigEpost(em.customer_email)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', kind: 'warn' })
+    // Mottakeren løses ÉN gang, som i sendToCustomer.
+    const mottaker = String(epostOverstyring || em.customer_email || '').trim()
+    if (!erGyldigEpost(mottaker)) return appAlert({ message: 'Ugyldig eller manglende e-postadresse', kind: 'warn' })
     try {
       const proj = projects.find(p => p.id === em.project_id)
       const viewToken = em.view_token || crypto.randomUUID()
@@ -20024,7 +20032,7 @@ function EndringsmeldingPage() {
 
       // PDF er ikke lenger vedlagt e-posten — byggherren laster den ned på svarsiden (/em-view).
       const payload = {
-        to: em.customer_email,
+        to: mottaker,
         subject: `${cfg.subjectPrefix}Endringsmelding ${em.em_number}${emRevSuffix(em.revision_number)} – ${em.title}`,
         html,
       }
@@ -20033,7 +20041,7 @@ function EndringsmeldingPage() {
       if (!resp.ok) throw new Error(`E-postsending feilet (${resp.status})`)
 
       // Oppdater aktivitetslogg + evt. ny purringsfrist (ikke for 'copy')
-      const log = [...(em.activity_log || []), { action: cfg.logAction, by: user?.email, at: new Date().toISOString(), to: em.customer_email }]
+      const log = [...(em.activity_log || []), { action: cfg.logAction, by: user?.email, at: new Date().toISOString(), to: mottaker }]
 
       // Lag snapshot for versjonshistorikk
       const newVersion = buildEmSnapshot(em, sendType)
@@ -20052,7 +20060,7 @@ function EndringsmeldingPage() {
       await supabase.from('endringsmeldinger').update(updates).eq('id', em.id)
 
       const reminderText = sendType !== 'copy' && reminderDays ? ` · Ny purringsfrist: ${reminderDays} dager` : ''
-      await appAlert({ message: cfg.successMsg, subMessage: `Sendt til ${em.customer_email}${reminderText}`, kind: 'success' })
+      await appAlert({ message: cfg.successMsg, subMessage: `Sendt til ${mottaker}${reminderText}`, kind: 'success' })
       load()
     } catch(e) { await appAlert({ message: 'Kunne ikke sende', subMessage: e.message, kind: 'error' }) }
   }
@@ -20063,6 +20071,38 @@ function EndringsmeldingPage() {
       navList()
     }
   }, [viewEmId, loading, viewEm])
+
+  // Sendedialogene trengs i BÅDE detaljvisning og listevisning. De defineres her
+  // ÉN gang og rendres begge steder — tidligere var de kopiert, og da ble bare
+  // den ene kopien rettet da mottakerfeltet kom. Én definisjon kan ikke sprike.
+  const sendDialoger = (
+    <>
+      {sendDialogEm && (
+        <SendEmDialog
+          em={sendDialogEm}
+          sendType="send"
+          onClose={() => setSendDialogEm(null)}
+          onConfirm={async (reminderDays, epost) => {
+            const em = sendDialogEm
+            setSendDialogEm(null)
+            await sendToCustomer(em, reminderDays, epost)
+          }}
+        />
+      )}
+      {resendDialogEm && (
+        <SendEmDialog
+          em={resendDialogEm.em}
+          sendType={resendDialogEm.type}
+          onClose={() => setResendDialogEm(null)}
+          onConfirm={async (reminderDays, epost) => {
+            const { em, type } = resendDialogEm
+            setResendDialogEm(null)
+            await resendToCustomer(em, type, reminderDays, epost)
+          }}
+        />
+      )}
+    </>
+  )
 
   // ── Detail View ────────────────────────────────────────────────────────────
   if (viewEmId) {
@@ -20359,31 +20399,8 @@ function EndringsmeldingPage() {
         </div>
         </div>
 
-        {/* Modaler også i detaljvisning */}
-        {sendDialogEm && (
-          <SendEmDialog
-            em={sendDialogEm}
-            sendType="send"
-            onClose={() => setSendDialogEm(null)}
-            onConfirm={async (reminderDays) => {
-              const em = sendDialogEm
-              setSendDialogEm(null)
-              await sendToCustomer(em, reminderDays)
-            }}
-          />
-        )}
-        {resendDialogEm && (
-          <SendEmDialog
-            em={resendDialogEm.em}
-            sendType={resendDialogEm.type}
-            onClose={() => setResendDialogEm(null)}
-            onConfirm={async (reminderDays) => {
-              const { em, type } = resendDialogEm
-              setResendDialogEm(null)
-              await resendToCustomer(em, type, reminderDays)
-            }}
-          />
-        )}
+        {/* Modaler også i detaljvisning — samme definisjon som i listevisningen */}
+        {sendDialoger}
         {viewingVersion && (
           <VersionViewerModal
             em={viewingVersion.em}
@@ -20676,33 +20693,9 @@ function EndringsmeldingPage() {
         }}
       />}
 
-      {/* Send-dialog med frist-valg */}
-      {sendDialogEm && (
-        <SendEmDialog
-          em={sendDialogEm}
-          sendType="send"
-          onClose={() => setSendDialogEm(null)}
-          onConfirm={async (reminderDays) => {
-            const em = sendDialogEm
-            setSendDialogEm(null)
-            await sendToCustomer(em, reminderDays)
-          }}
-        />
-      )}
-
-      {/* Send-på-nytt / Revisjon / Kopi dialog */}
-      {resendDialogEm && (
-        <SendEmDialog
-          em={resendDialogEm.em}
-          sendType={resendDialogEm.type}
-          onClose={() => setResendDialogEm(null)}
-          onConfirm={async (reminderDays) => {
-            const { em, type } = resendDialogEm
-            setResendDialogEm(null)
-            await resendToCustomer(em, type, reminderDays)
-          }}
-        />
-      )}
+      {/* Send-dialog og send-på-nytt/revisjon/kopi — samme definisjon som i
+          detaljvisningen. Var tidligere en kopi, og kopiene kom i utakt. */}
+      {sendDialoger}
 
       {/* Versjon-viewer modal */}
       {viewingVersion && (
@@ -20721,7 +20714,12 @@ function EndringsmeldingPage() {
 // ─── SEND-EM-DIALOG ───────────────────────────────────────────────────────────
 function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   // sendType: 'send' (første), 'resend', 'revision', 'copy'
+  const appAlert = useAppAlert()
   const [sending, setSending] = useState(false)
+  // Mottaker kan skrives rett i dialogen. Mangler prosjektet kunde, sto det bare
+  // en strek her, og man måtte ut av dialogen for å redigere endringsmeldingen.
+  const [epost, setEpost] = useState(em.customer_email || '')
+  const gyldigEpost = erGyldigEpost(epost)
 
   const isCopy = sendType === 'copy'
   const showReminder = !isCopy // Kopi har ikke purringsfrist
@@ -20744,8 +20742,24 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   const cfg = typeLabels[sendType] || typeLabels.send
 
   const handleConfirm = async () => {
+    if (!gyldigEpost) return
     setSending(true)
-    try { await onConfirm(null) }
+    const ren = epost.trim()
+    try {
+      // Adressen LAGRES på endringsmeldingen, ikke bare brukes i sendeøyeblikket.
+      // Purringene (reminder_due_date, «Purr ubesvarte») leser mottaker herfra —
+      // uten lagring ville EM-en stått igjen uten mottaker etter sending.
+      if (ren !== (em.customer_email || '')) {
+        const { error } = await supabase.from('endringsmeldinger')
+          .update({ customer_email: ren, updated_at: new Date().toISOString() }).eq('id', em.id)
+        if (error) {
+          await appAlert({ message: 'Kunne ikke lagre mottakeren', subMessage: error.message, kind: 'error' })
+          setSending(false)
+          return
+        }
+      }
+      await onConfirm(null, ren)
+    }
     finally { setSending(false) }
   }
 
@@ -20766,8 +20780,21 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
           )}
 
           <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'12px 14px' }}>
-            <div style={{ fontSize:'12px', color:'#64748b', marginBottom:'4px' }}>MOTTAKER</div>
-            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{em.customer_email || '—'}</div>
+            <label style={{ display:'block', fontSize:'12px', color:'#64748b', marginBottom:'6px' }}>MOTTAKER</label>
+            <input type="email" inputMode="email" autoComplete="email" value={epost}
+              onChange={e => setEpost(e.target.value)} placeholder="kunde@eksempel.no"
+              style={{ width:'100%', minHeight:'48px', padding:'10px 12px', boxSizing:'border-box',
+                border:`1px solid ${epost && !gyldigEpost ? '#fecaca' : '#e2e8f0'}`, borderRadius:'10px',
+                fontSize:'14px', fontWeight:'600', color:'#0f172a', background:'white', outline:'none',
+                fontFamily:'inherit' }} />
+            {epost && !gyldigEpost && (
+              <div style={{ fontSize:'12px', color:'#dc2626', marginTop:'6px' }}>Ugyldig e-postadresse.</div>
+            )}
+            {!em.customer_email && (
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'6px', lineHeight:1.45 }}>
+                Endringsmeldingen har ingen mottaker. Adressen du skriver her lagres på den, så purringer finner den senere.
+              </div>
+            )}
           </div>
 
           {showReminder && em.svarfrist && (
@@ -20798,9 +20825,10 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
         </div>
 
         <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end' }}>
-          <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button type="button" onClick={handleConfirm} disabled={sending || !em.customer_email}
-            style={{ padding:'10px 20px', background: sending ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
+          <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', minHeight:'48px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+          <button type="button" onClick={handleConfirm} disabled={sending || !gyldigEpost}
+            title={!gyldigEpost ? 'Skriv en gyldig e-postadresse for å sende' : undefined}
+            style={{ flex:1, padding:'10px 20px', minHeight:'56px', background: (sending || !gyldigEpost) ? '#93c5fd' : '#2563eb', color:'white', border:'none', borderRadius:'10px', cursor: (sending || !gyldigEpost)?'not-allowed':'pointer', fontSize:'15px', fontWeight:'700' }}>
             {sending ? 'Sender...' : cfg.button}
           </button>
         </div>
