@@ -10304,8 +10304,13 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
         <button onClick={onBack} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '13px', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', padding: 0, fontFamily: 'system-ui, sans-serif' }}>
           ← Tilbake til avvik
         </button>
+        {/* MOBIL: tittelblokken tar flex-basis 100 %, ellers ville flexWrap under
+            aldri slaa inn. «flex: 1» betyr basis 0, saa venstre side bidro med
+            null i brytningsregnestykket, og knapperaden — som er flexShrink: 0 —
+            fikk hele bredden den ba om. Tittelen ble klemt til én ordbredde og
+            overskuddet klippet bort av overflowX: hidden paa rot-diven. */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: isMobD ? '8px' : '16px', flexWrap: isMobD ? 'wrap' : 'nowrap' }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobD ? '10px' : '14px', flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: isMobD ? '10px' : '14px', flex: isMobD ? '1 1 100%' : 1, minWidth: 0 }}>
             {!isMobD && <div style={{ width: '52px', height: '52px', borderRadius: '14px', background: SEVERITY_CONFIG[dev.severity]?.bg || '#fffbeb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px', flexShrink: 0 }}>
               {dev.severity === 'Kritisk' ? '🚨' : '⚠️'}
             </div>}
@@ -10313,9 +10318,13 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: isMobD ? '6px' : '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
                 {dev.deviation_number && <span style={{ fontSize: isMobD ? '12px' : '13px', fontWeight: '700', color: '#64748b', background: '#f1f5f9', borderRadius: '6px', padding: '2px 8px', flexShrink: 0 }}>{dev.deviation_number}</span>}
                 {dev._venter && <span style={{ fontSize: isMobD ? '11px' : '12px', fontWeight: '700', color: '#1e40af', background: '#dbeafe', border: '1px solid #93c5fd', borderRadius: '6px', padding: '2px 8px', flexShrink: 0 }}>⏳ Venter på synk</span>}
-                <h1 style={{ margin: 0, fontSize: isMobD ? '16px' : '20px', fontWeight: 'bold', color: '#0f172a' }}>{dev.title}</h1>
-                <SeverityBadge severity={dev.severity} />
-                <AvvikStatusBadge status={dev.status} />
+                <h1 style={{ margin: 0, fontSize: isMobD ? '16px' : '20px', fontWeight: 'bold', color: '#0f172a', minWidth: 0 }}>{dev.title}</h1>
+                {/* Ett felles ledd, saa Hoey og Aapen brekker sammen og ikke fra
+                    hverandre. Samme gap som forelderen — desktop er uendret. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: isMobD ? '6px' : '10px', flexShrink: 0 }}>
+                  <SeverityBadge severity={dev.severity} />
+                  <AvvikStatusBadge status={dev.status} />
+                </div>
               </div>
               <div style={{ display: 'flex', gap: '14px', flexWrap: 'wrap' }}>
                 {proj && <span style={{ fontSize: '13px', color: '#059669', fontWeight: '500' }}>🏗️ {proj.name}</span>}
@@ -10324,24 +10333,27 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
               </div>
             </div>
           </div>
-          <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0 }}>
+          {/* flexWrap paa mobil: knappene brekker til ny linje i stedet for aa
+              stikke ut og bli klippet. flexShrink: 0 staar, saa ingen knapp
+              krympes til under trykkflatekravet. */}
+          <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0, flexWrap: isMobD ? 'wrap' : 'nowrap', marginTop: isMobD ? '12px' : 0 }}>
             {/* Avvik → endringsmelding. Skjules når avviket allerede er overført. */}
             {!dev.em_id && (
               <button onClick={() => setShowTilEm(true)} title="Lag endringsmelding av dette avviket"
-                style={{ padding: isMobD ? '7px 10px' : '9px 16px', minHeight: isMobD ? '44px' : '48px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                style={{ padding: isMobD ? '7px 10px' : '9px 16px', minHeight: '48px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
                 {isMobD ? '🔄 EM' : '🔄 Til endringsmelding'}
               </button>
             )}
             <button onClick={() => setShowSend(true)}
-              style={{ padding: isMobD ? '7px 10px' : '9px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600' }}>
+              style={{ padding: isMobD ? '7px 10px' : '9px 16px', minHeight: isMobD ? '48px' : undefined, minWidth: isMobD ? '48px' : undefined, background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600' }}>
               {isMobD ? '📧' : '📧 Send'}
             </button>
             <button onClick={exportAvvikPDF} disabled={exporting}
-              style={{ padding: isMobD ? '7px 10px' : '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '14px', fontWeight: '600', color: exporting ? '#94a3b8' : '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              style={{ padding: isMobD ? '7px 10px' : '10px 18px', minHeight: isMobD ? '48px' : undefined, border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: exporting ? 'not-allowed' : 'pointer', fontSize: isMobD ? '12px' : '14px', fontWeight: '600', color: exporting ? '#94a3b8' : '#374151', display: 'flex', alignItems: 'center', gap: '6px' }}>
               {exporting ? '⏳ Genererer...' : '📄 PDF'}
             </button>
-            <button onClick={() => setShowEdit(true)} style={{ padding: isMobD ? '7px 10px' : '9px 14px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding: isMobD ? '7px 10px' : '9px 12px', border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: isMobD ? '12px' : '13px' }}>🗑️</button>
+            <button onClick={() => setShowEdit(true)} style={{ padding: isMobD ? '7px 10px' : '9px 14px', minHeight: isMobD ? '48px' : undefined, minWidth: isMobD ? '48px' : undefined, border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '500' }}>✏️</button>
+            <button onClick={handleDelete} style={{ padding: isMobD ? '7px 10px' : '9px 12px', minHeight: isMobD ? '48px' : undefined, minWidth: isMobD ? '48px' : undefined, border: '1px solid #fecaca', borderRadius: '10px', background: 'white', cursor: 'pointer', color: '#dc2626', fontSize: isMobD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
       </div>
