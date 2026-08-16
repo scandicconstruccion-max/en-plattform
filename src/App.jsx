@@ -149,7 +149,13 @@ function formaterCacheTid(ts) {
 
 // Lite merke som kun vises når data kommer fra offline-cache.
 function SistOppdatert({ lagretAt, fraCache }) {
+  // ÉN kilde til sannhet for nett-status — samme som TilkoblingsIndikator.
+  const online = useTilkobling()
   if (!fraCache || !lagretAt) return null
+  // På nett er «les fra cache, så revalider» normaltilfellet ved nesten hver
+  // sidelasting. Å vise noe da blir støy og svekker den gule «Offline» sin kraft
+  // → vis INGENTING på nett. Gul linje kun når man faktisk er frakoblet.
+  if (online) return null
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: '6px',
