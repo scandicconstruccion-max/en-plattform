@@ -1716,10 +1716,16 @@ async function byggFakturaPdfDoc(inv, opts = {}) {
     doc.autoTable({
       startY: y,
       head: [['Beskrivelse','Enhetspris','Antall','Mva','Sum']],
-      body: (inv.lines||[]).map(l => {
-        const qty = parseFloat(l.qty)||0, up = parseFloat(l.unitPrice)||0
-        const just = linjeJustering(l)
-        return [ (l.description||'') + (just ? ` (${just})` : ''), fmtN(up), qty.toLocaleString('nb-NO'), `${Math.round((parseFloat(l.mvaRate)||0)*100)} %`, fmtN(qty*up) ]
+      // Kapittel vises som egen overskriftsrad — aldri som prefiks på hver linje.
+      // Ett kapittel (eller ingen) gir ingen overskrift; linjene står rene.
+      body: grupperLinjerPaaKapittel(inv.lines).flatMap(g => {
+        const rader = g.tittel ? [[{ content: g.tittel, colSpan: 5, styles: { fontStyle:'bold', textColor: hex('#64748b'), fontSize: 8, cellPadding: { top:4, bottom:1.5, left:0, right:0 } } }]] : []
+        g.linjer.forEach(l => {
+          const qty = parseFloat(l.qty)||0, up = parseFloat(l.unitPrice)||0
+          const just = linjeJustering(l)
+          rader.push([ (l.description||'') + (just ? ` (${just})` : ''), fmtN(up), qty.toLocaleString('nb-NO'), `${Math.round((parseFloat(l.mvaRate)||0)*100)} %`, fmtN(qty*up) ])
+        })
+        return rader
       }),
       theme: 'plain',
       styles: { fontSize: 9, cellPadding: { top:2.6, bottom:2.6, left:0, right:0 }, textColor: hex('#0f172a') },
@@ -13951,7 +13957,10 @@ function postTilFakturalinje(p, opts = {}) {
   const maalOere = opts.maalOere != null ? opts.maalOere : tilOere(postSum(p))
   const kildeQty = parseFloat(p.qty) || 0
   const enhet = p.unit || 'stk'
-  const tekst = (opts.prefiks || '') + (String(p.description || '').trim() || 'Uten beskrivelse')
+  // Kapittelnavnet skal ALDRI inn i beskrivelsen — det lagres i eget felt og
+  // vises som overskriftsrad. Ellers ligger «[Kapittel] » igjen i lines-jsonb
+  // og dukker opp igjen ved redigering og eksport.
+  const tekst = String(p.description || '').trim() || 'Uten beskrivelse'
 
   let qty = 1
   let unitPrice = maalOere / 100
@@ -13979,10 +13988,27 @@ function postTilFakturalinje(p, opts = {}) {
     unitPrice,
     mvaRate: opts.mvaRate != null ? opts.mvaRate : 0.25,
     // ── Visningsdata arvet fra kilden. Inngår ALDRI i noen sumberegning. ──
+    chapter: opts.kapittel || '',
     markup: parseFloat(p.markup) || 0,
     discount: parseFloat(p.discount) || 0,
     show_markup: !!p.show_markup,
   }
+}
+
+// Grupperer fakturalinjer på kapittel for visning. Returnerer én gruppe uten
+// tittel når fakturaen bare har ett kapittel (eller ingen) — da står linjene rene.
+function grupperLinjerPaaKapittel(lines) {
+  const liste = lines || []
+  const navn = [...new Set(liste.map(l => (l && l.chapter) || ''))]
+  if (navn.length <= 1) return [{ tittel: '', linjer: liste }]
+  const grupper = []
+  liste.forEach(l => {
+    const t = (l && l.chapter) || ''
+    const siste = grupper[grupper.length - 1]
+    if (siste && siste.tittel === t) siste.linjer.push(l)
+    else grupper.push({ tittel: t, linjer: [l] })
+  })
+  return grupper
 }
 
 // Bygger alle linjene og legger en eventuell avrundingsrest på siste linje,
@@ -13994,11 +14020,11 @@ function byggFakturalinjer(raa, opts = {}) {
   const fasitOere = Math.round(poster.reduce((a, r) => a + tilOere(postSum(r.p)) * r.faktor, 0))
   const sumMaal = maal.reduce((a, n) => a + n, 0)
   if (sumMaal !== fasitOere) maal[maal.length - 1] += fasitOere - sumMaal
-  return poster.map((r, i) => postTilFakturalinje(r.p, { ...opts, prefiks: r.prefiks, maalOere: maal[i] }))
+  return poster.map((r, i) => postTilFakturalinje(r.p, { ...opts, kapittel: r.kapittel, maalOere: maal[i] }))
 }
 
 // Fakturalinjer fra et kapittel-dokument (tilbud/ordre).
-//   medKapittel        → «[Kapittelnavn] » foran beskrivelsen
+//   medKapittel        → lagre kapittelnavnet på linja (vises som overskriftsrad)
 //   medKapittelPaaslag → gang inn ch.markup (tilbud gjør det, ordre gjør IKKE)
 //   globalMarkup       → gang inn globalt påslag (kun tilbud)
 function kapitlerTilFakturalinjer(chapters, opts = {}) {
@@ -14008,7 +14034,7 @@ function kapitlerTilFakturalinjer(chapters, opts = {}) {
     const kapittel = ch.name || ch.title || ''
     const kapFaktor = opts.medKapittelPaaslag ? 1 + (parseFloat(ch.markup) || 0) / 100 : 1
     ;(ch.posts || ch.lines || []).forEach(p => {
-      raa.push({ p, faktor: kapFaktor * globalFaktor, prefiks: opts.medKapittel && kapittel ? `[${kapittel}] ` : '' })
+      raa.push({ p, faktor: kapFaktor * globalFaktor, kapittel: opts.medKapittel ? kapittel : '' })
     })
   })
   return byggFakturalinjer(raa, opts)
@@ -14016,7 +14042,7 @@ function kapitlerTilFakturalinjer(chapters, opts = {}) {
 
 // Fakturalinjer fra et flatt post-dokument (endringsmelding).
 function posterTilFakturalinjer(posts, opts = {}) {
-  return byggFakturalinjer((posts || []).map(p => ({ p, faktor: 1, prefiks: '' })), opts)
+  return byggFakturalinjer((posts || []).map(p => ({ p, faktor: 1, kapittel: '' })), opts)
 }
 
 // Kildens fasit-sum for et flatt post-dokument.
@@ -25294,7 +25320,10 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
           <div style={iCard}>
             {isMobFD ? (
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                {(inv.lines||[]).map((l,i)=>{
+                {grupperLinjerPaaKapittel(inv.lines).map((g,gi)=>(
+                  <React.Fragment key={gi}>
+                  {g.tittel && <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px', padding:'6px 2px 0' }}>{g.tittel}</div>}
+                  {g.linjer.map((l,i)=>{
                   const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
                   const lineMva=lineNet*(parseFloat(l.mvaRate)||0)
                   return (
@@ -25312,6 +25341,8 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                     </div>
                   )
                 })}
+                  </React.Fragment>
+                ))}
               </div>
             ) : (
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'13px' }}>
@@ -25321,7 +25352,10 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                 ))}
               </tr></thead>
               <tbody>
-                {(inv.lines||[]).map((l,i)=>{
+                {grupperLinjerPaaKapittel(inv.lines).map((g,gi)=>(
+                  <React.Fragment key={gi}>
+                  {g.tittel && <tr><td colSpan={8} style={{ padding:'14px 10px 6px', fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.5px' }}>{g.tittel}</td></tr>}
+                  {g.linjer.map((l,i)=>{
                   const lineNet=(parseFloat(l.qty)||0)*(parseFloat(l.unitPrice)||0)
                   const lineMva=lineNet*(parseFloat(l.mvaRate)||0)
                   return <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
@@ -25338,6 +25372,8 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
                     <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#0f172a' }}>{fmtI(lineNet+lineMva)}</td>
                   </tr>
                 })}
+                  </React.Fragment>
+                ))}
               </tbody>
             </table>
             )}
@@ -25952,6 +25988,14 @@ function FakturaEditorModal({ projects, user, initial, invoices=[], onClose, onS
   )
 }
 
+// ── Fast bunnrad i «Ny faktura fra …»-velgerne ─────────────────────────────
+// Knappene ligger alltid synlig nederst; lista scroller bak dem. Trykkflate
+// 56px — skal kunne treffes med arbeidshansker. safe-area gir plass til
+// hjemindikatoren på iPhone.
+const velgerFot = { padding: '12px 16px calc(12px + env(safe-area-inset-bottom))', borderTop: '1px solid #e2e8f0', background: 'white', display: 'flex', gap: '10px', flexShrink: 0 }
+const velgerAvbrytBtn = { flex: '0 0 auto', minHeight: '56px', padding: '0 22px', border: '1px solid #e2e8f0', borderRadius: '12px', background: 'white', cursor: 'pointer', fontSize: '15px', fontWeight: '600', color: '#374151' }
+const velgerPrimaerBtn = (sperret) => ({ flex: 1, minHeight: '56px', padding: '0 20px', background: sperret ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '12px', cursor: sperret ? 'not-allowed' : 'pointer', fontSize: '15px', fontWeight: '700' })
+
 function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }) {
   const appAlert = useAppAlert()
   const [selectedOrder, setSelectedOrder] = useState('')
@@ -26036,10 +26080,10 @@ function FakturaFraOrdreModal({ orders, projects, user, mode, onClose, onSaved }
               </div>
             </div>
           )}
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleCreate} disabled={saving||!selectedOrder} style={{ padding:'10px 24px', background:saving||!selectedOrder?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedOrder?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
-          </div>
+        </div>
+        <div style={velgerFot}>
+          <button onClick={onClose} style={velgerAvbrytBtn}>Avbryt</button>
+          <button onClick={handleCreate} disabled={saving||!selectedOrder} style={velgerPrimaerBtn(saving||!selectedOrder)}>{saving?'Oppretter...':'Opprett faktura'}</button>
         </div>
       </div>
     </div>
@@ -26090,12 +26134,12 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'500px', maxHeight:'90vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>📋 Faktura fra tilbud</h2>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
         </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
+        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch' }}>
           <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
             {quotes.map(q=>{
               const proj=projects.find(p=>p.id===q.project_id)
@@ -26113,10 +26157,10 @@ function FakturaFraTilbudModal({ quotes, projects, user, onClose, onSaved }) {
               )
             })}
           </div>
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleCreate} disabled={saving||!selectedQuote} style={{ padding:'10px 24px', background:saving||!selectedQuote?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving||!selectedQuote?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
-          </div>
+        </div>
+        <div style={velgerFot}>
+          <button onClick={onClose} style={velgerAvbrytBtn}>Avbryt</button>
+          <button onClick={handleCreate} disabled={saving||!selectedQuote} style={velgerPrimaerBtn(saving||!selectedQuote)}>{saving?'Oppretter...':'Opprett faktura'}</button>
         </div>
       </div>
     </div>
@@ -26197,10 +26241,10 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
             </div>
           )}
           {selectedOrder&&changes.length===0&&<p style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center' }}>Ingen godkjente endringsmeldinger på denne ordren.</p>}
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleCreate} disabled={saving||!selectedOrder||selectedChanges.length===0} style={{ padding:'10px 24px', background:saving||!selectedOrder||selectedChanges.length===0?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Oppretter...':'Opprett faktura'}</button>
-          </div>
+        </div>
+        <div style={velgerFot}>
+          <button onClick={onClose} style={velgerAvbrytBtn}>Avbryt</button>
+          <button onClick={handleCreate} disabled={saving||!selectedOrder||selectedChanges.length===0} style={velgerPrimaerBtn(saving||!selectedOrder||selectedChanges.length===0)}>{saving?'Oppretter...':'Opprett faktura'}</button>
         </div>
       </div>
     </div>
@@ -26276,9 +26320,9 @@ function FakturaFraEndringModal({ endringer, projects, user, onClose, onSaved })
             </div>
           )}
         </div>
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'flex-end', gap:'10px', flexShrink:0 }}>
-          <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-          <button onClick={handleCreate} disabled={saving || !selected} style={{ padding:'10px 24px', background:(saving||!selected)?'#94d3bf':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:(saving||!selected)?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{saving?'Oppretter...':'🧾 Opprett faktura'}</button>
+        <div style={velgerFot}>
+          <button onClick={onClose} style={velgerAvbrytBtn}>Avbryt</button>
+          <button onClick={handleCreate} disabled={saving || !selected} style={velgerPrimaerBtn(saving||!selected)}>{saving?'Oppretter...':'🧾 Opprett faktura'}</button>
         </div>
       </div>
     </div>
@@ -26445,13 +26489,12 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
           )}
         </div>
         {step === 2 && (
-          <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-            <span style={{ fontSize:'13px', color:'#64748b' }}>{selectedCount} poster valgt</span>
-            <div style={{ display:'flex', gap:'10px' }}>
-              <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-              <button onClick={handleCreate} disabled={saving || selectedCount === 0}
-                style={{ padding:'10px 24px', background: saving ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: saving ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'600' }}>
-                {saving ? 'Oppretter...' : `🧾 Opprett delfaktura (${selectedCount} poster)`}
+          <div style={{ ...velgerFot, flexDirection:'column', gap:'8px' }}>
+            <span style={{ fontSize:'13px', color:'#64748b', alignSelf:'flex-start' }}>{selectedCount} poster valgt</span>
+            <div style={{ display:'flex', gap:'10px', width:'100%' }}>
+              <button onClick={onClose} style={velgerAvbrytBtn}>Avbryt</button>
+              <button onClick={handleCreate} disabled={saving || selectedCount === 0} style={velgerPrimaerBtn(saving || selectedCount === 0)}>
+                {saving ? 'Oppretter...' : `🧾 Opprett delfaktura (${selectedCount})`}
               </button>
             </div>
           </div>
