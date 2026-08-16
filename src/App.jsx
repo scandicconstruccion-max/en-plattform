@@ -5851,6 +5851,16 @@ const faseLabel = (id) => PROSJEKT_FASER.find(f => f.id === id)?.label || id
 // Sorter en liste av fase-id-er i den faste rekkefølgen.
 const sorterFaser = (ids) => PROSJEKT_FASER.filter(f => (ids || []).includes(f.id)).map(f => f.id)
 
+// Deriverte kilder for «Alle dokumenter» i Prosjektfiler (steg 2b).
+// REGISTRERES, ikke kopieres: radene leses live fra kilden, peker tilbake dit,
+// og forsvinner av seg selv om kilden slettes. Alle ligger i fase Utførelse.
+const DERIVERTE_KILDER = [
+  { key: 'avvik', tabell: 'deviations',         kilde: 'Fra Avvik',           side: 'avvik',           kategori: 'kontroll', doc_type: 'avvik',            fase: 'utforelse', nrfelt: null,           emoji: '⚠️' },
+  { key: 'ordre', tabell: 'orders',             kilde: 'Fra Ordre',           side: 'ordre',           kategori: 'okonomi',  doc_type: 'ordre',            fase: 'utforelse', nrfelt: 'order_number', emoji: '📦' },
+  { key: 'em',    tabell: 'endringsmeldinger',  kilde: 'Fra Endringsmelding', side: 'endringsmelding', kategori: 'okonomi',  doc_type: 'endringsmeldinger',fase: 'utforelse', nrfelt: 'em_number',    emoji: '🔄' },
+  { key: 'sjekk', tabell: 'checklists',         kilde: 'Fra Sjekklister',     side: 'sjekklister',     kategori: 'kontroll', doc_type: 'sjekklister',      fase: 'utforelse', nrfelt: null,           emoji: '✅', kunRegistrerte: true },
+]
+
 const formatFileSize = (bytes) => {
   if (!bytes) return ''
   if (bytes < 1024) return `${bytes} B`
@@ -5986,6 +5996,12 @@ function ProsjektfilerPage() {
   const [projectMeta, setProjectMeta] = useState(null)       // { phases, required_docs, active_phase, document_template_id }
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
   const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
+  // Steg 2b: registrering fra andre moduler (deriverte, live-leste rader)
+  const [visAlle, setVisAlle] = useState(false)              // false = «Bare opplastede» (standard)
+  const [derivedFulfilled, setDerivedFulfilled] = useState(() => new Set()) // Set("fase|doc_type") oppfylt av kilder
+  const [derivedRows, setDerivedRows] = useState({})         // { [kategori]: [ {id, tittel, status, nr, kilde, side, emoji} ] }
+  const [derivedTotals, setDerivedTotals] = useState({})     // { [key]: totalt antall i kilden }
+  const [derivedReady, setDerivedReady] = useState(false)    // deriverte tellere lastet? (for å unngå blink i «X av Y»)
   const [online, setOnline] = useState(typeof navigator !== 'undefined' ? navigator.onLine !== false : true)
   const [existingDocs, setExistingDocs] = useState([])   // aktive dokumenter i opplastingsprosjektet (revisjonsforslag)
   const [loading, setLoading] = useState(false)
@@ -6105,6 +6121,41 @@ function ProsjektfilerPage() {
     } catch (e) { console.warn('[prosjektfiler] prosjektmeta feilet', e); setProjectMeta(null); setWaivers([]); setViewedPhase(null) }
   }
 
+  // Steg 2b: deriverte kilder (avvik/ordre/EM/registrerte sjekklister) for prosjektet.
+  // Presens teller for faseoppfyllelse (≥1 → kravet oppfylt). Hver kilde hentes med
+  // limit + count fra DB (aldri hele tabellen) → treffer ikke 1000-grensen.
+  const loadDerived = async (projectId, opts = {}) => {
+    if (!projectId || projectId === 'all') { setDerivedFulfilled(new Set()); setDerivedRows({}); setDerivedTotals({}); setDerivedReady(true); return }
+    // Ved rent visnings-bytte (behold=true) rører vi ikke derivedReady, så «X av Y»
+    // ikke blinker — oppfyllelsen er allerede kjent og endres ikke av bryteren.
+    if (!opts.behold) setDerivedReady(false)
+    try {
+      const oppfylt = new Set(), rader = {}, totals = {}
+      // Hver kilde uavhengig: én feilende kilde (f.eks. manglende kolonne) skal
+      // ikke slå ut de andre.
+      await Promise.all(DERIVERTE_KILDER.map(async (k) => {
+        try {
+          const felt = ['id', 'title', 'status', 'project_id', 'created_at'].concat(k.nrfelt ? [k.nrfelt] : []).join(',')
+          let q = supabase.from(k.tabell).select(felt, { count: 'exact' }).eq('project_id', projectId)
+          if (k.kunRegistrerte) q = q.eq('i_prosjektfiler', true)
+          q = q.order('created_at', { ascending: false }).limit(50)
+          const { data, count, error } = await q
+          if (error) throw error
+          const n = count || 0
+          totals[k.key] = n
+          if (n > 0) oppfylt.add(k.fase + '|' + k.doc_type)
+          if (visAlle) {
+            const liste = (data || []).map(r => ({ id: r.id, tittel: r.title || '(uten tittel)', status: r.status || '', nr: k.nrfelt ? r[k.nrfelt] : null, kilde: k.kilde, side: k.side, emoji: k.emoji, key: k.key }))
+            rader[k.kategori] = (rader[k.kategori] || []).concat(liste)
+          }
+        } catch (e) { console.warn('[prosjektfiler] kilde feilet:', k.key, e); totals[k.key] = 0 }
+      }))
+      setDerivedFulfilled(oppfylt); setDerivedRows(rader); setDerivedTotals(totals)
+    } catch (e) {
+      console.warn('[prosjektfiler] deriverte kilder feilet', e)
+    } finally { setDerivedReady(true) }
+  }
+
   // Fillista: aktive dokumenter for valgt kategori/undermappe/søk, paginert fra DB.
   // Første side (uten søk) speiles til IndexedDB, så lista kan leses offline.
   const loadPanel = async (reset) => {
@@ -6167,6 +6218,7 @@ function ProsjektfilerPage() {
     if (selectedProject === 'all') return
     await loadCounts(selectedProject)
     await loadProjectMeta(selectedProject)
+    await loadDerived(selectedProject)
     await loadPanel(true)
     if (showArchive) await loadArchived()
   }
@@ -6191,11 +6243,19 @@ function ProsjektfilerPage() {
 
   // Bytt prosjekt → last tellere + mal-snapshot. (Kategori/undermappe nullstilles i velgeren.)
   useEffect(() => {
-    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); setProjectMeta(null); setWaivers([]); setViewedPhase(null); return }
+    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); setProjectMeta(null); setWaivers([]); setViewedPhase(null); setDerivedFulfilled(new Set()); setDerivedRows({}); setDerivedTotals({}); setDerivedReady(false); return }
     loadCounts(selectedProject)
     loadProjectMeta(selectedProject)
+    loadDerived(selectedProject)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
+
+  // «Bare opplastede» ↔ «Alle dokumenter»: hent (evt. tøm) deriverte rader.
+  // behold=true → ikke nullstill oppfyllelses-status (unngår blink i «X av Y»).
+  useEffect(() => {
+    if (selectedProject !== 'all') loadDerived(selectedProject, { behold: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visAlle])
 
   // Bytt kategori/undermappe → last første side. Søk er debouncet.
   useEffect(() => {
@@ -6245,7 +6305,11 @@ function ProsjektfilerPage() {
   const projectFaser = hasFaser ? sorterFaser(projectMeta.phases) : []
   const requiredDocs = Array.isArray(projectMeta?.required_docs) ? projectMeta.required_docs : []
   const isWaived = (phase, doc_type) => waivers.some(w => w.phase === phase && w.doc_type === doc_type)
-  const isFulfilled = (phase, doc_type) => fulfilled.has(phase + '|' + doc_type)
+  // ÉN sannhet: et krav er oppfylt av enten en opplastet fil (RPC) ELLER en
+  // registrert post fra en annen modul (deriverte kilder).
+  const isFulfilled = (phase, doc_type) => fulfilled.has(phase + '|' + doc_type) || derivedFulfilled.has(phase + '|' + doc_type)
+  // «X av Y» er klart først når BEGGE kildene er lastet — hindrer at tallet blinker.
+  const fulfillmentKlar = countsKnown && derivedReady
   const reqForPhase = (phase) => requiredDocs.filter(r => r.phase === phase)
   // X av Y for en fase (Y = påkrevde minus «ikke aktuelt», X = oppfylte)
   const faseProgress = (phase) => {
@@ -6259,7 +6323,8 @@ function ProsjektfilerPage() {
   const waivedForView = viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === selectedCategory && isWaived(viewedPhase, r.doc_type)) : []
   const waiverFor = (phase, doc_type) => waivers.find(w => w.phase === phase && w.doc_type === doc_type)
   // Antall manglende krav i valgt fase for en kategori (0 = ingen mangler).
-  const catManglerAntall = (catId) => viewedPhase ? reqForPhase(viewedPhase).filter(r => r.category === catId && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)).length : 0
+  // Ikke marker rødt før oppfyllelsen er klar (unngår rød blink mens kilder lastes).
+  const catManglerAntall = (catId) => (fulfillmentKlar && viewedPhase) ? reqForPhase(viewedPhase).filter(r => r.category === catId && !isWaived(viewedPhase, r.doc_type) && !isFulfilled(viewedPhase, r.doc_type)).length : 0
 
   // ── Fase-/mal-handlere ──────────────────────────────────────────────────────
   const [waiveTarget, setWaiveTarget] = useState(null)   // { phase, doc_type, label }
@@ -6500,7 +6565,7 @@ function ProsjektfilerPage() {
 
   // Manglende + «ikke aktuelt»-krav for valgt fase og kategori — vises nederst i lista.
   const renderKravBlokk = () => {
-    if (!hasFaser || !viewedPhase || !selectedCategory) return null
+    if (!hasFaser || !viewedPhase || !selectedCategory || !fulfillmentKlar) return null
     if (missingForView.length === 0 && waivedForView.length === 0) return null
     return (
       <div style={{ marginTop: '16px' }}>
@@ -6536,6 +6601,50 @@ function ProsjektfilerPage() {
             </div>
           )
         })}
+      </div>
+    )
+  }
+
+  // Bryter «Bare opplastede» ↔ «Alle dokumenter» (registrering fra andre moduler).
+  const renderVisningToggle = () => (
+    <div style={{ display: 'inline-flex', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', flexShrink: 0 }}>
+      {[['opplastede', 'Bare opplastede'], ['alle', 'Alle dokumenter']].map(([v, l]) => {
+        const aktiv = (v === 'alle') === visAlle
+        return (
+          <button key={v} onClick={() => setVisAlle(v === 'alle')}
+            style={{ padding: '8px 12px', minHeight: '40px', border: 'none', background: aktiv ? '#059669' : 'white', color: aktiv ? 'white' : '#475569', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>{l}</button>
+        )
+      })}
+    </div>
+  )
+
+  // Registrerte poster fra andre moduler (deriverte, live) i valgt kategori.
+  // Vises kun i «Alle dokumenter». Peker tilbake til posten via deep-link.
+  const renderDerivertBlokk = () => {
+    if (!visAlle || !selectedCategory) return null
+    const rader = derivedRows[selectedCategory] || []
+    if (rader.length === 0) return null
+    const overskudd = DERIVERTE_KILDER.filter(k => k.kategori === selectedCategory && (derivedTotals[k.key] || 0) > 50)
+    return (
+      <div style={{ marginTop: '16px' }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', letterSpacing: '0.06em', marginBottom: '6px' }}>REGISTRERT FRA ANDRE MODULER ({rader.length})</div>
+        {rader.map(r => (
+          <div key={r.side + r.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', minHeight: '56px', background: 'white', border: '1px solid #f1f5f9', borderRadius: '12px', marginBottom: '6px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '18px', flexShrink: 0 }}>{r.emoji}</span>
+            <div style={{ flex: 1, minWidth: '140px' }}>
+              <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tittel}{r.nr ? ` · ${r.nr}` : ''}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '11px', fontWeight: '600', color: '#475569', background: '#f1f5f9', borderRadius: '999px', padding: '1px 8px' }}>{r.kilde}</span>
+                {r.status && <span style={{ fontSize: '11px', color: '#94a3b8' }}>{r.status}</span>}
+              </div>
+            </div>
+            <button onClick={() => { if (window.__navigate) window.__navigate(r.side, r.id) }}
+              style={{ minHeight: '44px', padding: '8px 14px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', flexShrink: 0 }}>Åpne →</button>
+          </div>
+        ))}
+        {overskudd.map(k => (
+          <div key={k.key} style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>+ {(derivedTotals[k.key] || 0) - 50} flere {k.kilde.replace('Fra ', '').toLowerCase()} — åpne modulen for alle</div>
+        ))}
       </div>
     )
   }
@@ -6605,13 +6714,13 @@ function ProsjektfilerPage() {
                 {projectFaser.map(fid => {
                   const pr = faseProgress(fid)
                   const gronn = viewedPhase === fid            // grønn = valgt/vist fase (default = aktiv ved lasting)
-                  const harMangler = pr.y > 0 && pr.x < pr.y
+                  const harMangler = fulfillmentKlar && pr.y > 0 && pr.x < pr.y
                   return (
                     <button key={fid} onClick={() => setViewedPhase(fid)}
                       style={{ position: 'relative', height: '64px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '2px', padding: '6px 4px', borderRadius: '12px', border: `1px solid ${gronn ? '#059669' : '#e2e8f0'}`, background: gronn ? '#f0fdf4' : 'white', cursor: 'pointer', boxSizing: 'border-box' }}>
                       {harMangler && <span title="Mangler påkrevd dokument" style={{ position: 'absolute', top: '6px', right: '6px', width: '8px', height: '8px', borderRadius: '50%', background: '#dc2626' }} />}
                       <span style={{ maxWidth: '100%', fontSize: '13.5px', fontWeight: '600', color: gronn ? '#047857' : '#374151', lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{faseLabel(fid)}</span>
-                      {pr.y > 0 && <span style={{ fontSize: '12.5px', fontWeight: '700', color: gronn ? '#059669' : (pr.x >= pr.y ? '#059669' : '#94a3b8') }}>{pr.x}/{pr.y}</span>}
+                      {fulfillmentKlar && pr.y > 0 && <span style={{ fontSize: '12.5px', fontWeight: '700', color: gronn ? '#059669' : (pr.x >= pr.y ? '#059669' : '#94a3b8') }}>{pr.x}/{pr.y}</span>}
                     </button>
                   )
                 })}
@@ -6630,7 +6739,7 @@ function ProsjektfilerPage() {
                     style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', borderRadius: '999px', border: `1px solid ${isViewed ? '#059669' : '#e2e8f0'}`, background: isViewed ? '#f0fdf4' : 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: isViewed ? '#059669' : '#475569', whiteSpace: 'nowrap' }}>
                     {isActive && <span title="Aktiv fase">⚑</span>}
                     {faseLabel(fid)}
-                    {pr.y > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: komplett ? '#059669' : '#94a3b8', background: komplett ? '#dcfce7' : '#f1f5f9', borderRadius: '999px', padding: '1px 7px' }}>{pr.x}/{pr.y}</span>}
+                    {fulfillmentKlar && pr.y > 0 && <span style={{ fontSize: '11px', fontWeight: '700', color: komplett ? '#059669' : '#94a3b8', background: komplett ? '#dcfce7' : '#f1f5f9', borderRadius: '999px', padding: '1px 7px' }}>{pr.x}/{pr.y}</span>}
                   </button>
                 )
               })}
@@ -6643,14 +6752,16 @@ function ProsjektfilerPage() {
               <div style={{ marginTop: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', marginBottom: '5px', flexWrap: 'wrap' }}>
                   <span style={{ fontSize: '12px', fontWeight: '600', color: '#475569' }}>
-                    {pr.y > 0 ? `${pr.x} av ${pr.y} påkrevde dokumenter i ${faseLabel(viewedPhase)}` : `Ingen påkrevde dokumenter i ${faseLabel(viewedPhase)}`}
-                    {pr.waived > 0 ? ` · ${pr.waived} ikke aktuelt` : ''}
+                    {!fulfillmentKlar
+                      ? `Sjekker dokumenter i ${faseLabel(viewedPhase)}…`
+                      : (pr.y > 0 ? `${pr.x} av ${pr.y} påkrevde dokumenter i ${faseLabel(viewedPhase)}` : `Ingen påkrevde dokumenter i ${faseLabel(viewedPhase)}`)}
+                    {fulfillmentKlar && pr.waived > 0 ? ` · ${pr.waived} ikke aktuelt` : ''}
                   </span>
                   {projectMeta?.active_phase !== viewedPhase && (
                     <button onClick={() => setActivePhase(viewedPhase)} style={{ background: 'none', border: 'none', color: '#059669', fontSize: '12px', fontWeight: '600', cursor: 'pointer', padding: 0 }}>⚑ Sett som aktiv fase</button>
                   )}
                 </div>
-                {pr.y > 0 && (
+                {fulfillmentKlar && pr.y > 0 && (
                   <div style={{ height: '6px', background: '#f1f5f9', borderRadius: '999px', overflow: 'hidden' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: pct >= 100 ? '#059669' : '#22c55e', transition: 'width 0.3s' }} />
                   </div>
@@ -6727,6 +6838,7 @@ function ProsjektfilerPage() {
                 <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
                   style={{ padding: '8px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '18px', flexShrink: 0 }}>⬆️</button>
               </div>
+              <div style={{ marginBottom: '12px' }}>{renderVisningToggle()}</div>
               {catSupportsRevision && (
                 <button onClick={() => setShowArchive(v => !v)}
                   style={{ width: '100%', padding: '8px', background: showArchive ? '#f0fdf4' : 'white', color: showArchive ? '#059669' : '#64748b', border: `1px solid ${showArchive ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
@@ -6770,6 +6882,7 @@ function ProsjektfilerPage() {
                 </div>
               )}
               {renderKravBlokk()}
+              {renderDerivertBlokk()}
             </>
           )}
         </div>
@@ -6866,6 +6979,7 @@ function ProsjektfilerPage() {
                       🗄️ {showArchive ? 'Skjul arkiv' : 'Vis arkiverte revisjoner'}
                     </button>
                   )}
+                  {renderVisningToggle()}
                 </div>
                 <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
                   style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
@@ -6938,6 +7052,7 @@ function ProsjektfilerPage() {
                 </div>
               )}
               {renderKravBlokk()}
+              {renderDerivertBlokk()}
             </>
           )}
         </div>
@@ -7732,6 +7847,29 @@ function SjekklistePage({ onNavigateDetail }) {
 
   useEffect(() => { loadData() }, [])
 
+  // Deep-link fra Prosjektfiler: åpne sjekklista fra window.__pendingLinkId.
+  useEffect(() => {
+    const pendingId = window.__pendingLinkId
+    if (!pendingId || !checklists.length) return
+    if (checklists.some(c => c.id === pendingId)) { window.__pendingLinkId = null; onNavigateDetail(pendingId) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checklists])
+
+  // «Legg i prosjektfiler» — registrer/avregistrer sjekklista (opt-in, flagg på raden).
+  const toggleIProsjektfiler = async (c) => {
+    const ny = !c.i_prosjektfiler
+    setChecklists(prev => prev.map(x => x.id === c.id ? { ...x, i_prosjektfiler: ny } : x))  // optimistisk
+    try {
+      const { error } = await supabase.from('checklists')
+        .update({ i_prosjektfiler: ny, i_prosjektfiler_at: ny ? new Date().toISOString() : null })
+        .eq('id', c.id)
+      if (error) throw error
+    } catch (e) {
+      setChecklists(prev => prev.map(x => x.id === c.id ? { ...x, i_prosjektfiler: !ny } : x))  // rull tilbake
+      await alert({ message: 'Kunne ikke oppdatere', subMessage: e.message, kind: 'error' })
+    }
+  }
+
   const filtered = checklists.filter(c => {
     const ms = !search || c.title?.toLowerCase().includes(search.toLowerCase())
     const mp = projectFilter === 'all' || c.project_id === projectFilter
@@ -8016,7 +8154,12 @@ function SjekklistePage({ onNavigateDetail }) {
                           <span style={{ fontSize: '12px', color: '#64748b', flexShrink: 0 }}>{progress}%</span>
                         </div>
                       </div>
-                      <button onClick={e => { e.stopPropagation(); handleDeleteChecklist(c.id) }} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px', flexShrink: 0 }}>🗑️</button>
+                      <button onClick={e => { e.stopPropagation(); toggleIProsjektfiler(c) }}
+                        title={c.i_prosjektfiler ? 'Fjern fra prosjektfiler' : 'Legg i prosjektfiler'}
+                        style={{ background: c.i_prosjektfiler ? '#f0fdf4' : '#f8fafc', color: c.i_prosjektfiler ? '#059669' : '#64748b', border: `1px solid ${c.i_prosjektfiler ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '8px', padding: isMob ? '8px 10px' : '8px 12px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', flexShrink: 0, whiteSpace: 'nowrap', minHeight: '44px' }}>
+                        {c.i_prosjektfiler ? (isMob ? '✓ 📁' : '✓ I prosjektfiler') : (isMob ? '📁' : '📁 Legg i prosjektfiler')}
+                      </button>
+                      <button onClick={e => { e.stopPropagation(); handleDeleteChecklist(c.id) }} style={{ background: '#fef2f2', color: '#dc2626', border: 'none', borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', fontSize: '14px', flexShrink: 0, minHeight: '44px' }}>🗑️</button>
                     </button>
                   )
                 })}
@@ -9231,6 +9374,16 @@ function AvvikPage() {
   }
 
   useEffect(() => { loadData() }, [])
+
+  // Deep-link fra andre moduler (bl.a. Prosjektfiler): åpne avviket fra
+  // window.__pendingLinkId når lista er lastet. Gjenbruker varsel-mekanikken.
+  useEffect(() => {
+    const pendingId = window.__pendingLinkId
+    if (!pendingId || !deviations.length) return
+    const dev = deviations.find(d => d.id === pendingId)
+    if (dev) { window.__pendingLinkId = null; setSelected(dev) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deviations])
 
   // Offline Lag 3: når skrivekøen er synket ferdig, last lista på nytt
   // så optimistiske «venter på synk»-rader erstattes av server-data (med AV-nummer).
