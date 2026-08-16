@@ -5900,7 +5900,8 @@ const faseLabel = (id) => PROSJEKT_FASER.find(f => f.id === id)?.label || id
 // Sorter en liste av fase-id-er i den faste rekkefølgen.
 const sorterFaser = (ids) => PROSJEKT_FASER.filter(f => (ids || []).includes(f.id)).map(f => f.id)
 
-// Deriverte kilder for «Alle dokumenter» i Prosjektfiler (steg 2b).
+// Deriverte kilder som vises når «Vis også påkrevde dokumenter og registreringer»
+// er påhuket i Prosjektfiler (steg 2b).
 // REGISTRERES, ikke kopieres: radene leses live fra kilden, peker tilbake dit,
 // og forsvinner av seg selv om kilden slettes. Alle ligger i fase Utførelse.
 const DERIVERTE_KILDER = [
@@ -6046,7 +6047,10 @@ function ProsjektfilerPage() {
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
   const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
   // Steg 2b: registrering fra andre moduler (deriverte, live-leste rader)
-  const [visAlle, setVisAlle] = useState(false)              // false = «Bare opplastede» (standard)
+  // Avkryssingen «Vis også påkrevde dokumenter og registreringer». false = kun filer
+  // (standard). Vanlig React-state: holder seg når man bytter kategori og fase,
+  // men nullstilles ved sidelasting og når man forlater modulen.
+  const [visAlle, setVisAlle] = useState(false)
   const [derivedFulfilled, setDerivedFulfilled] = useState(() => new Set()) // Set("fase|doc_type") oppfylt av kilder
   const [derivedRows, setDerivedRows] = useState({})         // { [kategori]: [ {id, tittel, status, nr, kilde, side, emoji} ] }
   const [derivedTotals, setDerivedTotals] = useState({})     // { [key]: totalt antall i kilden }
@@ -6299,7 +6303,7 @@ function ProsjektfilerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
 
-  // «Bare opplastede» ↔ «Alle dokumenter»: hent (evt. tøm) deriverte rader.
+  // Avkryssingen slås av/på: hent (evt. tøm) deriverte rader.
   // behold=true → ikke nullstill oppfyllelses-status (unngår blink i «X av Y»).
   useEffect(() => {
     if (selectedProject !== 'all') loadDerived(selectedProject, { behold: true })
@@ -6669,21 +6673,31 @@ function ProsjektfilerPage() {
     )
   }
 
-  // Bryter «Bare opplastede» ↔ «Alle dokumenter» (registrering fra andre moduler).
+  // Avkryssing for om registreringer fra andre moduler skal legges TIL lista.
+  // Bevisst ikke to knapper: de to visningene er ikke likestilte alternativer —
+  // den ene inneholder alt den andre har, pluss mer. En avkryssing viser at
+  // brukeren legger noe til, ikke velger mellom to ting.
+  // Avhuket (standard) = kun filer. Påhuket = filer + krav + registreringer.
   const renderVisningToggle = () => (
-    <div style={{ display: 'inline-flex', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', flexShrink: 0 }}>
-      {[['opplastede', 'Bare opplastede'], ['alle', 'Alle dokumenter']].map(([v, l]) => {
-        const aktiv = (v === 'alle') === visAlle
-        return (
-          <button key={v} onClick={() => setVisAlle(v === 'alle')}
-            style={{ padding: '8px 12px', minHeight: '40px', border: 'none', background: aktiv ? '#059669' : 'white', color: aktiv ? 'white' : '#475569', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>{l}</button>
-        )
-      })}
-    </div>
+    <label
+      style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        minHeight: '48px', padding: '6px 12px 6px 10px',
+        border: `1px solid ${visAlle ? '#bbf7d0' : '#e2e8f0'}`,
+        background: visAlle ? '#f0fdf4' : 'white',
+        borderRadius: '10px', cursor: 'pointer', userSelect: 'none',
+        maxWidth: '100%', boxSizing: 'border-box',
+      }}>
+      <input type="checkbox" checked={visAlle} onChange={e => setVisAlle(e.target.checked)}
+        style={{ width: '20px', height: '20px', accentColor: '#059669', cursor: 'pointer', flexShrink: 0, margin: 0 }} />
+      <span style={{ fontSize: '13px', fontWeight: '600', color: visAlle ? '#166534' : '#475569', lineHeight: 1.35 }}>
+        Vis også påkrevde dokumenter og registreringer
+      </span>
+    </label>
   )
 
   // Registrerte poster fra andre moduler (deriverte, live) i valgt kategori.
-  // Vises kun i «Alle dokumenter». Peker tilbake til posten via deep-link.
+  // Vises kun når avkryssingen er påhuket. Peker tilbake til posten via deep-link.
   const renderDerivertBlokk = () => {
     if (!visAlle || !selectedCategory) return null
     // Fasen er FAST for disse kildene (alle: Utførelse). Har prosjektet en mal,
@@ -6938,14 +6952,13 @@ function ProsjektfilerPage() {
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '13px', fontWeight: '600', padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 ← Tilbake til kategorier
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
+              {/* Opplasting ligger KUN i headeren — også på mobil. */}
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
                   <input value={search} onChange={e => setSearch(e.target.value)} disabled={!online} placeholder={online ? 'Søk etter filer...' : 'Søk krever nett'}
                     style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
                 </div>
-                <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
-                  style={{ padding: '8px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '18px', flexShrink: 0 }}>⬆️</button>
               </div>
               <div style={{ marginBottom: '12px' }}>{renderVisningToggle()}</div>
               {catSupportsRevision && (
@@ -6961,7 +6974,7 @@ function ProsjektfilerPage() {
                 renderTomtilstand(true)
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({totalCount})</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>FILER ({totalCount})</div>
                   {fileGroups.map(group => {
                     const current = group[0]
                     const docGroup = current.document_group || current.id
@@ -6997,9 +7010,11 @@ function ProsjektfilerPage() {
 
         {/* LEFT: Category list */}
         <div style={{ width: '260px', flexShrink: 0, background: 'white', borderRight: '1px solid #e2e8f0', overflowY: 'auto', padding: '12px 0' }}>
-          <div style={{ padding: '4px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Ingen «+» her: en pluss i en overskrift som heter KATEGORIER leser
+              som «legg til kategori», ikke «last opp fil». Opplasting ligger
+              kun i headeren. */}
+          <div style={{ padding: '4px 16px 10px' }}>
             <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.07em' }}>KATEGORIER</span>
-            <button onClick={() => setShowUpload(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '20px', lineHeight: 1 }}>+</button>
           </div>
           {FILE_CATEGORIES.map(cat => {
             const catCount = countForCat(cat.id)
@@ -7068,8 +7083,10 @@ function ProsjektfilerPage() {
             <>
               {/* Toolbar: search + archive toggle + upload */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ position: 'relative' }}>
+                {/* flexWrap: avkryssingen skal legge seg under søkefeltet på smale
+                    vinduer, ikke klemme det sammen. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
                     <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
                     <input value={search} onChange={e => setSearch(e.target.value)} disabled={!online} placeholder={online ? 'Søk etter filer...' : 'Søk krever nett'}
                       style={{ paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
@@ -7100,7 +7117,7 @@ function ProsjektfilerPage() {
               ) : (
                 <div data-tour="fil-dokumenter" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.06em' }}>
-                    DOKUMENTER ({totalCount})
+                    FILER ({totalCount})
                   </div>
                   {/* Each group: current revision + archived revisions inline below */}
                   {fileGroups.map(group => {
@@ -19038,6 +19055,9 @@ function EndringsmeldingPage() {
       const { data: newInvoice, error } = await supabase.from('invoices').insert({
         title: em.title || `Faktura for ${emNr}`,
         invoice_number: newInvoiceNumber,
+        // Kobling til endringsmeldingen. invoices.em_id har ON DELETE RESTRICT,
+        // så EM-en kan ikke slettes bort under fakturaen når denne er satt.
+        em_id: em.id,
         project_id: em.project_id || null,
         customer_id: em.customer_id || null,
         customer_name: em.customer_name || '',
@@ -26838,6 +26858,19 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
         invoice_date:new Date().toISOString().split('T')[0],
         due_date:addDays(new Date().toISOString().split('T')[0],paymentDays(ord.payment_terms)),
         lines, status:'Utkast', created_by:user?.id,
+        // em_id er én uuid, mens denne veien kan fakturere FLERE endringsmeldinger
+        // samtidig. Er det nøyaktig én, settes koblingen og ON DELETE RESTRICT
+        // verner den. Er det flere, kan ikke kolonnen holde dem alle — da settes
+        // den ikke, og ingen av dem får slettevern. Se rapport: dette krever en
+        // koblingstabell for å løses helt.
+        em_id: selChanges.length === 1 ? selChanges[0].id : null,
+        // Sporet til ALLE endringsmeldingene loggføres uansett, også når em_id
+        // ikke kan settes fordi fakturaen dekker flere. Da finnes koblingen i
+        // det minste ett sted.
+        activity_log: [fakturaLogg(user, 'Opprettet', {
+          fra: `ordre ${ord.order_number || ''}`.trim(),
+          dekker: selChanges.map(c => (c.em_number || '') + emRevSuffix(c.revision_number)).filter(Boolean),
+        })],
       })
       const { error } = await supabase.from('invoices').insert(beriket3)
       if (error) throw error
@@ -26911,6 +26944,8 @@ function FakturaFraEndringModal({ endringer, projects, user, onClose, onSaved })
       const nextInvNr = (nextInvoiceNumber(existingInv || []) || '1')
       const beriket = await berikFakturaMedInnstillinger({
         title: em.title || ('Endringsmelding ' + emNr), invoice_number: nextInvNr,
+        // ON DELETE RESTRICT: EM-en kan ikke slettes bort under fakturaen.
+        em_id: em.id,
         project_id: em.project_id || null,
         customer_name: em.customer_name || '', customer_email: em.customer_email || '',
         payment_terms: '30 dager netto',
@@ -38131,7 +38166,10 @@ function KunderPage() {
       const [k, p, q, inv] = await Promise.all([
         supabase.from('customers').select('*').order('name').then(r => r.data || []),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
-        supabase.from('quotes').select('id,title,status,total_amount,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
+        // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
+        // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
+        // tung jsonb og skal ikke hentes for alle kunders tilbud her.
+        supabase.from('quotes').select('id,title,status,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
       setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
@@ -38367,6 +38405,11 @@ function KunderPage() {
   )
 }
 
+// Kundetidslinjen henter chapters for å regne ut ordrebeløp. Det er tung jsonb,
+// så antallet er bundet. En kronologisk historikk trenger ikke vise mer enn
+// dette; ordrene ut over grensen er de eldste, og de vises i Ordre-modulen.
+const CRM_ORDRE_GRENSE = 100
+
 function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
@@ -38375,6 +38418,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
   const [notater, setNotater] = useState([])
   const [ordrer, setOrdrer] = useState([])
   const [avvik, setAvvik] = useState([])
+  const [tilbudBelop, setTilbudBelop] = useState({})   // tilbud-id → sum fra calcQuote
   const [nyttNotat, setNyttNotat] = useState('')
   const [showNyKontakt, setShowNyKontakt] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -38385,19 +38429,38 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
     setLoading(true)
     try {
       const projIds = prosjekter.map(p => p.id)
-      const [k, n, ord, avv] = await Promise.all([
+      // Tilbudene er allerede filtrert til denne kunden av forelderen (på
+      // customer_id ELLER navn), så vi henter chapters for nøyaktig de id-ene
+      // visningen har — ikke bredt. Samme grense som ordrelinja.
+      const tilbudIds = (tilbud || []).slice(0, CRM_ORDRE_GRENSE).map(t => t.id).filter(Boolean)
+      const [k, n, ord, avv, qKap] = await Promise.all([
         supabase.from('customer_contacts').select('*').eq('customer_id', kunde.id).order('name').then(r => r.data || []),
         supabase.from('customer_notes').select('*').eq('customer_id', kunde.id).order('created_at', {ascending:false}).then(r => r.data || []),
-        supabase.from('orders').select('id,title,status,total_amount,customer_id,created_at').eq('customer_id', kunde.id).order('created_at',{ascending:false}).then(r => r.data || []),
+        // Beløpet regnes fra chapters, ikke fra orders.total_amount. Den kolonnen
+        // vedlikeholdes ikke — den settes kun ved revisjon og anbudstildeling, og
+        // står urørt når ordren redigeres. Den ville vist et gammelt beløp som
+        // fakta i kundebildet.
+        // chapters er tung jsonb, så spørringen er dobbelt avgrenset: kun denne
+        // kundens ordrer, og maks CRM_ORDRE_GRENSE av de nyeste.
+        supabase.from('orders').select('id,title,status,customer_id,created_at,chapters').eq('customer_id', kunde.id).order('created_at',{ascending:false}).limit(CRM_ORDRE_GRENSE).then(r => r.data || []),
         projIds.length > 0
           ? supabase.from('deviations').select('id,title,status,severity,project_id,created_at').in('project_id', projIds).order('created_at',{ascending:false}).then(r => r.data || [])
           : Promise.resolve([]),
+        tilbudIds.length > 0
+          ? supabase.from('quotes').select('id,chapters,global_markup').in('id', tilbudIds).then(r => r.data || [])
+          : Promise.resolve([]),
       ])
       setKontakter(k); setNotater(n); setOrdrer(ord); setAvvik(avv)
+      // Oppslag tilbud-id → sum, regnet med calcQuote (kapittelpåslag + globalt
+      // påslag). quotes.total_amount vedlikeholdes ikke og brukes ikke her.
+      setTilbudBelop(Object.fromEntries((qKap || []).map(q => [q.id, calcQuote(q.chapters || [], q.global_markup).grandTotal])))
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
-  useEffect(() => { loadDetails() }, [])
+  // Kjør på nytt hvis settet av tilbud endrer seg. Nøkkelen er innholdsbasert —
+  // tilbud-propen er et nytt array ved hver render og duger ikke som avhengighet.
+  const tilbudNokkel = (tilbud || []).map(t => t.id).join(',')
+  useEffect(() => { loadDetails() }, [tilbudNokkel])
 
   const lagreNotat = async () => {
     if (!nyttNotat.trim()) return
@@ -38435,12 +38498,20 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
   const buildTimeline = () => {
     const events = []
     prosjekter.forEach(p => events.push({ date: p.created_at || p.start_date || '2020-01-01', type: 'prosjekt', icon: '🏗️', color: '#059669', title: p.name, sub: `Status: ${p.status || 'Aktiv'}` }))
-    tilbud.forEach(t => events.push({ date: t.created_at, type: 'tilbud', icon: '📋', color: '#2563eb', title: t.title, sub: `${t.status}${t.total_amount ? ' · ' + Math.round(t.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` }))
+    tilbud.forEach(t => {
+      const belop = tilbudBelop[t.id] || 0
+      events.push({ date: t.created_at, type: 'tilbud', icon: '📋', color: '#2563eb', title: t.title, sub: `${t.status}${belop ? ' · ' + Math.round(belop).toLocaleString('nb-NO') + ' kr' : ''}` })
+    })
     fakturaer.forEach(f => {
       const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
       events.push({ date: f.created_at, type: 'faktura', icon: '🧾', color: isOverdue ? '#dc2626' : f.status === 'Betalt' ? '#059669' : '#d97706', title: f.title, sub: `${isOverdue ? 'Forfalt' : f.status}${fakturaBelop(f) ? ' · ' + Math.round(fakturaBelop(f)).toLocaleString('nb-NO') + ' kr' : ''}` })
     })
-    ordrer.forEach(o => events.push({ date: o.created_at, type: 'ordre', icon: '📦', color: '#7c3aed', title: o.title, sub: `${o.status || 'Aktiv'}${o.total_amount ? ' · ' + Math.round(o.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` }))
+    ordrer.forEach(o => {
+      // Samme fasit som ordremodulen selv viser. calcOrder ignorerer globalt
+      // påslag på ordre med vilje, derfor 0 som andre argument.
+      const belop = calcOrder(o.chapters || [], 0).grandTotal
+      events.push({ date: o.created_at, type: 'ordre', icon: '📦', color: '#7c3aed', title: o.title, sub: `${o.status || 'Aktiv'}${belop ? ' · ' + Math.round(belop).toLocaleString('nb-NO') + ' kr' : ''}` })
+    })
     avvik.forEach(a => {
       const proj = prosjekter.find(p => p.id === a.project_id)
       events.push({ date: a.created_at, type: 'avvik', icon: '⚠️', color: '#ea580c', title: a.title, sub: `${a.severity} · ${a.status}${proj ? ' · ' + proj.name : ''}` })
@@ -38685,7 +38756,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
                             <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
                             <div style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(t.created_at).toLocaleDateString('nb-NO')}</div>
                           </div>
-                          {t.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(t.total_amount).toLocaleString('nb-NO')} kr</span>}
+                          {!!tilbudBelop[t.id] && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(tilbudBelop[t.id]).toLocaleString('nb-NO')} kr</span>}
                           <span style={{ background:statusCfg.bg, color:statusCfg.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{t.status}</span>
                         </div>
                       )
