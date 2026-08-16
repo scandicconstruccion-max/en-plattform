@@ -3891,32 +3891,50 @@ function buildPrivateDuplicateNameSet(customers) {
   return dups
 }
 
+// er_kunde = hører hjemme i mine egne registre (Kundeoversikt, kundevelger,
+// UE-velger) — IKKE «er en kunde» i snever forstand. Én av radene er en
+// underleverandør (type='ue'). CRM-leads står utenfor; status er CRM-stadium
+// og sier ingenting om dette flagget. Alle inserts mot customers UNNTATT
+// CRM-masseimporten og CRMEditorModal setter er_kunde: true.
+//
+// Henter ALLE egne kunder, ikke de tusen første. Supabase kapper på 1000 rader
+// per spørring; uten paginering forsvinner kunde nummer 1001 stille ut av hver
+// eneste velger, og ingenting i grensesnittet røper det.
+async function hentEgneKunder() {
+  const SIDE = 1000
+  const ut = []
+  for (let fra = 0; ; fra += SIDE) {
+    const { data, error } = await supabase.from('customers')
+      .select('*')
+      .eq('er_kunde', true)
+      .order('name')
+      .order('id', { ascending: true })   // stabil sortering: like navn må ikke bytte side
+      .range(fra, fra + SIDE - 1)
+    if (error) throw error
+    const bolk = data || []
+    ut.push(...bolk)
+    if (bolk.length < SIDE) break
+  }
+  return ut
+}
+
 function getCachedCustomers() {
   if (_customerCache.data) return Promise.resolve(_customerCache.data)
   if (_customerCache.loading) return _customerCache.loading
-  _customerCache.loading = supabase.from('customers')
-    .select('*')
-    .order('name')
-    .then(({ data, error }) => {
-      if (error) {
-        console.error('[CustomerCache] Feil ved henting av kunder:', error)
-        _customerCache.data = []
-        _customerCache.loading = null
-        _customerCache.subscribers.forEach(fn => fn([]))
-        // Ikke cache tom liste permanent — prøv på nytt neste gang
-        setTimeout(() => { _customerCache.data = null }, 5000)
-        return []
-      }
-      _customerCache.data = data || []
+  _customerCache.loading = hentEgneKunder()
+    .then(rader => {
+      _customerCache.data = rader
       _customerCache.loading = null
       _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
-      console.log(`[CustomerCache] Lastet ${_customerCache.data.length} kunder`)
+      console.log(`[CustomerCache] Lastet ${rader.length} kunder (er_kunde=true)`)
       return _customerCache.data
     })
     .catch(err => {
-      console.error('[CustomerCache] Exception:', err)
+      console.error('[CustomerCache] Feil ved henting av kunder:', err)
       _customerCache.data = []
       _customerCache.loading = null
+      _customerCache.subscribers.forEach(fn => fn([]))
+      // Ikke cache tom liste permanent — prøv på nytt neste gang
       setTimeout(() => { _customerCache.data = null }, 5000)
       return []
     })
@@ -4564,6 +4582,10 @@ async function resolveCustomerFromForm({ form, user, initialCustomerId = null, s
       type: form.customer_orgnr?.trim() ? 'bedrift' : 'privat',
       created_by: user?.id,
       notes: 'Automatisk opprettet fra økonomimodul',
+      // Opprettet fra tilbud/ordre/faktura/anbud/BIM/kalkyle — hører hjemme i
+      // Kundeoversikten. statusOnCreate kan samtidig være 'lead': status er
+      // CRM-stadium og styrer ikke dette flagget.
+      er_kunde: true,
     }
     if (statusOnCreate) insertPayload.status = statusOnCreate
     const { data: newCust, error: custErr } = await supabase.from('customers').insert(insertPayload).select('id').single()
@@ -18296,7 +18318,10 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
   useEffect(() => {
     Promise.all([
       supabase.from('tender_ues').select('company_name, email, status').eq('tender_id', tender.id).then(r => r.data || []),
-      supabase.from('customers').select('id, name, email, phone, orgnr, type').in('type', ['ue', 'bedrift']).order('name').then(r => r.data || []),
+      // er_kunde i tillegg til type-filteret: CRM-leads kan ha type 'bedrift'
+      // og ville ellers fylle UE-velgeren med tusenvis av rader som aldri har
+      // vært underleverandører.
+      supabase.from('customers').select('id, name, email, phone, orgnr, type').eq('er_kunde', true).in('type', ['ue', 'bedrift']).order('name').then(r => r.data || []),
     ]).then(([existing, kunder]) => { setExistingUes(existing); setUeKunder(kunder) })
   }, [])
 
@@ -18381,6 +18406,8 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
               type: 'ue',
               created_by: user?.id,
               notes: 'Automatisk opprettet fra anbudsmodulen (UE-invitasjon)',
+              // En underleverandør hører hjemme i egne registre, ikke i CRM-leadlista.
+              er_kunde: true,
             })).select().single()
             if (newCust) { custId = newCust.id; createdAny = true }
           }
@@ -38141,7 +38168,8 @@ function KunderPage() {
   const confirmImport = async () => {
     if (!importData?.length) return; setImporting(true)
     try {
-      const clean = importData.filter(r => r.name?.trim()).map(r => ({ name: r.name?.trim(), type: r.type || 'bedrift', orgnr: r.orgnr || null, email: r.email || null, phone: r.phone || null, invoice_email: r.invoice_email || null, address: r.address || null, postal_code: r.postal_code || null, city: r.city || null, notes: r.notes || null, created_by: user?.id }))
+      // er_kunde: true — dette er import INN i Kundeoversikten, ikke CRM-import.
+      const clean = importData.filter(r => r.name?.trim()).map(r => ({ name: r.name?.trim(), type: r.type || 'bedrift', orgnr: r.orgnr || null, email: r.email || null, phone: r.phone || null, invoice_email: r.invoice_email || null, address: r.address || null, postal_code: r.postal_code || null, city: r.city || null, notes: r.notes || null, created_by: user?.id, er_kunde: true }))
       const { error } = await supabase.from('customers').insert(clean)
       if (error) throw error; setShowImport(false); setImportData(null); setImportErrors([]); load()
     } catch(e) { await appAlert({ message: 'Feil ved import', subMessage: e.message, kind: 'error' }) } finally { setImporting(false) }
@@ -38151,7 +38179,8 @@ function KunderPage() {
     setLoading(true)
     try {
       const [k, p, q, inv] = await Promise.all([
-        supabase.from('customers').select('*').order('name').then(r => r.data || []),
+        // Kun egne kunder. CRM-leads har er_kunde = false og hører hjemme i CRM.
+        hentEgneKunder(),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
         // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
@@ -38896,6 +38925,24 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
     invoice_email: initial?.invoice_email || '',
     notes: initial?.notes || '',
   })
+  // Kundenummeret må være unikt på tvers av HELE customers-tabellen — også mot
+  // CRM-rader, som kan bære et customer_number fra importfila. existingKunder er
+  // filtrert på er_kunde og duger derfor ikke som nummerkilde. Her hentes hele
+  // serien ufiltrert, så tallet i feltet er det samme som blir lagret.
+  const autoNrRef = React.useRef(autoCustomerNumber)
+  React.useEffect(() => {
+    if (isEdit) return
+    let aktiv = true
+    supabase.from('customers').select('customer_number').then(({ data }) => {
+      if (!aktiv) return
+      const nytt = nextSequenceNumber(data || [], 'K', 'customer_number', { withYear: false })
+      // Bytt kun hvis brukeren ikke har skrevet inn et eget nummer.
+      setForm(f => f.customer_number === autoNrRef.current ? { ...f, customer_number: nytt } : f)
+      autoNrRef.current = nytt
+    })
+    return () => { aktiv = false }
+  }, [isEdit])
+
   // Kontaktpersoner — array lokalt i skjemaet; persisteres til customer_contacts ved lagring.
   // For redigeringsmodus lastes eksisterende kontakter; for nye kunder starter vi med én tom rad.
   const [contacts, setContacts] = useState(
@@ -38976,12 +39023,18 @@ function KundeModal({ user, initial, onClose, onSaved, existingKunder = [] }) {
         const { error } = await supabase.from('customers').update({ ...form, updated_at: new Date().toISOString() }).eq('id', initial.id)
         if (error) throw error
       } else {
-        // Siste forsvarslinje: hvis kundenummeret vårt har kollidert (race condition),
-        // prøv å legge til 'B'-suffix — samme mønster som for prosjektnummer
-        let customer_number = form.customer_number || nextSequenceNumber(existingKunder, 'K', 'customer_number', { withYear: false })
-        const exists = existingKunder.find(k => k.customer_number === customer_number)
-        if (exists) customer_number = customer_number + 'B'
-        const { data: inserted, error } = await supabase.from('customers').insert({ ...form, customer_number, created_by: user?.id }).select().single()
+        // Autoritativ nummersjekk mot HELE tabellen i det øyeblikket vi lagrer —
+        // samme mønster som de andre stedene som oppretter kunder. Kollisjon
+        // løses ved å regne på nytt; 'B'-suffix er siste forsvarslinje ved race.
+        const { data: allCust } = await supabase.from('customers').select('customer_number')
+        const alleNr = allCust || existingKunder
+        let customer_number = form.customer_number || nextSequenceNumber(alleNr, 'K', 'customer_number', { withYear: false })
+        if (alleNr.some(k => k.customer_number === customer_number)) {
+          customer_number = nextSequenceNumber(alleNr, 'K', 'customer_number', { withYear: false })
+          if (alleNr.some(k => k.customer_number === customer_number)) customer_number = customer_number + 'B'
+        }
+        // Opprettet direkte i Kundeoversikten — hører per definisjon hjemme der.
+        const { data: inserted, error } = await supabase.from('customers').insert({ ...form, customer_number, created_by: user?.id, er_kunde: true }).select().single()
         if (error) throw error
         customerId = inserted?.id
       }
@@ -39817,6 +39870,8 @@ function CRMPage() {
                 estimated_value: Math.round(c.totalValue)||null,
                 notes: `Importert fra tilbudsmodul. ${c.quotes.length} tilbud${proj?' · Prosjekt: '+proj.name:''}`,
                 created_by: user?.id,
+                // Disse har allerede tilbud hos oss — de er ikke kalde leads.
+                er_kunde: true,
               })
               if (error) { errors.push(`${c.name}: ${error.message}`); console.error('Import error:', error) }
               else {
@@ -39923,6 +39978,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [editAct, setEditAct] = useState(null) // aktivitet under redigering
   const [showQuotePicker, setShowQuotePicker] = useState(false)
   const [usersById, setUsersById] = useState({})
+  const [leggerTilIKundeoversikt, setLeggerTilIKundeoversikt] = useState(false)
 
   // TILGANG (delt CRM, 2 brukere): rediger = alle (audit-spor holder historikken ærlig).
   // Slett = kun egen + admin (sletting er uopprettelig og etterlater ikke audit-spor).
@@ -39971,6 +40027,56 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
     await supabase.from('customers').delete().eq('id',c.id)
     invalidateCustomerCache()
     onBack()
+  }
+
+  // ── Legg til i Kundeoversikt ──────────────────────────────────────────────
+  // er_kunde = hører hjemme i mine egne registre (Kundeoversikt, kundevelger,
+  // UE-velger) — IKKE «er en kunde» i snever forstand. Én av radene er en
+  // underleverandør (type='ue'). CRM-leads står utenfor; status er CRM-stadium
+  // og sier ingenting om dette flagget. Alle inserts mot customers UNNTATT
+  // CRM-masseimporten og CRMEditorModal setter er_kunde: true.
+  //
+  // Rangeringen finnes kun for å hindre at stadiet flyttes BAKOVER. tapt og
+  // inaktiv er sluttstadier og rangeres derfor likt med vunnet: en tapt lead
+  // som likevel legges i Kundeoversikten skal ikke stille bli «vunnet».
+  const CRM_STADIE_RANG = { lead:1, kontaktet:2, tilbud_sendt:3, vunnet:4, tapt:4, inaktiv:4 }
+  const stadieNavn = (s) => CRM_STATUS[s]?.label || s || 'uten stadium'
+
+  const leggTilIKundeoversikt = async () => {
+    const ok = await confirm({
+      message: `Legg ${c.name} til i Kundeoversikten?`,
+      subMessage: 'Kunden blir tilgjengelig i kundevelgerne i tilbud, ordre og faktura. Kontaktpersoner registrert i CRM vises ikke i Kundeoversikten.',
+      confirmLabel: 'Legg til',
+    })
+    if (!ok) return
+    setLeggerTilIKundeoversikt(true)
+    try {
+      const flyttStadium = (CRM_STADIE_RANG[c.status] || 0) < CRM_STADIE_RANG.vunnet
+      const upd = { er_kunde: true, updated_at: new Date().toISOString() }
+      if (flyttStadium) upd.status = 'vunnet'
+      const { error } = await supabase.from('customers').update(upd).eq('id', c.id)
+      if (error) throw error
+      // Sporet loggføres i crm_activities. customers har ingen activity_log,
+      // og skal ikke få en — CRM-historikken har allerede sin egen tabell.
+      try {
+        await supabase.from('crm_activities').insert({
+          customer_id: c.id,
+          type: 'note',
+          title: 'Lagt til i Kundeoversikten',
+          description: flyttStadium
+            ? `Stadiet flyttet fra ${stadieNavn(c.status)} til Vunnet.`
+            : `Stadiet står på ${stadieNavn(c.status)} og ble ikke endret.`,
+          date: new Date().toISOString().split('T')[0],
+          created_by: user?.id,
+        })
+      } catch (loggFeil) { console.error('[CRM] Kunne ikke loggføre i crm_activities:', loggFeil) }
+      invalidateCustomerCache()
+      setC(v => ({ ...v, ...upd }))
+      loadDetails()
+      await alert({ message: 'Lagt til i Kundeoversikten', subMessage: `${c.name} er nå tilgjengelig i kundevelgerne.`, kind: 'success' })
+    } catch (e) {
+      await alert({ message: 'Kunne ikke legge til i Kundeoversikten', subMessage: e.message, kind: 'error' })
+    } finally { setLeggerTilIKundeoversikt(false) }
   }
 
   const uploadDoc = async (e) => {
@@ -40053,6 +40159,25 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
             <button onClick={handleDelete} style={{ padding:'9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
           </div>
         </div>
+
+        {/* Kundeoversikt-status. Står tydelig og full bredde, ikke gjemt blant
+            ✏️/🗑️ — etter at en lead er opprettet i CRM skal det andre klikket
+            være åpenbart. */}
+        {c.er_kunde ? (
+          <div style={{ marginTop:'16px', display:'flex', alignItems:'center', gap:'10px', padding:'12px 14px', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'12px', fontSize:'13px', color:'#94a3b8', fontWeight:'600' }}>
+            <span>✓</span><span>Ligger i Kundeoversikten</span>
+          </div>
+        ) : (
+          <div style={{ marginTop:'16px', display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', flexWrap:'wrap' }}>
+            <div style={{ flex:1, minWidth:'180px', fontSize:'13px', color:'#166534', lineHeight:1.5 }}>
+              Denne står kun i CRM. Legg den til i Kundeoversikten for å kunne velge den i tilbud, ordre og faktura.
+            </div>
+            <button onClick={leggTilIKundeoversikt} disabled={leggerTilIKundeoversikt}
+              style={{ minHeight:'56px', padding:'0 22px', background: leggerTilIKundeoversikt ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'12px', cursor: leggerTilIKundeoversikt ? 'wait' : 'pointer', fontSize:'14px', fontWeight:'700', flexShrink:0, width: isMobBD ? '100%' : 'auto' }}>
+              {leggerTilIKundeoversikt ? 'Legger til…' : '➕ Legg til i Kundeoversikt'}
+            </button>
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'4px', marginTop:'16px', flexWrap:'wrap' }}>
@@ -40751,6 +40876,9 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
       if (isEdit) { const {error}=await supabase.from('customers').update(payload).eq('id',initial.id); if(error) throw error }
       else {
         // Autogenerer K-NNNN for nye kunder opprettet via CRM
+        // er_kunde settes IKKE her — den er default false. CRM er leadregisteret;
+        // oppretter du noe inne i CRM, hører det hjemme i CRM til du aktivt
+        // flytter det over med «➕ Legg til i Kundeoversikt» på kundekortet.
         const { data: allCust } = await supabase.from('customers').select('customer_number')
         const customer_number = payload.customer_number || nextSequenceNumber(allCust || [], 'K', 'customer_number', { withYear: false })
         const {error}=await supabase.from('customers').insert({...payload, customer_number, created_by:user?.id})
@@ -41125,6 +41253,9 @@ function CRMImportModal({ user, onClose, onDone }) {
     let imported = 0
     const errors = []
     const kildeVal = kilde.trim() // settes på alle rader i importen
+    // er_kunde settes IKKE her — den er default false. Dette er CRM-masseimporten,
+    // selve leadkilden. Ville den satt flagget, ville Kundeoversikten fylles med
+    // titusener av rader du aldri har hatt en jobb for.
     for (let i = 0; i < toImport.length; i += 100) {
       const batch = toImport.slice(i, i + 100)
       const payloads = batch.map(r => ({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id }))
