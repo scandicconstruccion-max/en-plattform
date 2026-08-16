@@ -236,6 +236,9 @@ const FORHANDSLAST_LISTER = [
   ['projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')],
   ['projects:alle', () => supabase.from('projects').select('*').order('created_at', { ascending: false })],
   ['projects:nav_adr', () => supabase.from('projects').select('id,name,parent_id,depth,project_number,address').order('name')],
+  // Egen nøkkel for moduler som trenger kundedata fra prosjektet (EM-modulen).
+  // Kan ikke gjenbruke projects:nav — den cacher en smalere form.
+  ['projects:nav_kunde', () => supabase.from('projects').select('id,name,parent_id,depth,project_number,client_name,client_email').order('name')],
   ['sjekklister:liste', () => supabase.from('checklists').select('*').order('created_at', { ascending: false })],
   ['sjekkliste:maler', () => supabase.from('checklist_templates').select('*').order('name')],
   ['befaring:liste', () => supabase.from('inspections').select('*, inspection_items(id,status), inspection_followups(id,completed), inspection_files(id), inspection_observations(id,category,status,assigned_to_user_id)').order('date', { ascending: false })],
@@ -6609,17 +6612,20 @@ function ProsjektfilerPage() {
 
   const toggleCat = (catId) => setExpandedCats(p => ({ ...p, [catId]: !p[catId] }))
 
-  // Manglende + «ikke aktuelt»-krav for valgt fase og kategori — vises nederst i lista.
-  const renderKravBlokk = () => {
-    if (!hasFaser || !viewedPhase || !selectedCategory || !fulfillmentKlar) return null
-    if (missingForView.length === 0 && waivedForView.length === 0) return null
+  // Rekkefølgen i lista er bevisst: opplastede filer → manglende krav →
+  // registrert fra andre moduler → «ikke aktuelt». Det brukeren selv har lagt
+  // inn skal møte ham først; avskrevne krav er minst interessant og står sist.
+  // Derfor er krav-blokken splittet i to — de skal ikke stå samlet.
+  const kravBlokkAktiv = () => hasFaser && viewedPhase && selectedCategory && fulfillmentKlar
+
+  // Manglende påkrevde dokumenter i valgt fase og kategori.
+  const renderManglerBlokk = () => {
+    if (!kravBlokkAktiv() || missingForView.length === 0) return null
     return (
       <div style={{ marginTop: '16px' }}>
-        {missingForView.length > 0 && (
-          <div style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', letterSpacing: '0.06em', marginBottom: '6px' }}>
-            MANGLER I {faseLabel(viewedPhase).toUpperCase()} ({missingForView.length})
-          </div>
-        )}
+        <div style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', letterSpacing: '0.06em', marginBottom: '6px' }}>
+          MANGLER I {faseLabel(viewedPhase).toUpperCase()} ({missingForView.length})
+        </div>
         {missingForView.map(req => (
           <div key={req.doc_type} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '12px', marginBottom: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '16px' }}>⚠️</span>
@@ -6628,12 +6634,24 @@ function ProsjektfilerPage() {
               <div style={{ fontSize: '11px', color: '#b45309' }}>Påkrevd · {faseLabel(req.phase)}</div>
             </div>
             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              <button onClick={() => openUploadForReq(req)} style={{ padding: '6px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>⬆️ Last opp</button>
-              <button onClick={() => openLinkExisting(req)} style={{ padding: '6px 12px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Velg eksisterende</button>
-              <button onClick={() => { setWaiveTarget({ phase: viewedPhase, doc_type: req.doc_type, label: req.label }); setWaiveReason('') }} style={{ padding: '6px 12px', background: 'white', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Ikke aktuelt</button>
+              <button onClick={() => openUploadForReq(req)} style={{ padding: '8px 14px', minHeight: '44px', background: '#059669', color: 'white', border: 'none', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>⬆️ Last opp</button>
+              <button onClick={() => openLinkExisting(req)} style={{ padding: '8px 14px', minHeight: '44px', background: 'white', color: '#475569', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Velg eksisterende</button>
+              <button onClick={() => { setWaiveTarget({ phase: viewedPhase, doc_type: req.doc_type, label: req.label }); setWaiveReason('') }} style={{ padding: '8px 14px', minHeight: '44px', background: 'white', color: '#94a3b8', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Ikke aktuelt</button>
             </div>
           </div>
         ))}
+      </div>
+    )
+  }
+
+  // Krav satt til «Ikke aktuelt». Står nederst — avskrevet, men angrbart.
+  const renderIkkeAktueltBlokk = () => {
+    if (!kravBlokkAktiv() || waivedForView.length === 0) return null
+    return (
+      <div style={{ marginTop: '16px' }}>
+        <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.06em', marginBottom: '6px' }}>
+          IKKE AKTUELT ({waivedForView.length})
+        </div>
         {waivedForView.map(req => {
           const w = waiverFor(viewedPhase, req.doc_type)
           return (
@@ -6643,7 +6661,7 @@ function ProsjektfilerPage() {
                 <div style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', textDecoration: 'line-through' }}>{req.label}</div>
                 <div style={{ fontSize: '11px', color: '#94a3b8' }}>Ikke aktuelt{w?.reason ? ` · ${w.reason}` : ''}</div>
               </div>
-              <button onClick={() => undoWaive(viewedPhase, req.doc_type)} style={{ padding: '6px 12px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Angre</button>
+              <button onClick={() => undoWaive(viewedPhase, req.doc_type)} style={{ padding: '8px 14px', minHeight: '44px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer' }}>Angre</button>
             </div>
           )
         })}
@@ -6698,6 +6716,44 @@ function ProsjektfilerPage() {
     )
   }
 
+  // Åpner opplastingsdialogen forhåndsvalgt på gjeldende kategori/undermappe.
+  // Delt av headerknappen og tomtilstandens tekstlenke — én vei inn.
+  const apneOpplasting = () => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }
+
+  // Finnes det noe annet å se på i kategorien enn opplastede filer?
+  const antallAndreRader = () => {
+    const derivert = (visAlle && selectedCategory)
+      ? (derivedRows[selectedCategory] || []).filter(r => !hasFaser || r.fase === viewedPhase).length : 0
+    const krav = kravBlokkAktiv() ? (missingForView.length + waivedForView.length) : 0
+    return derivert + krav
+  }
+
+  // Tomtilstand. Har kategorien registrerte rader eller krav, skal ikke det
+  // store kortet dominere — da holder én linje over de øvrige radene.
+  const renderTomtilstand = (kompakt) => {
+    const lenke = (
+      <button onClick={apneOpplasting}
+        style={{ background: 'none', border: 'none', padding: '6px 0', minHeight: '44px', color: '#059669', fontWeight: '600', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline', textUnderlineOffset: '3px', fontFamily: 'inherit' }}>
+        Last opp den første filen i denne kategorien
+      </button>
+    )
+    if (antallAndreRader() > 0) {
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '10px 2px' }}>
+          <span style={{ fontSize: '13px', color: '#94a3b8' }}>Ingen opplastede filer i denne kategorien.</span>
+          {lenke}
+        </div>
+      )
+    }
+    return (
+      <div style={{ textAlign: 'center', padding: kompakt ? '40px 16px' : '60px 20px', background: 'white', borderRadius: kompakt ? '14px' : '16px', border: '1px solid #f1f5f9' }}>
+        <div style={{ fontSize: kompakt ? '36px' : '40px', marginBottom: kompakt ? '10px' : '12px' }}>📭</div>
+        <div style={{ fontSize: kompakt ? '14px' : '15px', fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Ingen filer her ennå</div>
+        {lenke}
+      </div>
+    )
+  }
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}
@@ -6732,7 +6788,11 @@ function ProsjektfilerPage() {
               <button onClick={openMalBytte} title="Velg eller bytt prosjektmal"
                 style={{ padding: '10px 14px', background: 'white', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', cursor: 'pointer', fontSize: '14px', fontWeight: '600', whiteSpace: 'nowrap' }}>⚙ Mal</button>
             )}
-            <button data-tour="fil-opplast" onClick={() => setShowUpload(true)} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '9px 14px' : '10px 18px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+            {/* Eneste opplastingsknapp. Forhåndsvelger kategorien man står i, slik
+                den fjernede knappen over lista gjorde — ellers ville vi mistet
+                muligheten til å laste rett inn i en kategori. */}
+            <button data-tour="fil-opplast" onClick={() => selectedCategory ? apneOpplasting() : setShowUpload(true)}
+              style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: isMob ? '10px 16px' : '12px 20px', minHeight: isMob ? '48px' : '52px', fontSize: isMob ? '13px' : '14px', fontWeight: '600', cursor: 'pointer', whiteSpace: 'nowrap' }}>
               ⬆️ {isMob ? 'Last opp' : 'Last opp fil'}
             </button>
           </div>
@@ -6898,12 +6958,7 @@ function ProsjektfilerPage() {
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
               ) : fileGroups.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 16px', background: 'white', borderRadius: '14px', border: '1px solid #f1f5f9' }}>
-                  <div style={{ fontSize: '36px', marginBottom: '10px' }}>📭</div>
-                  <div style={{ fontSize: '14px', fontWeight: '600', color: '#0f172a' }}>Ingen filer</div>
-                  <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
-                    style={{ marginTop: '12px', padding: '8px 18px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>⬆️ Last opp</button>
-                </div>
+                renderTomtilstand(true)
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({totalCount})</div>
@@ -6930,8 +6985,9 @@ function ProsjektfilerPage() {
                   )}
                 </div>
               )}
-              {renderKravBlokk()}
+              {renderManglerBlokk()}
               {renderDerivertBlokk()}
+              {renderIkkeAktueltBlokk()}
             </>
           )}
         </div>
@@ -7030,10 +7086,7 @@ function ProsjektfilerPage() {
                   )}
                   {renderVisningToggle()}
                 </div>
-                <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
-                  style={{ padding: '8px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
-                  ⬆️ Last opp fil
-                </button>
+                {/* Opplasting ligger KUN i headeren — én knapp, ikke tre. */}
               </div>
 
               {panelFromCache && <div style={{ marginBottom: '12px' }}><SistOppdatert fraCache={true} lagretAt={panelCacheAt} /></div>}
@@ -7043,15 +7096,7 @@ function ProsjektfilerPage() {
                   Laster filer...
                 </div>
               ) : fileGroups.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', background: 'white', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
-                  <div style={{ fontSize: '40px', marginBottom: '12px' }}>📭</div>
-                  <div style={{ fontSize: '15px', fontWeight: '600', color: '#0f172a', marginBottom: '4px' }}>Ingen filer her ennå</div>
-                  <div style={{ fontSize: '13px', color: '#94a3b8', marginBottom: '16px' }}>Last opp den første filen i denne kategorien</div>
-                  <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
-                    style={{ padding: '9px 20px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}>
-                    ⬆️ Last opp fil
-                  </button>
-                </div>
+                renderTomtilstand(false)
               ) : (
                 <div data-tour="fil-dokumenter" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.06em' }}>
@@ -7100,8 +7145,9 @@ function ProsjektfilerPage() {
                   )}
                 </div>
               )}
-              {renderKravBlokk()}
+              {renderManglerBlokk()}
               {renderDerivertBlokk()}
+              {renderIkkeAktueltBlokk()}
             </>
           )}
         </div>
@@ -9969,6 +10015,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
   const [lightbox, setLightbox] = useState(null)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
+  const [showTilEm, setShowTilEm] = useState(false)
 
   const proj = projects.find(p => p.id === dev.project_id)
 
@@ -10195,6 +10242,13 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
             </div>
           </div>
           <div style={{ display: 'flex', gap: isMobD ? '6px' : '8px', flexShrink: 0 }}>
+            {/* Avvik → endringsmelding. Skjules når avviket allerede er overført. */}
+            {!dev.em_id && (
+              <button onClick={() => setShowTilEm(true)} title="Lag endringsmelding av dette avviket"
+                style={{ padding: isMobD ? '7px 10px' : '9px 16px', minHeight: isMobD ? '44px' : '48px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600', whiteSpace: 'nowrap' }}>
+                {isMobD ? '🔄 EM' : '🔄 Til endringsmelding'}
+              </button>
+            )}
             <button onClick={() => setShowSend(true)}
               style={{ padding: isMobD ? '7px 10px' : '9px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: isMobD ? '12px' : '13px', fontWeight: '600' }}>
               {isMobD ? '📧' : '📧 Send'}
@@ -10464,6 +10518,23 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
             setShowSend(false)
             const { data } = await supabase.from('deviations').select('*').eq('id', dev.id).single()
             if (data) setDev(data)
+          }}
+        />
+      )}
+
+      {/* Avvik → endringsmelding */}
+      {showTilEm && (
+        <OverforModal
+          konfig="avvik->em"
+          user={user}
+          projects={projects}
+          forhandsvalgt={dev}
+          onClose={() => setShowTilEm(false)}
+          onSaved={async (res) => {
+            setShowTilEm(false)
+            const { data } = await supabase.from('deviations').select('*').eq('id', dev.id).single()
+            if (data) setDev(data)
+            await appAlert({ message: res.tekst, subMessage: 'Den ligger som utkast i Endringsmelding-modulen.', kind: 'success' })
           }}
         />
       )}
@@ -14112,6 +14183,433 @@ function calcQuote(chapters, globalMarkup) {
   const gm = parseFloat(globalMarkup) || 0
   const chapterTotals = chapters.reduce((acc, ch) => acc + calcChapter(ch).total, 0)
   return { subtotal, chapterTotals, grandTotal: chapterTotals * (1 + gm / 100) }
+}
+
+// ═══ KRYSSMODUL: OVERFØRING MELLOM MODULER ══════════════════════════════════
+// Én motor for alle «Ny … fra»-veier. Registeret under sier HVA som kan bli hva;
+// OverforModal er den ene velgeren, og lagre-funksjonen i hver rad er det eneste
+// som er spesifikt per vei. Å legge til en ny vei er én rad her — ikke en ny modal.
+
+// Fjerner tegn som ødelegger PostgREST-filtre (komma, parentes, prosent, stjerne).
+// Løftet til modulnivå så både CRM og kryssmodul-velgeren bruker samme regel.
+const sanitizeSearch = (s) => (s || '').trim().replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim()
+
+const OVERFORING_SIDESTORRELSE = 25
+
+// Beløp på en endringsmelding: postene er fasit, amount-kolonnen er fallback
+// for rader lagret før poststrukturen kom.
+const emBelop = (em) => {
+  const fraPoster = kildeSumPoster(em && em.posts)
+  return fraPoster > 0 ? fraPoster : (parseFloat(em && em.amount) || 0)
+}
+
+// Neste EM-nummer: EM-{prosjektnr}-{NN}, med global EM-NNNN som fallback.
+// Samme regel som EmForm bruker, men spør DB i stedet for en innlastet liste.
+async function nesteEmNummer(projectId, projects) {
+  const proj = (projects || []).find(p => p.id === projectId)
+  if (!proj) {
+    const { data } = await supabase.from('endringsmeldinger').select('em_number')
+    return nextSequenceNumber(data || [], 'EM', 'em_number', { withYear: false })
+  }
+  const projNum = String(proj.project_number || '').replace(/^P-?/i, '').trim() || '0000'
+  const prefix = `EM-${projNum}-`
+  const { data } = await supabase.from('endringsmeldinger').select('em_number').eq('project_id', projectId)
+  const nums = (data || []).map(e => e.em_number).filter(n => n && String(n).startsWith(prefix))
+    .map(n => parseInt(String(n).slice(prefix.length).split('-')[0]) || 0)
+  return `${prefix}${String(nums.length ? Math.max(...nums) + 1 : 1).padStart(2, '0')}`
+}
+
+// Kopierer bilder inn i målmodulens egen mappe og returnerer dem på EM-format
+// ({ name, url }). Samme mønster som Sjekkliste→Avvik (storage.copy): kopi, ikke
+// referanse — ellers dør bildet på et kundevendt dokument hvis kilden slettes.
+async function kopierBilderTilMappe(stier, mappe) {
+  const ut = []
+  for (const sti of (stier || [])) {
+    if (!sti) continue
+    const filnavn = String(sti).split('/').pop() || 'bilde.jpg'
+    const ext = (filnavn.split('.').pop() || 'jpg')
+    const nySti = `${mappe}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    let brukSti = nySti
+    try {
+      const { error } = await supabase.storage.from('plattform-files').copy(sti, nySti)
+      if (error) brukSti = sti   // kopiering feilet — pek på originalen heller enn å miste bildet
+    } catch (_) { brukSti = sti }
+    try {
+      const { data } = supabase.storage.from('plattform-files').getPublicUrl(brukSti)
+      if (data && data.publicUrl) ut.push({ name: filnavn, url: data.publicUrl })
+    } catch (_) { /* svelg — ett bilde skal ikke velte overføringen */ }
+  }
+  return ut
+}
+
+// Standard logglinje på begge dokumenter, så sporet finnes begge veier.
+const overforLogg = (user, tekst) => ({ action: tekst, by: (user && user.email) || 'System', at: new Date().toISOString() })
+
+const OVERFORINGER = {
+  // ── Avvik → Endringsmelding ──────────────────────────────────────────────
+  'avvik->em': {
+    tittel: 'Endringsmelding fra avvik',
+    emoji: '⚠️',
+    knapp: 'Opprett endringsmelding',
+    kildeTabell: 'deviations',
+    // Smalt select: hent ALDRI tunge jsonb-kolonner inn i en liste.
+    kildeKolonner: 'id, deviation_number, title, description, location, severity, status, project_id, has_cost_impact, cost_impact_amount, has_time_impact, time_impact_days, em_id, created_at',
+    sokefelt: ['deviation_number', 'title', 'description', 'location'],
+    sortering: { kolonne: 'created_at', stigende: false },
+    filtrer: (q) => q.is('em_id', null),
+    tomTekst: 'Ingen avvik å hente fra. Avvik som allerede er blitt en endringsmelding vises ikke.',
+    hjelpetekst: 'Kostnadsanslaget fra avviket blir én redigerbar post. Juster mengde og pris før du lagrer.',
+    // Full rad hentes ved valg — lista har bare det som vises
+    fullRad: async (id) => (await supabase.from('deviations').select('*').eq('id', id).single()).data,
+    vis: (d) => ({
+      nr: d.deviation_number || '',
+      tittel: d.title || '(uten tittel)',
+      under: [d.location, d.status, d.has_cost_impact ? 'kostnad' : null, d.has_time_impact ? 'tid' : null].filter(Boolean).join(' · '),
+    }),
+    lagUtkast: (dev) => {
+      const nr = dev.deviation_number || ''
+      const belop = dev.has_cost_impact ? (parseFloat(dev.cost_impact_amount) || 0) : 0
+      return {
+        tittel: `Tilleggsarbeid: ${dev.title || ''}`.trim(),
+        project_id: dev.project_id || '',
+        beskrivelse: [dev.description, dev.location ? `Sted: ${dev.location}` : null].filter(Boolean).join('\n\n'),
+        tidskonsekvens: dev.has_time_impact && dev.time_impact_days ? `${dev.time_impact_days} dager` : '',
+        // RÅTT beløp — ingen skjult påslag. Brukeren legger på selv om han vil.
+        poster: [{
+          id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+          description: [nr ? `Avvik ${nr}` : null, dev.title].filter(Boolean).join(' – '),
+          qty: 1, unit: 'stk',
+          unitPriceWork: belop || '', unitPriceMaterial: '',
+          markup: '', discount: '', show_markup: false,
+          _fraAvvik: true,
+        }],
+        // Avhuket bort som standard: avviksbilder viser ofte egen feil, og EM
+        // lagrer en permanent publik URL. Brukeren huker på det som skal ut.
+        bilder: (dev.images || []).map(sti => ({ sti, valgt: false })),
+      }
+    },
+    lagre: async (utkast, dev, { user, projects }) => {
+      const emNr = await nesteEmNummer(utkast.project_id, projects)
+      const bilder = await kopierBilderTilMappe(utkast.bilder.filter(b => b.valgt).map(b => b.sti), 'endringsmeldinger')
+      const nr = dev.deviation_number || ''
+      const { data, error } = await supabase.from('endringsmeldinger').insert({
+        title: utkast.tittel || `Tilleggsarbeid etter avvik ${nr}`,
+        em_number: emNr,
+        project_id: utkast.project_id || null,
+        description: utkast.beskrivelse || '',
+        reason: nr ? `Avvik ${nr}${dev.title ? ' – ' + dev.title : ''}` : '',
+        amount: kildeSumPoster(utkast.poster),
+        posts: utkast.poster.map(({ _fraAvvik, ...p }) => p),
+        time_consequence: utkast.tidskonsekvens || '',
+        hours: 0, materials_cost: 0, ue_cost: 0,
+        customer_name: utkast.kundeNavn || '',
+        customer_email: utkast.kundeEpost || '',
+        images: bilder, vedlegg: [],
+        deviation_id: dev.id,
+        status: 'Utkast',
+        created_by: user && user.id,
+        activity_log: [overforLogg(user, `Opprettet fra avvik ${nr}`)],
+      }).select().single()
+      if (error) throw error
+      // Tilbakepeker, så avviket viser «Ble EM-xxxx». Feiler den, står EM-en
+      // fortsatt — sporet finnes uansett via deviation_id.
+      try {
+        await supabase.from('deviations').update({
+          em_id: data.id,
+          activity_log: [...(dev.activity_log || []), overforLogg(user, `Ble endringsmelding ${emNr}`)],
+          updated_at: new Date().toISOString(),
+        }).eq('id', dev.id)
+      } catch (_) {}
+      return { id: data.id, nr: emNr, tekst: `Endringsmelding ${emNr} opprettet` }
+    },
+  },
+
+  // ── Endringsmelding → Ordre ──────────────────────────────────────────────
+  'em->ordre': {
+    tittel: 'Ordre fra endringsmelding',
+    emoji: '🔄',
+    knapp: 'Opprett ordre',
+    kildeTabell: 'endringsmeldinger',
+    kildeKolonner: 'id, em_number, title, status, project_id, revision_number, amount, created_at',
+    sokefelt: ['em_number', 'title', 'description'],
+    sortering: { kolonne: 'created_at', stigende: false },
+    filtrer: (q) => q.in('status', ['Godkjent', 'Utført']),
+    tomTekst: 'Ingen godkjente eller utførte endringsmeldinger å lage ordre av.',
+    hjelpetekst: 'Postene kopieres til ett kapittel på ordren. Beløpene er allerede ferdig regnet.',
+    fullRad: async (id) => (await supabase.from('endringsmeldinger').select('*').eq('id', id).single()).data,
+    vis: (em) => ({
+      nr: (em.em_number || '') + emRevSuffix(em.revision_number),
+      tittel: em.title || '(uten tittel)',
+      under: em.status || '',
+    }),
+    lagUtkast: (em) => ({
+      tittel: em.title || `Ordre fra ${em.em_number || 'endringsmelding'}`,
+      project_id: em.project_id || '',
+      beskrivelse: em.description || '',
+      tidskonsekvens: '',
+      kundeNavn: em.customer_name || '',
+      kundeEpost: em.customer_email || '',
+      // Feltene er identiske med ordreposter — ingen mapping nødvendig.
+      poster: (em.posts || []).map(p => ({ ...p })),
+      bilder: [],
+    }),
+    lagre: async (utkast, em, { user }) => {
+      const emNr = (em.em_number || '') + emRevSuffix(em.revision_number)
+      const { data: eksisterende } = await supabase.from('orders').select('order_number')
+      const ordreNr = nextSequenceNumber(eksisterende || [], 'ORD', 'order_number')
+      const { data, error } = await supabase.from('orders').insert({
+        title: utkast.tittel || `Ordre fra ${emNr}`,
+        order_number: ordreNr,
+        project_id: utkast.project_id || null,
+        customer_name: utkast.kundeNavn || '',
+        customer_email: utkast.kundeEpost || '',
+        payment_terms: '30 dager netto',
+        // ETT kapittel. markup:0 med vilje — feltet ignoreres av calcOrder og var
+        // kilden til beløpsfeilen; det skal aldri bære verdi på en ordre.
+        chapters: [{ id: Date.now(), title: `Endringsmelding ${emNr}`, markup: 0, posts: utkast.poster }],
+        global_markup: 0,
+        em_id: em.id,
+        status: 'Utkast',
+        created_by: user && user.id,
+        activity_log: [overforLogg(user, `Opprettet fra endringsmelding ${emNr}`)],
+      }).select().single()
+      if (error) throw error
+      // MERK: em.order_id settes IKKE her. Ordren ER endringsmeldingen — settes
+      // order_id, ville EM-en dukket opp som et tillegg på sin egen ordre og
+      // beløpet blitt talt to ganger i ordrens totalsum.
+      try {
+        await supabase.from('endringsmeldinger').update({
+          activity_log: [...(em.activity_log || []), overforLogg(user, `Ble ordre ${ordreNr}`)],
+          updated_at: new Date().toISOString(),
+        }).eq('id', em.id)
+      } catch (_) {}
+      return { id: data.id, nr: ordreNr, tekst: `Ordre ${ordreNr} opprettet` }
+    },
+  },
+}
+
+// ── Den ene velgeren. Steg 1: søk og velg kilde (filtrering skjer i DB, aldri
+// på et uttrekk). Steg 2: forhåndsvis og juster. Steg 3: opprett.
+// forhandsvalgt: full kilderad. Er den satt, hoppes steg 1 over — brukeren står
+// allerede på dokumentet og skal ikke velge det på nytt.
+function OverforModal({ konfig, user, projects = [], forhandsvalgt = null, onClose, onSaved }) {
+  const k = OVERFORINGER[konfig]
+  const appAlert = useAppAlert()
+  const mob = typeof window !== 'undefined' && window.innerWidth < 768
+
+  const [steg, setSteg] = useState(forhandsvalgt ? 2 : 1)
+  const [sok, setSok] = useState('')
+  const [debSok, setDebSok] = useState('')
+  const [rader, setRader] = useState([])
+  const [antall, setAntall] = useState(0)
+  const [side, setSide] = useState(0)
+  const [laster, setLaster] = useState(!forhandsvalgt)
+  const [henterMer, setHenterMer] = useState(false)
+  const [valgt, setValgt] = useState(forhandsvalgt)
+  const [utkast, setUtkast] = useState(forhandsvalgt ? k.lagUtkast(forhandsvalgt) : null)
+  const [lagrer, setLagrer] = useState(false)
+  const [feil, setFeil] = useState('')
+
+  // Debounce: søket går til DB, ikke mot en innlastet liste.
+  useEffect(() => { const t = setTimeout(() => setDebSok(sok), 300); return () => clearTimeout(t) }, [sok])
+
+  const byggSporring = (medCount) => {
+    let q = supabase.from(k.kildeTabell).select(k.kildeKolonner, medCount ? { count: 'exact' } : undefined)
+    if (k.filtrer) q = k.filtrer(q)
+    const term = sanitizeSearch(debSok)
+    if (term && k.sokefelt && k.sokefelt.length) q = q.or(k.sokefelt.map(f => `${f}.ilike.%${term}%`).join(','))
+    const s = k.sortering || { kolonne: 'created_at', stigende: false }
+    return q.order(s.kolonne, { ascending: !!s.stigende, nullsFirst: false }).order('id', { ascending: true })
+  }
+
+  const lastListe = async (nullstill = true) => {
+    nullstill ? setLaster(true) : setHenterMer(true)
+    try {
+      const nesteSide = nullstill ? 0 : side + 1
+      const fra = nesteSide * OVERFORING_SIDESTORRELSE
+      const { data, count, error } = await byggSporring(true).range(fra, fra + OVERFORING_SIDESTORRELSE - 1)
+      if (error) throw error
+      const hentet = data || []
+      setRader(prev => nullstill ? hentet : [...prev, ...hentet])
+      if (typeof count === 'number') setAntall(count)
+      setSide(nesteSide)
+      setFeil('')
+    } catch (e) {
+      console.error('[Overfor] lastListe', e)
+      // Vis den ekte feilen. Mangler koblingskolonnen (SQL ikke kjørt i dette
+      // miljøet), skal det ikke se ut som «ingen treff».
+      if (nullstill) { setRader([]); setAntall(0) }
+      setFeil(e?.message || 'Kunne ikke hente lista')
+    } finally { nullstill ? setLaster(false) : setHenterMer(false) }
+  }
+  useEffect(() => { if (!forhandsvalgt) lastListe(true) }, [debSok])
+
+  const velgKilde = async (rad) => {
+    setLaster(true)
+    try {
+      const full = k.fullRad ? await k.fullRad(rad.id) : rad
+      if (!full) throw new Error('Fant ikke raden')
+      setValgt(full)
+      setUtkast(k.lagUtkast(full))
+      setSteg(2)
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke hente dokumentet', subMessage: e.message, kind: 'error' })
+    } finally { setLaster(false) }
+  }
+
+  const settPost = (id, felt, verdi) => setUtkast(u => ({ ...u, poster: u.poster.map(p => p.id === id ? { ...p, [felt]: verdi } : p) }))
+  const fjernPost = (id) => setUtkast(u => ({ ...u, poster: u.poster.filter(p => p.id !== id) }))
+  const leggTilPost = () => setUtkast(u => ({ ...u, poster: [...u.poster, { id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()), description: '', qty: 1, unit: 'stk', unitPriceWork: '', unitPriceMaterial: '', markup: '', discount: '', show_markup: false }] }))
+  const veksleBilde = (i) => setUtkast(u => ({ ...u, bilder: u.bilder.map((b, j) => j === i ? { ...b, valgt: !b.valgt } : b) }))
+
+  const sum = utkast ? kildeSumPoster(utkast.poster) : 0
+
+  const opprett = async () => {
+    if (!utkast.tittel.trim()) { await appAlert({ message: 'Tittel mangler', kind: 'warn' }); return }
+    setLagrer(true)
+    try {
+      const res = await k.lagre(utkast, valgt, { user, projects })
+      onSaved(res)
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke opprette', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(false) }
+  }
+
+  const felt = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', background: 'white', color: '#0f172a', fontFamily: 'system-ui, sans-serif' }
+  const proj = projects.find(p => p.id === (utkast && utkast.project_id))
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 120, display: 'flex', alignItems: mob ? 'stretch' : 'center', justifyContent: 'center', padding: mob ? 0 : '16px' }}>
+      <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position: 'relative', background: 'white', borderRadius: mob ? 0 : '20px', width: '100%', maxWidth: mob ? '100%' : '620px', height: mob ? '100vh' : 'auto', maxHeight: mob ? '100vh' : '90vh', display: 'flex', flexDirection: 'column', boxShadow: mob ? 'none' : '0 20px 60px rgba(0,0,0,0.2)', fontFamily: 'system-ui,sans-serif', overflow: 'hidden' }}>
+
+        <div style={{ padding: mob ? '14px 16px' : '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0, gap: '10px' }}>
+          <h2 style={{ margin: 0, fontSize: mob ? '15px' : '18px', fontWeight: '700', color: '#0f172a' }}>{k.emoji} {k.tittel}</h2>
+          <button onClick={onClose} aria-label="Lukk" style={{ background: 'none', border: 'none', fontSize: '26px', cursor: 'pointer', color: '#94a3b8', minWidth: '48px', minHeight: '48px' }}>×</button>
+        </div>
+
+        {steg === 1 && (
+          <>
+            <div style={{ padding: mob ? '12px 16px' : '14px 24px', borderBottom: '1px solid #f8fafc', flexShrink: 0 }}>
+              <input value={sok} onChange={e => setSok(e.target.value)} placeholder="Søk på nummer, tittel eller beskrivelse…"
+                style={{ ...felt, minHeight: '48px' }} />
+              {antall > 0 && <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '6px' }}>{rader.length} av {antall} vist</div>}
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: mob ? '12px 16px' : '16px 24px', WebkitOverflowScrolling: 'touch' }}>
+              {feil ? (
+                <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '12px', padding: '14px', color: '#dc2626', fontSize: '13px', lineHeight: 1.5 }}>
+                  <strong>Kunne ikke hente lista.</strong><br />{feil}
+                </div>
+              ) : laster && rader.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '14px', padding: '30px 0' }}>Laster…</div>
+              ) : rader.length === 0 ? (
+                <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: '14px', padding: '30px 0' }}>{debSok ? 'Ingen treff på søket.' : k.tomTekst}</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {rader.map(r => {
+                    const v = k.vis(r)
+                    return (
+                      <button key={r.id} onClick={() => velgKilde(r)}
+                        style={{ padding: '14px 16px', minHeight: '56px', borderRadius: '12px', border: '1px solid #e2e8f0', background: 'white', cursor: 'pointer', textAlign: 'left', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '14px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.tittel}</div>
+                          <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{[v.nr, v.under].filter(Boolean).join(' · ')}</div>
+                        </div>
+                        <span style={{ color: '#cbd5e1', fontSize: '18px', flexShrink: 0 }}>›</span>
+                      </button>
+                    )
+                  })}
+                  {rader.length < antall && (
+                    <button onClick={() => lastListe(false)} disabled={henterMer}
+                      style={{ minHeight: '48px', border: '1px dashed #cbd5e1', borderRadius: '12px', background: 'white', cursor: 'pointer', fontSize: '13px', fontWeight: '600', color: '#059669' }}>
+                      {henterMer ? 'Henter…' : `Vis flere (${antall - rader.length} igjen)`}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+            <div style={velgerFot}>
+              <button onClick={onClose} style={{ ...velgerAvbrytBtn, flex: 1 }}>Avbryt</button>
+            </div>
+          </>
+        )}
+
+        {steg === 2 && utkast && (
+          <>
+            <div style={{ overflowY: 'auto', flex: 1, padding: mob ? '16px' : '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px', WebkitOverflowScrolling: 'touch' }}>
+              {k.hjelpetekst && <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '12px 14px', fontSize: '13px', color: '#166534', lineHeight: 1.5 }}>{k.hjelpetekst}</div>}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Tittel</label>
+                <input value={utkast.tittel} onChange={e => setUtkast(u => ({ ...u, tittel: e.target.value }))} style={{ ...felt, minHeight: '48px' }} />
+              </div>
+
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', fontSize: '13px', color: '#64748b' }}>
+                <span>🏗️ {proj ? proj.name : 'Uten prosjekt'}</span>
+                {utkast.kundeNavn ? <span>👤 {utkast.kundeNavn}</span> : null}
+                {utkast.tidskonsekvens ? <span>⏱️ {utkast.tidskonsekvens}</span> : null}
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <label style={{ fontSize: '13px', fontWeight: '600', color: '#374151' }}>Poster</label>
+                  <button onClick={leggTilPost} style={{ background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '8px 12px', minHeight: '40px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}>+ Post</button>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {utkast.poster.map(p => (
+                    <div key={p.id} style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '12px', padding: '12px' }}>
+                      {p._fraAvvik && <div style={{ fontSize: '11px', fontWeight: '700', color: '#d97706', marginBottom: '6px' }}>HENTET FRA AVVIK</div>}
+                      <input value={p.description} onChange={e => settPost(p.id, 'description', e.target.value)} placeholder="Beskrivelse"
+                        style={{ ...felt, minHeight: '44px', marginBottom: '8px' }} />
+                      <div style={{ display: 'grid', gridTemplateColumns: mob ? '1fr 1fr' : '1fr 1fr 1fr 1fr', gap: '8px' }}>
+                        <div><div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '3px' }}>Mengde</div>
+                          <input type="number" inputMode="decimal" value={p.qty} onChange={e => settPost(p.id, 'qty', e.target.value)} style={{ ...felt, minHeight: '44px', textAlign: 'right' }} /></div>
+                        <div><div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '3px' }}>Enhet</div>
+                          <input value={p.unit} onChange={e => settPost(p.id, 'unit', e.target.value)} placeholder="stk" style={{ ...felt, minHeight: '44px' }} /></div>
+                        <div><div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '3px' }}>Arbeid</div>
+                          <input type="number" inputMode="decimal" value={p.unitPriceWork} onChange={e => settPost(p.id, 'unitPriceWork', e.target.value)} placeholder="0" style={{ ...felt, minHeight: '44px', textAlign: 'right' }} /></div>
+                        <div><div style={{ fontSize: '11px', color: '#94a3b8', marginBottom: '3px' }}>Material</div>
+                          <input type="number" inputMode="decimal" value={p.unitPriceMaterial} onChange={e => settPost(p.id, 'unitPriceMaterial', e.target.value)} placeholder="0" style={{ ...felt, minHeight: '44px', textAlign: 'right' }} /></div>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '800', color: '#059669' }}>{fmtI(postSum(p))}</span>
+                        {utkast.poster.length > 1 && <button onClick={() => fjernPost(p.id)} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: '13px', fontWeight: '600', minHeight: '40px', padding: '0 8px' }}>Fjern</button>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '10px', textAlign: 'right', fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>Sum eks. mva: <span style={{ color: '#059669' }}>{fmtI(sum)}</span></div>
+              </div>
+
+              {utkast.bilder.length > 0 && (
+                <div>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>Bilder fra kilden</label>
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '8px' }}>Avhuket bort som standard — huk på kun det kunden skal se.</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {utkast.bilder.map((b, i) => (
+                      <label key={i} style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', minHeight: '48px', background: b.valgt ? '#f0fdf4' : '#f8fafc', border: `1px solid ${b.valgt ? '#bbf7d0' : '#f1f5f9'}`, borderRadius: '10px', cursor: 'pointer' }}>
+                        <input type="checkbox" checked={b.valgt} onChange={() => veksleBilde(i)} style={{ width: '20px', height: '20px', accentColor: '#059669' }} />
+                        <span style={{ fontSize: '13px', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{String(b.sti).split('/').pop()}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '6px' }}>Beskrivelse</label>
+                <textarea value={utkast.beskrivelse} onChange={e => setUtkast(u => ({ ...u, beskrivelse: e.target.value }))} rows={3} style={{ ...felt, resize: 'vertical' }} />
+              </div>
+            </div>
+            <div style={velgerFot}>
+              <button onClick={() => { if (forhandsvalgt) { onClose() } else { setSteg(1); setValgt(null); setUtkast(null) } }} style={velgerAvbrytBtn}>{forhandsvalgt ? 'Avbryt' : 'Tilbake'}</button>
+              <button onClick={opprett} disabled={lagrer} style={velgerPrimaerBtn(lagrer)}>{lagrer ? 'Oppretter…' : k.knapp}</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function fmt(n) { return (Math.round((parseFloat(n)||0)*100)/100).toLocaleString('nb-NO', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' kr' }
@@ -18362,6 +18860,8 @@ function EndringsmeldingPage() {
   const [emRevisions, setEmRevisions] = useState([])
   const [showNewEmRevision, setShowNewEmRevision] = useState(false)
   const [emRevisionNote, setEmRevisionNote] = useState('')
+  const [visNyMeny, setVisNyMeny] = useState(false)
+  const [visFraAvvik, setVisFraAvvik] = useState(false)
 
   // ── Navigasjonssystem: URL-basert historikk ──────────────────────────────
   // URL-format:
@@ -18616,7 +19116,8 @@ function EndringsmeldingPage() {
       // Offline Lag 2: network-first med fallback til IndexedDB + stale-while-revalidate
       const [emRes, prRes] = await Promise.all([
         lesMedCache('endringer:liste', () => supabase.from('endringsmeldinger').select('*').order('created_at', { ascending: false }), (fersk, lagretAt) => { setEndringer(fersk); setCacheInfo({ fraCache: false, lagretAt }) }),
-        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name'), (fersk) => setProjects(fersk)),
+        // Egen nøkkel med client_name/client_email — trengs til kunde-autofyll.
+        lesMedCache('projects:nav_kunde', () => supabase.from('projects').select('id,name,parent_id,depth,project_number,client_name,client_email').order('name'), (fersk) => setProjects(fersk)),
       ])
       setEndringer(emRes.data)
       setProjects(prRes.data)
@@ -18699,7 +19200,32 @@ function EndringsmeldingPage() {
       danger: true,
       confirmLabel: erGodkjent ? 'Slett likevel' : 'Slett',
     }))) return
-    await supabase.from('endringsmeldinger').delete().eq('id', em.id)
+    const { error } = await supabase.from('endringsmeldinger').delete().eq('id', em.id)
+    if (error) {
+      // invoices.em_id har ON DELETE RESTRICT. Databasen nekter slettingen, men
+      // gir en uforståelig melding. Finn fakturaen som blokkerer og navngi den —
+      // ellers står brukeren fast uten å vite hvorfor.
+      let blokkerende = []
+      try {
+        const { data } = await supabase.from('invoices').select('invoice_number, status').eq('em_id', em.id).limit(5)
+        blokkerende = data || []
+      } catch (_) { /* svelg — vi viser en generell melding under */ }
+      if (blokkerende.length > 0) {
+        const liste = blokkerende.map(f => `${f.invoice_number || 'uten nummer'} (${f.status || 'ukjent status'})`).join(', ')
+        const utkast = blokkerende.filter(f => f.status === 'Utkast')
+        await appAlert({
+          message: 'Endringsmeldingen kan ikke slettes',
+          subMessage: `Den ligger til grunn for faktura ${liste}.` +
+            (utkast.length > 0
+              ? ` Faktura ${utkast.map(f => f.invoice_number).join(', ')} er utkast og kan slettes først — da kan du slette endringsmeldingen.`
+              : ' Fakturaen er utstedt og kan ikke slettes. Endringsmeldingen må bli stående for sporbarheten.'),
+          kind: 'warning',
+        })
+      } else {
+        await appAlert({ message: 'Kunne ikke slette endringsmeldingen', subMessage: error.message, kind: 'error' })
+      }
+      return
+    }
     load()
   }
 
@@ -18806,6 +19332,7 @@ function EndringsmeldingPage() {
         return 'dager'
       })(),
       status: initial?.status || 'Utkast',
+      customer_name: initial?.customer_name || '',
       customer_email: initial?.customer_email || '',
       notes: initial?.notes || '',
     })
@@ -18883,6 +19410,7 @@ function EndringsmeldingPage() {
           posts, // Nye strukturerte poster
           time_consequence: form.time_consequence,
           status: form.status,
+          customer_name: form.customer_name,
           customer_email: form.customer_email,
           notes: form.notes,
           images,
@@ -18970,11 +19498,12 @@ function EndringsmeldingPage() {
                 set('project_id', v)
                 // Regenerer EM-nummer for nye endringer basert på valgt prosjekt
                 if (!isEdit) set('em_number', genEmNummer(v))
-                // Auto-fyll kundeinfo fra prosjektet
+                // Auto-fyll kundeinfo fra prosjektet. MERK: prosjekter bruker
+                // client_name/client_email — ikke customer_*. Feil feltnavn her
+                // gjorde at autofyllet aldri virket.
                 const proj = projects.find(p => p.id === v)
-                if (proj?.customer_email && !form.customer_email) {
-                  set('customer_email', proj.customer_email)
-                }
+                if (proj?.client_email && !form.customer_email) set('customer_email', proj.client_email)
+                if (proj?.client_name && !form.customer_name) set('customer_name', proj.client_name)
               }} projects={projects} style={{ ...inp, background:'white' }} placeholder="Velg prosjekt" /></div>
             </div>
 
@@ -19881,7 +20410,33 @@ function EndringsmeldingPage() {
             {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            {kanRedigereEM && <button onClick={() => navNew()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM</button>}
+            {kanRedigereEM && (
+              <div style={{ position:'relative' }}>
+                <button onClick={() => setVisNyMeny(v => !v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobEM ? '9px 12px' : '10px 20px', minHeight:'44px', fontSize: isMobEM ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny EM ▾</button>
+                {visNyMeny && (
+                  <>
+                    <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={() => setVisNyMeny(false)} />
+                    <div style={{ position:'absolute', top:'108%', right:0, background:'white', border:'1px solid #eef2f6', borderRadius:'16px', boxShadow:'0 16px 48px rgba(15,23,42,0.12)', zIndex:60, minWidth:'270px', padding:'6px' }}>
+                      <div style={{ padding:'8px 12px 6px', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px' }}>Ny endringsmelding fra</div>
+                      {[
+                        { key:'manuell', emoji:'📝', label:'Manuell', desc:'Lag fra bunnen av' },
+                        { key:'avvik',   emoji:'⚠️', label:'Fra avvik', desc:'Tilleggsarbeid etter et avvik' },
+                      ].map(o => (
+                        <button key={o.key} onClick={() => { setVisNyMeny(false); o.key === 'manuell' ? navNew() : setVisFraAvvik(true) }}
+                          style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'10px 12px', minHeight:'56px', border:'none', borderRadius:'12px', background:'transparent', cursor:'pointer', textAlign:'left' }}>
+                          <span style={{ width:'34px', height:'34px', borderRadius:'10px', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'17px', flexShrink:0 }}>{o.emoji}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{o.label}</div>
+                            <div style={{ fontSize:'12px', color:'#94a3b8' }}>{o.desc}</div>
+                          </div>
+                          <span style={{ color:'#cbd5e1', fontSize:'15px' }}>›</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -20079,9 +20634,19 @@ function EndringsmeldingPage() {
         </div>
       </div>
 
-      {showForm && <EmForm 
-        initial={editEm} 
-        onClose={() => navList()} 
+      {visFraAvvik && (
+        <OverforModal
+          konfig="avvik->em"
+          user={user}
+          projects={projects}
+          onClose={() => setVisFraAvvik(false)}
+          onSaved={async (res) => { setVisFraAvvik(false); load(); await appAlert({ message: res.tekst, subMessage: 'Den ligger som utkast — åpne den for å justere før sending.', kind: 'success' }) }}
+        />
+      )}
+
+      {showForm && <EmForm
+        initial={editEm}
+        onClose={() => navList()}
         onSaved={() => { navListReplace(); load() }}
         onSaveAndSend={(savedEm) => { 
           navListReplace();
@@ -20521,6 +21086,7 @@ async function exportOrderPDFGlobal(order, projects = [], mode = 'download', bra
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function OrdrePage() {
   const { user, role } = useAuth()
+  const appAlert = useAppAlert()
   const kanRedigereOrdre = rolleKanRedigereModul(role, 'ordre')
   const [orders, setOrders] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -20530,6 +21096,8 @@ function OrdrePage() {
   const [search, setSearch] = useState('')
   const [showNew, setShowNew] = useState(false)
   const [showFromQuote, setShowFromQuote] = useState(false)
+  const [visNyOrdreMeny, setVisNyOrdreMeny] = useState(false)
+  const [visFraEm, setVisFraEm] = useState(false)
   const [sendAfterSaveOrder, setSendAfterSaveOrder] = useState(null) // Ordre som skal sendes etter lagring
   const [selected, setSelected] = useState(null)
   React.useEffect(() => {
@@ -20598,8 +21166,34 @@ function OrdrePage() {
             {cacheInfo.fraCache && <div style={{ marginTop:'8px' }}><SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} /></div>}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            {quotes.length > 0 && <button onClick={()=>setShowFromQuote(true)} style={{ background:'white', color:'#059669', border:'1px solid #059669', borderRadius:'10px', padding: isMobO ? '9px 10px' : '10px 16px', fontSize: isMobO ? '11px' : '13px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>{isMobO ? '📋 Fra tilbud' : '📋 Fra tilbud'}</button>}
-            {kanRedigereOrdre && <button onClick={()=>setShowNew(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 12px' : '11px 20px', fontSize: isMobO ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ordre</button>}
+            {kanRedigereOrdre && (
+              <div style={{ position:'relative' }}>
+                <button onClick={()=>setVisNyOrdreMeny(v=>!v)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobO ? '9px 12px' : '11px 20px', minHeight:'44px', fontSize: isMobO ? '12px' : '14px', fontWeight:'600', cursor:'pointer', whiteSpace:'nowrap' }}>+ Ny ordre ▾</button>
+                {visNyOrdreMeny && (
+                  <>
+                    <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setVisNyOrdreMeny(false)} />
+                    <div style={{ position:'absolute', top:'108%', right:0, background:'white', border:'1px solid #eef2f6', borderRadius:'16px', boxShadow:'0 16px 48px rgba(15,23,42,0.12)', zIndex:60, minWidth:'286px', padding:'6px' }}>
+                      <div style={{ padding:'8px 12px 6px', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px' }}>Ny ordre fra</div>
+                      {[
+                        { key:'manuell', emoji:'📝', label:'Manuell', desc:'Lag fra bunnen av' },
+                        { key:'tilbud',  emoji:'📋', label:'Fra tilbud', desc:'Kopier kapitler og poster' },
+                        { key:'em',      emoji:'🔄', label:'Fra endringsmelding', desc:'Godkjent endring blir ordre' },
+                      ].map(o => (
+                        <button key={o.key} onClick={()=>{ setVisNyOrdreMeny(false); if (o.key==='manuell') setShowNew(true); else if (o.key==='tilbud') setShowFromQuote(true); else setVisFraEm(true) }}
+                          style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'10px 12px', minHeight:'56px', border:'none', borderRadius:'12px', background:'transparent', cursor:'pointer', textAlign:'left' }}>
+                          <span style={{ width:'34px', height:'34px', borderRadius:'10px', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'17px', flexShrink:0 }}>{o.emoji}</span>
+                          <div style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>{o.label}</div>
+                            <div style={{ fontSize:'12px', color:'#94a3b8' }}>{o.desc}</div>
+                          </div>
+                          <span style={{ color:'#cbd5e1', fontSize:'15px' }}>›</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -20687,6 +21281,15 @@ function OrdrePage() {
       }} />}
       {sendAfterSaveOrder && <SendOrdreModal order={sendAfterSaveOrder} user={user} getPdfBase64={(ord) => exportOrderPDFGlobal(ord, projects, 'base64')} onClose={()=>setSendAfterSaveOrder(null)} onSent={()=>{setSendAfterSaveOrder(null);load()}} />}
       {showFromQuote && <FraIlbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowFromQuote(false)} onSaved={()=>{setShowFromQuote(false);load()}} />}
+      {visFraEm && (
+        <OverforModal
+          konfig="em->ordre"
+          user={user}
+          projects={projects}
+          onClose={()=>setVisFraEm(false)}
+          onSaved={async (res)=>{ setVisFraEm(false); load(); await appAlert({ message: res.tekst, subMessage: 'Ordren ligger som utkast.', kind: 'success' }) }}
+        />
+      )}
     </div>
   )
 }
@@ -20709,7 +21312,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
   const cfg = ORDER_STATUS[o.status] || ORDER_STATUS['Utkast']
   const proj = projects.find(p=>p.id===o.project_id)
   const { grandTotal, chapterTotals } = calcOrder(o.chapters||[], o.global_markup)
-  const changesTotal = changes.filter(c=>c.status==='Godkjent').reduce((acc,c)=>acc+(c.amount||0),0)
+  // Postene er fasit (samme postSum som ordren selv bruker); amount er fallback.
+  const changesTotal = changes.filter(c=>c.status==='Godkjent'||c.status==='Fakturert').reduce((acc,c)=>acc+emBelop(c),0)
 
   const loadRevisions = async () => {
     const rootId = o.parent_order_id || o.id
@@ -20755,8 +21359,10 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     }
   }
 
+  // Endringsmeldinger på ordren leses fra hovedtabellen. order_changes er
+  // arkiv (tom i prod) og røres ikke.
   const loadChanges = async () => {
-    const { data } = await supabase.from('order_changes').select('*').eq('order_id',o.id).order('created_at')
+    const { data } = await supabase.from('endringsmeldinger').select('*').eq('order_id', o.id).order('created_at')
     setChanges(data||[])
   }
   const refresh = async () => {
@@ -21085,15 +21691,17 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🔄 Endringsmeldinger ({changes.length})</h3>
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {changes.map(c => {
-                  const sCfg = c.status==='Godkjent'?{bg:'#f0fdf4',color:'#16a34a',border:'#bbf7d0'}:c.status==='Sendt'?{bg:'#eff6ff',color:'#2563eb',border:'#bfdbfe'}:c.status==='Avslått'?{bg:'#fef2f2',color:'#dc2626',border:'#fecaca'}:{bg:'#f8fafc',color:'#64748b',border:'#e2e8f0'}
+                  const sCfg = EM_STATUS[c.status] || { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0' }
+                  const teller = c.status==='Godkjent' || c.status==='Fakturert'
                   return (
-                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{c.change_number} – {c.title}</div>
+                    <div key={c.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'12px 16px', border:'1px solid #f1f5f9', flexWrap:'wrap' }}>
+                      <div style={{ flex:1, minWidth:'160px' }}>
+                        <div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{c.em_number}{emRevSuffix(c.revision_number)} – {c.title}</div>
                         {c.description && <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>{c.description}</div>}
                       </div>
                       <span style={{ background:sCfg.bg, color:sCfg.color, border:`1px solid ${sCfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{c.status}</span>
-                      <span style={{ fontWeight:'800', color:'#0f172a', fontSize:'14px', minWidth:'80px', textAlign:'right' }}>+{fmtO(c.amount)}</span>
+                      <span title={teller ? 'Teller med i ordrens totalsum' : 'Teller ikke med før den er godkjent'}
+                        style={{ fontWeight:'800', color: teller ? '#0f172a' : '#94a3b8', fontSize:'14px', minWidth:'80px', textAlign:'right' }}>+{fmtO(emBelop(c))}</span>
                     </div>
                   )
                 })}
@@ -21207,7 +21815,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       {showSend && <SendOrdreModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
       {showReminder && <SendOrderReminderModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowReminder(false)} onSent={()=>{setShowReminder(false);refresh()}} />}
       {showResend && <ResendOrderModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowResend(false)} onSent={()=>{setShowResend(false);refresh()}} />}
-      {showNewChange && <EndringsmeldingModal order={o} user={user} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
+      {showNewChange && <EndringsmeldingModal order={o} user={user} projects={projects} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
       {showUpsellInvoice && <FakturaUpsellModal onClose={()=>setShowUpsellInvoice(false)} />}
       {showNewRevision && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
@@ -22109,22 +22717,45 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
   )
 }
 
-function EndringsmeldingModal({ order, user, existingCount, onClose, onSaved }) {
-  const alert = useAppAlert()
+function EndringsmeldingModal({ order, user, projects = [], existingCount, onClose, onSaved }) {
+  const appAlert = useAppAlert()
   const [form, setForm] = useState({ title:'', description:'', amount:0 })
   const [saving, setSaving] = useState(false)
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
 
+  // Skriver til endringsmeldinger med order_id — ikke lenger til order_changes.
+  // Beløpet blir én post, så EM-en er redigerbar videre i EM-modulen og bruker
+  // samme postSum-fasit som resten av kjeden.
   const handleSave = async () => {
-    if (!form.title.trim()) return alert('Tittel er påkrevd')
+    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
     setSaving(true)
     try {
-      const { data: existingChanges } = await supabase.from('order_changes').select('change_number').eq('order_id', order.id)
-      const change_number = nextSequenceNumber(existingChanges || [], 'EM', 'change_number', { withYear: false })
-      const { error } = await supabase.from('order_changes').insert({ order_id:order.id, change_number, title:form.title.trim(), description:form.description||null, amount:parseFloat(form.amount)||0, status:'Utkast', created_by:user?.id })
+      const emNr = await nesteEmNummer(order.project_id, projects)
+      const belop = parseFloat(form.amount) || 0
+      const poster = [{
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+        description: form.title.trim(), qty: 1, unit: 'stk',
+        unitPriceWork: belop, unitPriceMaterial: '', markup: '', discount: '', show_markup: false,
+      }]
+      const { error } = await supabase.from('endringsmeldinger').insert({
+        title: form.title.trim(),
+        em_number: emNr,
+        order_id: order.id,
+        project_id: order.project_id || null,
+        description: form.description || '',
+        amount: belop,
+        posts: poster,
+        hours: 0, materials_cost: 0, ue_cost: 0,
+        customer_name: order.customer_name || '',
+        customer_email: order.customer_email || '',
+        images: [], vedlegg: [],
+        status: 'Utkast',
+        created_by: user?.id,
+        activity_log: [overforLogg(user, `Opprettet på ordre ${order.order_number || ''}`.trim())],
+      })
       if (error) throw error
       onSaved()
-    } catch(e) { alert('Feil: '+e.message) }
+    } catch(e) { await appAlert({ message: 'Kunne ikke opprette endringsmelding', subMessage: e.message, kind: 'error' }) }
     finally { setSaving(false) }
   }
 
@@ -25018,7 +25649,9 @@ function FakturaDetaljer({ invoice: init, projects, orders, user, onBack }) {
   const [showInnbetaling, setShowInnbetaling] = useState(false)
   const cfg = INV_STATUS[inv.status] || INV_STATUS['Utkast']
   const proj = projects.find(p=>p.id===inv.project_id)
-  const ord = orders.find(o=>o.id===inv.order_id)
+  // De to fakturaveiene fyller hver sin kolonne (order_id vs from_order_id).
+  // Les begge til konsolideringen er tatt som egen sak.
+  const ord = orders.find(o=>o.id===(inv.order_id ?? inv.from_order_id))
   const { net, mva, gross } = calcLines(inv.lines)
   const overdue = isOverdue(inv)
   const betalingsStatus = beregnBetalingsstatus(inv, payments)
@@ -26174,8 +26807,9 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
   const [selectedChanges, setSelectedChanges] = useState([])
   const [saving, setSaving] = useState(false)
 
+  // Leser fra endringsmeldinger filtrert på order_id — order_changes er arkiv.
   const loadChanges = async (orderId) => {
-    const { data } = await supabase.from('order_changes').select('*').eq('order_id',orderId).eq('status','Godkjent')
+    const { data } = await supabase.from('endringsmeldinger').select('*').eq('order_id',orderId).eq('status','Godkjent').order('created_at')
     setChanges(data||[])
     setSelectedChanges((data||[]).map(c=>c.id))
   }
@@ -26188,7 +26822,12 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
     setSaving(true)
     try {
       const selChanges = changes.filter(c=>selectedChanges.includes(c.id))
-      const lines = selChanges.map(c=>({ id:Date.now()+Math.random(), description:`${c.change_number} – ${c.title}`, qty:1, unit:'stk', unitPrice:c.amount||0, mvaRate:0.25 }))
+      // Beløpet HENTES fra postene (postSum-fasit), som resten av fakturakjeden.
+      const lines = selChanges.map(c=>({
+        id:Date.now()+Math.random(),
+        description:`${c.em_number || ''}${emRevSuffix(c.revision_number)} – ${c.title}`.replace(/^ – /, ''),
+        qty:1, unit:'stk', unitPrice:tilOere(emBelop(c))/100, mvaRate:0.25,
+      }))
       const { data: existingInv3 } = await supabase.from('invoices').select('invoice_number')
       const nextInvNr3 = (nextInvoiceNumber(existingInv3 || []) || '1')
       const beriket3 = await berikFakturaMedInnstillinger({
@@ -26231,13 +26870,13 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
                   style={{ display:'flex', alignItems:'center', gap:'12px', padding:'12px 14px', background:selectedChanges.includes(c.id)?'#f0fdf4':'#f8fafc', borderRadius:'10px', border:`1px solid ${selectedChanges.includes(c.id)?'#bbf7d0':'#f1f5f9'}`, cursor:'pointer', marginBottom:'6px' }}>
                   <input type="checkbox" checked={selectedChanges.includes(c.id)} readOnly style={{ width:'16px', height:'16px', accentColor:'#059669' }} />
                   <div style={{ flex:1 }}>
-                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{c.change_number} – {c.title}</div>
+                    <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{c.em_number}{emRevSuffix(c.revision_number)} – {c.title}</div>
                     {c.description&&<div style={{ fontSize:'12px', color:'#64748b' }}>{c.description}</div>}
                   </div>
-                  <div style={{ fontWeight:'800', color:'#059669', fontSize:'14px' }}>{fmtI(c.amount)}</div>
+                  <div style={{ fontWeight:'800', color:'#059669', fontSize:'14px' }}>{fmtI(emBelop(c))}</div>
                 </div>
               ))}
-              {selectedChanges.length>0&&<div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'10px 14px', border:'1px solid #bbf7d0', textAlign:'right', fontSize:'14px', fontWeight:'700', color:'#059669' }}>Total: {fmtI(changes.filter(c=>selectedChanges.includes(c.id)).reduce((a,c)=>a+(c.amount||0),0))}</div>}
+              {selectedChanges.length>0&&<div style={{ background:'#f0fdf4', borderRadius:'10px', padding:'10px 14px', border:'1px solid #bbf7d0', textAlign:'right', fontSize:'14px', fontWeight:'700', color:'#059669' }}>Total: {fmtI(changes.filter(c=>selectedChanges.includes(c.id)).reduce((a,c)=>a+emBelop(c),0))}</div>}
             </div>
           )}
           {selectedOrder&&changes.length===0&&<p style={{ color:'#94a3b8', fontSize:'14px', textAlign:'center' }}>Ingen godkjente endringsmeldinger på denne ordren.</p>}
@@ -26541,8 +27180,10 @@ function SendFakturaModal({ invoice, user, onClose, onSent, generatePdfBase64 })
       if (!fnRes.ok||d?.error) throw new Error(d?.error||'Sending feilet')
       await supabase.from('invoices').update({status:'Sendt',sent_at:new Date().toISOString(),customer_email:email,updated_at:new Date().toISOString(),activity_log:[...(invoice.activity_log||[]), fakturaLogg(user, 'Sendt', { til: email })]}).eq('id',invoice.id)
 
-      // Hvis denne fakturaen ble opprettet fra en ordre, oppdater ordrestatus til 'Fakturert' nå
-      if (invoice.from_order_id) {
+      // Hvis denne fakturaen ble opprettet fra en ordre, oppdater ordrestatus til 'Fakturert' nå.
+      // De to fakturaveiene fyller hver sin kolonne — les begge.
+      const kobletOrdreId = invoice.order_id ?? invoice.from_order_id
+      if (kobletOrdreId) {
         // Prøv først med alle koblings-felter, fall tilbake til bare status hvis noen kolonner mangler
         const fullUpdate = {
           status: 'Fakturert',
@@ -26550,11 +27191,11 @@ function SendFakturaModal({ invoice, user, onClose, onSent, generatePdfBase64 })
           invoice_id: invoice.id,
           updated_at: new Date().toISOString(),
         }
-        let { error: ordErr } = await supabase.from('orders').update(fullUpdate).eq('id', invoice.from_order_id)
+        let { error: ordErr } = await supabase.from('orders').update(fullUpdate).eq('id', kobletOrdreId)
         if (ordErr) {
           console.warn('[Send faktura] Full ordre-oppdatering feilet, prøver bare status:', ordErr.message)
           const basicUpdate = { status: 'Fakturert', updated_at: new Date().toISOString() }
-          const { error: basicOrdErr } = await supabase.from('orders').update(basicUpdate).eq('id', invoice.from_order_id)
+          const { error: basicOrdErr } = await supabase.from('orders').update(basicUpdate).eq('id', kobletOrdreId)
           if (basicOrdErr) {
             console.error('[Send faktura] Kunne ikke oppdatere ordrestatus:', basicOrdErr)
           } else {
@@ -38691,7 +39332,7 @@ function CRMPage() {
   const initedRef = React.useRef(false)
 
   // PostgREST-or() bruker komma/parentes som skilletegn — fjern dem fra søket så filteret ikke brekker
-  const sanitizeSearch = (s) => (s||'').trim().replace(/[,()*%]/g, ' ').replace(/\s+/g, ' ').trim()
+  // sanitizeSearch er løftet til modulnivå — deles med kryssmodul-velgeren.
 
   // Bygg lista-spørring: filter + søk + sortering skjer i DB, ikke på et 1000-raders uttrekk.
   const buildListQuery = (withCount) => {
