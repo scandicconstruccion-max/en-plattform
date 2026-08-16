@@ -4677,6 +4677,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
   const wrapperRef = React.useRef(null)
   const inputRef = React.useRef(null)
   const dropdownRef = React.useRef(null)
+  const tastaturNav = React.useRef(false)   // true kun mellom piltast og påfølgende render
 
   const isEmpty = value === emptyValue || value == null || value === ''
   const selected = !isEmpty ? options.find(p => p.id === value) : null
@@ -4709,11 +4710,38 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     setHighlightedIndex(0)
   }
 
-  const openDrop = () => {
-    if (wrapperRef.current) {
-      const r = wrapperRef.current.getBoundingClientRect()
-      setRect({ top: r.bottom + 4, left: r.left, width: r.width })
+  // Regner ut hvor nedtrekket skal ligge, OG hvor høyt det får lov å bli.
+  // Uten klamringen mot viewporten legges 320px nedover fra feltet uansett hvor
+  // lavt feltet står. Boksen er position:fixed og følger derfor ikke med når
+  // siden scrolles — alt som havner under skjermkanten blir uoppnåelig.
+  const MAKS_HOYDE = 320
+  const KANT_MARG = 8
+  const beregnPosisjon = () => {
+    if (!wrapperRef.current) return null
+    const r = wrapperRef.current.getBoundingClientRect()
+    const vh = (typeof window !== 'undefined' && window.innerHeight) || 0
+    const plassUnder = vh - r.bottom - 4 - KANT_MARG
+    const plassOver = r.top - 4 - KANT_MARG
+    // Vend oppover kun når det er trangt under OG romsligere over.
+    const oppover = plassUnder < 160 && plassOver > plassUnder
+    const maxHeight = Math.max(120, Math.min(MAKS_HOYDE, oppover ? plassOver : plassUnder))
+    return {
+      top: oppover ? Math.max(KANT_MARG, r.top - 4 - maxHeight) : r.bottom + 4,
+      left: r.left,
+      width: r.width,
+      maxHeight,
     }
+  }
+
+  // Behold forrige objekt når posisjonen er uendret. Uten denne gir hver eneste
+  // scroll-hendelse et nytt objekt, ny state og dermed én render pr. frame.
+  const likRekt = (a, b) => !!a && !!b &&
+    Math.abs(a.top - b.top) < 0.5 && Math.abs(a.left - b.left) < 0.5 &&
+    Math.abs(a.width - b.width) < 0.5 && Math.abs(a.maxHeight - b.maxHeight) < 0.5
+  const settRekt = (ny) => { if (ny) setRect(prev => likRekt(prev, ny) ? prev : ny) }
+
+  const openDrop = () => {
+    settRekt(beregnPosisjon())
     setShowDrop(true)
     setSearchText('')
     setIsTyping(false)
@@ -4741,6 +4769,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
       setHighlightedIndex(i => Math.min(i + 1, Math.max(filtered.length - 1, 0)))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
+      tastaturNav.current = true
       setHighlightedIndex(i => Math.max(i - 1, 0))
     } else if (e.key === 'Enter') {
       e.preventDefault()
@@ -4756,13 +4785,31 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
     }
   }
 
+  // Rull uthevet rad inn i syne — KUN etter tastaturnavigasjon. Lå dette i en
+  // ref-callback på hver rad, kjørte det ved hver render, og en render midt i
+  // en touch-scroll dro lista tilbake til highlightedIndex (som er 0 rett etter
+  // åpning). Det var grunnen til at nedtrekket ikke lot seg scrolle på mobil.
+  useEffect(() => {
+    if (!tastaturNav.current) return
+    tastaturNav.current = false
+    const parent = dropdownRef.current
+    if (!parent) return
+    const el = parent.querySelector(`[data-idx="${highlightedIndex}"]`)
+    if (!el) return
+    const elTop = el.offsetTop
+    const elBottom = elTop + el.offsetHeight
+    if (elTop < parent.scrollTop) parent.scrollTop = elTop
+    else if (elBottom > parent.scrollTop + parent.clientHeight) parent.scrollTop = elBottom - parent.clientHeight
+  }, [highlightedIndex])
+
   useEffect(() => {
     if (!showDrop) return
-    const update = () => {
-      if (wrapperRef.current) {
-        const r = wrapperRef.current.getBoundingClientRect()
-        setRect({ top: r.bottom + 4, left: r.left, width: r.width })
-      }
+    const update = (e) => {
+      // Ignorer nedtrekkets EGEN scroll. Lytteren står i capture-fasen og fanger
+      // ellers hver scroll-hendelse fra lista selv — som er den brukeren utløser
+      // med fingeren, og som ikke flytter feltet nedtrekket er festet til.
+      if (e && e.target && dropdownRef.current && dropdownRef.current.contains(e.target)) return
+      settRekt(beregnPosisjon())
     }
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
@@ -4801,8 +4848,11 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
       borderRadius:'10px',
       boxShadow:'0 8px 24px rgba(0,0,0,0.18)',
       zIndex: 99999,
-      maxHeight:'320px',
-      overflowY:'auto'
+      maxHeight: `${rect.maxHeight}px`,
+      overflowY:'auto',
+      WebkitOverflowScrolling:'touch',
+      overscrollBehavior:'contain',   // hindrer at siden bak scroller når lista når enden
+      touchAction:'pan-y'
     }}>
       {options.length === 0 ? (
         <div style={{ padding:'14px', fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>
@@ -4818,13 +4868,7 @@ function SearchableProjectSelect({ value, onChange, projects, placeholder, style
             const isHighlighted = idx === highlightedIndex
             return (
             <div key={p.id}
-              ref={el => { if (isHighlighted && el && dropdownRef.current) {
-                const parent = dropdownRef.current
-                const elTop = el.offsetTop
-                const elBottom = elTop + el.offsetHeight
-                if (elTop < parent.scrollTop) parent.scrollTop = elTop
-                else if (elBottom > parent.scrollTop + parent.clientHeight) parent.scrollTop = elBottom - parent.clientHeight
-              } }}
+              data-idx={idx}
               onMouseDown={(e) => { e.preventDefault(); handleSelect(p) }}
               onMouseEnter={e => { setHighlightedIndex(idx); e.currentTarget.style.background='#f0fdf4' }}
               onMouseLeave={e => { e.currentTarget.style.background = isHighlighted ? '#f0fdf4' : 'white' }}
