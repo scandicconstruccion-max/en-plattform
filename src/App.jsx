@@ -6178,7 +6178,7 @@ function ProsjektfilerPage() {
           totals[k.key] = n
           if (n > 0) oppfylt.add(k.fase + '|' + k.doc_type)
           if (visAlle) {
-            const liste = (data || []).map(r => ({ id: r.id, tittel: r.title || '(uten tittel)', status: r.status || '', nr: k.nrfelt ? r[k.nrfelt] : null, kilde: k.kilde, side: k.side, emoji: k.emoji, key: k.key }))
+            const liste = (data || []).map(r => ({ id: r.id, tittel: r.title || '(uten tittel)', status: r.status || '', nr: k.nrfelt ? r[k.nrfelt] : null, kilde: k.kilde, side: k.side, emoji: k.emoji, key: k.key, fase: k.fase }))
             rader[k.kategori] = (rader[k.kategori] || []).concat(liste)
           }
         } catch (e) { console.warn('[prosjektfiler] kilde feilet:', k.key, e); totals[k.key] = 0 }
@@ -6655,9 +6655,12 @@ function ProsjektfilerPage() {
   // Vises kun i «Alle dokumenter». Peker tilbake til posten via deep-link.
   const renderDerivertBlokk = () => {
     if (!visAlle || !selectedCategory) return null
-    const rader = derivedRows[selectedCategory] || []
+    // Fasen er FAST for disse kildene (alle: Utførelse). Har prosjektet en mal,
+    // vises radene KUN i den fasen — aldri i Anbud/Kontrakt/FDV/Overlevering.
+    // Uten mal finnes ingen fase-kontekst, og radene vises som før.
+    const rader = (derivedRows[selectedCategory] || []).filter(r => !hasFaser || r.fase === viewedPhase)
     if (rader.length === 0) return null
-    const overskudd = DERIVERTE_KILDER.filter(k => k.kategori === selectedCategory && (derivedTotals[k.key] || 0) > 50)
+    const overskudd = DERIVERTE_KILDER.filter(k => k.kategori === selectedCategory && (!hasFaser || k.fase === viewedPhase) && (derivedTotals[k.key] || 0) > 50)
     return (
       <div style={{ marginTop: '16px' }}>
         <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', letterSpacing: '0.06em', marginBottom: '6px' }}>REGISTRERT FRA ANDRE MODULER ({rader.length})</div>
