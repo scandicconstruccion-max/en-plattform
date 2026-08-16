@@ -14412,69 +14412,6 @@ const OVERFORINGER = {
       return { id: data.id, nr: emNr, tekst: `Endringsmelding ${emNr} opprettet` }
     },
   },
-
-  // ── Endringsmelding → Ordre ──────────────────────────────────────────────
-  'em->ordre': {
-    tittel: 'Ordre fra endringsmelding',
-    emoji: '🔄',
-    knapp: 'Opprett ordre',
-    kildeTabell: 'endringsmeldinger',
-    kildeKolonner: 'id, em_number, title, status, project_id, revision_number, amount, created_at',
-    sokefelt: ['em_number', 'title', 'description'],
-    sortering: { kolonne: 'created_at', stigende: false },
-    filtrer: (q) => q.in('status', ['Godkjent', 'Utført']),
-    tomTekst: 'Ingen godkjente eller utførte endringsmeldinger å lage ordre av.',
-    hjelpetekst: 'Postene kopieres til ett kapittel på ordren. Beløpene er allerede ferdig regnet.',
-    fullRad: async (id) => (await supabase.from('endringsmeldinger').select('*').eq('id', id).single()).data,
-    vis: (em) => ({
-      nr: (em.em_number || '') + emRevSuffix(em.revision_number),
-      tittel: em.title || '(uten tittel)',
-      under: em.status || '',
-    }),
-    lagUtkast: (em) => ({
-      tittel: em.title || `Ordre fra ${em.em_number || 'endringsmelding'}`,
-      project_id: em.project_id || '',
-      beskrivelse: em.description || '',
-      tidskonsekvens: '',
-      kundeNavn: em.customer_name || '',
-      kundeEpost: em.customer_email || '',
-      // Feltene er identiske med ordreposter — ingen mapping nødvendig.
-      poster: (em.posts || []).map(p => ({ ...p })),
-      bilder: [],
-    }),
-    lagre: async (utkast, em, { user }) => {
-      const emNr = (em.em_number || '') + emRevSuffix(em.revision_number)
-      const { data: eksisterende } = await supabase.from('orders').select('order_number')
-      const ordreNr = nextSequenceNumber(eksisterende || [], 'ORD', 'order_number')
-      const { data, error } = await supabase.from('orders').insert({
-        title: utkast.tittel || `Ordre fra ${emNr}`,
-        order_number: ordreNr,
-        project_id: utkast.project_id || null,
-        customer_name: utkast.kundeNavn || '',
-        customer_email: utkast.kundeEpost || '',
-        payment_terms: '30 dager netto',
-        // ETT kapittel. markup:0 med vilje — feltet ignoreres av calcOrder og var
-        // kilden til beløpsfeilen; det skal aldri bære verdi på en ordre.
-        chapters: [{ id: Date.now(), title: `Endringsmelding ${emNr}`, markup: 0, posts: utkast.poster }],
-        global_markup: 0,
-        em_id: em.id,
-        status: 'Utkast',
-        created_by: user && user.id,
-        activity_log: [overforLogg(user, `Opprettet fra endringsmelding ${emNr}`)],
-      }).select().single()
-      if (error) throw error
-      // MERK: em.order_id settes IKKE her. Ordren ER endringsmeldingen — settes
-      // order_id, ville EM-en dukket opp som et tillegg på sin egen ordre og
-      // beløpet blitt talt to ganger i ordrens totalsum.
-      try {
-        await supabase.from('endringsmeldinger').update({
-          activity_log: [...(em.activity_log || []), overforLogg(user, `Ble ordre ${ordreNr}`)],
-          updated_at: new Date().toISOString(),
-        }).eq('id', em.id)
-      } catch (_) {}
-      return { id: data.id, nr: ordreNr, tekst: `Ordre ${ordreNr} opprettet` }
-    },
-  },
 }
 
 // ── Den ene velgeren. Steg 1: søk og velg kilde (filtrering skjer i DB, aldri
@@ -21206,7 +21143,6 @@ async function exportOrderPDFGlobal(order, projects = [], mode = 'download', bra
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function OrdrePage() {
   const { user, role } = useAuth()
-  const appAlert = useAppAlert()
   const kanRedigereOrdre = rolleKanRedigereModul(role, 'ordre')
   const [orders, setOrders] = useState([])
   const [quotes, setQuotes] = useState([])
@@ -21217,7 +21153,6 @@ function OrdrePage() {
   const [showNew, setShowNew] = useState(false)
   const [showFromQuote, setShowFromQuote] = useState(false)
   const [visNyOrdreMeny, setVisNyOrdreMeny] = useState(false)
-  const [visFraEm, setVisFraEm] = useState(false)
   const [sendAfterSaveOrder, setSendAfterSaveOrder] = useState(null) // Ordre som skal sendes etter lagring
   const [selected, setSelected] = useState(null)
   React.useEffect(() => {
@@ -21294,12 +21229,17 @@ function OrdrePage() {
                     <div style={{ position:'fixed', inset:0, zIndex:50 }} onClick={()=>setVisNyOrdreMeny(false)} />
                     <div style={{ position:'absolute', top:'108%', right:0, background:'white', border:'1px solid #eef2f6', borderRadius:'16px', boxShadow:'0 16px 48px rgba(15,23,42,0.12)', zIndex:60, minWidth:'286px', padding:'6px' }}>
                       <div style={{ padding:'8px 12px 6px', fontSize:'11px', fontWeight:'600', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'0.6px' }}>Ny ordre fra</div>
+                      {/* Ingen «Fra endringsmelding». Tilbud og avvik er
+                          utgangspunkt, ordre og endring er utfall — en endring
+                          skal ikke bli en ordre. En EM som både henger på en
+                          ordre OG er konvertert til egen ordre, telles to
+                          ganger i ordresummen. Tilleggsarbeid legges i stedet
+                          på ordren med «➕ Ny endringsmelding». */}
                       {[
                         { key:'manuell', emoji:'📝', label:'Manuell', desc:'Lag fra bunnen av' },
                         { key:'tilbud',  emoji:'📋', label:'Fra tilbud', desc:'Kopier kapitler og poster' },
-                        { key:'em',      emoji:'🔄', label:'Fra endringsmelding', desc:'Godkjent endring blir ordre' },
                       ].map(o => (
-                        <button key={o.key} onClick={()=>{ setVisNyOrdreMeny(false); if (o.key==='manuell') setShowNew(true); else if (o.key==='tilbud') setShowFromQuote(true); else setVisFraEm(true) }}
+                        <button key={o.key} onClick={()=>{ setVisNyOrdreMeny(false); if (o.key==='manuell') setShowNew(true); else setShowFromQuote(true) }}
                           style={{ width:'100%', display:'flex', alignItems:'center', gap:'12px', padding:'10px 12px', minHeight:'56px', border:'none', borderRadius:'12px', background:'transparent', cursor:'pointer', textAlign:'left' }}>
                           <span style={{ width:'34px', height:'34px', borderRadius:'10px', background:'#f1f5f9', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'17px', flexShrink:0 }}>{o.emoji}</span>
                           <div style={{ flex:1, minWidth:0 }}>
@@ -21401,15 +21341,6 @@ function OrdrePage() {
       }} />}
       {sendAfterSaveOrder && <SendOrdreModal order={sendAfterSaveOrder} user={user} getPdfBase64={(ord) => exportOrderPDFGlobal(ord, projects, 'base64')} onClose={()=>setSendAfterSaveOrder(null)} onSent={()=>{setSendAfterSaveOrder(null);load()}} />}
       {showFromQuote && <FraIlbudModal quotes={quotes} projects={projects} user={user} onClose={()=>setShowFromQuote(false)} onSaved={()=>{setShowFromQuote(false);load()}} />}
-      {visFraEm && (
-        <OverforModal
-          konfig="em->ordre"
-          user={user}
-          projects={projects}
-          onClose={()=>setVisFraEm(false)}
-          onSaved={async (res)=>{ setVisFraEm(false); load(); await appAlert({ message: res.tekst, subMessage: 'Ordren ligger som utkast.', kind: 'success' }) }}
-        />
-      )}
     </div>
   )
 }
