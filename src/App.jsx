@@ -40228,9 +40228,13 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
             <div style={{ flex:1, minWidth:'180px', fontSize:'13px', color:'#166534', lineHeight:1.5 }}>
               Denne står kun i CRM. Legg den til i Kundeoversikten for å kunne velge den i tilbud, ordre og faktura.
             </div>
+            {/* Vanlig «+», ikke ➕. Emojien tegnes av systemets emojifont i sin
+                egen grønnfarge og arver ikke color — den ble grønn på grønt.
+                48px høyde for hanske, men innholdsbredde på PC: knappen skal
+                ikke veie mer enn setningen som forklarer den. */}
             <button onClick={leggTilIKundeoversikt} disabled={leggerTilIKundeoversikt}
-              style={{ minHeight:'56px', padding:'0 22px', background: leggerTilIKundeoversikt ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'12px', cursor: leggerTilIKundeoversikt ? 'wait' : 'pointer', fontSize:'14px', fontWeight:'700', flexShrink:0, width: isMobBD ? '100%' : 'auto' }}>
-              {leggerTilIKundeoversikt ? 'Legger til…' : '➕ Legg til i Kundeoversikt'}
+              style={{ minHeight:'48px', padding:'0 16px', background: leggerTilIKundeoversikt ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: leggerTilIKundeoversikt ? 'wait' : 'pointer', fontSize:'13px', fontWeight:'600', flexShrink:0, whiteSpace:'nowrap', width: isMobBD ? '100%' : 'auto' }}>
+              {leggerTilIKundeoversikt ? 'Legger til…' : '+ Legg til i Kundeoversikt'}
             </button>
           </div>
         )}
