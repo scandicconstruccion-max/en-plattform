@@ -5900,7 +5900,7 @@ const faseLabel = (id) => PROSJEKT_FASER.find(f => f.id === id)?.label || id
 // Sorter en liste av fase-id-er i den faste rekkefølgen.
 const sorterFaser = (ids) => PROSJEKT_FASER.filter(f => (ids || []).includes(f.id)).map(f => f.id)
 
-// Deriverte kilder som vises når «Vis også registreringer fra andre moduler»
+// Deriverte kilder som vises når «Vis også påkrevde dokumenter og registreringer»
 // er påhuket i Prosjektfiler (steg 2b).
 // REGISTRERES, ikke kopieres: radene leses live fra kilden, peker tilbake dit,
 // og forsvinner av seg selv om kilden slettes. Alle ligger i fase Utførelse.
@@ -6047,7 +6047,7 @@ function ProsjektfilerPage() {
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
   const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
   // Steg 2b: registrering fra andre moduler (deriverte, live-leste rader)
-  // Avkryssingen «Vis også registreringer fra andre moduler». false = kun filer
+  // Avkryssingen «Vis også påkrevde dokumenter og registreringer». false = kun filer
   // (standard). Vanlig React-state: holder seg når man bytter kategori og fase,
   // men nullstilles ved sidelasting og når man forlater modulen.
   const [visAlle, setVisAlle] = useState(false)
@@ -6691,7 +6691,7 @@ function ProsjektfilerPage() {
       <input type="checkbox" checked={visAlle} onChange={e => setVisAlle(e.target.checked)}
         style={{ width: '20px', height: '20px', accentColor: '#059669', cursor: 'pointer', flexShrink: 0, margin: 0 }} />
       <span style={{ fontSize: '13px', fontWeight: '600', color: visAlle ? '#166534' : '#475569', lineHeight: 1.35 }}>
-        Vis også registreringer fra andre moduler
+        Vis også påkrevde dokumenter og registreringer
       </span>
     </label>
   )
@@ -7010,9 +7010,11 @@ function ProsjektfilerPage() {
 
         {/* LEFT: Category list */}
         <div style={{ width: '260px', flexShrink: 0, background: 'white', borderRight: '1px solid #e2e8f0', overflowY: 'auto', padding: '12px 0' }}>
-          <div style={{ padding: '4px 16px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {/* Ingen «+» her: en pluss i en overskrift som heter KATEGORIER leser
+              som «legg til kategori», ikke «last opp fil». Opplasting ligger
+              kun i headeren. */}
+          <div style={{ padding: '4px 16px 10px' }}>
             <span style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', letterSpacing: '0.07em' }}>KATEGORIER</span>
-            <button onClick={() => setShowUpload(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '20px', lineHeight: 1 }}>+</button>
           </div>
           {FILE_CATEGORIES.map(cat => {
             const catCount = countForCat(cat.id)
