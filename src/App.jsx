@@ -1780,7 +1780,7 @@ function AuthProvider({ children }) {
     if (!authUser) { setProfile(null); return }
     try {
       let prof = null
-      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role, created_at, feedback_prompt_disabled, feedback_prompt_last_shown, company_id, module_access').eq('id', authUser.id).maybeSingle()
+      const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role, created_at, feedback_prompt_disabled, feedback_prompt_last_shown, company_id, module_access, seen_tours').eq('id', authUser.id).maybeSingle()
       if (error) {
         // Fallback without platform_role if column doesn't exist yet
         const { data: fallback } = await supabase.from('user_profiles').select('full_name, avatar_url, role, module_access').eq('id', authUser.id).maybeSingle()
@@ -1803,6 +1803,25 @@ function AuthProvider({ children }) {
         } catch (_) {}
       }
       setProfile(prof)
+
+      // Engangsmigrering av opplæringstur-historikk: har brukeren sett-turer i
+      // localStorage, men tom DB-fasit (seen_tours), tar vi historikken med inn i
+      // DB én gang. Da slipper veteraner å se turen på nytt når de bytter enhet.
+      try {
+        const dbSeen = (prof && prof.seen_tours) || {}
+        if (prof && Object.keys(dbSeen).length === 0) {
+          const prefix = `ep-tour-${authUser.id}-`
+          const fraLokal = {}
+          for (let i = 0; i < localStorage.length; i++) {
+            const k = localStorage.key(i)
+            if (k && k.startsWith(prefix) && localStorage.getItem(k) === 'done') fraLokal[k.slice(prefix.length)] = true
+          }
+          if (Object.keys(fraLokal).length > 0) {
+            setProfile(p => p ? { ...p, seen_tours: fraLokal } : p)
+            supabase.from('user_profiles').update({ seen_tours: fraLokal }).eq('id', authUser.id).then(() => {}, () => {})
+          }
+        }
+      } catch (_) {}
 
       // Registrer sist sett (sist innlogget) — best effort, brukes i kontrollpanelet
       try { await supabase.from('user_profiles').update({ last_seen: new Date().toISOString() }).eq('id', authUser.id) } catch (_) {}
@@ -1849,7 +1868,15 @@ function AuthProvider({ children }) {
   const kanSlette = rolleKanSlette(role)       // kun admin/leder
   const kanStyreProsjekt = rolleKanStyreProsjekt(role) // opprette/slette prosjekt: admin/leder
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, loading, supabase }}>{children}</AuthContext.Provider>
+  // Marker en opplæringstur som sett — DB er fasit, localStorage er cache.
+  const markTourSeen = async (tourKey) => {
+    if (!user?.id || !tourKey) return
+    const merged = { ...(profile?.seen_tours || {}), [tourKey]: true }
+    setProfile(p => p ? { ...p, seen_tours: { ...(p.seen_tours || {}), [tourKey]: true } } : p)
+    try { await supabase.from('user_profiles').update({ seen_tours: merged }).eq('id', user.id) } catch (_) {}
+  }
+
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -2782,7 +2809,8 @@ const KildeGateContext = React.createContext(false)
 // Starter automatisk første gang per bruker+modul (localStorage). Kan spilles av
 // på nytt ved å dispatche window-eventet `ep-tour:<tourKey>`.
 function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon = false }) {
-  const { user } = useAuth()
+  const { user, profile, markTourSeen } = useAuth()
+  const dbSett = !!(profile && profile.seen_tours && profile.seen_tours[tourKey] === true)  // DB-fasit
   const kildeGate = React.useContext(KildeGateContext)   // true = hold igjen auto-start (kilde-popup åpen/ubesvart)
   const [aktiv, setAktiv] = React.useState(false)
   const [idx, setIdx] = React.useState(0)
@@ -2815,17 +2843,22 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
     if (!autoStart) return
     if (kildeGate) return                                     // kilde-popup åpen/ubesvart → ikke start (og ikke marker 'done')
     if (!tillatAnon && (!user || !user.id)) return            // vent til ekte bruker er lastet (unngå 'anon'-nøkkel)
-    let sett = false
-    try { sett = localStorage.getItem(nokkel) === 'done' } catch (_) {}
+    // Viktig: vent på at profilen (DB-fasit) er lastet før vi bestemmer oss —
+    // ellers rekker turen å blinke fram i det halve sekundet før DB er lest.
+    if (!tillatAnon && !profile) return
+    let sett = dbSett                                          // DB er fasit
+    try { if (!sett && localStorage.getItem(nokkel) === 'done') sett = true } catch (_) {}   // cache
     if (sett) return
     const t = setTimeout(() => {
       setIdx(0); setAktiv(true)
       // Marker som sett straks den auto-starter → vises kun første gang, uansett hvordan den lukkes.
       // «?»-knappen spiller den av igjen via ep-tour-eventet (uavhengig av dette flagget).
       try { localStorage.setItem(nokkel, 'done') } catch (_) {}
+      if (!tillatAnon) markTourSeen(tourKey)                   // skriv DB-fasit
     }, 650)
     return () => clearTimeout(t)
-  }, [nokkel, autoStart, user, kildeGate])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nokkel, autoStart, user, profile, kildeGate])
 
   React.useEffect(() => {
     const start = () => { setIdx(0); setAktiv(true); setTick(x => x + 1) }
@@ -2842,7 +2875,7 @@ function Produktomvisning({ tourKey, steps, autoStart = true, onSteg, tillatAnon
     if (aktiv && typeof onSteg === 'function') onSteg(idx, steps[idx])
   }, [aktiv, idx])
 
-  const lukk = () => { setAktiv(false); if (typeof onSteg === 'function') onSteg(-1, null); try { localStorage.setItem(nokkel, 'done') } catch (_) {} }
+  const lukk = () => { setAktiv(false); if (typeof onSteg === 'function') onSteg(-1, null); try { localStorage.setItem(nokkel, 'done') } catch (_) {} if (!tillatAnon) markTourSeen(tourKey) }
   if (!aktiv || !steps || steps.length === 0) return null
   const steg = steps[idx]
   const siste = idx === steps.length - 1
