@@ -4514,7 +4514,7 @@ function nextSequenceNumber(existingItems, prefix, numberField, { withYear = tru
 }
 
 // ─── FELLES KUNDE-OPPLØSNING FOR ØKONOMI-MODULER ────────────────────────
-// Bruker i TilbudEditorModal / OrdreEditorModal / FakturaEditorModal / EndringsmeldingModal.
+// Bruker i TilbudEditorModal / OrdreEditorModal / FakturaEditorModal.
 // Hvis bruker allerede har valgt kunde via CustomerSelect (form.customer_id satt), returnerer den id-en.
 // Ellers prøver den å matche på orgnr / email / navn. Finner den ingen match, oppretter den
 // en ny kunde i customers-tabellen med autogenerert K-NNNN nummer.
@@ -14341,6 +14341,78 @@ const OVERFORINGER = {
     },
   },
 
+  // ── Ordre → Endringsmelding ──────────────────────────────────────────────
+  // Åpnes normalt forhåndsvalgt fra ordredetaljene (steg 1 hoppes over), men
+  // rada er komplett så velgeren også virker frittstående.
+  'ordre->em': {
+    tittel: 'Endringsmelding på ordre',
+    emoji: '🔄',
+    knapp: 'Opprett endringsmelding',
+    kildeTabell: 'orders',
+    kildeKolonner: 'id, order_number, title, status, project_id, revision_number, customer_name, customer_email, created_at',
+    sokefelt: ['order_number', 'title', 'customer_name'],
+    sortering: { kolonne: 'created_at', stigende: false },
+    filtrer: (q) => q.neq('status', 'Avslått'),
+    tomTekst: 'Ingen ordrer å legge en endringsmelding på.',
+    hjelpetekst: 'Endringsmeldingen er tilleggsarbeid PÅ ordren — ikke en kopi av den. Legg inn postene som kommer i tillegg. Beløpet teller med i ordrens totalsum først når endringsmeldingen er godkjent.',
+    fullRad: async (id) => (await supabase.from('orders').select('*').eq('id', id).single()).data,
+    vis: (o) => ({
+      nr: (o.order_number || '') + revNumSuffix(o.revision_number),
+      tittel: o.title || '(uten tittel)',
+      under: [o.customer_name, o.status].filter(Boolean).join(' · '),
+    }),
+    // Tom post, ikke en kopi av ordrelinjene: en endringsmelding er nytt
+    // arbeid. Tittel står blank med vilje — den skal navngi endringen, og
+    // opprett-knappen krever den utfylt.
+    lagUtkast: (o) => ({
+      tittel: '',
+      project_id: o.project_id || '',
+      beskrivelse: '',
+      tidskonsekvens: '',
+      kundeNavn: o.customer_name || '',
+      kundeEpost: o.customer_email || '',
+      poster: [{
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
+        description: '', qty: 1, unit: 'stk',
+        unitPriceWork: '', unitPriceMaterial: '',
+        markup: '', discount: '', show_markup: false,
+      }],
+      bilder: [],
+    }),
+    lagre: async (utkast, ordre, { user, projects }) => {
+      const ordreNr = (ordre.order_number || '') + revNumSuffix(ordre.revision_number)
+      const emNr = await nesteEmNummer(utkast.project_id, projects)
+      const { data, error } = await supabase.from('endringsmeldinger').insert({
+        title: utkast.tittel || `Endring på ${ordreNr || 'ordre'}`,
+        em_number: emNr,
+        order_id: ordre.id,
+        project_id: utkast.project_id || null,
+        description: utkast.beskrivelse || '',
+        reason: ordreNr ? `Ordre ${ordreNr}${ordre.title ? ' – ' + ordre.title : ''}` : '',
+        amount: kildeSumPoster(utkast.poster),
+        posts: utkast.poster,
+        time_consequence: utkast.tidskonsekvens || '',
+        hours: 0, materials_cost: 0, ue_cost: 0,
+        customer_name: utkast.kundeNavn || '',
+        customer_email: utkast.kundeEpost || '',
+        images: [], vedlegg: [],
+        status: 'Utkast',
+        created_by: user && user.id,
+        activity_log: [overforLogg(user, `Opprettet på ordre ${ordreNr}`.trim())],
+      }).select().single()
+      if (error) throw error
+      // Tilbakepeker på ordrens logg. Feiler den, står EM-en fortsatt —
+      // koblingen finnes uansett via order_id.
+      try {
+        await supabase.from('orders').update({
+          activity_log: [...(Array.isArray(ordre.activity_log) ? ordre.activity_log : []), overforLogg(user, `Endringsmelding ${emNr} opprettet`)],
+          updated_at: new Date().toISOString(),
+        }).eq('id', ordre.id)
+      } catch (_) {}
+      return { id: data.id, nr: emNr, tekst: `Endringsmelding ${emNr} opprettet` }
+    },
+  },
+
   // ── Endringsmelding → Ordre ──────────────────────────────────────────────
   'em->ordre': {
     tittel: 'Ordre fra endringsmelding',
@@ -21635,6 +21707,7 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
               )
             })()}
             {o.status !== 'Fakturert' && o.status !== 'Avslått' && <button onClick={createInvoice} disabled={creatingInvoice} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background: creatingInvoice ? '#86efac' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: creatingInvoice ? 'wait' : 'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{creatingInvoice ? '⏳' : (isMobOD ? '🧾 Faktura' : '🧾 Send til faktura')}</button>}
+            {kanRedigereOrdre && <button onClick={()=>setShowNewChange(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#fffbeb', color:'#d97706', border:'1px solid #fde68a', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '➕ EM' : '➕ Ny endringsmelding'}</button>}
             {kanRedigereOrdre && <button onClick={()=>setShowNewRevision(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'10px', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600' }}>{isMobOD ? '🔄 Rev' : '🔄 Ny revisjon'}</button>}
             <button onClick={()=>exportOrderPDF(o, 'preview')} title="Forhåndsvis PDF" style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '11px' : '13px', fontWeight:'600', color:'#374151' }}>{isMobOD ? '👁 Vis' : '👁 Forhåndsvisning'}</button>
             {kanRedigereOrdre && <button onClick={()=>setEditing(true)} style={{ padding: isMobOD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobOD ? '12px' : '13px' }}>✏️</button>}
@@ -21733,10 +21806,20 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
             </div>
           </div>
 
-          {/* Endringsmeldinger */}
-          {changes.length > 0 && (
-            <div style={oCard}>
-              <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🔄 Endringsmeldinger ({changes.length})</h3>
+          {/* Endringsmeldinger — vises ALLTID, også ved null. Skjules panelet
+              ved N=0, finnes det ingen synlig vei til den første, og at veien
+              mangler blir umulig å oppdage. */}
+          <div style={oCard}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
+              <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>🔄 Endringsmeldinger ({changes.length})</h3>
+              {kanRedigereOrdre && <button onClick={()=>setShowNewChange(true)} style={{ background:'#fffbeb', color:'#d97706', border:'1px solid #fde68a', borderRadius:'8px', padding:'8px 12px', minHeight:'40px', fontSize:'12px', fontWeight:'700', cursor:'pointer', flexShrink:0 }}>+ Ny</button>}
+            </div>
+            {changes.length === 0 ? (
+              <div style={{ textAlign:'center', color:'#94a3b8', fontSize:'13px', padding:'18px 0', lineHeight:1.5 }}>
+                Ingen endringsmeldinger på denne ordren.
+                {kanRedigereOrdre && <><br />Tilleggsarbeid legges inn med «+ Ny».</>}
+              </div>
+            ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {changes.map(c => {
                   const sCfg = EM_STATUS[c.status] || { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0' }
@@ -21754,8 +21837,8 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
                   )
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         {/* Sidebar */}
@@ -21863,7 +21946,16 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
       {showSend && <SendOrdreModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowSend(false)} onSent={()=>{setShowSend(false);refresh()}} />}
       {showReminder && <SendOrderReminderModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowReminder(false)} onSent={()=>{setShowReminder(false);refresh()}} />}
       {showResend && <ResendOrderModal order={o} user={user} getPdfBase64={(ord) => exportOrderPDF(ord, 'base64')} onClose={()=>setShowResend(false)} onSent={()=>{setShowResend(false);refresh()}} />}
-      {showNewChange && <EndringsmeldingModal order={o} user={user} projects={projects} existingCount={changes.length} onClose={()=>setShowNewChange(false)} onSaved={()=>{setShowNewChange(false);loadChanges()}} />}
+      {showNewChange && (
+        <OverforModal
+          konfig="ordre->em"
+          user={user}
+          projects={projects}
+          forhandsvalgt={o}
+          onClose={()=>setShowNewChange(false)}
+          onSaved={async ()=>{ setShowNewChange(false); await loadChanges(); await refresh() }}
+        />
+      )}
       {showUpsellInvoice && <FakturaUpsellModal onClose={()=>setShowUpsellInvoice(false)} />}
       {showNewRevision && (
         <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
@@ -22758,70 +22850,6 @@ function ResendOrderModal({ order, user, getPdfBase64, onClose, onSent }) {
           <div style={{ display:'flex', justifyContent: isMobRO ? 'stretch' : 'flex-end', flexDirection: isMobRO ? 'column-reverse' : 'row', gap: isMobRO ? '10px' : '12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
             <button onClick={onClose} style={{ padding: isMobRO ? '12px 20px' : '10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobRO ? '15px' : '14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
             <button onClick={handleSend} disabled={sending} style={{ padding: isMobRO ? '14px 24px' : '10px 24px', background:sending?'#c4b5fd':'#7c3aed', color:'white', border:'none', borderRadius:'10px', cursor:sending?'not-allowed':'pointer', fontSize: isMobRO ? '15px' : '14px', fontWeight:'700' }}>{sending?'Sender...':'🔁 Send på nytt'}</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function EndringsmeldingModal({ order, user, projects = [], existingCount, onClose, onSaved }) {
-  const appAlert = useAppAlert()
-  const [form, setForm] = useState({ title:'', description:'', amount:0 })
-  const [saving, setSaving] = useState(false)
-  const set = (k,v) => setForm(f=>({...f,[k]:v}))
-
-  // Skriver til endringsmeldinger med order_id — ikke lenger til order_changes.
-  // Beløpet blir én post, så EM-en er redigerbar videre i EM-modulen og bruker
-  // samme postSum-fasit som resten av kjeden.
-  const handleSave = async () => {
-    if (!form.title.trim()) { await appAlert({ message: 'Tittel er påkrevd', kind: 'warn' }); return }
-    setSaving(true)
-    try {
-      const emNr = await nesteEmNummer(order.project_id, projects)
-      const belop = parseFloat(form.amount) || 0
-      const poster = [{
-        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()),
-        description: form.title.trim(), qty: 1, unit: 'stk',
-        unitPriceWork: belop, unitPriceMaterial: '', markup: '', discount: '', show_markup: false,
-      }]
-      const { error } = await supabase.from('endringsmeldinger').insert({
-        title: form.title.trim(),
-        em_number: emNr,
-        order_id: order.id,
-        project_id: order.project_id || null,
-        description: form.description || '',
-        amount: belop,
-        posts: poster,
-        hours: 0, materials_cost: 0, ue_cost: 0,
-        customer_name: order.customer_name || '',
-        customer_email: order.customer_email || '',
-        images: [], vedlegg: [],
-        status: 'Utkast',
-        created_by: user?.id,
-        activity_log: [overforLogg(user, `Opprettet på ordre ${order.order_number || ''}`.trim())],
-      })
-      if (error) throw error
-      onSaved()
-    } catch(e) { await appAlert({ message: 'Kunne ikke opprette endringsmelding', subMessage: e.message, kind: 'error' }) }
-    finally { setSaving(false) }
-  }
-
-  return (
-    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-          <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny endringsmelding</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-        </div>
-        <div style={{ padding:'24px', display:'flex', flexDirection:'column', gap:'14px' }}>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="F.eks. Tilleggsarbeid drensgrøft" style={oInp} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beskrivelse</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} placeholder="Beskriv endringen..." style={{ ...oInp, resize:'none' }} /></div>
-          <div><label style={{ display:'block', fontSize:'13px', fontWeight:'600', color:'#374151', marginBottom:'6px' }}>Beløp eks. mva (kr)</label><input type="number" value={form.amount} onChange={e=>set('amount',e.target.value)} placeholder="0" style={oInp} /></div>
-          <div style={{ display:'flex', justifyContent:'flex-end', gap:'12px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-            <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-            <button onClick={handleSave} disabled={saving} style={{ padding:'10px 24px', background:saving?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:saving?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600' }}>{saving?'Lagrer...':'Opprett endringsmelding'}</button>
           </div>
         </div>
       </div>
