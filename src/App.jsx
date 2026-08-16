@@ -5900,7 +5900,8 @@ const faseLabel = (id) => PROSJEKT_FASER.find(f => f.id === id)?.label || id
 // Sorter en liste av fase-id-er i den faste rekkefølgen.
 const sorterFaser = (ids) => PROSJEKT_FASER.filter(f => (ids || []).includes(f.id)).map(f => f.id)
 
-// Deriverte kilder for «Alle dokumenter» i Prosjektfiler (steg 2b).
+// Deriverte kilder som vises når «Vis også registreringer fra andre moduler»
+// er påhuket i Prosjektfiler (steg 2b).
 // REGISTRERES, ikke kopieres: radene leses live fra kilden, peker tilbake dit,
 // og forsvinner av seg selv om kilden slettes. Alle ligger i fase Utførelse.
 const DERIVERTE_KILDER = [
@@ -6046,7 +6047,10 @@ function ProsjektfilerPage() {
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
   const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
   // Steg 2b: registrering fra andre moduler (deriverte, live-leste rader)
-  const [visAlle, setVisAlle] = useState(false)              // false = «Bare opplastede» (standard)
+  // Avkryssingen «Vis også registreringer fra andre moduler». false = kun filer
+  // (standard). Vanlig React-state: holder seg når man bytter kategori og fase,
+  // men nullstilles ved sidelasting og når man forlater modulen.
+  const [visAlle, setVisAlle] = useState(false)
   const [derivedFulfilled, setDerivedFulfilled] = useState(() => new Set()) // Set("fase|doc_type") oppfylt av kilder
   const [derivedRows, setDerivedRows] = useState({})         // { [kategori]: [ {id, tittel, status, nr, kilde, side, emoji} ] }
   const [derivedTotals, setDerivedTotals] = useState({})     // { [key]: totalt antall i kilden }
@@ -6299,7 +6303,7 @@ function ProsjektfilerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
 
-  // «Bare opplastede» ↔ «Alle dokumenter»: hent (evt. tøm) deriverte rader.
+  // Avkryssingen slås av/på: hent (evt. tøm) deriverte rader.
   // behold=true → ikke nullstill oppfyllelses-status (unngår blink i «X av Y»).
   useEffect(() => {
     if (selectedProject !== 'all') loadDerived(selectedProject, { behold: true })
@@ -6669,21 +6673,31 @@ function ProsjektfilerPage() {
     )
   }
 
-  // Bryter «Bare opplastede» ↔ «Alle dokumenter» (registrering fra andre moduler).
+  // Avkryssing for om registreringer fra andre moduler skal legges TIL lista.
+  // Bevisst ikke to knapper: de to visningene er ikke likestilte alternativer —
+  // den ene inneholder alt den andre har, pluss mer. En avkryssing viser at
+  // brukeren legger noe til, ikke velger mellom to ting.
+  // Avhuket (standard) = kun filer. Påhuket = filer + krav + registreringer.
   const renderVisningToggle = () => (
-    <div style={{ display: 'inline-flex', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden', flexShrink: 0 }}>
-      {[['opplastede', 'Bare opplastede'], ['alle', 'Alle dokumenter']].map(([v, l]) => {
-        const aktiv = (v === 'alle') === visAlle
-        return (
-          <button key={v} onClick={() => setVisAlle(v === 'alle')}
-            style={{ padding: '8px 12px', minHeight: '40px', border: 'none', background: aktiv ? '#059669' : 'white', color: aktiv ? 'white' : '#475569', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>{l}</button>
-        )
-      })}
-    </div>
+    <label
+      style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        minHeight: '48px', padding: '6px 12px 6px 10px',
+        border: `1px solid ${visAlle ? '#bbf7d0' : '#e2e8f0'}`,
+        background: visAlle ? '#f0fdf4' : 'white',
+        borderRadius: '10px', cursor: 'pointer', userSelect: 'none',
+        maxWidth: '100%', boxSizing: 'border-box',
+      }}>
+      <input type="checkbox" checked={visAlle} onChange={e => setVisAlle(e.target.checked)}
+        style={{ width: '20px', height: '20px', accentColor: '#059669', cursor: 'pointer', flexShrink: 0, margin: 0 }} />
+      <span style={{ fontSize: '13px', fontWeight: '600', color: visAlle ? '#166534' : '#475569', lineHeight: 1.35 }}>
+        Vis også registreringer fra andre moduler
+      </span>
+    </label>
   )
 
   // Registrerte poster fra andre moduler (deriverte, live) i valgt kategori.
-  // Vises kun i «Alle dokumenter». Peker tilbake til posten via deep-link.
+  // Vises kun når avkryssingen er påhuket. Peker tilbake til posten via deep-link.
   const renderDerivertBlokk = () => {
     if (!visAlle || !selectedCategory) return null
     // Fasen er FAST for disse kildene (alle: Utførelse). Har prosjektet en mal,
@@ -6938,14 +6952,13 @@ function ProsjektfilerPage() {
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#059669', fontSize: '13px', fontWeight: '600', padding: '0 0 10px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                 ← Tilbake til kategorier
               </button>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                <div style={{ position: 'relative', flex: 1 }}>
+              {/* Opplasting ligger KUN i headeren — også på mobil. */}
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{ position: 'relative' }}>
                   <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
                   <input value={search} onChange={e => setSearch(e.target.value)} disabled={!online} placeholder={online ? 'Søk etter filer...' : 'Søk krever nett'}
                     style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
                 </div>
-                <button onClick={() => { setUploadForm(f => ({ ...f, category: selectedCategory, sub: selectedSub || '' })); setShowUpload(true) }}
-                  style={{ padding: '8px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: 'pointer', fontSize: '18px', flexShrink: 0 }}>⬆️</button>
               </div>
               <div style={{ marginBottom: '12px' }}>{renderVisningToggle()}</div>
               {catSupportsRevision && (
@@ -6961,7 +6974,7 @@ function ProsjektfilerPage() {
                 renderTomtilstand(true)
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>DOKUMENTER ({totalCount})</div>
+                  <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '6px', letterSpacing: '0.06em' }}>FILER ({totalCount})</div>
                   {fileGroups.map(group => {
                     const current = group[0]
                     const docGroup = current.document_group || current.id
@@ -7068,8 +7081,10 @@ function ProsjektfilerPage() {
             <>
               {/* Toolbar: search + archive toggle + upload */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <div style={{ position: 'relative' }}>
+                {/* flexWrap: avkryssingen skal legge seg under søkefeltet på smale
+                    vinduer, ikke klemme det sammen. */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
                     <span style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8', fontSize: '13px' }}>🔍</span>
                     <input value={search} onChange={e => setSearch(e.target.value)} disabled={!online} placeholder={online ? 'Søk etter filer...' : 'Søk krever nett'}
                       style={{ paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', width: '200px', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
@@ -7100,7 +7115,7 @@ function ProsjektfilerPage() {
               ) : (
                 <div data-tour="fil-dokumenter" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <div style={{ fontSize: '11px', fontWeight: '700', color: '#64748b', marginBottom: '8px', letterSpacing: '0.06em' }}>
-                    DOKUMENTER ({totalCount})
+                    FILER ({totalCount})
                   </div>
                   {/* Each group: current revision + archived revisions inline below */}
                   {fileGroups.map(group => {
