@@ -26864,6 +26864,13 @@ function FakturaEndringsModal({ orders, projects, user, onClose, onSaved }) {
         // den ikke, og ingen av dem får slettevern. Se rapport: dette krever en
         // koblingstabell for å løses helt.
         em_id: selChanges.length === 1 ? selChanges[0].id : null,
+        // Sporet til ALLE endringsmeldingene loggføres uansett, også når em_id
+        // ikke kan settes fordi fakturaen dekker flere. Da finnes koblingen i
+        // det minste ett sted.
+        activity_log: [fakturaLogg(user, 'Opprettet', {
+          fra: `ordre ${ord.order_number || ''}`.trim(),
+          dekker: selChanges.map(c => (c.em_number || '') + emRevSuffix(c.revision_number)).filter(Boolean),
+        })],
       })
       const { error } = await supabase.from('invoices').insert(beriket3)
       if (error) throw error
@@ -38159,7 +38166,10 @@ function KunderPage() {
       const [k, p, q, inv] = await Promise.all([
         supabase.from('customers').select('*').order('name').then(r => r.data || []),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
-        supabase.from('quotes').select('id,title,status,total_amount,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
+        // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
+        // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
+        // tung jsonb og skal ikke hentes for alle kunders tilbud her.
+        supabase.from('quotes').select('id,title,status,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
       setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
@@ -38408,6 +38418,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
   const [notater, setNotater] = useState([])
   const [ordrer, setOrdrer] = useState([])
   const [avvik, setAvvik] = useState([])
+  const [tilbudBelop, setTilbudBelop] = useState({})   // tilbud-id → sum fra calcQuote
   const [nyttNotat, setNyttNotat] = useState('')
   const [showNyKontakt, setShowNyKontakt] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -38418,7 +38429,11 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
     setLoading(true)
     try {
       const projIds = prosjekter.map(p => p.id)
-      const [k, n, ord, avv] = await Promise.all([
+      // Tilbudene er allerede filtrert til denne kunden av forelderen (på
+      // customer_id ELLER navn), så vi henter chapters for nøyaktig de id-ene
+      // visningen har — ikke bredt. Samme grense som ordrelinja.
+      const tilbudIds = (tilbud || []).slice(0, CRM_ORDRE_GRENSE).map(t => t.id).filter(Boolean)
+      const [k, n, ord, avv, qKap] = await Promise.all([
         supabase.from('customer_contacts').select('*').eq('customer_id', kunde.id).order('name').then(r => r.data || []),
         supabase.from('customer_notes').select('*').eq('customer_id', kunde.id).order('created_at', {ascending:false}).then(r => r.data || []),
         // Beløpet regnes fra chapters, ikke fra orders.total_amount. Den kolonnen
@@ -38431,12 +38446,21 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
         projIds.length > 0
           ? supabase.from('deviations').select('id,title,status,severity,project_id,created_at').in('project_id', projIds).order('created_at',{ascending:false}).then(r => r.data || [])
           : Promise.resolve([]),
+        tilbudIds.length > 0
+          ? supabase.from('quotes').select('id,chapters,global_markup').in('id', tilbudIds).then(r => r.data || [])
+          : Promise.resolve([]),
       ])
       setKontakter(k); setNotater(n); setOrdrer(ord); setAvvik(avv)
+      // Oppslag tilbud-id → sum, regnet med calcQuote (kapittelpåslag + globalt
+      // påslag). quotes.total_amount vedlikeholdes ikke og brukes ikke her.
+      setTilbudBelop(Object.fromEntries((qKap || []).map(q => [q.id, calcQuote(q.chapters || [], q.global_markup).grandTotal])))
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
-  useEffect(() => { loadDetails() }, [])
+  // Kjør på nytt hvis settet av tilbud endrer seg. Nøkkelen er innholdsbasert —
+  // tilbud-propen er et nytt array ved hver render og duger ikke som avhengighet.
+  const tilbudNokkel = (tilbud || []).map(t => t.id).join(',')
+  useEffect(() => { loadDetails() }, [tilbudNokkel])
 
   const lagreNotat = async () => {
     if (!nyttNotat.trim()) return
@@ -38474,7 +38498,10 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
   const buildTimeline = () => {
     const events = []
     prosjekter.forEach(p => events.push({ date: p.created_at || p.start_date || '2020-01-01', type: 'prosjekt', icon: '🏗️', color: '#059669', title: p.name, sub: `Status: ${p.status || 'Aktiv'}` }))
-    tilbud.forEach(t => events.push({ date: t.created_at, type: 'tilbud', icon: '📋', color: '#2563eb', title: t.title, sub: `${t.status}${t.total_amount ? ' · ' + Math.round(t.total_amount).toLocaleString('nb-NO') + ' kr' : ''}` }))
+    tilbud.forEach(t => {
+      const belop = tilbudBelop[t.id] || 0
+      events.push({ date: t.created_at, type: 'tilbud', icon: '📋', color: '#2563eb', title: t.title, sub: `${t.status}${belop ? ' · ' + Math.round(belop).toLocaleString('nb-NO') + ' kr' : ''}` })
+    })
     fakturaer.forEach(f => {
       const isOverdue = f.status !== 'Betalt' && f.due_date && f.due_date < new Date().toISOString().split('T')[0]
       events.push({ date: f.created_at, type: 'faktura', icon: '🧾', color: isOverdue ? '#dc2626' : f.status === 'Betalt' ? '#059669' : '#d97706', title: f.title, sub: `${isOverdue ? 'Forfalt' : f.status}${fakturaBelop(f) ? ' · ' + Math.round(fakturaBelop(f)).toLocaleString('nb-NO') + ' kr' : ''}` })
@@ -38729,7 +38756,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
                             <div style={{ fontSize:'14px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{t.title}</div>
                             <div style={{ fontSize:'12px', color:'#94a3b8' }}>{new Date(t.created_at).toLocaleDateString('nb-NO')}</div>
                           </div>
-                          {t.total_amount && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(t.total_amount).toLocaleString('nb-NO')} kr</span>}
+                          {!!tilbudBelop[t.id] && <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{Math.round(tilbudBelop[t.id]).toLocaleString('nb-NO')} kr</span>}
                           <span style={{ background:statusCfg.bg, color:statusCfg.color, borderRadius:'999px', fontSize:'11px', fontWeight:'700', padding:'2px 8px', flexShrink:0 }}>{t.status}</span>
                         </div>
                       )
