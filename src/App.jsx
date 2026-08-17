@@ -17288,7 +17288,12 @@ function AnbudDetaljer({ tender: init, projects, user, onBack }) {
             {t.status==='Under vurdering' && <button onClick={()=>setShowAward(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '🏆 Tildel' : '🏆 Tildel anbud'}</button>}
             {isIncoming && <button onClick={generateQuote} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '📋 Tilbud' : '📋 Generer tilbud'}</button>}
             {!isIncoming && t.status==='Tildelt' && <button onClick={generateOrdreTilVinner} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize: isMobAD ? '11px' : '13px', fontWeight:'600' }}>{isMobAD ? '📄 Ordre' : '📄 Generer ordre til vinner'}</button>}
-            <button onClick={()=>setEditing(true)} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobAD ? '12px' : '13px' }}>✏️</button>
+            {/* Poster kan bare endres mens anbudet er utkast. Er det sendt, sitter
+                UE-ene med postlisten de priser mot — endrer vi den i etterkant,
+                priser de på noe annet enn det vi ser. Samme regel som Faktura. */}
+            {t.status === 'Utkast'
+              ? <button onClick={()=>setEditing(true)} title="Rediger anbudet" style={{ padding: isMobAD ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobAD ? '12px' : '13px' }}>✏️</button>
+              : <span title={`Anbudet er ${String(t.status || '').toLowerCase()} — postene er låst. Underleverandørene priser mot denne listen.`} style={{ padding: isMobAD ? '7px 10px' : '9px 14px', border:'1px solid #f1f5f9', borderRadius:'10px', background:'#f8fafc', color:'#94a3b8', fontSize: isMobAD ? '12px' : '13px', cursor:'default', whiteSpace:'nowrap' }}>🔒</span>}
             <button onClick={handleDelete} style={{ padding: isMobAD ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobAD ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
@@ -17627,6 +17632,8 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const [bulkFag, setBulkFag] = useState('')
   const [visKun, setVisKun] = useState('alle') // 'alle' | 'ufordelt'
   const [sok, setSok] = useState('')
+  const [side, setSide] = useState(0)   // sidevisning — 97 poster i én DOM er tungt på telefon
+  const POSTER_PER_SIDE = 50
   const [oppretter, setOppretter] = useState(false)
   // Prosjektinfo som fylles inn etter at postene er lest inn (oppretter nytt prosjekt ved lagring)
   const [pInfo, setPInfo] = useState({ navn:'', gate:'', postnr:'', sted:'', byggherre:'', kontakt:'', frist:'' })
@@ -17637,9 +17644,18 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
   // Hindre at en betalt innlesning forsvinner ved uhell (klikk utenfor / lukk)
+  // En utilsiktet lukking er dyr: postene finnes bare her, og å hente dem igjen
+  // krever en ny betalt AI-lesning av hele dokumentet. Uttrekket gir dessuten
+  // ikke samme svar to ganger — fordelingen brukeren nettopp kontrollerte
+  // kommer ikke tilbake. Teksten må si begge ting.
   const bekreftLukk = async () => {
     if (poster.length > 0) {
-      const ok = await confirm({ message: 'Forkaste de innleste postene?', subMessage: `Du har ${poster.length} poster inne. Lukker du nå, mister du dem.`, danger: true, confirmLabel: 'Forkast og lukk' })
+      const ok = await confirm({
+        message: 'Forkaste de innleste postene?',
+        subMessage: `Du har ${poster.length} poster inne, og de finnes ikke lagret noe annet sted — lukker du nå, er de borte.\n\nÅ få dem tilbake krever en ny AI-lesning av hele dokumentet, som teller på månedskvoten din. Den lesningen gir heller ikke samme resultat: antall poster og fagfordelingen blir litt annerledes, så kontrollen du har gjort må gjøres om.`,
+        danger: true,
+        confirmLabel: 'Forkast og lukk',
+      })
       if (!ok) return
     }
     onClose()
@@ -17690,6 +17706,9 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
     } catch (_) { /* teller er kosmetisk */ }
   }
   useEffect(() => { lastAiForbruk() }, [])
+  // Bytter brukeren filter eller søk, skal vi tilbake til første side —
+  // ellers står man på side 2 av et resultat som nå har én side.
+  useEffect(() => { setSide(0) }, [visKun, sok])
 
   // 🤖 Les et anbudsdokument med AI: skiller poster fra prosa og foreslår faggruppe.
   const lesMedAI = async (file) => {
@@ -17743,8 +17762,24 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const internt = (grupper['internt'] || []).length
   const fagMedPoster = Object.keys(grupper).filter(g => g !== '_ufordelt' && g !== 'internt')
   const synligePoster = poster.filter(p => (visKun === 'alle' || !p.faggruppe) && (!sok.trim() || (p.description || '').toLowerCase().includes(sok.toLowerCase())))
+  // Postlisten ER kontrollsteget i denne modulen: det er her brukeren bekrefter
+  // fagfordelingen fra AI-en og merker hva som skal gjøres internt. Når filteret
+  // «Kun ufordelte» står på og AI-en har gitt alle postene et fag, blir lista tom
+  // — og da var det ingenting å se på. Vi må vite det, både for å forklare det i
+  // tomtilstanden og for å stenge Opprett-knappen.
+  const antallSider = Math.max(1, Math.ceil(synligePoster.length / POSTER_PER_SIDE))
+  const gjeldendeSide = Math.min(side, antallSider - 1)
+  const sidePoster = synligePoster.slice(gjeldendeSide * POSTER_PER_SIDE, gjeldendeSide * POSTER_PER_SIDE + POSTER_PER_SIDE)
+  const listeSkjult = poster.length > 0 && synligePoster.length === 0
+  const nullstillVisning = () => { setVisKun('alle'); setSok(''); setSide(0) }
 
   const opprett = async () => {
+    // Postlisten er kontrollsteget. Er den ikke synlig, har brukeren ikke sett
+    // fagfordelingen fra AI-en — og da skal det ikke gå e-post til noen UE.
+    if (listeSkjult) {
+      await appAlert({ message: 'Du må se postlisten først', subMessage: `Listen er skjult av ${visKun === 'ufordelt' ? 'filteret «Kun ufordelte»' : 'søket'}. Trykk «Vis alle ${poster.length} poster», kontroller fagfordelingen, og opprett deretter forespørslene.`, kind: 'warning' })
+      return
+    }
     if (!fagMedPoster.length) { await appAlert({ message: 'Ingen poster med faggruppe', subMessage: 'Sett faggruppe på minst én post før du oppretter forespørsler.', kind: 'warning' }); return }
     if (ufordelt > 0 && !(await confirm({ message: `${ufordelt} poster mangler faggruppe`, subMessage: 'Disse blir ikke tatt med. Vil du fortsette?', confirmLabel: 'Opprett likevel' }))) return
     if (!(await confirm({ message: `Opprett ${fagMedPoster.length} forespørsel${fagMedPoster.length !== 1 ? 'er' : ''}?`, subMessage: fagMedPoster.map(f => `${fagNavn(f)}: ${grupper[f].length} poster`).join('\n'), confirmLabel: 'Opprett' }))) return
@@ -17918,19 +17953,70 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
                 </div>
               )}
 
-              {/* Poster-tabell (egen scroll så bunn/oppsummering alltid synlig) */}
-              <div style={{ border: '1px solid #f1f5f9', borderRadius: '12px', overflow: 'hidden' }}>
-                <div style={{ maxHeight: '44vh', overflowY: 'auto', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-                  {synligePoster.length === 0 ? (
-                    <div style={{ padding: '30px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>{visKun === 'ufordelt' ? '🎉 Ingen ufordelte poster igjen.' : 'Ingen poster matcher søket.'}</div>
+              {/* Postlisten — kontrollsteget. Egen scroll så bunn/oppsummering alltid synlig. */}
+              <div style={{ border: listeSkjult ? '1px solid #fde68a' : '1px solid #f1f5f9', borderRadius: '12px', overflow: 'hidden' }}>
+                <div style={{ maxHeight: isMob ? '52vh' : '44vh', overflowY: 'auto', overflowX: isMob ? 'hidden' : 'auto', WebkitOverflowScrolling: 'touch' }}>
+                  {listeSkjult ? (
+                    /* Tomtilstand med vei ut. Før sto det bare «🎉 Ingen ufordelte
+                       poster igjen» her, uten noe å trykke på — da ser skjermen ut
+                       som om listen er borte, og man kan sende forespørsler uten å
+                       ha kontrollert fordelingen. */
+                    <div style={{ padding: isMob ? '22px 16px' : '30px', textAlign: 'center', background: '#fffbeb' }}>
+                      <div style={{ fontSize: '26px', marginBottom: '8px' }}>{visKun === 'ufordelt' ? '✅' : '🔍'}</div>
+                      <div style={{ fontSize: '14px', fontWeight: '700', color: '#0f172a', marginBottom: '4px' }}>
+                        {visKun === 'ufordelt' ? 'Alle poster har fått faggruppe' : `Ingen av de ${poster.length} postene matcher søket`}
+                      </div>
+                      <div style={{ fontSize: '13px', color: '#b45309', lineHeight: 1.5, maxWidth: '440px', margin: '0 auto 14px' }}>
+                        {visKun === 'ufordelt'
+                          ? `Derfor er denne listen tom — filteret viser bare poster uten fag. Du må se gjennom alle ${poster.length} postene og kontrollere fagfordelingen før du kan opprette forespørsler.`
+                          : 'Tøm søket for å se hele postlisten igjen. Du må ha listen framme for å kunne opprette forespørsler.'}
+                      </div>
+                      <button onClick={nullstillVisning} style={{ background: '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '11px 20px', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
+                        Vis alle {poster.length} poster
+                      </button>
+                    </div>
+                  ) : isMob ? (
+                    /* Mobil: kort i stedet for tabell. Tabellen krever 760 px, så på
+                       telefon måtte man skrolle sidelengs for å nå faggruppe-velgeren
+                       — nettopp den kontrollen skjermen finnes for. */
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', padding: '10px' }}>
+                      {sidePoster.map(p => (
+                        <div key={p.id} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', padding: '10px', background: p.faggruppe === 'internt' ? '#eff6ff' : (p.faggruppe ? 'white' : '#fffbeb') }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '7px', fontSize: '12px', color: '#64748b', fontWeight: '600', flex: 1 }}>
+                              <input type="checkbox" checked={valgte.has(p.id)} onChange={() => toggleValgt(p.id)} style={{ width: '18px', height: '18px' }} />
+                              Merk
+                            </label>
+                            {!p.faggruppe && <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309' }}>⚠ Mangler fag</span>}
+                            <button onClick={() => slett(p.id)} title="Slett post" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#dc2626', fontSize: '20px', padding: '0 6px', lineHeight: 1 }}>×</button>
+                          </div>
+                          <textarea value={p.description} onChange={e => oppdater(p.id, 'description', e.target.value)} rows={3} style={{ ...tInp, fontSize: '16px', padding: '9px 10px', resize: 'vertical', lineHeight: 1.4, fontFamily: 'system-ui,sans-serif', marginBottom: '8px' }} />
+                          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                            <div style={{ flex: 1 }}>
+                              <label style={impLbl}>Mengde</label>
+                              <input type="number" inputMode="decimal" value={p.qty} onChange={e => oppdater(p.id, 'qty', e.target.value)} style={{ ...tInp, fontSize: '16px', textAlign: 'right' }} />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                              <label style={impLbl}>Enhet</label>
+                              <input value={p.unit} onChange={e => oppdater(p.id, 'unit', e.target.value)} style={{ ...tInp, fontSize: '16px' }} />
+                            </div>
+                          </div>
+                          <label style={impLbl}>Faggruppe / internt</label>
+                          <select value={p.faggruppe || ''} onChange={e => oppdater(p.id, 'faggruppe', e.target.value)} style={{ ...tInp, fontSize: '16px', fontWeight: p.faggruppe ? '600' : '400', color: p.faggruppe ? '#0f172a' : '#94a3b8' }}>
+                            <option value="">— Velg —</option>
+                            {fagValg.map(f => <option key={f.id} value={f.id}>{f.navn}</option>)}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
                   ) : (
                     <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '760px', fontSize: '13px' }}>
                       <thead><tr style={{ background: '#f8fafc', position: 'sticky', top: 0, zIndex: 1 }}>
-                        <th style={{ padding: '8px 10px', width: '30px', background: '#f8fafc' }}><input type="checkbox" checked={valgte.size === synligePoster.length && synligePoster.length > 0} onChange={merkAlle} /></th>
+                        <th style={{ padding: '8px 10px', width: '30px', background: '#f8fafc' }}><input type="checkbox" title={`Merk alle ${synligePoster.length} poster i utvalget`} checked={valgte.size === synligePoster.length && synligePoster.length > 0} onChange={merkAlle} /></th>
                         {['Beskrivelse', 'Mengde', 'Enhet', 'Faggruppe / internt', ''].map((h, i) => <th key={i} style={{ padding: '8px 10px', textAlign: i === 1 ? 'right' : 'left', fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', background: '#f8fafc' }}>{h}</th>)}
                       </tr></thead>
                       <tbody>
-                        {synligePoster.map(p => (
+                        {sidePoster.map(p => (
                           <tr key={p.id} style={{ borderTop: '1px solid #f1f5f9', background: p.faggruppe === 'internt' ? '#eff6ff' : (p.faggruppe ? 'white' : '#fffbeb') }}>
                             <td style={{ padding: '6px 10px', textAlign: 'center', verticalAlign: 'top' }}><input type="checkbox" checked={valgte.has(p.id)} onChange={() => toggleValgt(p.id)} style={{ marginTop: '8px' }} /></td>
                             <td style={{ padding: '6px 4px', verticalAlign: 'top' }}><textarea value={p.description} onChange={e => oppdater(p.id, 'description', e.target.value)} rows={2} style={{ ...tInp, minWidth: '300px', padding: '7px 10px', resize: 'vertical', lineHeight: 1.4, fontFamily: 'system-ui,sans-serif' }} /></td>
@@ -17949,6 +18035,19 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
                     </table>
                   )}
                 </div>
+                {/* Sidevisning — 97 poster med fire felt hver blir nesten 400
+                    skjemakontroller i DOM-en samtidig, og det merkes på telefon. */}
+                {!listeSkjult && antallSider > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '10px 12px', borderTop: '1px solid #f1f5f9', background: '#f8fafc' }}>
+                    <button onClick={() => setSide(s => Math.max(0, s - 1))} disabled={gjeldendeSide === 0}
+                      style={{ padding: '9px 14px', borderRadius: '9px', border: '1px solid #e2e8f0', background: 'white', cursor: gjeldendeSide === 0 ? 'default' : 'pointer', opacity: gjeldendeSide === 0 ? 0.45 : 1, fontSize: '13px', fontWeight: '700' }}>← Forrige</button>
+                    <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600', textAlign: 'center' }}>
+                      Viser {gjeldendeSide * POSTER_PER_SIDE + 1}–{Math.min((gjeldendeSide + 1) * POSTER_PER_SIDE, synligePoster.length)} av {synligePoster.length}
+                    </span>
+                    <button onClick={() => setSide(s => Math.min(antallSider - 1, s + 1))} disabled={gjeldendeSide >= antallSider - 1}
+                      style={{ padding: '9px 14px', borderRadius: '9px', border: '1px solid #e2e8f0', background: 'white', cursor: gjeldendeSide >= antallSider - 1 ? 'default' : 'pointer', opacity: gjeldendeSide >= antallSider - 1 ? 0.45 : 1, fontSize: '13px', fontWeight: '700' }}>Neste →</button>
+                  </div>
+                )}
               </div>
 
               {/* Oppsummering */}
@@ -17964,8 +18063,10 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
         <div style={{ padding: isMob ? '12px 14px' : '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={bekreftLukk} style={{ padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px' }}>Avbryt</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {poster.length > 0 && fagMedPoster.length === 0 && <span style={{ fontSize: '12px', color: '#b45309' }}>Sett faggruppe på minst én UE-post først</span>}
-            <button onClick={opprett} disabled={oppretter} style={{ padding: '10px 22px', background: oppretter ? '#6ee7b7' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: oppretter ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+            {listeSkjult
+              ? <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>Vis postlisten før du oppretter</span>
+              : (poster.length > 0 && fagMedPoster.length === 0 && <span style={{ fontSize: '12px', color: '#b45309' }}>Sett faggruppe på minst én UE-post først</span>)}
+            <button onClick={opprett} disabled={oppretter || listeSkjult} title={listeSkjult ? 'Postlisten må være synlig så du kan kontrollere fagfordelingen først' : undefined} style={{ padding: '10px 22px', background: (oppretter || listeSkjult) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || listeSkjult) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
               {oppretter ? 'Oppretter...' : `📤 Opprett ${fagMedPoster.length || ''} forespørsel${fagMedPoster.length !== 1 ? 'er' : ''}`}
             </button>
           </div>
@@ -18301,7 +18402,8 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
                               <td style={{ padding:'6px 4px' }}><input value={p.unit} onChange={e=>updatePost(ch.id,p.id,'unit',e.target.value)} placeholder="stk" style={{ ...tInp, width:'60px' }} /></td>
                               {isIncoming && <td style={{ padding:'6px 4px' }}><input type="number" value={p.unitCost} onChange={e=>updatePost(ch.id,p.id,'unitCost',e.target.value)} style={{ ...tInp, width:'120px', textAlign:'right' }} /></td>}
                               {isIncoming && <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtT(ls)}</td>}
-                              <td style={{ padding:'6px 4px' }}>{ch.posts.length>1&&<button onClick={()=>removePost(ch.id,p.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button>}</td>
+                              {/* Også den siste posten skal kunne slettes — «+ Legg til post» gjør det reversibelt. */}
+                              <td style={{ padding:'6px 4px' }}><button onClick={()=>removePost(ch.id,p.id)} title="Slett post" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'16px' }}>×</button></td>
                             </tr>
                           })}
                         </tbody>
