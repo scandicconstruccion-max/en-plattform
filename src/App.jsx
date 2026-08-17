@@ -17632,6 +17632,7 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const [bulkFag, setBulkFag] = useState('')
   const [visKun, setVisKun] = useState('alle') // 'alle' | 'ufordelt'
   const [sok, setSok] = useState('')
+  const [visProsjektInfo, setVisProsjektInfo] = useState(false)  // lukket som standard — postlisten er det man er her for
   const [side, setSide] = useState(0)   // sidevisning — 97 poster i én DOM er tungt på telefon
   const POSTER_PER_SIDE = 50
   const [oppretter, setOppretter] = useState(false)
@@ -17771,6 +17772,12 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const gjeldendeSide = Math.min(side, antallSider - 1)
   const sidePoster = synligePoster.slice(gjeldendeSide * POSTER_PER_SIDE, gjeldendeSide * POSTER_PER_SIDE + POSTER_PER_SIDE)
   const listeSkjult = poster.length > 0 && synligePoster.length === 0
+  // Overskrift for det sammenlagte prosjektinfo-panelet: vis hva som faktisk er
+  // valgt, slik at man ser det uten å åpne. Er ingenting satt, sier den ifra —
+  // uten prosjekt havner anbudene løse, og det er lett å overse når panelet er lukket.
+  const valgtProsjektNavn = projects.find(pr => pr.id === prosjektId)?.name || ''
+  const prosjektInfoSatt = !!(valgtProsjektNavn || pInfo.navn.trim())
+  const prosjektNavnVist = valgtProsjektNavn || pInfo.navn.trim() || 'Prosjektinfo'
   const nullstillVisning = () => { setVisKun('alle'); setSok(''); setSide(0) }
 
   const opprett = async () => {
@@ -17819,9 +17826,12 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? 0 : '16px' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? 0 : '12px' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={e => { if (e.target === e.currentTarget) bekreftLukk() }} />
-      <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? 0 : '20px', width: '100%', maxWidth: isMob ? '100%' : '960px', maxHeight: isMob ? '100vh' : '94vh', height: isMob ? '100vh' : 'auto', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui,sans-serif' }}>
+      {/* Vinduet skal være høyt, ikke en liten boks midt på siden: postlisten er
+          det man er her for. Høyden var 'auto' på desktop, så vinduet krympet til
+          innholdet og listen fikk lite plass. Nå fyller det høyden det får lov til. */}
+      <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? 0 : '20px', width: '100%', maxWidth: isMob ? '100%' : '1100px', maxHeight: isMob ? '100vh' : '96vh', height: isMob ? '100vh' : '96vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui,sans-serif' }}>
         <div style={{ padding: isMob ? '14px 16px' : '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: isMob ? '16px' : '18px', fontWeight: '800', color: '#0f172a' }}>📥 Importer & fordel poster</h2>
@@ -17888,12 +17898,21 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
           )}
 
           {poster.length > 0 && (
-            <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '14px', padding: '16px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>🏗️ Prosjektinfo</div>
-                <button onClick={() => setVisMerImport(v => !v)} style={{ background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', padding: 0 }}>{visMerImport ? '− Skjul opplasting' : '+ Legg til flere poster'}</button>
+            /* Sammenleggbar, lukket som standard. Utfylt skjema tok 524 px rett over
+               postlisten på telefon — både mye rulling, og grunnen til at listen i
+               det hele tatt kunne bli klemt bort. Prosjektnavnet står som overskrift,
+               så man ser hva som er satt uten å åpne. */
+            <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '14px', padding: visProsjektInfo ? '16px 18px' : '10px 14px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: visProsjektInfo ? '12px' : 0, gap: '8px' }}>
+                <button onClick={() => setVisProsjektInfo(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0 }}>{visProsjektInfo ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏗️ {prosjektNavnVist}</span>
+                  {!visProsjektInfo && !prosjektInfoSatt && <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '2px 8px', flexShrink: 0 }}>⚠ ikke satt</span>}
+                </button>
+                <button onClick={() => setVisMerImport(v => !v)} style={{ background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', padding: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>{visMerImport ? '− Skjul' : '+ Flere poster'}</button>
               </div>
-              {!prosjektId && (
+              {visProsjektInfo && !prosjektId && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     <div><label style={impLbl}>Prosjektnavn</label><input value={pInfo.navn} onChange={e => settP('navn', e.target.value)} style={impInp} placeholder="F.eks. Sundenga Boligsameie – våtrom" /></div>
@@ -17911,11 +17930,13 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
                   <div style={{ fontSize: '12px', color: '#94a3b8', margin: '12px 0 6px', textAlign: 'center' }}>— eller —</div>
                 </>
               )}
-              <div>
-                <label style={impLbl}>Knytt til et eksisterende prosjekt</label>
-                <SearchableProjectSelect value={prosjektId} onChange={setProsjektId} projects={projects} style={{ ...tInp, maxWidth: '320px' }} placeholder="Velg eksisterende prosjekt" />
-                {prosjektId && <button onClick={() => setProsjektId('')} style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>Fjern – fyll inn nytt i stedet</button>}
-              </div>
+              {visProsjektInfo && (
+                <div>
+                  <label style={impLbl}>Knytt til et eksisterende prosjekt</label>
+                  <SearchableProjectSelect value={prosjektId} onChange={setProsjektId} projects={projects} style={{ ...tInp, maxWidth: '320px' }} placeholder="Velg eksisterende prosjekt" />
+                  {prosjektId && <button onClick={() => setProsjektId('')} style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>Fjern – fyll inn nytt i stedet</button>}
+                </div>
+              )}
             </div>
           )}
 
