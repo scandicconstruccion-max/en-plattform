@@ -17953,9 +17953,20 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
                 </div>
               )}
 
-              {/* Postlisten — kontrollsteget. Egen scroll så bunn/oppsummering alltid synlig. */}
-              <div style={{ border: listeSkjult ? '1px solid #fde68a' : '1px solid #f1f5f9', borderRadius: '12px', overflow: 'hidden' }}>
-                <div style={{ maxHeight: isMob ? '52vh' : '44vh', overflowY: 'auto', overflowX: isMob ? 'hidden' : 'auto', WebkitOverflowScrolling: 'touch' }}>
+              {/* Postlisten — kontrollsteget.
+                  flexShrink: 0 er ikke kosmetikk. Denne blokka er et flex-element i
+                  en kolonne med begrenset høyde, og fordi den har overflow: hidden
+                  settes dens automatiske minstehøyde til 0 — da kan flexbox klemme
+                  den helt bort når innholdet over fyller høyden. Målt på 375×812:
+                  prosjektinfo-skjemaet tok 524 av 686 tilgjengelige piksler, og
+                  blokka ble 2 px høy med 8212 px innhold klippet inne. Derfor viste
+                  telefonen hverken rader, paginering eller tomtilstand, mens
+                  telleren og fag-brikkene utenfor blokka så helt riktige ut.
+                  minHeight er en ekstra bunn så blokka aldri kan bli usynlig igjen.
+                  På mobil dropper vi den indre scrollen, slik at hele modalen er ÉN
+                  scroll — nøstet scroll i nøstet scroll er vondt med tommelen. */}
+              <div style={{ border: listeSkjult ? '1px solid #fde68a' : '1px solid #f1f5f9', borderRadius: '12px', overflow: 'hidden', flexShrink: 0, minHeight: '120px' }}>
+                <div style={{ maxHeight: isMob ? 'none' : '44vh', overflowY: isMob ? 'visible' : 'auto', overflowX: isMob ? 'hidden' : 'auto', WebkitOverflowScrolling: 'touch' }}>
                   {listeSkjult ? (
                     /* Tomtilstand med vei ut. Før sto det bare «🎉 Ingen ufordelte
                        poster igjen» her, uten noe å trykke på — da ser skjermen ut
