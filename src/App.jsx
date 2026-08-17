@@ -53389,30 +53389,44 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   }, [])
 
   const totalPrice = hasBasis ? 1899 : 3398
+  const mobUp = typeof window !== 'undefined' && window.innerWidth < 768
 
+  // Innholdet varierer med hasBasis: uten basis kommer «KREVER BASIS
+  // KALKULASJON» med tre prislinjer i tillegg, og modalen blir høyere. Uten
+  // maxHeight falt «Aktiver BIM-Kalkyle» under folden, og ingenting scrollet.
+  // Derfor: fast bunnrad som alltid er synlig, innhold som scroller bak, og
+  // bredere boks på PC så scrollen blir sikkerhetsnett og ikke normaltilfelle.
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems: mobUp ? 'stretch' : 'center', justifyContent:'center', padding: mobUp ? 0 : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+      <div style={{ position:'relative', background:'white', borderRadius: mobUp ? 0 : '20px', width:'100%', maxWidth: mobUp ? '100%' : '680px', height: mobUp ? '100vh' : 'auto', maxHeight: mobUp ? '100vh' : '90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow: mobUp ? 'none' : '0 20px 60px rgba(0,0,0,0.3)' }}>
         {/* Gradient header */}
-        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: mobUp ? '20px 20px' : '24px', color:'white', position:'relative', flexShrink:0 }}>
           {/* onClose, IKKE lukkMedBekreftelse — den finnes bare i
               KalkHurtigstartModal. Referansen leses under render, saa den ga
               ReferenceError og hvit skjerm for alle uten bim_kalkyle.
               Rettet i 63693af, gjeninnfoert i 5782ede. Ikke gjenta. */}
-          <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
-          <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
-          <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
-          <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
+          <button onClick={onClose} aria-label="Lukk" style={{ position:'absolute', top:'10px', right:'10px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', minWidth:'44px', minHeight:'44px', cursor:'pointer', color:'white', fontSize:'20px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
+            <div style={{ fontSize:'36px', flexShrink:0 }}>📐</div>
+            <div style={{ minWidth:0 }}>
+              <h2 style={{ margin:'0 0 2px', fontSize: mobUp ? '19px' : '22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
+              <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
+            </div>
+          </div>
         </div>
 
-        <div style={{ padding:'24px' }}>
+        {/* Rullbart innhold — sikkerhetsnettet */}
+        <div style={{ padding: mobUp ? '16px' : '20px 24px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch', overscrollBehavior:'contain' }}>
           <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
             BIM-Kalkyle er for proffe aktører som kalkulerer fra BIM-modeller. Last opp en IFC-fil fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy, og få automatisk mengdeuttak, 3D-visning, materialmatching mot ditt bibliotek og ferdig kalkyle.
           </p>
 
           <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', marginBottom:'16px' }}>
             <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.5px', marginBottom:'8px' }}>HVA DU FÅR</div>
+            {/* To kolonner på PC: halverer høyden på den lengste blokken, så
+                normaltilfellet får plass uten scroll. */}
+            <div style={{ display:'grid', gridTemplateColumns: mobUp ? '1fr' : '1fr 1fr', columnGap:'16px' }}>
             {[
               { icon:'📂', text:'IFC-import fra ArchiCAD, Revit, Allplan, Tekla og andre BIM-verktøy' },
               { icon:'📏', text:'Automatisk mengdeuttak fra 3D-geometri (vegger, tak, gulv, vinduer, dører, m.m.)' },
@@ -53428,6 +53442,7 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
                 <span style={{ lineHeight:1.4 }}>{f.text}</span>
               </div>
             ))}
+            </div>
           </div>
 
           {loading ? (
@@ -53456,20 +53471,22 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
             </div>
           )}
 
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={onClose} style={{ flex:'0 0 auto', padding:'12px 18px', background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-              Ikke nå
-            </button>
-            <button
-              onClick={() => { if (onNavigate) onNavigate('minbedrift'); onClose() }}
-              style={{ flex:1, padding:'12px 18px', background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'700', boxShadow:'0 4px 12px rgba(139,92,246,0.3)' }}>
-              {hasBasis ? 'Aktiver BIM-Kalkyle' : 'Aktiver begge moduler'}
-            </button>
-          </div>
-
-          <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'11px', color:'#94a3b8' }}>
+          <p style={{ margin:'4px 0 0', textAlign:'center', fontSize:'11px', color:'#94a3b8' }}>
             Du kan deaktivere igjen når som helst fra Min bedrift → Abonnement
           </p>
+        </div>
+
+        {/* FAST bunnrad — samme mønster som velgermodalene i «Ny faktura fra …».
+            velgerFot har env(safe-area-inset-bottom), så knappen ikke havner
+            under hjemindikatoren. Ligger UTENFOR det rullbare feltet, så den er
+            synlig uansett hvor høyt innholdet blir. */}
+        <div style={velgerFot}>
+          <button onClick={onClose} style={velgerAvbrytBtn}>Ikke nå</button>
+          <button
+            onClick={() => { if (onNavigate) onNavigate('minbedrift'); onClose() }}
+            style={{ ...velgerPrimaerBtn(false), background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', boxShadow:'0 4px 12px rgba(139,92,246,0.3)' }}>
+            {hasBasis ? 'Aktiver BIM-Kalkyle' : 'Aktiver begge moduler'}
+          </button>
         </div>
       </div>
     </div>
