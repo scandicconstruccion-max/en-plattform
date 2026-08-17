@@ -18913,7 +18913,12 @@ function UEPrisingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
+  // erLevert = prisene er inne, siden er i lesemodus.
+  // nyligLevert = levert akkurat nå, så kvitteringen kan ordlegges deretter.
+  // Tidligere fantes bare «done», og den erstattet HELE siden med en kvittering
+  // — også ved gjenbesøk. Da så UE aldri meldingene, og kunne ikke svare.
+  const [erLevert, setErLevert] = useState(false)
+  const [nyligLevert, setNyligLevert] = useState(false)
   const [erRevidering, setErRevidering] = useState(false)
   const [forbehold, setForbehold] = useState('')
   const [sporsmal, setSporsmal] = useState([])
@@ -18932,15 +18937,24 @@ function UEPrisingsPage() {
       const { data: ue, error: ue_err } = await supabase.from('tender_ues').select('*').eq('token', t).single()
       if (ue_err||!ue) throw new Error('Lenken er ugyldig eller utløpt.')
       setSporsmal(Array.isArray(ue.sporsmal) ? ue.sporsmal : [])
-      if (ue.status === 'Priset') { setUeData(ue); const { data: td0 } = await supabase.from('tenders').select('*').eq('id', ue.tender_id).single(); setTender(td0); setDone(true); setLoading(false); return }
+      // Siden lastes likt uansett status. Har UE alt levert, vises den i
+      // lesemodus med prisene låst — men dialogen er åpen. Vil oppdragsgiver ha
+      // nye tall, ber han om revidert tilbud, og da settes status tilbake til
+      // «Åpnet» og feltene låses opp igjen.
+      const levert = ue.status === 'Priset'
+      setErLevert(levert)
       const { data: td, error: td_err } = await supabase.from('tenders').select('*').eq('id', ue.tender_id).single()
       if (td_err||!td) throw new Error('Anbudet ble ikke funnet.')
       setUeData(ue); setTender(td)
       const forrige = Array.isArray(ue.chapters) && ue.chapters.length ? ue.chapters : null
-      if (forrige) setErRevidering(true)
+      // Revideringsbanneret gjelder bare når prisingen faktisk er åpnet igjen.
+      // En UE som bare ser på sitt leverte tilbud, er ikke bedt om noe.
+      if (forrige && !levert) setErRevidering(true)
       const kilde = forrige || (td.chapters||[])
       setChapters(kilde.map(ch=>({ ...ch, posts:(ch.posts||[]).map(p=>({...p, uePrice: p.uePrice != null ? p.uePrice : ''})) })))
-      await supabase.from('tender_ues').update({ status:'Åpnet' }).eq('id', ue.id)
+      // Viktig: en levert status må ikke overskrives til «Åpnet» bare fordi UE
+      // åpner lenken igjen — det ville låst opp prisene uten at noen ba om det.
+      if (!levert) await supabase.from('tender_ues').update({ status:'Åpnet' }).eq('id', ue.id)
     } catch(e) { setError(e.message) }
     finally { setLoading(false) }
   }
@@ -18957,8 +18971,13 @@ function UEPrisingsPage() {
       if (error) throw error
       setSporsmal(nytt); setNyttSpm('')
       if (tender?.created_by) {
-        try { await supabase.from('notifications').insert({ user_id: tender.created_by, title:`❓ Spørsmål fra ${ueData.company_name}`, message:`«${nytt[nytt.length-1].text.slice(0,80)}» — ${tender.title}`, type:'info', link_page:'anbudsmodul', link_id: tender.id }) } catch(_) {}
+        try { await supabase.from('notifications').insert({ user_id: tender.created_by, title:`❓ Melding fra ${ueData.company_name}`, message:`«${nytt[nytt.length-1].text.slice(0,80)}» — ${tender.title}`, type:'info', link_page:'anbudsmodul', link_id: tender.id }) } catch(_) {}
       }
+      // E-post til oppdragsgiver. En rad i varsellista er ikke nok når det står
+      // en frist og venter. Bygges og sendes server-side (ue-melding-notify),
+      // slik at denne uinnloggede siden ikke kan sende vilkårlig e-post — samme
+      // mønster som ue-svar-notify i UE-forespørselsflyten.
+      try { await supabase.functions.invoke('ue-melding-notify', { body: { token } }) } catch(_) { /* varsling skal ikke blokkere meldingen */ }
     } catch(e) { alert({ message:'Kunne ikke sende spørsmål', subMessage:e.message, kind:'error' }) }
     finally { setSenderSpm(false) }
   }
@@ -18978,7 +18997,8 @@ function UEPrisingsPage() {
       if (tender.created_by) {
         await supabase.from('notifications').insert({ user_id:tender.created_by, title:`Ny anbudspris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul' })
       }
-      setDone(true)
+      setErLevert(true); setNyligLevert(true)
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch(_) {}
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSubmitting(false) }
   }
@@ -18987,7 +19007,6 @@ function UEPrisingsPage() {
 
   if (loading) return <div style={pageStyle}><div style={{ textAlign:'center', marginTop:'20vh' }}><div style={{ width:'40px', height:'40px', border:'3px solid #e2e8f0', borderTop:'3px solid #2563eb', borderRadius:'50%', margin:'0 auto 16px', animation:'spin 1s linear infinite' }}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style><p style={{ color:'#64748b' }}>Laster anbudsforespørsel...</p></div></div>
   if (error) return <div style={pageStyle}><div style={{ background:'white', borderRadius:'20px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 8px 40px rgba(0,0,0,0.1)' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>❌</div><h2 style={{ margin:'0 0 8px', color:'#0f172a' }}>Ugyldig lenke</h2><p style={{ margin:0, color:'#64748b' }}>{error}</p></div></div>
-  if (done) return <div style={pageStyle}><div style={{ background:'white', borderRadius:'20px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 8px 40px rgba(0,0,0,0.1)' }}><div style={{ fontSize:'64px', marginBottom:'16px' }}>✅</div><h2 style={{ margin:'0 0 8px', color:'#0f172a', fontSize:'24px' }}>Priser innlevert!</h2><p style={{ margin:'0 0 12px', color:'#64748b' }}>Oppdragsgiver er varslet og vil kontakte deg.</p><p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Du kan lukke denne siden.</p></div></div>
 
   const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
   const fristUtlopt = tender?.deadline && tender.deadline < new Date().toISOString().slice(0,10)
@@ -19024,13 +19043,32 @@ function UEPrisingsPage() {
           )}
         </div>
 
-        {fristUtlopt && (
+        {/* Kvittering som et felt på siden, ikke en side som erstatter alt.
+            Dialogen under skal være tilgjengelig også etter innlevering. */}
+        {erLevert && (
+          <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'16px', padding:'18px 22px' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:'12px' }}>
+              <div style={{ fontSize:'26px', lineHeight:1, flexShrink:0 }}>✅</div>
+              <div>
+                <div style={{ fontSize:'15px', fontWeight:'800', color:'#166534', marginBottom:'4px' }}>
+                  {nyligLevert ? 'Prisene er sendt inn!' : `Du har levert pris: ${fmtT(ueData?.total_amount || totalAmount)}`}
+                </div>
+                <div style={{ fontSize:'13px', color:'#15803d', lineHeight:1.55 }}>
+                  {nyligLevert ? 'Oppdragsgiver er varslet. ' : ''}
+                  Prisene er låst nå. Trenger du å endre noe, skriv det i dialogen under — da kan oppdragsgiver åpne tilbudet for revidering, og prisene dine ligger klare til å justeres.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {fristUtlopt && !erLevert && (
           <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'16px', padding:'16px 20px', color:'#b91c1c', fontSize:'14px', fontWeight:'600' }}>
             ⏰ Anbudsfristen ({tender.deadline}) er utløpt. Innlevering er stengt. Ta kontakt med oppdragsgiver hvis du fortsatt ønsker å gi pris.
           </div>
         )}
 
-        {erRevidering && !done && (
+        {erRevidering && (
           <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'16px', padding:'16px 20px', color:'#1d4ed8', fontSize:'14px', fontWeight:'600' }}>
             🔁 Oppdragsgiver har bedt om et revidert tilbud. Prisene fra ditt forrige tilbud er forhåndsutfylt — juster dem og send inn på nytt.
           </div>
@@ -19038,8 +19076,8 @@ function UEPrisingsPage() {
 
         {/* Spørsmål til oppdragsgiver */}
         <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>💬 Spørsmål til oppdragsgiver</h3>
-          <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#94a3b8' }}>Har du spørsmål til grunnlaget? Still dem her – svaret kommer på denne siden, så slipper du e-post frem og tilbake.</p>
+          <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>💬 Dialog med oppdragsgiver</h3>
+          <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#94a3b8' }}>Spørsmål og svar går begge veier – svaret kommer på denne siden, så slipper du e-post frem og tilbake.</p>
           {sporsmal.length > 0 && (
             <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'14px' }}>
               {sporsmal.map((m,i) => (
@@ -19052,7 +19090,7 @@ function UEPrisingsPage() {
             </div>
           )}
           <div style={{ display:'flex', gap:'8px', alignItems:'flex-end' }}>
-            <textarea value={nyttSpm} onChange={e=>setNyttSpm(e.target.value)} rows={2} placeholder="Skriv spørsmålet ditt..." style={{ ...tInp, resize:'vertical', flex:1 }} />
+            <textarea value={nyttSpm} onChange={e=>setNyttSpm(e.target.value)} rows={2} placeholder="Skriv ditt svar / spørsmål..." style={{ ...tInp, resize:'vertical', flex:1 }} />
             <button onClick={postSpm} disabled={senderSpm||!nyttSpm.trim()} style={{ padding:'11px 18px', background: senderSpm||!nyttSpm.trim()?'#cbd5e1':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor: senderSpm||!nyttSpm.trim()?'default':'pointer', whiteSpace:'nowrap' }}>{senderSpm?'Sender...':'Send'}</button>
           </div>
         </div>
@@ -19069,7 +19107,9 @@ function UEPrisingsPage() {
                     <td style={{ padding:'16px 12px', color:'#0f172a', fontWeight:'500', lineHeight:1.55 }}>{p.description||'—'}</td>
                     <td style={{ padding:'16px 12px', textAlign:'right', color:'#475569', whiteSpace:'nowrap' }}>{p.qty}</td>
                     <td style={{ padding:'16px 12px', color:'#475569' }}>{p.unit}</td>
-                    <td style={{ padding:'12px' }}><input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'130px', textAlign:'right', borderColor:'#2563eb' }} /></td>
+                    <td style={{ padding:'12px', textAlign:'right' }}>{erLevert
+                      ? <span style={{ color:'#475569', fontWeight:'600', whiteSpace:'nowrap' }}>{fmtT(p.uePrice)}</span>
+                      : <input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'130px', textAlign:'right', borderColor:'#2563eb' }} />}</td>
                     <td style={{ padding:'16px 12px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtT(ls)}</td>
                   </tr>
                 })}
@@ -19078,22 +19118,30 @@ function UEPrisingsPage() {
           </div>
         ))}
 
-        <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'6px' }}>Forbehold / merknader (valgfritt)</label>
-          <textarea value={forbehold} onChange={e=>setForbehold(e.target.value)} rows={3} placeholder="F.eks. «Prisen forutsetter frostfri grunn», «Stillas ikke inkludert», forbehold om mengder e.l." style={{ ...tInp, resize:'vertical' }} />
-          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8' }}>Eventuelle forbehold vises til oppdragsgiver sammen med prisen din.</p>
-        </div>
+        {(!erLevert || (ueData?.forbehold || forbehold)) && (
+          <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'6px' }}>Forbehold / merknader (valgfritt)</label>
+            {erLevert
+              ? <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{ueData?.forbehold || forbehold || '—'}</p>
+              : <>
+                  <textarea value={forbehold} onChange={e=>setForbehold(e.target.value)} rows={3} placeholder="F.eks. «Prisen forutsetter frostfri grunn», «Stillas ikke inkludert», forbehold om mengder e.l." style={{ ...tInp, resize:'vertical' }} />
+                  <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8' }}>Eventuelle forbehold vises til oppdragsgiver sammen med prisen din.</p>
+                </>}
+          </div>
+        )}
 
         <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: erLevert ? 0 : '20px' }}>
             <div><div style={{ fontSize:'13px', color:'#64748b', fontWeight:'600' }}>Din totalpris eks. mva</div></div>
-            <div style={{ fontSize:'26px', fontWeight:'800', color:'#0f172a' }}>{fmtT(totalAmount)}</div>
+            <div style={{ fontSize:'26px', fontWeight:'800', color:'#0f172a' }}>{fmtT(erLevert ? (ueData?.total_amount ?? totalAmount) : totalAmount)}</div>
           </div>
+          {erLevert ? null : <>
           <button data-tour="ue-lever" onClick={handleSubmit} disabled={submitting||totalAmount===0||fristUtlopt}
             style={{ width:'100%', padding:'16px', background:submitting||totalAmount===0||fristUtlopt?'#94a3b8':'#2563eb', color:'white', border:'none', borderRadius:'14px', fontSize:'16px', fontWeight:'700', cursor:submitting||totalAmount===0||fristUtlopt?'not-allowed':'pointer' }}>
             {fristUtlopt?'⏰ Fristen er utløpt':submitting?'Sender inn...':'📤 Lever priser'}
           </button>
           {totalAmount===0&&!fristUtlopt&&<p style={{ margin:'8px 0 0', fontSize:'13px', color:'#94a3b8', textAlign:'center' }}>Fyll inn priser for å levere</p>}
+          </>}
         </div>
         <p style={{ margin:0, fontSize:'12px', color:'#cbd5e1', textAlign:'center' }}>Sendt via En Plattform KS-system · enplattform.no</p>
       </div>
