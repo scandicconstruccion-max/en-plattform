@@ -16641,7 +16641,10 @@ function AnbudsPage() {
         {showUtValg && (
           <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:isMobA?'flex-end':'center', justifyContent:'center', padding:isMobA?0:'16px' }}>
             <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={e=>{ if(e.target===e.currentTarget) setShowUtValg(false) }} />
-            <div style={{ position:'relative', background:'white', borderRadius:isMobA?'20px 20px 0 0':'18px', width:'100%', maxWidth:'520px', padding:'22px', fontFamily:'system-ui,sans-serif' }}>
+            {/* Bunnark uten hoeydetak vokser oppover forbi skjermtoppen, og
+                toppen av arket blir uoppnaaelig. maxHeight + scroll, og
+                safe-area saa nederste valg ikke havner under hjemindikatoren. */}
+            <div style={{ position:'relative', background:'white', borderRadius:isMobA?'20px 20px 0 0':'18px', width:'100%', maxWidth:'520px', padding:'22px', paddingBottom: isMobA ? 'calc(22px + env(safe-area-inset-bottom))' : '22px', maxHeight: isMobA ? '85vh' : '90vh', overflowY:'auto', WebkitOverflowScrolling:'touch', overscrollBehavior:'contain', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px' }}>
                 <h2 style={{ margin:0, fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>📤 Nytt anbud til UE</h2>
                 <button onClick={()=>setShowUtValg(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
@@ -20817,6 +20820,7 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   // en strek her, og man måtte ut av dialogen for å redigere endringsmeldingen.
   const [epost, setEpost] = useState(em.customer_email || '')
   const gyldigEpost = erGyldigEpost(epost)
+  const mobSE = typeof window !== 'undefined' && window.innerWidth < 768
 
   const isCopy = sendType === 'copy'
   const showReminder = !isCopy // Kopi har ikke purringsfrist
@@ -20863,13 +20867,16 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      {/* Innholdet varierer med sendType, svarfrist og om EM-en har mottaker
+          fra før. Uten maxHeight vokser dialogen forbi skjermkanten og
+          send-knappen blir uoppnåelig — samme feil som BimKalkyleUpsellModal. */}
+      <div style={{ position:'relative', background:'white', borderRadius: mobSE ? 0 : '20px', width:'100%', maxWidth: mobSE ? '100%' : '480px', height: mobSE ? '100vh' : 'auto', maxHeight: mobSE ? '100vh' : '90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow: mobSE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{cfg.title}</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          <button onClick={onClose} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', minWidth:'44px', minHeight:'44px' }}>×</button>
         </div>
 
-        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch', overscrollBehavior:'contain' }}>
           {cfg.banner && (
             <div style={{ background: cfg.banner.bg, border: `1px solid ${cfg.banner.border}`, borderRadius:'10px', padding:'12px 14px' }}>
               <div style={{ fontSize:'13px', color: cfg.banner.color, lineHeight:1.5 }}>{cfg.banner.text}</div>
@@ -20921,7 +20928,7 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
           </div>
         </div>
 
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+        <div style={{ padding:'16px 24px calc(16px + env(safe-area-inset-bottom))', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end', flexShrink:0, background:'white' }}>
           <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', minHeight:'48px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
           <button type="button" onClick={handleConfirm} disabled={sending || !gyldigEpost}
             title={!gyldigEpost ? 'Skriv en gyldig e-postadresse for å sende' : undefined}
@@ -55361,9 +55368,12 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:140, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'620px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+      {/* overflow:hidden UTEN maxHeight klipper bort det som ikke faar plass —
+          det blir ikke rullbart, det forsvinner. Samme mekanisme som
+          avvik-headeren. Fast topp, rullbart innhold. */}
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '620px', height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.3)' }}>
 
-        <div style={{ padding:'22px 24px 16px', borderBottom:'1px solid #f1f5f9', position:'relative' }}>
+        <div style={{ padding:'22px 24px 16px', borderBottom:'1px solid #f1f5f9', position:'relative', flexShrink:0 }}>
           <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'#f1f5f9', border:'none', borderRadius:'50%', width:'30px', height:'30px', cursor:'pointer', color:'#64748b', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <h2 style={{ margin:'0 0 4px', fontSize:'19px', fontWeight:'800', color:'#0f172a' }}>Nytt kalkulasjonsprosjekt</h2>
           <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>Hvordan vil du starte?</p>
@@ -55403,7 +55413,7 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
           </div>
         </div>
 
-        <div style={{ padding:'20px 24px 24px' }}>
+        <div style={{ padding:'20px 24px calc(24px + env(safe-area-inset-bottom))', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch', overscrollBehavior:'contain' }}>
           <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'12px' }}>
 
             {/* Hurtigstart (først, anbefalt) */}
