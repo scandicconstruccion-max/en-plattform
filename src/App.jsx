@@ -17633,6 +17633,9 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const [visKun, setVisKun] = useState('alle') // 'alle' | 'ufordelt'
   const [sok, setSok] = useState('')
   const [visProsjektInfo, setVisProsjektInfo] = useState(false)  // lukket som standard — postlisten er det man er her for
+  const prosjektNavnRef = React.useRef(null)   // markøren settes hit når prosjekt mangler
+  const autoAapnetRef = React.useRef(false)    // bare panel VI åpnet skal lukke seg selv igjen
+  const forrigeAntallRef = React.useRef(0)     // for å se når postene kommer inn
   const [side, setSide] = useState(0)   // sidevisning — 97 poster i én DOM er tungt på telefon
   const POSTER_PER_SIDE = 50
   const [oppretter, setOppretter] = useState(false)
@@ -17771,6 +17774,7 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const antallSider = Math.max(1, Math.ceil(synligePoster.length / POSTER_PER_SIDE))
   const gjeldendeSide = Math.min(side, antallSider - 1)
   const sidePoster = synligePoster.slice(gjeldendeSide * POSTER_PER_SIDE, gjeldendeSide * POSTER_PER_SIDE + POSTER_PER_SIDE)
+  const harPoster = poster.length > 0
   const listeSkjult = poster.length > 0 && synligePoster.length === 0
   // Overskrift for det sammenlagte prosjektinfo-panelet: vis hva som faktisk er
   // valgt, slik at man ser det uten å åpne. Er ingenting satt, sier den ifra —
@@ -17778,13 +17782,43 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const valgtProsjektNavn = projects.find(pr => pr.id === prosjektId)?.name || ''
   const prosjektInfoSatt = !!(valgtProsjektNavn || pInfo.navn.trim())
   const prosjektNavnVist = valgtProsjektNavn || pInfo.navn.trim() || 'Prosjektinfo'
-  // Én kilde til hvorfor Opprett er sperret — samme tekst i knappen, i
-  // hjelpeteksten ved siden av, og som begrunnelse hvis den likevel trykkes.
-  const sperreGrunn = poster.length === 0 ? null
-    : listeSkjult ? 'Vis postlisten før du oppretter'
-    : !prosjektInfoSatt ? 'Velg prosjekt eller fyll inn prosjektnavn først'
+  // To slags sperre, med ulikt virkemiddel.
+  //
+  // HARD: postlisten er ikke synlig. Da har brukeren ikke sett fagfordelingen i
+  // det hele tatt, og knappen skal se utilgjengelig ut — grå og død.
+  //
+  // MYK: noe mangler, men brukeren har sett listen. En grå knapp leses som
+  // «ødelagt», ikke som «gjør dette først» — særlig når det som mangler ligger i
+  // et sammenlagt panel. Derfor er knappen grønn og trykkbar: trykket går ikke
+  // gjennom, men det åpner panelet, setter markøren i feltet og sier hvorfor.
+  // Vernet er like sterkt, det er flyttet fra utseende til handling.
+  const hardSperre = poster.length > 0 && listeSkjult ? 'Vis postlisten før du oppretter' : null
+  const mykSperre = (poster.length === 0 || hardSperre) ? null
+    : !prosjektInfoSatt ? 'Mangler prosjekt — trykk for å fylle inn'
     : fagMedPoster.length === 0 ? 'Sett faggruppe på minst én UE-post først'
     : null
+
+  // Fokuser prosjektnavn-feltet. Panelet må rekke å tegnes opp først.
+  const fokuserProsjektNavn = () => { setTimeout(() => prosjektNavnRef.current?.focus(), 80) }
+
+  // Kommer postene inn uten at prosjekt er satt, åpner panelet seg selv med
+  // markøren i navnefeltet — det som mangler skal ligge foran deg, ikke gjemt.
+  // Er prosjektet fylt inn på forhånd, forblir panelet lukket.
+  useEffect(() => {
+    const foer = forrigeAntallRef.current
+    forrigeAntallRef.current = poster.length
+    if (foer === 0 && poster.length > 0 && !prosjektInfoSatt) {
+      setVisProsjektInfo(true)
+      autoAapnetRef.current = true
+      fokuserProsjektNavn()
+    }
+  }, [poster.length])
+
+  // Når feltet er fylt ut og brukeren forlater det, legger panelet seg sammen
+  // igjen — men bare hvis det var vi som åpnet det.
+  const lukkHvisAutoAapnet = () => {
+    if (autoAapnetRef.current && prosjektInfoSatt) { setVisProsjektInfo(false); autoAapnetRef.current = false }
+  }
   const nullstillVisning = () => { setVisKun('alle'); setSok(''); setSide(0) }
 
   const opprett = async () => {
@@ -17799,7 +17833,9 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
     // lettere å overse — derfor kreves det, ikke bare varsles om.
     if (!prosjektInfoSatt) {
       setVisProsjektInfo(true)
-      await appAlert({ message: 'Anbudene mangler prosjekt', subMessage: 'Velg et eksisterende prosjekt, eller fyll inn prosjektnavn. Uten det havner forespørslene i en løs samling uten byggeplass, byggherre eller frist. Prosjektinfo er nå åpnet for deg.', kind: 'warning' })
+      autoAapnetRef.current = true
+      await appAlert({ message: 'Anbudene mangler prosjekt', subMessage: 'Velg et eksisterende prosjekt, eller fyll inn prosjektnavn. Uten det havner forespørslene i en løs samling uten byggeplass, byggherre eller frist. Prosjektinfo er åpnet, og markøren står i feltet.', kind: 'warning' })
+      fokuserProsjektNavn()
       return
     }
     if (!fagMedPoster.length) { await appAlert({ message: 'Ingen poster med faggruppe', subMessage: 'Sett faggruppe på minst én post før du oppretter forespørsler.', kind: 'warning' }); return }
@@ -17841,12 +17877,13 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? 0 : '12px' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: (isMob && harPoster) ? 'stretch' : 'center', justifyContent: 'center', padding: (isMob && harPoster) ? 0 : '12px', overflowY: 'auto' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={e => { if (e.target === e.currentTarget) bekreftLukk() }} />
-      {/* Vinduet skal være høyt, ikke en liten boks midt på siden: postlisten er
-          det man er her for. Høyden var 'auto' på desktop, så vinduet krympet til
-          innholdet og listen fikk lite plass. Nå fyller det høyden det får lov til. */}
-      <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? 0 : '20px', width: '100%', maxWidth: isMob ? '100%' : '1100px', maxHeight: isMob ? '100vh' : '96vh', height: isMob ? '100vh' : '96vh', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui,sans-serif' }}>
+      {/* Høyden følger innholdet fram til postene finnes. Før opplasting er det
+          bare to små kort, og et vindu i full skjermhøyde rundt dem ser ødelagt
+          ut. Så snart postlisten er der, vokser vinduet til full høyde — da er
+          det listen som skal ha plassen. */}
+      <div style={{ position: 'relative', background: 'white', borderRadius: (isMob && harPoster) ? 0 : '20px', width: '100%', maxWidth: isMob ? '100%' : '1100px', maxHeight: isMob ? (harPoster ? '100vh' : 'calc(100vh - 24px)') : '96vh', height: harPoster ? (isMob ? '100vh' : '96vh') : 'auto', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui,sans-serif' }}>
         <div style={{ padding: isMob ? '14px 16px' : '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: isMob ? '16px' : '18px', fontWeight: '800', color: '#0f172a' }}>📥 Importer & fordel poster</h2>
@@ -17930,7 +17967,7 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
               {visProsjektInfo && !prosjektId && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div><label style={impLbl}>Prosjektnavn</label><input value={pInfo.navn} onChange={e => settP('navn', e.target.value)} style={impInp} placeholder="F.eks. Sundenga Boligsameie – våtrom" /></div>
+                    <div><label style={impLbl}>Prosjektnavn</label><input ref={prosjektNavnRef} value={pInfo.navn} onChange={e => settP('navn', e.target.value)} onBlur={lukkHvisAutoAapnet} style={impInp} placeholder="F.eks. Sundenga Boligsameie – våtrom" /></div>
                     <div><label style={impLbl}>Byggeplass – gateadresse</label><input value={pInfo.gate} onChange={e => settP('gate', e.target.value)} style={impInp} placeholder="Gate og nummer" /></div>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       <div style={{ width: '120px' }}><label style={impLbl}>Postnr.</label><input value={pInfo.postnr} onChange={e => settP('postnr', e.target.value)} style={impInp} placeholder="0000" /></div>
@@ -17948,7 +17985,7 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
               {visProsjektInfo && (
                 <div>
                   <label style={impLbl}>Knytt til et eksisterende prosjekt</label>
-                  <SearchableProjectSelect value={prosjektId} onChange={setProsjektId} projects={projects} style={{ ...tInp, maxWidth: '320px' }} placeholder="Velg eksisterende prosjekt" />
+                  <SearchableProjectSelect value={prosjektId} onChange={(v) => { setProsjektId(v); if (v && autoAapnetRef.current) { setVisProsjektInfo(false); autoAapnetRef.current = false } }} projects={projects} style={{ ...tInp, maxWidth: '320px' }} placeholder="Velg eksisterende prosjekt" />
                   {prosjektId && <button onClick={() => setProsjektId('')} style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>Fjern – fyll inn nytt i stedet</button>}
                 </div>
               )}
@@ -18110,8 +18147,8 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
         <div style={{ padding: isMob ? '12px 14px' : '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={bekreftLukk} style={{ padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px' }}>Avbryt</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {sperreGrunn && <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>{sperreGrunn}</span>}
-            <button onClick={opprett} disabled={oppretter || !!sperreGrunn} title={sperreGrunn || undefined} style={{ padding: '10px 22px', background: (oppretter || sperreGrunn) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || sperreGrunn) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+            {(hardSperre || mykSperre) && <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>{hardSperre || mykSperre}</span>}
+            <button onClick={opprett} disabled={oppretter || !!hardSperre} title={hardSperre || mykSperre || undefined} style={{ padding: '10px 22px', background: (oppretter || hardSperre) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || hardSperre) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
               {oppretter ? 'Oppretter...' : `📤 Opprett ${fagMedPoster.length || ''} forespørsel${fagMedPoster.length !== 1 ? 'er' : ''}`}
             </button>
           </div>
