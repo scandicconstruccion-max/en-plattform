@@ -57,4 +57,35 @@ export default [
       "react-hooks/rules-of-hooks": "error",
     },
   },
+  // ── src/App.jsx ────────────────────────────────────────────────────────────
+  // Hele appen ligger i denne ene fila, og den sto UTENFOR lintingen over.
+  // Konsekvensen var seks udefinerte referanser i produksjon, tre av dem
+  // render-tid — de gir hvit skjerm. esbuild fanger dem ikke; de smeller først
+  // i nettleseren. «lukkMedBekreftelse» ble rettet 30. juli 11:29 og innført på
+  // nytt samme kveld 19:34, uten at noe sa fra.
+  //
+  // Bevisst smal regelliste: no-undef og hooks-reglene. Å slå på hele
+  // recommended på 79 000 linjer ville gitt tusenvis av treff og blitt slått av
+  // igjen samme dag. Dette settet skal holdes på null.
+  {
+    files: ["src/App.jsx"],
+    languageOptions: {
+      globals: { ...globals.browser, React: "readonly" },
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: "module",
+        ecmaFeatures: { jsx: true },
+      },
+    },
+    plugins: {
+      react: pluginReact,
+      "react-hooks": pluginReactHooks,
+    },
+    settings: { react: { version: "detect" } },
+    rules: {
+      "no-undef": "error",
+      "react-hooks/rules-of-hooks": "error",
+      "react/jsx-uses-vars": "error",
+    },
+  },
 ];
