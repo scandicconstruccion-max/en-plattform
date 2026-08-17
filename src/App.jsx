@@ -10958,7 +10958,10 @@ function SendAvvikModal({ dev, project, onClose, onSent, user, generatePdfBase64
           let viewToken = dev.view_token
           if (!viewToken) {
             viewToken = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : (Date.now() + '-' + Math.random().toString(36).slice(2))
-            try { await supabase.from('deviations').update({ view_token: viewToken }).eq('id', dev.id); setDev(prev => ({ ...prev, view_token: viewToken })) } catch (_) {}
+            // dev er en prop her — ingen setDev finnes. Kallet laa inne i
+            // catch(_) og feilet stille hver gang. Tokenet under er allerede
+            // riktig, saa lenken blir den samme.
+            try { await supabase.from('deviations').update({ view_token: viewToken }).eq('id', dev.id) } catch (_) {}
           }
           visLenke = `${window.location.origin}/avvik-view?token=${viewToken}${erByggherre ? '&rolle=byggherre' : ''}`
         }
@@ -13420,7 +13423,9 @@ function StatusEndringsModal({ maskin, projects, user, onClose, onSaved, initial
 
     // Sjekk sertifikater hvis maskinen har krav
     if (emp && requiredCerts.length > 0) {
-      const { data: empCerts } = await supabase.from('employee_certificates').select('name, expiry_date').eq('employee_id', empId)
+      // emp.id, ikke empId — den fantes aldri. Feilen avbroet hele
+      // velgAnsatt-flyten, saa sertifikatadvarselen kom aldri.
+      const { data: empCerts } = await supabase.from('employee_certificates').select('name, expiry_date').eq('employee_id', emp.id)
       const validCerts = (empCerts || []).filter(c => !c.expiry_date || new Date(c.expiry_date) > new Date()).map(c => c.name)
       const missing = requiredCerts.filter(req => !validCerts.includes(req))
       if (missing.length > 0) {
@@ -16636,7 +16641,10 @@ function AnbudsPage() {
         {showUtValg && (
           <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems:isMobA?'flex-end':'center', justifyContent:'center', padding:isMobA?0:'16px' }}>
             <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={e=>{ if(e.target===e.currentTarget) setShowUtValg(false) }} />
-            <div style={{ position:'relative', background:'white', borderRadius:isMobA?'20px 20px 0 0':'18px', width:'100%', maxWidth:'520px', padding:'22px', fontFamily:'system-ui,sans-serif' }}>
+            {/* Bunnark uten hoeydetak vokser oppover forbi skjermtoppen, og
+                toppen av arket blir uoppnaaelig. maxHeight + scroll, og
+                safe-area saa nederste valg ikke havner under hjemindikatoren. */}
+            <div style={{ position:'relative', background:'white', borderRadius:isMobA?'20px 20px 0 0':'18px', width:'100%', maxWidth:'520px', padding:'22px', paddingBottom: isMobA ? 'calc(22px + env(safe-area-inset-bottom))' : '22px', maxHeight: isMobA ? '85vh' : '90vh', overflowY:'auto', WebkitOverflowScrolling:'touch', overscrollBehavior:'contain', boxSizing:'border-box', fontFamily:'system-ui,sans-serif' }}>
               <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'4px' }}>
                 <h2 style={{ margin:0, fontSize:'18px', fontWeight:'800', color:'#0f172a' }}>📤 Nytt anbud til UE</h2>
                 <button onClick={()=>setShowUtValg(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
@@ -20812,6 +20820,7 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   // en strek her, og man måtte ut av dialogen for å redigere endringsmeldingen.
   const [epost, setEpost] = useState(em.customer_email || '')
   const gyldigEpost = erGyldigEpost(epost)
+  const mobSE = typeof window !== 'undefined' && window.innerWidth < 768
 
   const isCopy = sendType === 'copy'
   const showReminder = !isCopy // Kopi har ikke purringsfrist
@@ -20858,13 +20867,16 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px', fontFamily:'system-ui, sans-serif' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)' }}>
-        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      {/* Innholdet varierer med sendType, svarfrist og om EM-en har mottaker
+          fra før. Uten maxHeight vokser dialogen forbi skjermkanten og
+          send-knappen blir uoppnåelig — samme feil som BimKalkyleUpsellModal. */}
+      <div style={{ position:'relative', background:'white', borderRadius: mobSE ? 0 : '20px', width:'100%', maxWidth: mobSE ? '100%' : '480px', height: mobSE ? '100vh' : 'auto', maxHeight: mobSE ? '100vh' : '90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow: mobSE ? 'none' : '0 20px 60px rgba(0,0,0,0.2)' }}>
+        <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
           <h2 style={{ margin:0, fontSize:'18px', fontWeight:'700', color:'#0f172a' }}>{cfg.title}</h2>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          <button onClick={onClose} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', minWidth:'44px', minHeight:'44px' }}>×</button>
         </div>
 
-        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        <div style={{ padding:'20px 24px', display:'flex', flexDirection:'column', gap:'16px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch', overscrollBehavior:'contain' }}>
           {cfg.banner && (
             <div style={{ background: cfg.banner.bg, border: `1px solid ${cfg.banner.border}`, borderRadius:'10px', padding:'12px 14px' }}>
               <div style={{ fontSize:'13px', color: cfg.banner.color, lineHeight:1.5 }}>{cfg.banner.text}</div>
@@ -20916,7 +20928,7 @@ function SendEmDialog({ em, onClose, onConfirm, sendType = 'send' }) {
           </div>
         </div>
 
-        <div style={{ padding:'16px 24px', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end' }}>
+        <div style={{ padding:'16px 24px calc(16px + env(safe-area-inset-bottom))', borderTop:'1px solid #f1f5f9', display:'flex', gap:'10px', justifyContent:'flex-end', flexShrink:0, background:'white' }}>
           <button type="button" onClick={onClose} disabled={sending} style={{ padding:'10px 20px', minHeight:'48px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: sending?'not-allowed':'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
           <button type="button" onClick={handleConfirm} disabled={sending || !gyldigEpost}
             title={!gyldigEpost ? 'Skriv en gyldig e-postadresse for å sende' : undefined}
@@ -28575,6 +28587,14 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
       const sheetEntries = (sheet.timesheet_entries || entries.filter(e => e.timesheet_id === sheet.id))
       const projectIds = [...new Set(sheetEntries.map(e => e.project_id).filter(Boolean))]
       const notifiedUsers = new Set()
+      // Navnet ble tidligere slaatt opp i en employees-liste som ikke finnes i
+      // denne komponenten. Feilen avbroet varslingen, saa hverken prosjektleder
+      // eller admin fikk beskjed om innleverte timelister. Hentes direkte nå.
+      let empName = 'En ansatt'
+      try {
+        const { data: e } = await supabase.from('employees').select('first_name, last_name').eq('id', employeeId).maybeSingle()
+        if (e) empName = `${e.first_name || ''} ${e.last_name || ''}`.trim() || 'En ansatt'
+      } catch (_) {}
 
       if (projectIds.length > 0) {
         const { data: projData } = await supabase.from('projects').select('id, name, project_manager_name, project_manager_email').in('id', projectIds)
@@ -28585,8 +28605,6 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
               const { data: mgrEmp } = await supabase.from('employees').select('user_id').eq('email', p.project_manager_email).single()
               if (mgrEmp?.user_id && mgrEmp.user_id !== user?.id && !notifiedUsers.has(mgrEmp.user_id)) {
                 notifiedUsers.add(mgrEmp.user_id)
-                const emp = employees.find(e => e.id === employeeId)
-                const empName = emp ? `${emp.first_name||''} ${emp.last_name||''}`.trim() : 'En ansatt'
                 await supabase.from('notifications').insert({ user_id:mgrEmp.user_id, title:`Ny timeliste til godkjenning`, message:`${empName} har levert inn timeliste for uke ${week}, ${year}. Prosjekt: ${p.name}`, type:'info', link_page:'timelister' })
               }
             }
@@ -28604,8 +28622,6 @@ function WeekSheet({ sheet, week, year, employeeId, projects, user, onEdit, onRe
           .maybeSingle()
         if (adminUser?.id && adminUser.id !== user?.id && !notifiedUsers.has(adminUser.id)) {
           notifiedUsers.add(adminUser.id)
-          const emp = employees.find(e => e.id === employeeId)
-          const empName = emp ? `${emp.first_name||''} ${emp.last_name||''}`.trim() : 'En ansatt'
           await supabase.from('notifications').insert({
             user_id: adminUser.id,
             title: 'Ny timeliste til godkjenning',
@@ -43041,6 +43057,9 @@ function BefaringPage() {
 function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
   const confirm = useConfirm()
   const alertEl = useSystemAlertGlobal()
+  // PDF-menyen under refererte isMobBD, som bare finnes i CRMDetaljer.
+  // Egen lokal flagg her — samme regel som resten av fila.
+  const mobilBD = typeof window !== 'undefined' && window.innerWidth < 768
   const [ins, setIns] = useState(init)
   const [observations, setObservations] = useState([])
   const [loading, setLoading] = useState(true)
@@ -43362,11 +43381,11 @@ function BefaringMobileDetalj({ inspection: init, projects, user, onBack }) {
         <>
           <div onMouseDown={(e) => { if (e.target === e.currentTarget) !pdfExporting && setShowPdfMenu(false); }} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:200 }} />
           <div style={{
-            position:'fixed', inset: isMobBD ? 0 : 'auto', top: isMobBD ? 0 : '50%', left: isMobBD ? 0 : '50%',
-            transform: isMobBD ? 'none' : 'translate(-50%,-50%)',
-            background:'white', borderRadius: isMobBD ? 0 : '20px',
-            width: isMobBD ? '100%' : 'min(560px, calc(100vw - 32px))',
-            height: isMobBD ? '100vh' : 'auto', maxHeight: isMobBD ? '100vh' : '92vh',
+            position:'fixed', inset: mobilBD ? 0 : 'auto', top: mobilBD ? 0 : '50%', left: mobilBD ? 0 : '50%',
+            transform: mobilBD ? 'none' : 'translate(-50%,-50%)',
+            background:'white', borderRadius: mobilBD ? 0 : '20px',
+            width: mobilBD ? '100%' : 'min(560px, calc(100vw - 32px))',
+            height: mobilBD ? '100vh' : 'auto', maxHeight: mobilBD ? '100vh' : '92vh',
             zIndex:201, fontFamily:'system-ui,sans-serif', display:'flex', flexDirection:'column'
           }}>
             <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
@@ -45125,7 +45144,9 @@ function BefaringInfoPanel({ ins, proj }) {
           <p style={{ margin:0, fontSize:'13px', color:'#475569', lineHeight:1.6 }}>{ins.notes}</p>
         </div>
       )}
-      {alertEl}
+      {/* Her sto {alertEl}. Den finnes bare i BefaringMobileDetalj, ikke her —
+          samme scope-lekkasje som lukkMedBekreftelse, og samme hvite skjerm.
+          Panelet er et rent infokort og eier ingen varselboks. */}
     </div>
   )
 }
@@ -53061,6 +53082,68 @@ function VarslerPage({ onNavigate }) {
 // ─── END VARSLER PAGE ─────────────────────────────────────────────────────────
 
 // ─── LOCKED MODULE UPSELL PAGE ───────────────────────────────────────────────
+// ─── FEILGRENSE RUNDT MODULENE ───────────────────────────────────────────────
+// Uten denne tar ett krasj hvor som helst ned HELE appen, og brukeren ser en
+// blank side uten noe å gå tilbake til. Det er grunnen til at
+// «lukkMedBekreftelse is not defined» rakk å ramme flere prøvebrukere før noen
+// meldte fra.
+//
+// Ligger INNENFOR layouten, så sidemeny og topplinje står igjen — brukeren
+// kommer alltid videre. key={page} i App gjør at grensen nullstiller seg av seg
+// selv ved navigasjon, uten at brukeren må trykke «Prøv igjen».
+//
+// VIKTIG: den logger ALLTID til konsollen. En pen melding som skjuler den ekte
+// feilen er verre enn en hvit skjerm — da forsvinner stacktracen som er det
+// eneste som forteller hva som gikk galt.
+class ModulFeilgrense extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { feil: null }
+  }
+  static getDerivedStateFromError(feil) {
+    return { feil }
+  }
+  componentDidCatch(feil, info) {
+    console.error(`[ModulFeilgrense] Krasj i modulen «${this.props.modulId}»:`, feil)
+    if (info && info.componentStack) console.error('[ModulFeilgrense] Komponentstack:', info.componentStack)
+  }
+  render() {
+    if (!this.state.feil) return this.props.children
+    const navn = this.props.modulNavn || this.props.modulId || 'Denne siden'
+    const mob = typeof window !== 'undefined' && window.innerWidth < 768
+    const knapp = (primaer) => ({
+      minHeight: '48px', padding: '0 20px', borderRadius: '10px', cursor: 'pointer',
+      fontSize: '14px', fontWeight: '600', width: mob ? '100%' : 'auto',
+      background: primaer ? '#059669' : 'white', color: primaer ? 'white' : '#374151',
+      border: primaer ? 'none' : '1px solid #e2e8f0',
+    })
+    return (
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'60vh', fontFamily:'system-ui,sans-serif', padding:'24px' }}>
+        <div style={{ textAlign:'center', maxWidth:'460px' }}>
+          <div style={{ fontSize:'48px', marginBottom:'16px' }}>⚠️</div>
+          <h2 style={{ color:'#0f172a', margin:'0 0 8px', fontSize:'20px' }}>{navn} kunne ikke vises</h2>
+          <p style={{ color:'#64748b', margin:'0 0 6px', fontSize:'14px', lineHeight:1.6 }}>
+            Det oppsto en feil i denne modulen. Resten av systemet virker som normalt, og ingenting av det du har lagret er borte.
+          </p>
+          <p style={{ color:'#94a3b8', margin:'0 0 20px', fontSize:'13px', lineHeight:1.6 }}>
+            Meld gjerne fra om hva du gjorde rett før dette skjedde, så retter vi det.
+          </p>
+          <div style={{ display:'flex', gap:'10px', flexDirection: mob ? 'column' : 'row', justifyContent:'center' }}>
+            <button onClick={() => this.setState({ feil: null })} style={knapp(false)}>Prøv igjen</button>
+            <button onClick={() => { this.setState({ feil: null }); if (this.props.onNavigate) this.props.onNavigate('dashboard') }} style={knapp(true)}>Tilbake til dashbord</button>
+          </div>
+          <details style={{ marginTop:'22px', textAlign:'left' }}>
+            <summary style={{ cursor:'pointer', fontSize:'12px', color:'#94a3b8' }}>Teknisk detalj</summary>
+            <pre style={{ marginTop:'8px', padding:'10px 12px', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'8px', fontSize:'11px', color:'#64748b', whiteSpace:'pre-wrap', wordBreak:'break-word', overflowX:'auto' }}>
+              {String(this.state.feil && (this.state.feil.message || this.state.feil))}
+            </pre>
+          </details>
+        </div>
+      </div>
+    )
+  }
+}
+
 function LockedModulePage({ pageId, onNavigate }) {
   const navItem = navItems.find(n => n?.id === pageId)
   const modDef = MODULE_CATALOG.find(m => m.navId === pageId || m.id === pageId)
@@ -53313,26 +53396,44 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   }, [])
 
   const totalPrice = hasBasis ? 1899 : 3398
+  const mobUp = typeof window !== 'undefined' && window.innerWidth < 768
 
+  // Innholdet varierer med hasBasis: uten basis kommer «KREVER BASIS
+  // KALKULASJON» med tre prislinjer i tillegg, og modalen blir høyere. Uten
+  // maxHeight falt «Aktiver BIM-Kalkyle» under folden, og ingenting scrollet.
+  // Derfor: fast bunnrad som alltid er synlig, innhold som scroller bak, og
+  // bredere boks på PC så scrollen blir sikkerhetsnett og ikke normaltilfelle.
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:200, display:'flex', alignItems: mobUp ? 'stretch' : 'center', justifyContent:'center', padding: mobUp ? 0 : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+      <div style={{ position:'relative', background:'white', borderRadius: mobUp ? 0 : '20px', width:'100%', maxWidth: mobUp ? '100%' : '680px', height: mobUp ? '100vh' : 'auto', maxHeight: mobUp ? '100vh' : '90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow: mobUp ? 'none' : '0 20px 60px rgba(0,0,0,0.3)' }}>
         {/* Gradient header */}
-        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding:'28px 24px', color:'white', position:'relative' }}>
-          <button onClick={lukkMedBekreftelse} style={{ position:'absolute', top:'14px', right:'14px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', width:'32px', height:'32px', cursor:'pointer', color:'white', fontSize:'18px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
-          <div style={{ fontSize:'40px', marginBottom:'8px' }}>📐</div>
-          <h2 style={{ margin:'0 0 4px', fontSize:'22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
-          <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
+        <div style={{ background:'linear-gradient(135deg, #8b5cf6 0%, #3b82f6 100%)', padding: mobUp ? '20px 20px' : '24px', color:'white', position:'relative', flexShrink:0 }}>
+          {/* onClose, IKKE lukkMedBekreftelse — den finnes bare i
+              KalkHurtigstartModal. Referansen leses under render, saa den ga
+              ReferenceError og hvit skjerm for alle uten bim_kalkyle.
+              Rettet i 63693af, gjeninnfoert i 5782ede. Ikke gjenta. */}
+          <button onClick={onClose} aria-label="Lukk" style={{ position:'absolute', top:'10px', right:'10px', background:'rgba(255,255,255,0.2)', border:'none', borderRadius:'50%', minWidth:'44px', minHeight:'44px', cursor:'pointer', color:'white', fontSize:'20px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
+          <div style={{ display:'flex', alignItems:'center', gap:'14px' }}>
+            <div style={{ fontSize:'36px', flexShrink:0 }}>📐</div>
+            <div style={{ minWidth:0 }}>
+              <h2 style={{ margin:'0 0 2px', fontSize: mobUp ? '19px' : '22px', fontWeight:'800' }}>BIM-Kalkyle</h2>
+              <p style={{ margin:0, fontSize:'14px', opacity:0.95, fontWeight:'500' }}>Fra tegning til tilbud på minutter</p>
+            </div>
+          </div>
         </div>
 
-        <div style={{ padding:'24px' }}>
+        {/* Rullbart innhold — sikkerhetsnettet */}
+        <div style={{ padding: mobUp ? '16px' : '20px 24px', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch', overscrollBehavior:'contain' }}>
           <p style={{ margin:'0 0 16px', fontSize:'14px', color:'#475569', lineHeight:1.5 }}>
             BIM-Kalkyle er for proffe aktører som kalkulerer fra BIM-modeller. Last opp en IFC-fil fra ArchiCAD, Revit, Allplan, Tekla eller annet BIM-verktøy, og få automatisk mengdeuttak, 3D-visning, materialmatching mot ditt bibliotek og ferdig kalkyle.
           </p>
 
           <div style={{ background:'#f8fafc', borderRadius:'12px', padding:'14px 16px', marginBottom:'16px' }}>
             <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', letterSpacing:'0.5px', marginBottom:'8px' }}>HVA DU FÅR</div>
+            {/* To kolonner på PC: halverer høyden på den lengste blokken, så
+                normaltilfellet får plass uten scroll. */}
+            <div style={{ display:'grid', gridTemplateColumns: mobUp ? '1fr' : '1fr 1fr', columnGap:'16px' }}>
             {[
               { icon:'📂', text:'IFC-import fra ArchiCAD, Revit, Allplan, Tekla og andre BIM-verktøy' },
               { icon:'📏', text:'Automatisk mengdeuttak fra 3D-geometri (vegger, tak, gulv, vinduer, dører, m.m.)' },
@@ -53348,6 +53449,7 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
                 <span style={{ lineHeight:1.4 }}>{f.text}</span>
               </div>
             ))}
+            </div>
           </div>
 
           {loading ? (
@@ -53376,20 +53478,22 @@ function BimKalkyleUpsellModal({ onClose, onNavigate }) {
             </div>
           )}
 
-          <div style={{ display:'flex', gap:'8px' }}>
-            <button onClick={onClose} style={{ flex:'0 0 auto', padding:'12px 18px', background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600' }}>
-              Ikke nå
-            </button>
-            <button
-              onClick={() => { if (onNavigate) onNavigate('minbedrift'); onClose() }}
-              style={{ flex:1, padding:'12px 18px', background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'700', boxShadow:'0 4px 12px rgba(139,92,246,0.3)' }}>
-              {hasBasis ? 'Aktiver BIM-Kalkyle' : 'Aktiver begge moduler'}
-            </button>
-          </div>
-
-          <p style={{ margin:'12px 0 0', textAlign:'center', fontSize:'11px', color:'#94a3b8' }}>
+          <p style={{ margin:'4px 0 0', textAlign:'center', fontSize:'11px', color:'#94a3b8' }}>
             Du kan deaktivere igjen når som helst fra Min bedrift → Abonnement
           </p>
+        </div>
+
+        {/* FAST bunnrad — samme mønster som velgermodalene i «Ny faktura fra …».
+            velgerFot har env(safe-area-inset-bottom), så knappen ikke havner
+            under hjemindikatoren. Ligger UTENFOR det rullbare feltet, så den er
+            synlig uansett hvor høyt innholdet blir. */}
+        <div style={velgerFot}>
+          <button onClick={onClose} style={velgerAvbrytBtn}>Ikke nå</button>
+          <button
+            onClick={() => { if (onNavigate) onNavigate('minbedrift'); onClose() }}
+            style={{ ...velgerPrimaerBtn(false), background:'linear-gradient(135deg, #8b5cf6, #3b82f6)', boxShadow:'0 4px 12px rgba(139,92,246,0.3)' }}>
+            {hasBasis ? 'Aktiver BIM-Kalkyle' : 'Aktiver begge moduler'}
+          </button>
         </div>
       </div>
     </div>
@@ -55264,9 +55368,12 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
   return (
     <div style={{ position:'fixed', inset:0, zIndex:140, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'620px', overflow:'hidden', boxShadow:'0 20px 60px rgba(0,0,0,0.3)' }}>
+      {/* overflow:hidden UTEN maxHeight klipper bort det som ikke faar plass —
+          det blir ikke rullbart, det forsvinner. Samme mekanisme som
+          avvik-headeren. Fast topp, rullbart innhold. */}
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '620px', height: isMob ? '100vh' : 'auto', maxHeight: isMob ? '100vh' : '90vh', display:'flex', flexDirection:'column', overflow:'hidden', boxShadow: isMob ? 'none' : '0 20px 60px rgba(0,0,0,0.3)' }}>
 
-        <div style={{ padding:'22px 24px 16px', borderBottom:'1px solid #f1f5f9', position:'relative' }}>
+        <div style={{ padding:'22px 24px 16px', borderBottom:'1px solid #f1f5f9', position:'relative', flexShrink:0 }}>
           <button onClick={onClose} style={{ position:'absolute', top:'14px', right:'14px', background:'#f1f5f9', border:'none', borderRadius:'50%', width:'30px', height:'30px', cursor:'pointer', color:'#64748b', fontSize:'16px', display:'flex', alignItems:'center', justifyContent:'center' }}>×</button>
           <h2 style={{ margin:'0 0 4px', fontSize:'19px', fontWeight:'800', color:'#0f172a' }}>Nytt kalkulasjonsprosjekt</h2>
           <p style={{ margin:0, fontSize:'13px', color:'#64748b' }}>Hvordan vil du starte?</p>
@@ -55306,7 +55413,7 @@ function KalkOpprettValgModal({ onClose, onVelgHurtigstart, onVelgTom }) {
           </div>
         </div>
 
-        <div style={{ padding:'20px 24px 24px' }}>
+        <div style={{ padding:'20px 24px calc(24px + env(safe-area-inset-bottom))', overflowY:'auto', flex:1, WebkitOverflowScrolling:'touch', overscrollBehavior:'contain' }}>
           <div style={{ display:'grid', gridTemplateColumns: isMob ? '1fr' : '1fr 1fr', gap:'12px' }}>
 
             {/* Hurtigstart (først, anbefalt) */}
@@ -78982,7 +79089,7 @@ function AppContent() {
           </div>
         ) : isPageLocked ? (
           <LockedModulePage pageId={page} onNavigate={navigate} />
-        ) : (<>
+        ) : (<ModulFeilgrense key={page} modulId={page} modulNavn={navItems.find(n => n?.id === page)?.label} onNavigate={navigate}>
         {page === 'dashboard' && <Dashboard onNavigate={navigate} user={user}
           activeModules={activeModules}
           trialActive={!!(trialInfo?.trialEnd && new Date() < new Date(trialInfo.trialEnd))}
@@ -79029,7 +79136,7 @@ function AppContent() {
         {page !== 'dashboard' && page !== 'prosjekter' && page !== 'prosjektfiler' && page !== 'sjekklister' && page !== 'sjekkliste_detaljer' && page !== 'prosjekt_detaljer' && page !== 'avvik' && page !== 'hms' && page !== 'maskiner' && page !== 'kalkulator' && page !== 'bim_kalkyle' && page !== 'tilbud' && page !== 'anbudsmodul' && page !== 'endringsmelding' && page !== 'ordre' && page !== 'faktura' && page !== 'ansatte' && page !== 'timelister' && page !== 'ressursplan' && page !== 'kalender' && page !== 'chat' && page !== 'kunder' && page !== 'crm' && page !== 'befaring' && page !== 'bildedok' && page !== 'fdv' && page !== 'minbedrift' && page !== 'brukeradmin' && page !== 'superadmin' && page !== 'feedback-admin' && page !== 'varsler' && (
           <ComingSoon title={navItems.find(n => n?.id === page)?.label || page} />
         )}
-        </>)}
+        </ModulFeilgrense>)}
       </main>
     </div>
     </KildeGateContext.Provider>
