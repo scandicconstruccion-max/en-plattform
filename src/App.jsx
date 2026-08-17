@@ -62832,19 +62832,25 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
   const [autoBekreftet, setAutoBekreftet] = useState({})  // signatur → true (for å vise banner)
 
   // Konverter bruker_bibliotek-rad til konstruksjon-format
-  const brukerMalToKonstruksjon = (mal) => ({
-    id: mal.id,
-    name: mal.name,
-    kategori: mal.kategori,
-    fag: mal.fag,
-    enhet: mal.data?.enhet || 'm²',
-    beskrivelse: mal.data?.beskrivelse || 'Egen mal',
-    materialer: mal.data?.materialer || [],
-    arbeidsarter: mal.data?.arbeidsarter || [],
-    underleverandorer: mal.data?.underleverandorer || [],
-    lag: mal.data?.lag || [],
-    _bedrift: true,
-  })
+  const brukerMalToKonstruksjon = (mal) => {
+    // Rader lagret av BimNyKonstruksjonDialog har ingen id i det hele tatt
+    // (den dialogen jobber på indeks). Uten id blir `rad.id === id` sann for
+    // ALLE radene, så de må få id her — før noe rendres eller brukes.
+    const rader = medReparerteBibliotekRader(mal.data)
+    return {
+      id: mal.id,
+      name: mal.name,
+      kategori: mal.kategori,
+      fag: mal.fag,
+      enhet: mal.data?.enhet || 'm²',
+      beskrivelse: mal.data?.beskrivelse || 'Egen mal',
+      materialer: rader.materialer,
+      arbeidsarter: rader.arbeidsarter,
+      underleverandorer: rader.underleverandorer,
+      lag: mal.data?.lag || [],
+      _bedrift: true,
+    }
+  }
 
   // Hent bruker-bibliotek + eksisterende matchinger ved oppstart
   useEffect(() => {
@@ -67378,6 +67384,134 @@ function beregnArbeidskostnad(arbeidsart, faktorer) {
   return { faktiskTid, timekostnad, arbeidskostnad, medFortjeneste }
 }
 
+// ─── UNIKE ID-ER I KALKYLE-TREET ─────────────────────────────────────────────
+// Rader i en bygningsdel (materialer, arbeidsarter, underleverandører, flate- og
+// åpningstillegg) identifiseres KUN på `id`. Alle skrivinger matcher med
+// `rad.id === id` og oppdaterer hver rad som treffer.
+//
+// Tidligere ble id-ene laget med Date.now() pluss en fast offset per kolleksjon
+// (+100 arbeidsarter, +200 materialer, +300 underleverandører), mens «+ Material»
+// brukte bare Date.now(). De båndene overlapper: et klikk på «+ Material»
+// 202 ms etter at en bygningsdel med 6 materialer ble satt inn ga den nye raden
+// samme id som material nr. 3. Da traff neste skriving BEGGE radene — i prod ble
+// OSB-linjen overskrevet med gips, så to identiske gipslinjer sto igjen.
+// Brukeren ser dette som at hen har skrevet feil selv.
+//
+// nyRadId() kan ikke kollidere: crypto.randomUUID() der den finnes (alle
+// nettlesere fra 2021, krever HTTPS/localhost), ellers tidsstempel + en teller
+// som er monoton så lenge fanen lever.
+let _radIdTeller = 0
+function nyRadId() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID()
+    }
+  } catch (e) { /* enkelte eldre WebView-er kaster ved tilgang — fall videre ned */ }
+  _radIdTeller += 1
+  return `r${Date.now().toString(36)}_${_radIdTeller.toString(36)}`
+}
+
+// Kolleksjonene inne i en bygningsdel som identifiseres på id.
+const KALK_RAD_KOLLEKSJONER = ['materialer', 'arbeidsarter', 'underleverandorer', 'flatetillegg', 'apningstillegg']
+
+const manglerId = (id) => id === undefined || id === null || id === ''
+
+// Reparerer manglende og duplikate id-er i ÉN bygningsdel.
+// Rører kun `id` — alt annet innhold i raden er bit for bit uendret, og rader
+// med unik id returneres som samme objektreferanse (ingen unødvendig re-render).
+// Id-er er unike per kolleksjon per bygningsdel, som er presis den scopen
+// skrivingene bruker (de matcher alltid kalkyle → bygningsdel → rad).
+function reparerBygningsdelRader(bd) {
+  if (!bd || typeof bd !== 'object') return { bd, antall: 0 }
+  let antall = 0
+  let ut = bd
+  for (const felt of KALK_RAD_KOLLEKSJONER) {
+    const rader = bd[felt]
+    if (!Array.isArray(rader) || rader.length === 0) continue
+    const brukte = new Set()
+    let feltEndret = false
+    const nyeRader = rader.map(rad => {
+      if (!rad || typeof rad !== 'object') return rad
+      const noekkel = manglerId(rad.id) ? null : String(rad.id)
+      if (noekkel !== null && !brukte.has(noekkel)) { brukte.add(noekkel); return rad }
+      const nyId = nyRadId()
+      brukte.add(String(nyId))
+      feltEndret = true
+      antall += 1
+      return { ...rad, id: nyId }
+    })
+    if (feltEndret) ut = { ...ut, [felt]: nyeRader }
+  }
+  return { bd: ut, antall }
+}
+
+// Reparerer hele kalkyle-treet: kalkyle-id-er, bygningsdel-id-er og radene inne
+// i hver bygningsdel. En duplikat bygningsdel-id gir nøyaktig samme symptom som
+// en duplikat rad-id (skrivingen treffer to bygningsdeler), så den tas med her.
+function reparerKalkyleTre(kalkyler) {
+  if (!Array.isArray(kalkyler)) return { kalkyler, antall: 0 }
+  let antall = 0
+  const brukteKalk = new Set()
+  const nyeKalkyler = kalkyler.map(kl => {
+    if (!kl || typeof kl !== 'object') return kl
+    let ut = kl
+    const kalkNoekkel = manglerId(kl.id) ? null : String(kl.id)
+    if (kalkNoekkel === null || brukteKalk.has(kalkNoekkel)) {
+      ut = { ...ut, id: nyRadId() }
+      antall += 1
+    }
+    brukteKalk.add(String(ut.id))
+
+    if (Array.isArray(ut.bygningsdeler) && ut.bygningsdeler.length > 0) {
+      const brukteBd = new Set()
+      let bdEndret = false
+      const nyeBd = ut.bygningsdeler.map(bd => {
+        if (!bd || typeof bd !== 'object') return bd
+        let nyBd = bd
+        const bdNoekkel = manglerId(bd.id) ? null : String(bd.id)
+        if (bdNoekkel === null || brukteBd.has(bdNoekkel)) {
+          nyBd = { ...nyBd, id: nyRadId() }
+          antall += 1
+          bdEndret = true
+        }
+        brukteBd.add(String(nyBd.id))
+        const r = reparerBygningsdelRader(nyBd)
+        if (r.antall > 0) { nyBd = r.bd; antall += r.antall; bdEndret = true }
+        return nyBd
+      })
+      if (bdEndret) ut = { ...ut, bygningsdeler: nyeBd }
+    }
+    return ut
+  })
+  return { kalkyler: antall > 0 ? nyeKalkyler : kalkyler, antall }
+}
+
+// Wrapper for en hel kalkulasjon-rad fra `calculations`. Reparerer stille —
+// brukeren skal ikke se en dialog om noe som ikke er hens feil. Loggen står der
+// for å kunne måle hvor utbredt kollisjonene er i eksisterende data.
+// Merk: reparasjonen skjer i minnet. Den skrives til databasen først når noe
+// annet lagrer kalkylen — vi trigger ikke en skriving bare for å rydde id-er.
+function medReparerteKalkyleIder(rad) {
+  if (!rad || typeof rad !== 'object' || !Array.isArray(rad.kalkyler)) return rad
+  const { kalkyler, antall } = reparerKalkyleTre(rad.kalkyler)
+  if (antall === 0) return rad
+  console.warn(`[kalkyle] reparerte ${antall} manglende/kolliderende id-er i kalkyle ${rad.kalk_number || rad.id || ''}`)
+  return { ...rad, kalkyler }
+}
+
+// Samme reparasjon for en lagret bygningsdel i bruker_bibliotek. Strukturen der
+// er den samme JSONB-en (data.materialer / data.arbeidsarter / ...), og
+// BimNyKonstruksjonDialog lagrer rader helt uten id — de må få id før de brukes.
+function medReparerteBibliotekRader(kilde) {
+  const { bd, antall } = reparerBygningsdelRader({
+    materialer: kilde?.materialer || [],
+    arbeidsarter: kilde?.arbeidsarter || [],
+    underleverandorer: kilde?.underleverandorer || [],
+  })
+  if (antall > 0) console.warn(`[bibliotek] reparerte ${antall} manglende/kolliderende rad-id-er`)
+  return bd
+}
+
 // Hjelper brukt av PlanleggModal — samme logikk som inlinet parseFloat(v) || fallback
 function safeMengde(v, fallback = 1) { const n = parseFloat(v); return isNaN(n) ? fallback : n }
 
@@ -67660,10 +67794,10 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
       const { data: existingCalcs } = await supabase.from('calculations').select('kalk_number')
       const newKalkNr = nextSequenceNumber(existingCalcs || [], 'KA', 'kalk_number')
       // Deep-kopier kalkyler med nye IDer
-      const newKalkyler = (tmpl.kalkyler || []).map((kl, i) => ({
+      const newKalkyler = (tmpl.kalkyler || []).map((kl) => ({
         ...kl,
-        id: Date.now() + i,
-        bygningsdeler: (kl.bygningsdeler || []).map((bd, j) => ({ ...bd, id: Date.now() + i * 1000 + j }))
+        id: nyRadId(),
+        bygningsdeler: (kl.bygningsdeler || []).map((bd) => ({ ...bd, id: nyRadId() }))
       }))
       const payload = {
         title: tmpl.title + ' (fra mal)',
@@ -69551,26 +69685,26 @@ function bibliotekTilBygningsdel(bd, mengde) {
   const materialer = Array.isArray(bd.materialer) ? bd.materialer : []
   const underleverandorer = Array.isArray(bd.underleverandorer) ? bd.underleverandorer : []
   return {
-    id: Date.now() + Math.random() * 1000,
+    id: nyRadId(),
     name: bd.name || bd.navn || 'Uten navn',
     mengde: m,
     enhet: bd.enhet || 'stk',
     source_bibliotek_id: bd.id,
-    arbeidsarter: arbeidsarter.map((a, i) => ({
-      id: Date.now() + i + 100,
+    arbeidsarter: arbeidsarter.map((a) => ({
+      id: nyRadId(),
       beskrivelse: a.beskrivelse || '',
       grunntid: parseFloat(a.grunntid) || 0,
     })),
-    materialer: materialer.map((mat, i) => ({
-      id: Date.now() + i + 200,
+    materialer: materialer.map((mat) => ({
+      id: nyRadId(),
       varenavn: mat.varenavn || '',
       nobb: mat.nobb || '',
       mengde: parseFloat(mat.mengde) || 0,
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
     })),
-    underleverandorer: underleverandorer.map((u, i) => ({
-      id: Date.now() + i + 300,
+    underleverandorer: underleverandorer.map((u) => ({
+      id: nyRadId(),
       navn: u.navn || '',
       beskrivelse: u.beskrivelse || '',
       kostnad: u.kostnad || 0,
@@ -69614,7 +69748,7 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
         const apningstillegg = []
         if (mengder.vinduer.antall > 0) {
           apningstillegg.push({
-            id: Date.now() + 1000,
+            id: nyRadId(),
             beskrivelse: `${mengder.vinduer.antall} vinduer`,
             antall: mengder.vinduer.antall,
             areal: mengder.vinduer.arealPerStk,
@@ -69624,7 +69758,7 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
         }
         if (mengder.ytterdorer.antall > 0) {
           apningstillegg.push({
-            id: Date.now() + 1100,
+            id: nyRadId(),
             beskrivelse: `${mengder.ytterdorer.antall} ytterdører`,
             antall: mengder.ytterdorer.antall,
             areal: mengder.ytterdorer.arealPerStk,
@@ -69634,7 +69768,7 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
         }
         if (mengder.porter && mengder.porter.antall > 0) {
           apningstillegg.push({
-            id: Date.now() + 1200,
+            id: nyRadId(),
             beskrivelse: `${mengder.porter.antall} porter`,
             antall: mengder.porter.antall,
             areal: mengder.porter.arealPerStk,
@@ -69669,14 +69803,14 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
     const tekniskBygningsdeler = []
     if (veiviserData.teknisk.vvs > 0) {
       tekniskBygningsdeler.push({
-        id: Date.now() + 5000,
+        id: nyRadId(),
         name: '🚿 VVS (rundsum)',
         mengde: 1,
         enhet: 'rs',
         arbeidsarter: [],
         materialer: [],
         underleverandorer: [{
-          id: Date.now() + 5100,
+          id: nyRadId(),
           navn: 'VVS-entreprenør',
           beskrivelse: `Bad: ${veiviserData.antallBad}, bad m/badekar: ${veiviserData.antallBadMedBadekar}, kjøkken: ${veiviserData.antallKjokken}, vaskerom: ${veiviserData.antallVaskerom}`,
           kostnad: veiviserData.teknisk.vvs,
@@ -69685,14 +69819,14 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
     }
     if (veiviserData.teknisk.elektro > 0) {
       tekniskBygningsdeler.push({
-        id: Date.now() + 5200,
+        id: nyRadId(),
         name: '⚡ Elektro (rundsum)',
         mengde: 1,
         enhet: 'rs',
         arbeidsarter: [],
         materialer: [],
         underleverandorer: [{
-          id: Date.now() + 5300,
+          id: nyRadId(),
           navn: 'Elektriker',
           beskrivelse: `${veiviserData.elektroNiva} installasjon, ${mengder.bra} m² BRA`,
           kostnad: veiviserData.teknisk.elektro,
@@ -69701,14 +69835,14 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
     }
     if (veiviserData.teknisk.ventilasjon > 0) {
       tekniskBygningsdeler.push({
-        id: Date.now() + 5400,
+        id: nyRadId(),
         name: '💨 Ventilasjon (rundsum)',
         mengde: 1,
         enhet: 'rs',
         arbeidsarter: [],
         materialer: [],
         underleverandorer: [{
-          id: Date.now() + 5500,
+          id: nyRadId(),
           navn: 'Ventilasjonsentreprenør',
           beskrivelse: `${veiviserData.ventilasjonType}, ${mengder.bra} m² BRA`,
           kostnad: veiviserData.teknisk.ventilasjon,
@@ -69733,14 +69867,14 @@ function byggKalkylerFraVeiviser(veiviserData, bedriftFaktorer = {}) {
       name: '🍳 Kjøkkeninnredning',
       fag: 'ue',
       bygningsdeler: [{
-        id: Date.now() + 6000,
+        id: nyRadId(),
         name: `Kjøkkeninnredning komplett m/hvitevarer (${veiviserData.antallKjokken} stk)`,
         mengde: 1,
         enhet: 'rs',
         arbeidsarter: [],
         materialer: [],
         underleverandorer: [{
-          id: Date.now() + 6100,
+          id: nyRadId(),
           navn: 'Kjøkkenleverandør',
           beskrivelse: `${veiviserData.antallKjokken} kjøkken × ${veiviserData.kjokkenPrisPerStk.toLocaleString('nb-NO')} kr — komplett m/hvitevarer. Justér beløpet basert på faktisk valgt leverandør.`,
           kostnad: totalKjokkenKostnad,
@@ -70259,7 +70393,7 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
         ? mengder.vindu.gjennomsnittAreal
         : BIM_DEFAULTS.vindu_default_areal
       apningstillegg.push({
-        id: Date.now() + 1000,
+        id: nyRadId(),
         beskrivelse: `${mengder.vindu.antall} vinduer`,
         antall: mengder.vindu.antall,
         areal: arealPerStk,
@@ -70269,7 +70403,7 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
     }
     if (ytterdorAntall > 0) {
       apningstillegg.push({
-        id: Date.now() + 1100,
+        id: nyRadId(),
         beskrivelse: `${ytterdorAntall} ytterdører`,
         antall: ytterdorAntall,
         areal: BIM_DEFAULTS.dor_ytre_areal,
@@ -70535,7 +70669,8 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
     const loadMaler = async () => {
       try {
         const { data } = await supabase.from('bruker_bibliotek').select('*').eq('user_id', user?.id).eq('fag', fagId).order('created_at', { ascending: false })
-        setBrukerMaler(data || [])
+        // Samme reparasjon som for kalkyler — malene bærer den samme JSONB-en.
+        setBrukerMaler((data || []).map(mal => ({ ...mal, data: { ...(mal.data || {}), ...medReparerteBibliotekRader(mal.data) } })))
       } catch(e) {}
       setLoadingMaler(false)
     }
@@ -71363,7 +71498,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
         // Create kalkyler for each selected fag
         kalkyler = selectedFag.map((fagId, i) => {
           const fag = getFaggruppe(fagId)
-          return { id: Date.now() + i, fag: fagId, name: fag.name, description: '', bygningsdeler: [] }
+          return { id: nyRadId(), fag: fagId, name: fag.name, description: '', bygningsdeler: [] }
         })
         // Faktorer: bruk de prosjekt-justerte fra steg 2 hvis satt, ellers bedrift/standard
         selectedFag.forEach(fagId => {
@@ -71376,7 +71511,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
         selectedFag.forEach((fagId, i) => {
           if (!existingFag.includes(fagId)) {
             const fag = getFaggruppe(fagId)
-            kalkyler.push({ id: Date.now() + i, fag: fagId, name: fag.name, description: '', bygningsdeler: [] })
+            kalkyler.push({ id: nyRadId(), fag: fagId, name: fag.name, description: '', bygningsdeler: [] })
             faktorer[fagId] = bedriftFaktorer[fagId] || getDefaultFaktorer(fagId)
           }
         })
@@ -71592,7 +71727,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const confirm = useConfirm()
   const appAlert = useAppAlert()
   const { user } = useAuth()
-  const [k, setK] = useState(init)
+  // Reparér id-kollisjoner FØR første render, slik at ingen skriving kan treffe
+  // to rader i en kalkyle som ble lagret med de gamle Date.now()-id-ene.
+  const [k, setK] = useState(() => medReparerteKalkyleIder(init))
   const [activeKalkId, setActiveKalkId] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
   const [showBibliotekPicker, setShowBibliotekPicker] = useState(null)
@@ -71700,12 +71837,15 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // Copy bygningsdel within same kalkyle
   const copyBd = (kalId, bd) => {
     const newBd = JSON.parse(JSON.stringify(bd))
-    newBd.id = Date.now() + Math.random() * 1000
+    newBd.id = nyRadId()
     newBd.name = bd.name + ' (kopi)'
-    // Reset all sub-IDs
-    newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a,i) => ({ ...a, id: Date.now() + i + 100 }))
-    newBd.materialer = (newBd.materialer||[]).map((m,i) => ({ ...m, id: Date.now() + i + 200 }))
-    newBd.underleverandorer = (newBd.underleverandorer||[]).map((u,i) => ({ ...u, id: Date.now() + i + 300 }))
+    // Reset all sub-IDs — kopien må ikke dele id med originalen, ellers treffer
+    // en skriving begge bygningsdelene.
+    newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a) => ({ ...a, id: nyRadId() }))
+    newBd.materialer = (newBd.materialer||[]).map((m) => ({ ...m, id: nyRadId() }))
+    newBd.underleverandorer = (newBd.underleverandorer||[]).map((u) => ({ ...u, id: nyRadId() }))
+    newBd.flatetillegg = (newBd.flatetillegg||[]).map((f) => ({ ...f, id: nyRadId() }))
+    newBd.apningstillegg = (newBd.apningstillegg||[]).map((a) => ({ ...a, id: nyRadId() }))
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), newBd] } : kl))
   }
 
@@ -71748,7 +71888,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: (b.arbeidsarter||[]).map(a => a.id === aId ? { ...a, [field]: value } : a) } : b) } : kl))
   }
   const addArbeidsart = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: [...(b.arbeidsarter||[]), { id: Date.now(), beskrivelse: '', grunntid: 0 }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: [...(b.arbeidsarter||[]), { id: nyRadId(), beskrivelse: '', grunntid: 0 }] } : b) } : kl))
   }
   const removeArbeidsart = (kalId, bdId, aId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, arbeidsarter: (b.arbeidsarter||[]).filter(a => a.id !== aId) } : b) } : kl))
@@ -71762,7 +71902,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const kal = kalkyler.find(k => k.id === kalId)
     const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
     const defaultTimer = parseFloat(fakt.default_timer_flate) || 0.5
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: [...(b.flatetillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, timer_per_flate: defaultTimer }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: [...(b.flatetillegg||[]), { id: nyRadId(), beskrivelse: '', antall: 1, timer_per_flate: defaultTimer }] } : b) } : kl))
   }
   const removeFlatetillegg = (kalId, bdId, ftId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, flatetillegg: (b.flatetillegg||[]).filter(ft => ft.id !== ftId) } : b) } : kl))
@@ -71776,7 +71916,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const kal = kalkyler.find(k => k.id === kalId)
     const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
     const defaultTimer = parseFloat(fakt.default_timer_aapning) || 0.5
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: [...(b.apningstillegg||[]), { id: Date.now(), beskrivelse: '', antall: 1, areal: 2.0, baerende: false, timer_per_tillegg: defaultTimer }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: [...(b.apningstillegg||[]), { id: nyRadId(), beskrivelse: '', antall: 1, areal: 2.0, baerende: false, timer_per_tillegg: defaultTimer }] } : b) } : kl))
   }
   const removeApningstillegg = (kalId, bdId, atId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).filter(at => at.id !== atId) } : b) } : kl))
@@ -71804,7 +71944,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     if (varselType) setMaterialVarsel({ type: varselType })
   }
   const addMaterial = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: Date.now(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: nyRadId(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
   }
   const removeMaterial = (kalId, bdId, mId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : kl))
@@ -71815,7 +71955,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).map(u => u.id === uId ? { ...u, [field]: value } : u) } : b) } : kl))
   }
   const addUE = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: Date.now(), navn: '', beskrivelse: '', kostnad: 0, email: '', telefon: '', status: 'utkast', foresporsel_id: null }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: nyRadId(), navn: '', beskrivelse: '', kostnad: 0, email: '', telefon: '', status: 'utkast', foresporsel_id: null }] } : b) } : kl))
   }
   const removeUE = (kalId, bdId, uId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : kl))
@@ -72060,7 +72200,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
 
   // Add empty bygningsdel
   const addEmptyBd = (kalId) => {
-    const newBd = { id: Date.now(), name: '', mengde: 1, enhet: 'm²', arbeidsarter: [{ id: Date.now()+1, beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }
+    const newBd = { id: nyRadId(), name: '', mengde: 1, enhet: 'm²', arbeidsarter: [{ id: nyRadId(), beskrivelse: '', grunntid: 0 }], materialer: [], underleverandorer: [] }
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), newBd] } : kl))
   }
 
@@ -72098,7 +72238,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
 
   const refresh = async () => {
     const { data } = await supabase.from('calculations').select('*').eq('id', k.id).single()
-    if (data) setK(data)
+    if (data) setK(medReparerteKalkyleIder(data))
   }
 
   const updateStatus = async (status) => {
@@ -73158,7 +73298,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                           e.stopPropagation()
                           const foresporsler = kalk.ue_foresporsler || []
                           const defaultPaaslag = parseFloat(alleFaktorer['ue']?.ue_paaslag_prosent || alleFaktorer[kalk.fag]?.ue_paaslag_prosent) || 15
-                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, _ueOpen: true, ue_foresporsler: [...foresporsler, { id: Date.now(), navn: '', email: '', telefon: '', beskrivelse: '', status: 'utkast', vedlegg: [], paaslag: defaultPaaslag }] } : kl))
+                          updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, _ueOpen: true, ue_foresporsler: [...foresporsler, { id: nyRadId(), navn: '', email: '', telefon: '', beskrivelse: '', status: 'utkast', vedlegg: [], paaslag: defaultPaaslag }] } : kl))
                         }} style={{ background:'#ca8a04', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny forespørsel</button>
                       </div>
 
@@ -73397,19 +73537,19 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         if (existingUE) {
                                           return { ...bd, arbeidsarter: [], materialer: [], _ue_original: backup, underleverandorer: bd.underleverandorer.map(u => u.source === 'ue_foresporsel' ? { ...u, kostnad: ueEnhetspris, navn: uf.navn, paaslag } : u) }
                                         } else {
-                                          return { ...bd, arbeidsarter: [], materialer: [], _ue_original: backup, underleverandorer: [...(bd.underleverandorer||[]), { id: Date.now() + Math.random()*1000, navn: uf.navn, beskrivelse: match.name, kostnad: ueEnhetspris, paaslag, source: 'ue_foresporsel' }] }
+                                          return { ...bd, arbeidsarter: [], materialer: [], _ue_original: backup, underleverandorer: [...(bd.underleverandorer||[]), { id: nyRadId(), navn: uf.navn, beskrivelse: match.name, kostnad: ueEnhetspris, paaslag, source: 'ue_foresporsel' }] }
                                         }
                                       })
                                       // Legg til ekstra poster som nye bygningsdeler med UE-kostnad
                                       if (includeExtra) {
                                         extraPoster.forEach((ep, i) => {
                                           newBds.push({
-                                            id: Date.now() + i + 500,
+                                            id: nyRadId(),
                                             name: ep.name,
                                             mengde: 1, enhet: 'RS',
                                             arbeidsarter: [],
                                             materialer: [],
-                                            underleverandorer: [{ id: Date.now() + i + 600, navn: uf.navn, beskrivelse: ep.name, kostnad: ep.pris, paaslag, source: 'ue_foresporsel' }]
+                                            underleverandorer: [{ id: nyRadId(), navn: uf.navn, beskrivelse: ep.name, kostnad: ep.pris, paaslag, source: 'ue_foresporsel' }]
                                           })
                                         })
                                       }
@@ -73845,10 +73985,12 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const importBds = (sourceKalk) => {
             const bds = (sourceKalk.bygningsdeler || []).map(bd => {
               const newBd = JSON.parse(JSON.stringify(bd))
-              newBd.id = Date.now() + Math.random() * 1000
-              newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a,i) => ({ ...a, id: Date.now() + i + 100 + Math.random()*100 }))
-              newBd.materialer = (newBd.materialer||[]).map((m,i) => ({ ...m, id: Date.now() + i + 200 + Math.random()*100 }))
-              newBd.underleverandorer = (newBd.underleverandorer||[]).map((u,i) => ({ ...u, id: Date.now() + i + 300 + Math.random()*100 }))
+              newBd.id = nyRadId()
+              newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a) => ({ ...a, id: nyRadId() }))
+              newBd.materialer = (newBd.materialer||[]).map((m) => ({ ...m, id: nyRadId() }))
+              newBd.underleverandorer = (newBd.underleverandorer||[]).map((u) => ({ ...u, id: nyRadId() }))
+              newBd.flatetillegg = (newBd.flatetillegg||[]).map((f) => ({ ...f, id: nyRadId() }))
+              newBd.apningstillegg = (newBd.apningstillegg||[]).map((a) => ({ ...a, id: nyRadId() }))
               return newBd
             })
             if (bds.length === 0) return
