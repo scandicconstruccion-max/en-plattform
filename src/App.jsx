@@ -49647,7 +49647,16 @@ function SuperAdminPage() {
     try {
       const comp = companies.find(c=>c.id===companyId)
       const history = comp?.payment_history || []
-      history.push({ date: paymentDate, recorded_at: new Date().toISOString() })
+      // source: 'manuell' skiller denne fra postene stripe-webhook skriver med
+      // source: 'stripe'. Uten merkingen kan de samme pengene foeres to ganger
+      // — én gang av webhooken, én gang naar noen trykker «Registrer betaling»
+      // paa en betaling som allerede er hentet automatisk.
+      history.push({
+        date: paymentDate,
+        source: 'manuell',
+        recorded_by: user?.email || null,
+        recorded_at: new Date().toISOString(),
+      })
       const nextDue = new Date(paymentDate)
       nextDue.setMonth(nextDue.getMonth()+1)
       await supabase.rpc('admin_update_company', { p_company_id: companyId, p_patch: {
@@ -58664,6 +58673,23 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false, a
     return t
   }, [alleGulvLagsett, oppdater])
 
+  // Status-pille: hvor mange er klassifisert vs hvor mange "usikker" gjenstår
+  const stegStatus = React.useMemo(() => {
+    const totalt = alleVeggLagsett.length + alleGulvLagsett.length
+    if (totalt === 0) return { ferdig: true, tekst: 'Ingen lagsett', farge: 'graa' }
+    const usikre = alleVeggLagsett.filter(({ lagsett }) =>
+      !lagsett.brukerKategori || lagsett.brukerKategori === 'usikker'
+    ).length
+    const ferdig = totalt - usikre
+    if (usikre === 0) return { ferdig: true, tekst: '✓ Ferdig', farge: 'gronn' }
+    return { ferdig: false, tekst: `${ferdig} av ${totalt} klassifisert`, farge: 'blaa' }
+  }, [alleVeggLagsett, alleGulvLagsett, oppdater])
+
+  // ALLE hooks maa staa FOER denne returen. Rendrer komponenten null naar
+  // lista er tom, og deretter innhold naar IFC-fila er lest inn, endrer antall
+  // hooks seg mellom to renders — React kaster «Rendered more hooks than
+  // during the previous render», og hele appen blir hvit. stegStatus haandterer
+  // selv totalt === 0, saa den kan trygt regnes foer vi vet om vi rendrer.
   if (alleVeggLagsett.length === 0 && alleGulvLagsett.length === 0) return null
 
   // Hjelpestiler
@@ -58804,18 +58830,6 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false, a
       </div>
     )
   }
-
-  // Status-pille: hvor mange er klassifisert vs hvor mange "usikker" gjenstår
-  const stegStatus = React.useMemo(() => {
-    const totalt = alleVeggLagsett.length + alleGulvLagsett.length
-    if (totalt === 0) return { ferdig: true, tekst: 'Ingen lagsett', farge: 'graa' }
-    const usikre = alleVeggLagsett.filter(({ lagsett }) =>
-      !lagsett.brukerKategori || lagsett.brukerKategori === 'usikker'
-    ).length
-    const ferdig = totalt - usikre
-    if (usikre === 0) return { ferdig: true, tekst: '✓ Ferdig', farge: 'gronn' }
-    return { ferdig: false, tekst: `${ferdig} av ${totalt} klassifisert`, farge: 'blaa' }
-  }, [alleVeggLagsett, alleGulvLagsett, oppdater])
 
   const stegFarger = {
     gronn: { bg: '#d1fae5', tekst: '#065f46', sirkel_bg: '#10b981' },
@@ -63159,8 +63173,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     }
   }
 
-  if (alleLagsett.length === 0) return null
-
   // Sammendrag-tellinger
   const tellinger = React.useMemo(() => {
     const t = { eksakt: 0, ingen: 0, hoppet: 0, bekreftet: 0, auto: 0, baering: 0 }
@@ -63184,6 +63196,21 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     })
     return t
   }, [matchResultater, oppdater])
+
+  // Status-pille: hvor mange er bekreftet/auto-matchet vs total
+  const stegStatus = React.useMemo(() => {
+    const totalt = matchResultater.length
+    if (totalt === 0) return { tekst: 'Ingen lagsett', farge: 'graa' }
+    const fullfort = tellinger.bekreftet + tellinger.auto
+    if (fullfort === totalt) return { tekst: '✓ Ferdig', farge: 'gronn' }
+    if (fullfort === 0) return { tekst: `0 av ${totalt} matchet`, farge: 'graa' }
+    return { tekst: `${fullfort} av ${totalt} matchet`, farge: 'blaa' }
+  }, [matchResultater, tellinger, oppdater])
+
+  // ALLE hooks foer returen — se samme merknad i BimKlassifiseringSeksjon.
+  // stegStatus leser tellinger, saa rekkefoelgen mellom de to maa staa.
+  // Begge haandterer selv at lista er tom.
+  if (alleLagsett.length === 0) return null
 
   // Stiler
   const card = { background:'white', borderRadius:'12px', border:'1px solid #e2e8f0', overflow:'hidden' }
@@ -63221,16 +63248,6 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
     border: '1px solid #15803d',
     fontWeight: '700',
   }
-
-  // Status-pille: hvor mange er bekreftet/auto-matchet vs total
-  const stegStatus = React.useMemo(() => {
-    const totalt = matchResultater.length
-    if (totalt === 0) return { tekst: 'Ingen lagsett', farge: 'graa' }
-    const fullfort = tellinger.bekreftet + tellinger.auto
-    if (fullfort === totalt) return { tekst: '✓ Ferdig', farge: 'gronn' }
-    if (fullfort === 0) return { tekst: `0 av ${totalt} matchet`, farge: 'graa' }
-    return { tekst: `${fullfort} av ${totalt} matchet`, farge: 'blaa' }
-  }, [matchResultater, tellinger, oppdater])
 
   const stegFarger = {
     gronn: { bg: '#d1fae5', tekst: '#065f46', sirkel_bg: '#10b981' },
