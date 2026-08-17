@@ -17778,6 +17778,13 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const valgtProsjektNavn = projects.find(pr => pr.id === prosjektId)?.name || ''
   const prosjektInfoSatt = !!(valgtProsjektNavn || pInfo.navn.trim())
   const prosjektNavnVist = valgtProsjektNavn || pInfo.navn.trim() || 'Prosjektinfo'
+  // Én kilde til hvorfor Opprett er sperret — samme tekst i knappen, i
+  // hjelpeteksten ved siden av, og som begrunnelse hvis den likevel trykkes.
+  const sperreGrunn = poster.length === 0 ? null
+    : listeSkjult ? 'Vis postlisten før du oppretter'
+    : !prosjektInfoSatt ? 'Velg prosjekt eller fyll inn prosjektnavn først'
+    : fagMedPoster.length === 0 ? 'Sett faggruppe på minst én UE-post først'
+    : null
   const nullstillVisning = () => { setVisKun('alle'); setSok(''); setSide(0) }
 
   const opprett = async () => {
@@ -17785,6 +17792,14 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
     // fagfordelingen fra AI-en — og da skal det ikke gå e-post til noen UE.
     if (listeSkjult) {
       await appAlert({ message: 'Du må se postlisten først', subMessage: `Listen er skjult av ${visKun === 'ufordelt' ? 'filteret «Kun ufordelte»' : 'søket'}. Trykk «Vis alle ${poster.length} poster», kontroller fagfordelingen, og opprett deretter forespørslene.`, kind: 'warning' })
+      return
+    }
+    // Uten prosjekt havner anbudene i en løs «Uten prosjekt»-samling, og det har
+    // skjedd i praksis. Nå som prosjektinfo er lukket som standard, er det enda
+    // lettere å overse — derfor kreves det, ikke bare varsles om.
+    if (!prosjektInfoSatt) {
+      setVisProsjektInfo(true)
+      await appAlert({ message: 'Anbudene mangler prosjekt', subMessage: 'Velg et eksisterende prosjekt, eller fyll inn prosjektnavn. Uten det havner forespørslene i en løs samling uten byggeplass, byggherre eller frist. Prosjektinfo er nå åpnet for deg.', kind: 'warning' })
       return
     }
     if (!fagMedPoster.length) { await appAlert({ message: 'Ingen poster med faggruppe', subMessage: 'Sett faggruppe på minst én post før du oppretter forespørsler.', kind: 'warning' }); return }
@@ -18095,10 +18110,8 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
         <div style={{ padding: isMob ? '12px 14px' : '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={bekreftLukk} style={{ padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px' }}>Avbryt</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {listeSkjult
-              ? <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>Vis postlisten før du oppretter</span>
-              : (poster.length > 0 && fagMedPoster.length === 0 && <span style={{ fontSize: '12px', color: '#b45309' }}>Sett faggruppe på minst én UE-post først</span>)}
-            <button onClick={opprett} disabled={oppretter || listeSkjult} title={listeSkjult ? 'Postlisten må være synlig så du kan kontrollere fagfordelingen først' : undefined} style={{ padding: '10px 22px', background: (oppretter || listeSkjult) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || listeSkjult) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+            {sperreGrunn && <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>{sperreGrunn}</span>}
+            <button onClick={opprett} disabled={oppretter || !!sperreGrunn} title={sperreGrunn || undefined} style={{ padding: '10px 22px', background: (oppretter || sperreGrunn) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || sperreGrunn) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
               {oppretter ? 'Oppretter...' : `📤 Opprett ${fagMedPoster.length || ''} forespørsel${fagMedPoster.length !== 1 ? 'er' : ''}`}
             </button>
           </div>
