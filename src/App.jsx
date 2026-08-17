@@ -19125,11 +19125,12 @@ function EndringsmeldingPage() {
     try {
       // Tilgangssjekk: faktura-modul aktiv, aktiv prøveperiode, eller Anthropic-admin
       const { data: settings } = await supabase.from('company_settings').select('active_modules, subscription_status, trial_ends_at').limit(1).single()
-      const activeModules = settings?.active_modules || []
-      const fakturaInModules = activeModules.includes('faktura')
-      const isTrialActive = settings?.subscription_status === 'trial' && settings?.trial_ends_at && new Date(settings.trial_ends_at) > new Date()
+      // harModul dekker faktura-modulen, proeveperioden og interne bedrifter.
+      // Krevde tidligere subscription_status='trial' i tillegg til datoen —
+      // en tredje variant av samme regel, som laaste modulen for bedrifter som
+      // hadde bestilt noe og dermed staar som 'active' midt i proeveperioden.
       const isAdmin = user?.email?.endsWith('@enplattform.no') || false
-      const hasAccess = fakturaInModules || isTrialActive || isAdmin
+      const hasAccess = harModul(settings, 'faktura') || isAdmin
       if (!hasAccess) { setShowEmInvoiceUpsell(true); return }
 
       setCreatingEmInvoice(true)
@@ -21582,11 +21583,12 @@ function OrdreDetaljer({ order: init, projects, user, onBack }) {
     try {
       // Sjekk om faktura-modulen er aktivert
       const { data: settings } = await supabase.from('company_settings').select('active_modules, subscription_status, trial_ends_at').limit(1).single()
-      const activeModules = settings?.active_modules || []
-      const fakturaInModules = activeModules.includes('faktura')
-      const isTrialActive = settings?.subscription_status === 'trial' && settings?.trial_ends_at && new Date(settings.trial_ends_at) > new Date()
+      // harModul dekker faktura-modulen, proeveperioden og interne bedrifter.
+      // Krevde tidligere subscription_status='trial' i tillegg til datoen —
+      // en tredje variant av samme regel, som laaste modulen for bedrifter som
+      // hadde bestilt noe og dermed staar som 'active' midt i proeveperioden.
       const isAdmin = user?.email?.endsWith('@enplattform.no') || false
-      const hasAccess = fakturaInModules || isTrialActive || isAdmin
+      const hasAccess = harModul(settings, 'faktura') || isAdmin
 
       if (!hasAccess) {
         setShowUpsellInvoice(true)
@@ -49343,6 +49345,55 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
 
 
 
+// ─── ÉN KILDE FOR MODULTILGANG ──────────────────────────────────────────────
+// Alt som spør «har denne bedriften modul X akkurat nå» skal gå hit.
+// Reglene, samlet på ett sted:
+//   1. Interne bedrifter (eier + hans egne folk) har alltid alt, gratis.
+//   2. I prøveperioden har bedriften ALLE moduler. Styrt av trial_ends_at
+//      alene, IKKE subscription_status — «trial→active»-flippen ved første
+//      bestilling skal ikke låse de øvrige modulene før prøvetiden er over.
+//   3. Etterpå: kun det som står i active_modules.
+//
+// Spørsmålet ble tidligere stilt ti steder med tre ulike svar. Fem av dem
+// visste ikke om prøveperioden i det hele tatt. Resultatet var at en
+// prøvebruker med ti dager igjen fikk salgsmodalen på 1 899 kr/mnd i stedet
+// for modulen han hadde rett på — ruten sa ja, modulen sa nei.
+// Trenger et nytt sted dette: bruk harModul, ikke en ny active_modules-spørring.
+const MODUL_TILGANG_KOLONNER = 'active_modules, subscription_status, trial_ends_at'
+
+function proveperiodeAktiv(innst) {
+  if (!innst || !innst.trial_ends_at) return false
+  const slutt = new Date(innst.trial_ends_at)
+  return !isNaN(slutt.getTime()) && new Date() < slutt
+}
+
+// modulId: én streng, eller en liste der ALLE må være aktive.
+// BIM-Kalkyle er ['kalkulator', 'bim_kalkyle'] — tillegget krever basis.
+function harModul(innst, modulId) {
+  if (!modulId) return true
+  if (!innst) return false
+  if (innst.subscription_status === 'intern') return true
+  if (proveperiodeAktiv(innst)) return true
+  const mods = innst.active_modules || []
+  if (Array.isArray(modulId)) return modulId.every(m => mods.includes(m))
+  return mods.includes(modulId)
+}
+
+// Henter de tre kolonnene én gang og gir deg predikatet. Erstatter fem
+// separate active_modules-spørringer som hver manglet prøveperioden.
+function useModulTilgang() {
+  const [innstillinger, setInnstillinger] = useState(null)
+  const [laster, setLaster] = useState(true)
+  useEffect(() => {
+    let aktiv = true
+    supabase.from('company_settings').select(MODUL_TILGANG_KOLONNER).limit(1).single()
+      .then(({ data }) => { if (aktiv) { setInnstillinger(data || null); setLaster(false) } })
+      .catch(() => { if (aktiv) setLaster(false) })
+    return () => { aktiv = false }
+  }, [])
+  return { innstillinger, laster, harModul: (modulId) => harModul(innstillinger, modulId) }
+}
+
 // ─── MIN BEDRIFT MODULE ───────────────────────────────────────────────────────
 
 // Alle priser er eks. mva. perUser = faktureres per bruker som har modulen (sete).
@@ -52086,7 +52137,10 @@ function BrukeradminPage() {
       setUsers(uData)
       setInvitations(iData)
       setCompanyModules(cData.active_modules || [])
-      const trialAktiv = cData.subscription_status === 'trial' && (!cData.trial_ends_at || new Date(cData.trial_ends_at) > new Date())
+      // Samme proeveperiode-regel som ruten: datoen alene avgjoer. Krevde
+      // tidligere subscription_status='trial' i tillegg, OG regnet manglende
+      // trial_ends_at som aktiv proeveperiode — begge deler avvek fra ruten.
+      const trialAktiv = proveperiodeAktiv(cData)
       setTrialActive(trialAktiv)
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
@@ -53352,30 +53406,19 @@ function getDefaultFaktorer(fagId) {
 // ─── BIM-KALKYLE TILGANGSKONTROLL ────────────────────────────────────────────
 // BIM-Kalkyle er tilleggsmodul som krever basis Kalkulasjon (1499 kr/mnd) + 1899 kr/mnd
 
-function hasKalkulator(activeModules) {
-  return (activeModules || []).includes('kalkulator')
-}
+// BIM-Kalkyle krever BÅDE basis kalkulator OG bim_kalkyle. Selve
+// tilgangsreglene — inkludert prøveperioden — ligger i harModul.
+const BIM_KALKYLE_MODULER = ['kalkulator', 'bim_kalkyle']
 
-function hasBimKalkyle(activeModules) {
-  const mods = activeModules || []
-  // BIM-Kalkyle krever BÅDE basis kalkulator OG bim_kalkyle
-  return mods.includes('kalkulator') && mods.includes('bim_kalkyle')
-}
-
-// Hook for å hente BIM-Kalkyle-status fra company_settings
+// Hook for å hente BIM-Kalkyle-status. Leser nå de samme tre kolonnene som
+// ruten, så modulen og navigasjonen ikke kan svare ulikt på samme spørsmål.
 function useBimKalkyleStatus() {
-  const [activeModules, setActiveModules] = useState([])
-  const [loading, setLoading] = useState(true)
-  useEffect(() => {
-    supabase.from('company_settings').select('active_modules').limit(1).single()
-      .then(({ data }) => { setActiveModules(data?.active_modules || []); setLoading(false) })
-      .catch(() => setLoading(false))
-  }, [])
+  const { innstillinger, laster } = useModulTilgang()
   return {
-    activeModules,
-    hasKalkulator: hasKalkulator(activeModules),
-    hasBimKalkyle: hasBimKalkyle(activeModules),
-    loading,
+    innstillinger,
+    hasKalkulator: harModul(innstillinger, 'kalkulator'),
+    hasBimKalkyle: harModul(innstillinger, BIM_KALKYLE_MODULER),
+    loading: laster,
   }
 }
 
@@ -53383,17 +53426,10 @@ function useBimKalkyleStatus() {
 // Vises når en bruker uten BIM-Kalkyle prøver å bruke en BIM-Kalkyle-funksjon
 
 function BimKalkyleUpsellModal({ onClose, onNavigate }) {
-  const [hasBasis, setHasBasis] = useState(true)
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    supabase.from('company_settings').select('active_modules').limit(1).single()
-      .then(({ data }) => {
-        setHasBasis((data?.active_modules || []).includes('kalkulator'))
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }, [])
+  // Samme kilde som ruten og modulen. Har bedriften kalkulator — enten kjoept
+  // eller via proeveperioden — vises den korte varianten uten basis-prislinjene.
+  const { innstillinger: uInnst, laster: loading } = useModulTilgang()
+  const hasBasis = loading ? true : harModul(uInnst, 'kalkulator')
 
   const totalPrice = hasBasis ? 1899 : 3398
   const mobUp = typeof window !== 'undefined' && window.innerWidth < 768
@@ -67511,29 +67547,28 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   const [showBimImport, setShowBimImport] = useState(false)
   // Patch 14.D: Ved "Endre BIM-grunnlag" — kalkyle som skal redigeres med eksisterende sesjon-data
   const [editBimSesjon, setEditBimSesjon] = useState(null)  // { kalk, sesjon } eller null
-  const [bimActiveModules, setBimActiveModules] = useState([])
-  useEffect(() => {
-    supabase.from('company_settings').select('active_modules').limit(1).single()
-      .then(({ data }) => setBimActiveModules(data?.active_modules || []))
-      .catch(() => {})
-  }, [])
+  // Samme kilde som ruten. Leste tidligere active_modules alene, uten aa vite
+  // om proeveperioden — derfor fikk en proevebruker salgsmodal av en modul
+  // navigasjonen nettopp hadde sluppet ham inn i.
+  const { innstillinger: bimInnstillinger, laster: bimLaster } = useModulTilgang()
+  const harBimKalkyle = harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
 
   // Patch 23.2: Direkte-navigering fra BIM-Kalkyle i sidebar/dashboard
   // Når brukeren klikker BIM-Kalkyle skal de gå rett til IFC-opplasting,
   // ikke til kalkyle-listen først.
   useEffect(() => {
-    if (autoOpenBim && bimActiveModules.length > 0) {
-      if (hasBimKalkyle(bimActiveModules)) setShowBimImport(true)
+    if (autoOpenBim && !bimLaster) {
+      if (harBimKalkyle) setShowBimImport(true)
       else setShowBimUpsell(true)
     } else if (!autoOpenBim) {
       // Brukeren navigerte fra bim_kalkyle til kalkulator — lukk BIM-flyten
       setShowBimImport(false)
       setShowBimUpsell(false)
     }
-  }, [autoOpenBim, bimActiveModules])
+  }, [autoOpenBim, bimLaster, harBimKalkyle])
 
   const handleBimKalkyleClick = () => {
-    if (hasBimKalkyle(bimActiveModules)) setShowBimImport(true)
+    if (harBimKalkyle) setShowBimImport(true)
     else setShowBimUpsell(true)
   }
 
@@ -71568,8 +71603,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
 
   // Check if user has tilbud module + load UE-tilbud
   useEffect(() => {
-    supabase.from('company_settings').select('active_modules').limit(1).single()
-      .then(({ data }) => setHasTilbudModule((data?.active_modules || []).includes('tilbud')))
+    supabase.from('company_settings').select(MODUL_TILGANG_KOLONNER).limit(1).single()
+      .then(({ data }) => setHasTilbudModule(harModul(data, 'tilbud')))
       .catch(() => {})
     // Load all UE-forespørsler for this calculation
     supabase.from('ue_foresporsler').select('*').eq('calculation_id', init.id).order('created_at', { ascending: false })
@@ -73922,9 +73957,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const dragInfoRef = React.useRef(null)                 // { fromIdx } — live-verdi under dra
 
           useEffect(() => {
-            supabase.from('company_settings').select('active_modules').limit(1).single()
+            supabase.from('company_settings').select(MODUL_TILGANG_KOLONNER).limit(1).single()
               .then(({ data }) => {
-                const hasIt = (data?.active_modules || []).includes('ressursplan')
+                const hasIt = harModul(data, 'ressursplan')
                 setHasRessursplan(hasIt)
                 setLoading(false)
                 if (hasIt) {
@@ -78428,17 +78463,19 @@ function AppContent() {
     minbedrift: null, brukeradmin: null, superadmin: null, // admin always accessible
   }
 
+  // Reglene ligger i harModul — se «ÉN KILDE FOR MODULTILGANG». Her bygges bare
+  // raden den trenger, av det denne komponenten allerede har lastet.
+  const modulInnstillinger = activeModules ? {
+    active_modules: activeModules,
+    subscription_status: trialInfo?.status,
+    trial_ends_at: trialInfo?.trialEnd || null,
+  } : null
+
   const isModuleActive = (navId) => {
     if (!activeModules) return true // still loading, show as active
     const requiredModule = navToModule[navId]
     if (!requiredModule) return true // always accessible (dashboard, minbedrift, brukeradmin, varsler)
-    // Interne bedrifter (eier + hans egne folk) har alltid full tilgang, gratis
-    if (trialInfo?.status === 'intern') return true
-    // Full tilgang til ALLE moduler i hele den 15-dagers prøveperioden — også etter at man har
-    // bestilt en modul. Styres av trial_ends_at (prøvevinduet), ikke av subscription_status, slik at
-    // «trial→active»-flippen ved bestilling ikke låser de øvrige modulene før prøvetiden faktisk er over.
-    if (trialInfo?.trialEnd && new Date() < new Date(trialInfo.trialEnd)) return true
-    return activeModules.includes(requiredModule)
+    return harModul(modulInnstillinger, requiredModule)
   }
 
   // Rollebasert tilgang: kan denne brukerens rolle se/åpne siden? (platform_owner ser alt)
