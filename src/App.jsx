@@ -71382,6 +71382,35 @@ function _prisLik(a, b) {
   return Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 0.005
 }
 
+// Hva skal én materiallinje ha av pris og enhet, gitt varen fra prislisten?
+//
+// Delt mellom «Oppdater priser»-dialogen (manuell, med forhåndsvisning) og den
+// automatiske biblioteksoppdateringen ved import. Én regel, ett sted — ellers
+// ville rull→m² kunne oppføre seg ulikt avhengig av hvor oppdateringen startet.
+function nyPrisForLinje(linje, vare) {
+  const gammelPris = parseFloat(linje?.enhetspris) || 0
+  const omr = linje?._omregning
+  if (omr && parseFloat(omr.areal) > 0) {
+    // Linjen er bevisst regnet om fra leveranseenhet til m². Ny leveransepris
+    // deles på det SAMME arealet — omregningen skal overleve prisoppdateringer.
+    const nyLeveransePris = parseFloat(vare?.pris_per_enhet) || 0
+    return {
+      gammelPris,
+      nyPris: Math.round((nyLeveransePris / parseFloat(omr.areal)) * 100) / 100,
+      nyEnhet: linje.enhet,
+      nyOmregning: { ...omr, fraPris: nyLeveransePris },
+      omregnetFra: { pris: nyLeveransePris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) },
+    }
+  }
+  return {
+    gammelPris,
+    nyPris: parseFloat(vare?.pris_per_enhet) || 0,
+    nyEnhet: vare?.enhet || linje?.enhet || '',
+    nyOmregning: null,
+    omregnetFra: null,
+  }
+}
+
 // Klassifiserer materiallinjer mot bedriftens aktive prisliste.
 //   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
 // Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
@@ -71436,22 +71465,7 @@ async function byggPrisforslag(poster, userId) {
     const vare = prisMap[nobb]
     if (!vare) { utgatt.push({ ...p, nobb }); continue }
 
-    const gammelPris = parseFloat(p.linje.enhetspris) || 0
-    const omr = p.linje._omregning
-    let nyPris, nyEnhet, nyOmregning = null, omregnetFra = null
-
-    if (omr && parseFloat(omr.areal) > 0) {
-      // Linjen er bevisst regnet om fra rull til m². Ny rullpris deles på det
-      // SAMME arealet — omregningen skal overleve en prisoppdatering.
-      const nyLeveransePris = parseFloat(vare.pris_per_enhet) || 0
-      nyPris = Math.round((nyLeveransePris / parseFloat(omr.areal)) * 100) / 100
-      nyEnhet = p.linje.enhet            // beholder m², prisen er per m²
-      nyOmregning = { ...omr, fraPris: nyLeveransePris }
-      omregnetFra = { pris: nyLeveransePris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) }
-    } else {
-      nyPris = parseFloat(vare.pris_per_enhet) || 0
-      nyEnhet = vare.enhet || p.linje.enhet
-    }
+    const { gammelPris, nyPris, nyEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
 
     const post = {
       ...p,
@@ -71549,6 +71563,212 @@ async function beregnVareFelter(confirm, vare, linje) {
     enhetspris: perM2,
     _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
   }
+}
+
+// ─── AUTOMATISK PRISOPPDATERING AV BIBLIOTEKET (Oppgave 5, punkt 6) ──────────
+// Når en prisliste importeres og settes aktiv, oppdateres ALLE bedriftens egne
+// bygningsdeler i biblioteket. Å måtte huske «Oppdater priser» per kalkyle
+// fungerer ikke i praksis — da var hele koblingsjobben forgjeves.
+//
+// KALKYLER RØRES IKKE. En kalkyle er et konkret tilbud, og noen er sendt til
+// kunde. Der er «Oppdater priser» fortsatt den manuelle veien, med bekreftelse
+// på sendte tilbud.
+//
+// Biblioteket er trygt å oppdatere automatisk fordi det er en MAL: ingen kunde
+// har fått den, og neste kalkyle skal ha dagens priser. Men det skjer i stor
+// skala uten at noen ser på, så hele operasjonen kan angres samlet — snapshotet
+// av de gamle prisene lagres før noe skrives.
+
+// Frittstående kopi, uten delte objektreferanser.
+function _dypkopi(v) {
+  try { return JSON.parse(JSON.stringify(v)) } catch (e) { return v }
+}
+
+// Leser prisene for en mengde NOBB-numre fra én prisliste, i puljer.
+async function _hentPriserForNummer(prislisteId, nummer) {
+  const kart = {}
+  for (let i = 0; i < nummer.length; i += 100) {
+    const { data, error } = await supabase.from('prisbok')
+      .select('varenummer, varenavn, enhet, pris_per_enhet')
+      .eq('prisliste_id', prislisteId)
+      .in('varenummer', nummer.slice(i, i + 100))
+    if (error) throw error
+    ;(data || []).forEach(r => { kart[String(r.varenummer)] = r })
+  }
+  return kart
+}
+
+// Bedriftens bibliotekrader. Samme lesemønster som useBedriftsbibliotek(), men
+// utenfor React — importflyten er ikke en komponent.
+async function _hentBedriftensBibliotekrader(companyId, userId) {
+  let q = supabase.from('bruker_bibliotek').select('id, name, fag, kategori, data')
+  if (companyId) q = q.or(`company_id.eq.${companyId},and(company_id.is.null,user_id.eq.${userId})`)
+  else q = q.eq('user_id', userId)
+  const { data, error } = await q
+  if (error) {
+    const { data: egne } = await supabase.from('bruker_bibliotek').select('id, name, fag, kategori, data').eq('user_id', userId)
+    return egne || []
+  }
+  return data || []
+}
+
+// Oppdaterer alle bedriftens bygningsdeler mot prislisten.
+// Returnerer statistikken oppsummeringen viser, og id-en til angre-loggen.
+async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, companyId, userId }) {
+  const tomt = { rader: 0, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, ukoblet: 0, detaljer: [], loggId: null, feil: null }
+  if (!prislisteId || !userId) return { ...tomt, feil: 'Mangler prisliste eller bruker.' }
+
+  let rader = []
+  try { rader = await _hentBedriftensBibliotekrader(companyId, userId) }
+  catch (e) { return { ...tomt, feil: 'Kunne ikke lese biblioteket: ' + ((e && e.message) || 'ukjent feil') } }
+  if (rader.length === 0) return { ...tomt }
+
+  // Alle NOBB-numre på tvers av hele biblioteket — ett oppslag, ikke ett per rad.
+  const nummer = new Set()
+  rader.forEach(r => (r.data?.materialer || []).forEach(m => {
+    if (matErKoblet(m)) nummer.add(String(m.nobb).trim())
+  }))
+
+  let priser = {}
+  if (nummer.size > 0) {
+    try { priser = await _hentPriserForNummer(prislisteId, [...nummer]) }
+    catch (e) { return { ...tomt, rader: rader.length, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') } }
+  }
+
+  const stat = { rader: rader.length, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, ukoblet: 0 }
+  const detaljer = []      // per bygningsdel, til «se detaljene»
+  const snapshot = []      // gamle materialer per rad, til angring
+  const skriv = []         // radene som faktisk endres
+
+  for (const rad of rader) {
+    const mats = rad.data?.materialer || []
+    stat.linjerTotalt += mats.length
+    const radLinjer = []
+    let radEndret = 0
+    const nyeMats = mats.map(m => {
+      if (!matErKoblet(m)) { stat.ukoblet += 1; radLinjer.push({ navn: m.varenavn || 'Uten navn', type: 'ukoblet' }); return m }
+      const vare = priser[String(m.nobb).trim()]
+      if (!vare) {
+        stat.utgatt += 1
+        radLinjer.push({ navn: m.varenavn || 'Uten navn', nobb: String(m.nobb).trim(), type: 'utgatt', pris: parseFloat(m.enhetspris) || 0 })
+        return m
+      }
+      const { gammelPris, nyPris, nyEnhet, nyOmregning } = nyPrisForLinje(m, vare)
+      if (_prisLik(gammelPris, nyPris)) {
+        stat.uendret += 1
+        radLinjer.push({ navn: vare.varenavn || m.varenavn, type: 'uendret', pris: gammelPris })
+        return m
+      }
+      stat.oppdatert += 1
+      radEndret += 1
+      radLinjer.push({
+        navn: vare.varenavn || m.varenavn, nobb: String(m.nobb).trim(), type: 'oppdatert',
+        gammelPris, nyPris, diff: Math.round((nyPris - gammelPris) * 100) / 100,
+        diffProsent: gammelPris > 0 ? ((nyPris - gammelPris) / gammelPris) * 100 : null,
+        omregnet: !!nyOmregning,
+      })
+      const felter = { ...m, enhetspris: nyPris, varenavn: vare.varenavn || m.varenavn }
+      if (nyOmregning) felter._omregning = nyOmregning
+      else felter.enhet = nyEnhet
+      return felter
+    })
+
+    detaljer.push({ radId: rad.id, navn: rad.name, fag: rad.fag, kategori: rad.kategori, endret: radEndret, linjer: radLinjer })
+    if (radEndret > 0) {
+      // `materialer` = slik det var før. `satte` = slik vi skrev det.
+      // Angringen trenger begge: den setter tilbake bare der linjen fortsatt har
+      // den prisen VI satte. Er den noe annet, har noen rørt linjen etterpå, og
+      // det arbeidet skal ikke overskrives.
+      //
+      // Dypkopi: uten den deler snapshotet objekter med det som skrives til
+      // biblioteket, og en senere endring på en linje ville også endret
+      // snapshotet — da mister angringen grunnlaget for å se hva VI satte.
+      snapshot.push({ rad_id: rad.id, navn: rad.name, ..._dypkopi({ materialer: mats, satte: nyeMats }) })
+      skriv.push({ id: rad.id, data: { ...(rad.data || {}), materialer: nyeMats } })
+    }
+  }
+
+  if (skriv.length === 0) return { ...stat, detaljer, loggId: null, feil: null }
+
+  // Snapshotet skrives FØR radene. Feiler loggen, avbryter vi — en
+  // masseoppdatering ingen kan angre er verre enn ingen oppdatering.
+  let loggId = null
+  try {
+    const { data: logg, error } = await supabase.from('bibliotek_prisoppdateringer')
+      .insert({
+        company_id: companyId || null, user_id: userId,
+        prisliste_id: prislisteId, prisliste_navn: prislisteNavn || null,
+        statistikk: stat, snapshot,
+      })
+      .select('id').single()
+    if (error) throw error
+    loggId = logg?.id || null
+  } catch (e) {
+    return { ...stat, detaljer, loggId: null,
+      feil: 'Kunne ikke lagre angre-punktet, så ingenting ble oppdatert. Kjør SQL-en for bibliotek_prisoppdateringer først. (' + ((e && e.message) || 'ukjent feil') + ')' }
+  }
+
+  let skrevet = 0
+  for (const r of skriv) {
+    try {
+      const { data: endret, error } = await supabase.from('bruker_bibliotek').update({ data: r.data }).eq('id', r.id).select('id')
+      if (error) throw error
+      if (endret && endret.length > 0) skrevet += 1
+    } catch (e) { /* fortsett — resten skal ikke stoppe av én rad */ }
+  }
+
+  return { ...stat, detaljer, loggId, skrevetRader: skrevet, feil: skrevet === skriv.length ? null
+    : `${skriv.length - skrevet} av ${skriv.length} bygningsdeler ble ikke lagret. Sjekk at du har skrivetilgang til bedriftens bibliotek.` }
+}
+
+// Angrer en samlet biblioteksoppdatering.
+//
+// Angrer BARE linjer som fortsatt har den prisen oppdateringen satte. Har noen
+// rørt en linje etterpå, skal ikke angringen overskrive det arbeidet — den
+// linjen hoppes over og telles i `hoppet`.
+async function angreBibliotekPrisoppdatering(loggId) {
+  if (!loggId) return { gjenopprettet: 0, hoppet: 0, feil: 'Mangler angre-punkt.' }
+  let logg = null
+  try {
+    const { data, error } = await supabase.from('bibliotek_prisoppdateringer')
+      .select('id, snapshot, angret_at').eq('id', loggId).single()
+    if (error) throw error
+    logg = data
+  } catch (e) {
+    return { gjenopprettet: 0, hoppet: 0, feil: 'Fant ikke angre-punktet: ' + ((e && e.message) || 'ukjent feil') }
+  }
+  if (logg.angret_at) return { gjenopprettet: 0, hoppet: 0, feil: 'Denne oppdateringen er allerede angret.' }
+
+  const snapshot = Array.isArray(logg.snapshot) ? logg.snapshot : []
+  let gjenopprettet = 0, hoppet = 0, rortEtterpaa = 0
+  for (const post of snapshot) {
+    try {
+      const { data: naa } = await supabase.from('bruker_bibliotek').select('id, data').eq('id', post.rad_id).single()
+      if (!naa) { hoppet += 1; continue }
+      const gamleMats = Array.isArray(post.materialer) ? post.materialer : []
+      const satteMats = Array.isArray(post.satte) ? post.satte : []
+      const naaMats = naa.data?.materialer || []
+      let radRortEtterpaa = 0
+      const tilbake = naaMats.map(m => {
+        const gml = gamleMats.find(g => String(g.id) === String(m.id))
+        if (!gml) return m
+        const satt = satteMats.find(g => String(g.id) === String(m.id))
+        // Ingen endring å angre på denne linjen.
+        if (satt && _prisLik(gml.enhetspris, satt.enhetspris)) return m
+        // Står linjen med noe ANNET enn det vi satte, har noen rørt den etterpå.
+        // Da lar vi den stå — angringen skal ikke spise andres arbeid.
+        if (satt && !_prisLik(m.enhetspris, satt.enhetspris)) { radRortEtterpaa += 1; return m }
+        return { ...m, enhetspris: gml.enhetspris, varenavn: gml.varenavn, enhet: gml.enhet, _omregning: gml._omregning || null }
+      })
+      if (radRortEtterpaa > 0) rortEtterpaa += radRortEtterpaa
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ data: { ...(naa.data || {}), materialer: tilbake } }).eq('id', post.rad_id).select('id')
+      if (error) throw error
+      if (endret && endret.length > 0) gjenopprettet += 1; else hoppet += 1
+    } catch (e) { hoppet += 1 }
+  }
+  try { await supabase.from('bibliotek_prisoppdateringer').update({ angret_at: new Date().toISOString() }).eq('id', loggId) } catch (e) {}
+  return { gjenopprettet, hoppet, rortEtterpaa, feil: null }
 }
 
 // Kalkylestatuser der kunden ALT har fått tallene. Oppdaterer man prisene da,
@@ -71873,6 +72093,143 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
               </button>
             </>
           )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── OPPSUMMERING ETTER AUTOMATISK BIBLIOTEKSOPPDATERING ─────────────────────
+// Vises etter at en prisliste er importert eller satt aktiv. Oppdateringen har
+// alt skjedd — dette er kvitteringen, med detaljene og muligheten til å angre alt.
+function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose }) {
+  const [visDetaljer, setVisDetaljer] = useState(false)
+  const [angrer, setAngrer] = useState(false)
+  const [angreSvar, setAngreSvar] = useState(null)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+  const r = resultat || {}
+
+  const angre = async () => {
+    if (angrer || !r.loggId) return
+    setAngrer(true)
+    try {
+      const svar = await angreBibliotekPrisoppdatering(r.loggId)
+      setAngreSvar(svar)
+      if (!svar.feil && typeof onAngret === 'function') onAngret(svar)
+    } finally { setAngrer(false) }
+  }
+
+  const tall = (verdi, tekst, farger) => (
+    <div style={{ flex:'1 1 140px', background: farger.bg, border:`1px solid ${farger.kant}`, borderRadius:'12px', padding:'12px 14px', minWidth:0 }}>
+      <div style={{ fontSize:'22px', fontWeight:'800', color: farger.tekst, lineHeight:1.1 }}>{verdi}</div>
+      <div style={{ fontSize:'11px', color: farger.tekst, marginTop:'4px', lineHeight:1.4 }}>{tekst}</div>
+    </div>
+  )
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:160, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !angrer) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '660px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>📚 Biblioteket er oppdatert</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
+              mot {prislisteNavn || 'den nye prislisten'}
+            </p>
+          </div>
+          <button onClick={onClose} disabled={angrer} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: angrer ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {r.feil && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color:'#991b1b', lineHeight:1.55 }}>
+              {r.feil}
+            </div>
+          )}
+
+          {angreSvar && (
+            <div style={{ background: angreSvar.feil ? '#fef2f2' : '#f0fdf4', border:`1px solid ${angreSvar.feil ? '#fecaca' : '#bbf7d0'}`, borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color: angreSvar.feil ? '#991b1b' : '#15803d', lineHeight:1.6 }}>
+              {angreSvar.feil ? angreSvar.feil : (
+                <>
+                  <strong>Prisene er satt tilbake.</strong> {angreSvar.gjenopprettet} {angreSvar.gjenopprettet === 1 ? 'bygningsdel' : 'bygningsdeler'} er gjenopprettet.
+                  {/* To ulike ting: rortEtterpaa = linjer noen har endret etter
+                      oppdateringen (bevisst spart), hoppet = rader vi ikke fikk
+                      lest eller skrevet. Blandes de, forstår ingen tallene. */}
+                  {angreSvar.rortEtterpaa > 0
+                    ? ` ${angreSvar.rortEtterpaa} ${angreSvar.rortEtterpaa === 1 ? 'linje ble' : 'linjer ble'} hoppet over — ${angreSvar.rortEtterpaa === 1 ? 'den er' : 'de er'} endret etter oppdateringen, og det arbeidet skal ikke overskrives.`
+                    : ''}
+                  {angreSvar.hoppet > 0
+                    ? ` ${angreSvar.hoppet} ${angreSvar.hoppet === 1 ? 'bygningsdel' : 'bygningsdeler'} kunne ikke settes tilbake — sjekk at du har skrivetilgang.`
+                    : ''}
+                </>
+              )}
+            </div>
+          )}
+
+          <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#374151', lineHeight:1.6 }}>
+            <strong>{r.oppdatert || 0} av {r.linjerTotalt || 0} materiallinjer</strong> i biblioteket fikk ny pris.
+            {r.utgatt > 0 ? ` ${r.utgatt} ${r.utgatt === 1 ? 'vare er' : 'varer er'} utgått og står med gammel pris.` : ''}
+            {r.ukoblet > 0 ? ` ${r.ukoblet} ${r.ukoblet === 1 ? 'linje mangler' : 'linjer mangler'} kobling.` : ''}
+          </p>
+
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'14px' }}>
+            {tall(r.oppdatert || 0, 'fikk ny pris', { bg:'#f0fdf4', kant:'#bbf7d0', tekst:'#15803d' })}
+            {tall(r.uendret || 0, 'uendret pris', { bg:'#f8fafc', kant:'#e2e8f0', tekst:'#475569' })}
+            {tall(r.utgatt || 0, 'utgått — står med gammel pris', { bg:'#fff7ed', kant:'#fed7aa', tekst:'#c2410c' })}
+            {tall(r.ukoblet || 0, 'mangler NOBB-kobling', { bg:'#fffbeb', kant:'#fde68a', tekst:'#a16207' })}
+          </div>
+
+          <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6, background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+            Kalkylene dine er <strong>ikke</strong> rørt. En kalkyle er et konkret tilbud, og noen er sendt til kunde —
+            der bruker du «🔄 Oppdater priser» når du selv vil.
+          </div>
+
+          {(r.detaljer || []).length > 0 && (
+            <>
+              <button onClick={() => setVisDetaljer(v => !v)}
+                style={{ display:'flex', alignItems:'center', gap:'7px', width:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', fontSize:'13px', color:'#374151', cursor:'pointer', textAlign:'left', fontWeight:'600' }}>
+                <span style={{ color:'#94a3b8' }}>{visDetaljer ? '▼' : '▶'}</span>
+                Se detaljene ({(r.detaljer || []).filter(dd => dd.endret > 0).length} bygningsdeler endret)
+              </button>
+              {visDetaljer && (
+                <div style={{ marginTop:'8px' }}>
+                  {(r.detaljer || []).filter(dd => dd.endret > 0).map(dd => (
+                    <div key={dd.radId} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', marginBottom:'7px' }}>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{dd.navn}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'6px' }}>{dd.kategori || 'uten kategori'} · {dd.endret} {dd.endret === 1 ? 'linje' : 'linjer'} endret</div>
+                      {dd.linjer.filter(l => l.type === 'oppdatert').map((l, i) => (
+                        <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'2px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
+                          <span style={{ minWidth:0 }}>{l.navn}</span>
+                          <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(l.gammelPris)}</span>
+                          <span style={{ color:'#94a3b8' }}>→</span>
+                          <strong>{fmtKr2(l.nyPris)}</strong>
+                          <span style={{ fontSize:'11px', fontWeight:'700', color: l.diff > 0 ? '#c2410c' : '#15803d' }}>
+                            {l.diff > 0 ? '+' : ''}{fmtKr2(l.diff)}
+                            {l.diffProsent !== null ? ` · ${l.diffProsent > 0 ? '+' : ''}${l.diffProsent.toFixed(1)} %` : ''}
+                          </span>
+                          {l.omregnet && <span style={{ fontSize:'10px', color:'#1d4ed8', fontWeight:'700' }}>↩ omregnet</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {r.loggId && !angreSvar && (
+            <button onClick={angre} disabled={angrer}
+              title="Setter alle prisene i biblioteket tilbake til slik de var før oppdateringen"
+              style={{ flex:'1 1 170px', background:'white', color:'#b91c1c', border:'1px solid #fecaca', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: angrer ? 'default' : 'pointer' }}>
+              {angrer ? 'Setter tilbake …' : '↩️ Angre alt'}
+            </button>
+          )}
+          <button onClick={onClose} disabled={angrer} style={{ flex:'1 1 150px', background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: angrer ? 'default' : 'pointer' }}>
+            {angreSvar ? 'Lukk' : 'Greit'}
+          </button>
         </div>
       </div>
     </div>
@@ -72763,7 +73120,7 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
 // ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
 
 function PrisbokPage({ onBack }) {
-  const { user } = useAuth()
+  const { user, companyId } = useAuth()
   const confirm = useConfirm()
   const [prislister, setPrislister] = useState([])
   const [aktivPrisliste, setAktivPrisliste] = useState(null)
@@ -72779,6 +73136,9 @@ function PrisbokPage({ onBack }) {
   const [is5001, setIs5001] = useState(false)
   const [importProgress, setImportProgress] = useState('')
   const [toast, setToast] = useState(null) // { type: 'success'|'error', message }
+  // Oppsummeringen etter at biblioteket er oppdatert mot en ny aktiv prisliste.
+  const [bibResultat, setBibResultat] = useState(null)   // { resultat, prislisteNavn }
+  const [oppdatererBib, setOppdatererBib] = useState(false)
   const fileRef = React.useRef(null)
 
   const loadData = async () => {
@@ -72921,6 +73281,25 @@ function PrisbokPage({ onBack }) {
     e.target.value = ''
   }
 
+  // Kjører den automatiske biblioteksoppdateringen og viser oppsummeringen.
+  // Kalkyler røres IKKE — de er konkrete tilbud, og noen er sendt til kunde.
+  const oppdaterBiblioteketNaa = async (prisliste) => {
+    if (!prisliste?.id) return
+    setOppdatererBib(true)
+    try {
+      const res = await oppdaterBibliotekMotPrisliste({
+        prislisteId: prisliste.id,
+        prislisteNavn: prisliste.navn,
+        companyId: companyId || null,
+        userId: user?.id,
+      })
+      // Har bedriften ingen egne bygningsdeler, er det ingenting å fortelle om.
+      if (res && (res.linjerTotalt > 0 || res.feil)) setBibResultat({ resultat: res, prislisteNavn: prisliste.navn })
+    } catch (e) {
+      setToast({ type: 'error', message: 'Biblioteket ble ikke oppdatert: ' + ((e && e.message) || 'ukjent feil') })
+    } finally { setOppdatererBib(false) }
+  }
+
   const doImport = async (items, navn) => {
     setImporting(true)
     try {
@@ -72942,6 +73321,9 @@ function PrisbokPage({ onBack }) {
       setImportProgress('')
       await loadData()
       setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
+      // Ble denne listen aktiv (første import), oppdateres biblioteket med én gang.
+      // Ellers skjer det når brukeren setter den aktiv.
+      if (pl.aktiv) await oppdaterBiblioteketNaa(pl)
     } catch(e) { setToast({ type: 'error', message: 'Feil ved import: ' + e.message }) }
     finally { setImporting(false); setImportProgress('') }
   }
@@ -72973,6 +73355,16 @@ function PrisbokPage({ onBack }) {
     await supabase.from('prislister').update({ aktiv: false }).eq('user_id', user?.id)
     await supabase.from('prislister').update({ aktiv: true }).eq('id', pl.id)
     await loadData()
+    // Å bytte aktiv prisliste er å si «dette er prisene våre nå», så biblioteket
+    // skal følge. Vi spør likevel: brukeren kan bytte bare for å søke i en gammel
+    // liste, og da skal ikke biblioteket skrives om.
+    const ok = await confirm({
+      message: 'Oppdatere biblioteket med de nye prisene?',
+      subMessage: `Alle bedriftens egne bygningsdeler får prisene fra «${pl.navn}» på materiallinjer som har NOBB-nummer. Kalkylene dine røres ikke — der bruker du «Oppdater priser» selv.`,
+      confirmLabel: 'Oppdater biblioteket',
+      cancelLabel: 'Bare bytt prisliste',
+    })
+    if (ok) await oppdaterBiblioteketNaa(pl)
   }
 
   const deletePrisliste = async (pl) => {
@@ -73183,6 +73575,27 @@ function PrisbokPage({ onBack }) {
           </div>
         )}
       </div>
+
+      {/* Framdrift mens biblioteket oppdateres */}
+      {oppdatererBib && (
+        <div style={{ position:'fixed', inset:0, zIndex:155, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(15,23,42,0.45)', padding:'16px' }}>
+          <div style={{ background:'white', borderRadius:'16px', padding:'22px 26px', textAlign:'center', maxWidth:'320px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ fontSize:'28px', marginBottom:'10px' }}>📚</div>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>Oppdaterer biblioteket …</div>
+            <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>Henter nye priser til bedriftens bygningsdeler. Kalkylene røres ikke.</div>
+          </div>
+        </div>
+      )}
+
+      {/* Oppsummering, med detaljer og «Angre alt» */}
+      {bibResultat && (
+        <BibliotekPrisResultatModal
+          resultat={bibResultat.resultat}
+          prislisteNavn={bibResultat.prislisteNavn}
+          onAngret={() => setToast({ type: 'success', message: 'Prisene i biblioteket er satt tilbake' })}
+          onClose={() => setBibResultat(null)}
+        />
+      )}
     </div>
   )
 }
