@@ -17632,6 +17632,10 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const [bulkFag, setBulkFag] = useState('')
   const [visKun, setVisKun] = useState('alle') // 'alle' | 'ufordelt'
   const [sok, setSok] = useState('')
+  const [visProsjektInfo, setVisProsjektInfo] = useState(false)  // lukket som standard — postlisten er det man er her for
+  const prosjektNavnRef = React.useRef(null)   // markøren settes hit når prosjekt mangler
+  const autoAapnetRef = React.useRef(false)    // bare panel VI åpnet skal lukke seg selv igjen
+  const forrigeAntallRef = React.useRef(0)     // for å se når postene kommer inn
   const [side, setSide] = useState(0)   // sidevisning — 97 poster i én DOM er tungt på telefon
   const POSTER_PER_SIDE = 50
   const [oppretter, setOppretter] = useState(false)
@@ -17770,7 +17774,51 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const antallSider = Math.max(1, Math.ceil(synligePoster.length / POSTER_PER_SIDE))
   const gjeldendeSide = Math.min(side, antallSider - 1)
   const sidePoster = synligePoster.slice(gjeldendeSide * POSTER_PER_SIDE, gjeldendeSide * POSTER_PER_SIDE + POSTER_PER_SIDE)
+  const harPoster = poster.length > 0
   const listeSkjult = poster.length > 0 && synligePoster.length === 0
+  // Overskrift for det sammenlagte prosjektinfo-panelet: vis hva som faktisk er
+  // valgt, slik at man ser det uten å åpne. Er ingenting satt, sier den ifra —
+  // uten prosjekt havner anbudene løse, og det er lett å overse når panelet er lukket.
+  const valgtProsjektNavn = projects.find(pr => pr.id === prosjektId)?.name || ''
+  const prosjektInfoSatt = !!(valgtProsjektNavn || pInfo.navn.trim())
+  const prosjektNavnVist = valgtProsjektNavn || pInfo.navn.trim() || 'Prosjektinfo'
+  // To slags sperre, med ulikt virkemiddel.
+  //
+  // HARD: postlisten er ikke synlig. Da har brukeren ikke sett fagfordelingen i
+  // det hele tatt, og knappen skal se utilgjengelig ut — grå og død.
+  //
+  // MYK: noe mangler, men brukeren har sett listen. En grå knapp leses som
+  // «ødelagt», ikke som «gjør dette først» — særlig når det som mangler ligger i
+  // et sammenlagt panel. Derfor er knappen grønn og trykkbar: trykket går ikke
+  // gjennom, men det åpner panelet, setter markøren i feltet og sier hvorfor.
+  // Vernet er like sterkt, det er flyttet fra utseende til handling.
+  const hardSperre = poster.length > 0 && listeSkjult ? 'Vis postlisten før du oppretter' : null
+  const mykSperre = (poster.length === 0 || hardSperre) ? null
+    : !prosjektInfoSatt ? 'Mangler prosjekt — trykk for å fylle inn'
+    : fagMedPoster.length === 0 ? 'Sett faggruppe på minst én UE-post først'
+    : null
+
+  // Fokuser prosjektnavn-feltet. Panelet må rekke å tegnes opp først.
+  const fokuserProsjektNavn = () => { setTimeout(() => prosjektNavnRef.current?.focus(), 80) }
+
+  // Kommer postene inn uten at prosjekt er satt, åpner panelet seg selv med
+  // markøren i navnefeltet — det som mangler skal ligge foran deg, ikke gjemt.
+  // Er prosjektet fylt inn på forhånd, forblir panelet lukket.
+  useEffect(() => {
+    const foer = forrigeAntallRef.current
+    forrigeAntallRef.current = poster.length
+    if (foer === 0 && poster.length > 0 && !prosjektInfoSatt) {
+      setVisProsjektInfo(true)
+      autoAapnetRef.current = true
+      fokuserProsjektNavn()
+    }
+  }, [poster.length])
+
+  // Når feltet er fylt ut og brukeren forlater det, legger panelet seg sammen
+  // igjen — men bare hvis det var vi som åpnet det.
+  const lukkHvisAutoAapnet = () => {
+    if (autoAapnetRef.current && prosjektInfoSatt) { setVisProsjektInfo(false); autoAapnetRef.current = false }
+  }
   const nullstillVisning = () => { setVisKun('alle'); setSok(''); setSide(0) }
 
   const opprett = async () => {
@@ -17778,6 +17826,16 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
     // fagfordelingen fra AI-en — og da skal det ikke gå e-post til noen UE.
     if (listeSkjult) {
       await appAlert({ message: 'Du må se postlisten først', subMessage: `Listen er skjult av ${visKun === 'ufordelt' ? 'filteret «Kun ufordelte»' : 'søket'}. Trykk «Vis alle ${poster.length} poster», kontroller fagfordelingen, og opprett deretter forespørslene.`, kind: 'warning' })
+      return
+    }
+    // Uten prosjekt havner anbudene i en løs «Uten prosjekt»-samling, og det har
+    // skjedd i praksis. Nå som prosjektinfo er lukket som standard, er det enda
+    // lettere å overse — derfor kreves det, ikke bare varsles om.
+    if (!prosjektInfoSatt) {
+      setVisProsjektInfo(true)
+      autoAapnetRef.current = true
+      await appAlert({ message: 'Anbudene mangler prosjekt', subMessage: 'Velg et eksisterende prosjekt, eller fyll inn prosjektnavn. Uten det havner forespørslene i en løs samling uten byggeplass, byggherre eller frist. Prosjektinfo er åpnet, og markøren står i feltet.', kind: 'warning' })
+      fokuserProsjektNavn()
       return
     }
     if (!fagMedPoster.length) { await appAlert({ message: 'Ingen poster med faggruppe', subMessage: 'Sett faggruppe på minst én post før du oppretter forespørsler.', kind: 'warning' }); return }
@@ -17819,9 +17877,13 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent: 'center', padding: isMob ? 0 : '16px' }}>
+    <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: (isMob && harPoster) ? 'stretch' : 'center', justifyContent: 'center', padding: (isMob && harPoster) ? 0 : '12px', overflowY: 'auto' }}>
       <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.45)' }} onMouseDown={e => { if (e.target === e.currentTarget) bekreftLukk() }} />
-      <div style={{ position: 'relative', background: 'white', borderRadius: isMob ? 0 : '20px', width: '100%', maxWidth: isMob ? '100%' : '960px', maxHeight: isMob ? '100vh' : '94vh', height: isMob ? '100vh' : 'auto', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui,sans-serif' }}>
+      {/* Høyden følger innholdet fram til postene finnes. Før opplasting er det
+          bare to små kort, og et vindu i full skjermhøyde rundt dem ser ødelagt
+          ut. Så snart postlisten er der, vokser vinduet til full høyde — da er
+          det listen som skal ha plassen. */}
+      <div style={{ position: 'relative', background: 'white', borderRadius: (isMob && harPoster) ? 0 : '20px', width: '100%', maxWidth: isMob ? '100%' : '1100px', maxHeight: isMob ? (harPoster ? '100vh' : 'calc(100vh - 24px)') : '96vh', height: harPoster ? (isMob ? '100vh' : '96vh') : 'auto', display: 'flex', flexDirection: 'column', fontFamily: 'system-ui,sans-serif' }}>
         <div style={{ padding: isMob ? '14px 16px' : '18px 24px', borderBottom: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <h2 style={{ margin: 0, fontSize: isMob ? '16px' : '18px', fontWeight: '800', color: '#0f172a' }}>📥 Importer & fordel poster</h2>
@@ -17888,15 +17950,24 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
           )}
 
           {poster.length > 0 && (
-            <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '14px', padding: '16px 18px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-                <div style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a' }}>🏗️ Prosjektinfo</div>
-                <button onClick={() => setVisMerImport(v => !v)} style={{ background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', padding: 0 }}>{visMerImport ? '− Skjul opplasting' : '+ Legg til flere poster'}</button>
+            /* Sammenleggbar, lukket som standard. Utfylt skjema tok 524 px rett over
+               postlisten på telefon — både mye rulling, og grunnen til at listen i
+               det hele tatt kunne bli klemt bort. Prosjektnavnet står som overskrift,
+               så man ser hva som er satt uten å åpne. */
+            <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', borderRadius: '14px', padding: visProsjektInfo ? '16px 18px' : '10px 14px', flexShrink: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: visProsjektInfo ? '12px' : 0, gap: '8px' }}>
+                <button onClick={() => setVisProsjektInfo(v => !v)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0, background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', font: 'inherit' }}>
+                  <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0 }}>{visProsjektInfo ? '▼' : '▶'}</span>
+                  <span style={{ fontSize: '14px', fontWeight: '800', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>🏗️ {prosjektNavnVist}</span>
+                  {!visProsjektInfo && !prosjektInfoSatt && <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '2px 8px', flexShrink: 0 }}>⚠ ikke satt</span>}
+                </button>
+                <button onClick={() => setVisMerImport(v => !v)} style={{ background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer', padding: 0, flexShrink: 0, whiteSpace: 'nowrap' }}>{visMerImport ? '− Skjul' : '+ Flere poster'}</button>
               </div>
-              {!prosjektId && (
+              {visProsjektInfo && !prosjektId && (
                 <>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <div><label style={impLbl}>Prosjektnavn</label><input value={pInfo.navn} onChange={e => settP('navn', e.target.value)} style={impInp} placeholder="F.eks. Sundenga Boligsameie – våtrom" /></div>
+                    <div><label style={impLbl}>Prosjektnavn</label><input ref={prosjektNavnRef} value={pInfo.navn} onChange={e => settP('navn', e.target.value)} onBlur={lukkHvisAutoAapnet} style={impInp} placeholder="F.eks. Sundenga Boligsameie – våtrom" /></div>
                     <div><label style={impLbl}>Byggeplass – gateadresse</label><input value={pInfo.gate} onChange={e => settP('gate', e.target.value)} style={impInp} placeholder="Gate og nummer" /></div>
                     <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
                       <div style={{ width: '120px' }}><label style={impLbl}>Postnr.</label><input value={pInfo.postnr} onChange={e => settP('postnr', e.target.value)} style={impInp} placeholder="0000" /></div>
@@ -17911,11 +17982,13 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
                   <div style={{ fontSize: '12px', color: '#94a3b8', margin: '12px 0 6px', textAlign: 'center' }}>— eller —</div>
                 </>
               )}
-              <div>
-                <label style={impLbl}>Knytt til et eksisterende prosjekt</label>
-                <SearchableProjectSelect value={prosjektId} onChange={setProsjektId} projects={projects} style={{ ...tInp, maxWidth: '320px' }} placeholder="Velg eksisterende prosjekt" />
-                {prosjektId && <button onClick={() => setProsjektId('')} style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>Fjern – fyll inn nytt i stedet</button>}
-              </div>
+              {visProsjektInfo && (
+                <div>
+                  <label style={impLbl}>Knytt til et eksisterende prosjekt</label>
+                  <SearchableProjectSelect value={prosjektId} onChange={(v) => { setProsjektId(v); if (v && autoAapnetRef.current) { setVisProsjektInfo(false); autoAapnetRef.current = false } }} projects={projects} style={{ ...tInp, maxWidth: '320px' }} placeholder="Velg eksisterende prosjekt" />
+                  {prosjektId && <button onClick={() => setProsjektId('')} style={{ marginLeft: '8px', background: 'none', border: 'none', color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>Fjern – fyll inn nytt i stedet</button>}
+                </div>
+              )}
             </div>
           )}
 
@@ -18074,10 +18147,8 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
         <div style={{ padding: isMob ? '12px 14px' : '16px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <button onClick={bekreftLukk} style={{ padding: '10px 18px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: 'pointer', fontSize: '14px' }}>Avbryt</button>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            {listeSkjult
-              ? <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>Vis postlisten før du oppretter</span>
-              : (poster.length > 0 && fagMedPoster.length === 0 && <span style={{ fontSize: '12px', color: '#b45309' }}>Sett faggruppe på minst én UE-post først</span>)}
-            <button onClick={opprett} disabled={oppretter || listeSkjult} title={listeSkjult ? 'Postlisten må være synlig så du kan kontrollere fagfordelingen først' : undefined} style={{ padding: '10px 22px', background: (oppretter || listeSkjult) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || listeSkjult) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
+            {(hardSperre || mykSperre) && <span style={{ fontSize: '12px', color: '#b45309', fontWeight: '600', maxWidth: isMob ? '150px' : 'none' }}>{hardSperre || mykSperre}</span>}
+            <button onClick={opprett} disabled={oppretter || !!hardSperre} title={hardSperre || mykSperre || undefined} style={{ padding: '10px 22px', background: (oppretter || hardSperre) ? '#cbd5e1' : '#059669', color: 'white', border: 'none', borderRadius: '10px', cursor: (oppretter || hardSperre) ? 'not-allowed' : 'pointer', fontSize: '14px', fontWeight: '700' }}>
               {oppretter ? 'Oppretter...' : `📤 Opprett ${fagMedPoster.length || ''} forespørsel${fagMedPoster.length !== 1 ? 'er' : ''}`}
             </button>
           </div>
@@ -18842,7 +18913,12 @@ function UEPrisingsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [submitting, setSubmitting] = useState(false)
-  const [done, setDone] = useState(false)
+  // erLevert = prisene er inne, siden er i lesemodus.
+  // nyligLevert = levert akkurat nå, så kvitteringen kan ordlegges deretter.
+  // Tidligere fantes bare «done», og den erstattet HELE siden med en kvittering
+  // — også ved gjenbesøk. Da så UE aldri meldingene, og kunne ikke svare.
+  const [erLevert, setErLevert] = useState(false)
+  const [nyligLevert, setNyligLevert] = useState(false)
   const [erRevidering, setErRevidering] = useState(false)
   const [forbehold, setForbehold] = useState('')
   const [sporsmal, setSporsmal] = useState([])
@@ -18861,15 +18937,24 @@ function UEPrisingsPage() {
       const { data: ue, error: ue_err } = await supabase.from('tender_ues').select('*').eq('token', t).single()
       if (ue_err||!ue) throw new Error('Lenken er ugyldig eller utløpt.')
       setSporsmal(Array.isArray(ue.sporsmal) ? ue.sporsmal : [])
-      if (ue.status === 'Priset') { setUeData(ue); const { data: td0 } = await supabase.from('tenders').select('*').eq('id', ue.tender_id).single(); setTender(td0); setDone(true); setLoading(false); return }
+      // Siden lastes likt uansett status. Har UE alt levert, vises den i
+      // lesemodus med prisene låst — men dialogen er åpen. Vil oppdragsgiver ha
+      // nye tall, ber han om revidert tilbud, og da settes status tilbake til
+      // «Åpnet» og feltene låses opp igjen.
+      const levert = ue.status === 'Priset'
+      setErLevert(levert)
       const { data: td, error: td_err } = await supabase.from('tenders').select('*').eq('id', ue.tender_id).single()
       if (td_err||!td) throw new Error('Anbudet ble ikke funnet.')
       setUeData(ue); setTender(td)
       const forrige = Array.isArray(ue.chapters) && ue.chapters.length ? ue.chapters : null
-      if (forrige) setErRevidering(true)
+      // Revideringsbanneret gjelder bare når prisingen faktisk er åpnet igjen.
+      // En UE som bare ser på sitt leverte tilbud, er ikke bedt om noe.
+      if (forrige && !levert) setErRevidering(true)
       const kilde = forrige || (td.chapters||[])
       setChapters(kilde.map(ch=>({ ...ch, posts:(ch.posts||[]).map(p=>({...p, uePrice: p.uePrice != null ? p.uePrice : ''})) })))
-      await supabase.from('tender_ues').update({ status:'Åpnet' }).eq('id', ue.id)
+      // Viktig: en levert status må ikke overskrives til «Åpnet» bare fordi UE
+      // åpner lenken igjen — det ville låst opp prisene uten at noen ba om det.
+      if (!levert) await supabase.from('tender_ues').update({ status:'Åpnet' }).eq('id', ue.id)
     } catch(e) { setError(e.message) }
     finally { setLoading(false) }
   }
@@ -18886,8 +18971,13 @@ function UEPrisingsPage() {
       if (error) throw error
       setSporsmal(nytt); setNyttSpm('')
       if (tender?.created_by) {
-        try { await supabase.from('notifications').insert({ user_id: tender.created_by, title:`❓ Spørsmål fra ${ueData.company_name}`, message:`«${nytt[nytt.length-1].text.slice(0,80)}» — ${tender.title}`, type:'info', link_page:'anbudsmodul', link_id: tender.id }) } catch(_) {}
+        try { await supabase.from('notifications').insert({ user_id: tender.created_by, title:`❓ Melding fra ${ueData.company_name}`, message:`«${nytt[nytt.length-1].text.slice(0,80)}» — ${tender.title}`, type:'info', link_page:'anbudsmodul', link_id: tender.id }) } catch(_) {}
       }
+      // E-post til oppdragsgiver. En rad i varsellista er ikke nok når det står
+      // en frist og venter. Bygges og sendes server-side (ue-melding-notify),
+      // slik at denne uinnloggede siden ikke kan sende vilkårlig e-post — samme
+      // mønster som ue-svar-notify i UE-forespørselsflyten.
+      try { await supabase.functions.invoke('ue-melding-notify', { body: { token } }) } catch(_) { /* varsling skal ikke blokkere meldingen */ }
     } catch(e) { alert({ message:'Kunne ikke sende spørsmål', subMessage:e.message, kind:'error' }) }
     finally { setSenderSpm(false) }
   }
@@ -18907,7 +18997,8 @@ function UEPrisingsPage() {
       if (tender.created_by) {
         await supabase.from('notifications').insert({ user_id:tender.created_by, title:`Ny anbudspris mottatt: ${tender.title}`, message:`${ueData.company_name} har levert pris: ${fmtT(totalAmount)}`, type:'success', link_page:'anbudsmodul' })
       }
-      setDone(true)
+      setErLevert(true); setNyligLevert(true)
+      try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch(_) {}
     } catch(e) { alert('Feil: '+e.message) }
     finally { setSubmitting(false) }
   }
@@ -18916,7 +19007,6 @@ function UEPrisingsPage() {
 
   if (loading) return <div style={pageStyle}><div style={{ textAlign:'center', marginTop:'20vh' }}><div style={{ width:'40px', height:'40px', border:'3px solid #e2e8f0', borderTop:'3px solid #2563eb', borderRadius:'50%', margin:'0 auto 16px', animation:'spin 1s linear infinite' }}/><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style><p style={{ color:'#64748b' }}>Laster anbudsforespørsel...</p></div></div>
   if (error) return <div style={pageStyle}><div style={{ background:'white', borderRadius:'20px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 8px 40px rgba(0,0,0,0.1)' }}><div style={{ fontSize:'48px', marginBottom:'16px' }}>❌</div><h2 style={{ margin:'0 0 8px', color:'#0f172a' }}>Ugyldig lenke</h2><p style={{ margin:0, color:'#64748b' }}>{error}</p></div></div>
-  if (done) return <div style={pageStyle}><div style={{ background:'white', borderRadius:'20px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 8px 40px rgba(0,0,0,0.1)' }}><div style={{ fontSize:'64px', marginBottom:'16px' }}>✅</div><h2 style={{ margin:'0 0 8px', color:'#0f172a', fontSize:'24px' }}>Priser innlevert!</h2><p style={{ margin:'0 0 12px', color:'#64748b' }}>Oppdragsgiver er varslet og vil kontakte deg.</p><p style={{ margin:0, color:'#94a3b8', fontSize:'13px' }}>Du kan lukke denne siden.</p></div></div>
 
   const totalAmount = chapters.reduce((acc,ch)=>acc+(ch.posts||[]).reduce((a,p)=>a+(parseFloat(p.qty)||0)*(parseFloat(p.uePrice)||0),0),0)
   const fristUtlopt = tender?.deadline && tender.deadline < new Date().toISOString().slice(0,10)
@@ -18953,13 +19043,32 @@ function UEPrisingsPage() {
           )}
         </div>
 
-        {fristUtlopt && (
+        {/* Kvittering som et felt på siden, ikke en side som erstatter alt.
+            Dialogen under skal være tilgjengelig også etter innlevering. */}
+        {erLevert && (
+          <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'16px', padding:'18px 22px' }}>
+            <div style={{ display:'flex', alignItems:'flex-start', gap:'12px' }}>
+              <div style={{ fontSize:'26px', lineHeight:1, flexShrink:0 }}>✅</div>
+              <div>
+                <div style={{ fontSize:'15px', fontWeight:'800', color:'#166534', marginBottom:'4px' }}>
+                  {nyligLevert ? 'Prisene er sendt inn!' : `Du har levert pris: ${fmtT(ueData?.total_amount || totalAmount)}`}
+                </div>
+                <div style={{ fontSize:'13px', color:'#15803d', lineHeight:1.55 }}>
+                  {nyligLevert ? 'Oppdragsgiver er varslet. ' : ''}
+                  Prisene er låst nå. Trenger du å endre noe, skriv det i dialogen under — da kan oppdragsgiver åpne tilbudet for revidering, og prisene dine ligger klare til å justeres.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {fristUtlopt && !erLevert && (
           <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'16px', padding:'16px 20px', color:'#b91c1c', fontSize:'14px', fontWeight:'600' }}>
             ⏰ Anbudsfristen ({tender.deadline}) er utløpt. Innlevering er stengt. Ta kontakt med oppdragsgiver hvis du fortsatt ønsker å gi pris.
           </div>
         )}
 
-        {erRevidering && !done && (
+        {erRevidering && (
           <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'16px', padding:'16px 20px', color:'#1d4ed8', fontSize:'14px', fontWeight:'600' }}>
             🔁 Oppdragsgiver har bedt om et revidert tilbud. Prisene fra ditt forrige tilbud er forhåndsutfylt — juster dem og send inn på nytt.
           </div>
@@ -18967,8 +19076,8 @@ function UEPrisingsPage() {
 
         {/* Spørsmål til oppdragsgiver */}
         <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>💬 Spørsmål til oppdragsgiver</h3>
-          <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#94a3b8' }}>Har du spørsmål til grunnlaget? Still dem her – svaret kommer på denne siden, så slipper du e-post frem og tilbake.</p>
+          <h3 style={{ margin:'0 0 4px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>💬 Dialog med oppdragsgiver</h3>
+          <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#94a3b8' }}>Spørsmål og svar går begge veier – svaret kommer på denne siden, så slipper du e-post frem og tilbake.</p>
           {sporsmal.length > 0 && (
             <div style={{ display:'flex', flexDirection:'column', gap:'8px', marginBottom:'14px' }}>
               {sporsmal.map((m,i) => (
@@ -18981,7 +19090,7 @@ function UEPrisingsPage() {
             </div>
           )}
           <div style={{ display:'flex', gap:'8px', alignItems:'flex-end' }}>
-            <textarea value={nyttSpm} onChange={e=>setNyttSpm(e.target.value)} rows={2} placeholder="Skriv spørsmålet ditt..." style={{ ...tInp, resize:'vertical', flex:1 }} />
+            <textarea value={nyttSpm} onChange={e=>setNyttSpm(e.target.value)} rows={2} placeholder="Skriv ditt svar / spørsmål..." style={{ ...tInp, resize:'vertical', flex:1 }} />
             <button onClick={postSpm} disabled={senderSpm||!nyttSpm.trim()} style={{ padding:'11px 18px', background: senderSpm||!nyttSpm.trim()?'#cbd5e1':'#059669', color:'white', border:'none', borderRadius:'10px', fontSize:'14px', fontWeight:'700', cursor: senderSpm||!nyttSpm.trim()?'default':'pointer', whiteSpace:'nowrap' }}>{senderSpm?'Sender...':'Send'}</button>
           </div>
         </div>
@@ -18998,7 +19107,9 @@ function UEPrisingsPage() {
                     <td style={{ padding:'16px 12px', color:'#0f172a', fontWeight:'500', lineHeight:1.55 }}>{p.description||'—'}</td>
                     <td style={{ padding:'16px 12px', textAlign:'right', color:'#475569', whiteSpace:'nowrap' }}>{p.qty}</td>
                     <td style={{ padding:'16px 12px', color:'#475569' }}>{p.unit}</td>
-                    <td style={{ padding:'12px' }}><input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'130px', textAlign:'right', borderColor:'#2563eb' }} /></td>
+                    <td style={{ padding:'12px', textAlign:'right' }}>{erLevert
+                      ? <span style={{ color:'#475569', fontWeight:'600', whiteSpace:'nowrap' }}>{fmtT(p.uePrice)}</span>
+                      : <input type="number" value={p.uePrice} onChange={e=>updatePrice(ch.id,p.id,e.target.value)} placeholder="0" style={{ ...tInp, width:'130px', textAlign:'right', borderColor:'#2563eb' }} />}</td>
                     <td style={{ padding:'16px 12px', textAlign:'right', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmtT(ls)}</td>
                   </tr>
                 })}
@@ -19007,22 +19118,30 @@ function UEPrisingsPage() {
           </div>
         ))}
 
-        <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'6px' }}>Forbehold / merknader (valgfritt)</label>
-          <textarea value={forbehold} onChange={e=>setForbehold(e.target.value)} rows={3} placeholder="F.eks. «Prisen forutsetter frostfri grunn», «Stillas ikke inkludert», forbehold om mengder e.l." style={{ ...tInp, resize:'vertical' }} />
-          <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8' }}>Eventuelle forbehold vises til oppdragsgiver sammen med prisen din.</p>
-        </div>
+        {(!erLevert || (ueData?.forbehold || forbehold)) && (
+          <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
+            <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'6px' }}>Forbehold / merknader (valgfritt)</label>
+            {erLevert
+              ? <p style={{ margin:0, fontSize:'14px', color:'#475569', lineHeight:1.6, whiteSpace:'pre-wrap' }}>{ueData?.forbehold || forbehold || '—'}</p>
+              : <>
+                  <textarea value={forbehold} onChange={e=>setForbehold(e.target.value)} rows={3} placeholder="F.eks. «Prisen forutsetter frostfri grunn», «Stillas ikke inkludert», forbehold om mengder e.l." style={{ ...tInp, resize:'vertical' }} />
+                  <p style={{ margin:'6px 0 0', fontSize:'12px', color:'#94a3b8' }}>Eventuelle forbehold vises til oppdragsgiver sammen med prisen din.</p>
+                </>}
+          </div>
+        )}
 
         <div style={{ background:'white', borderRadius:'16px', padding:'20px 24px', boxShadow:'0 2px 12px rgba(0,0,0,0.06)', border:'1px solid #f1f5f9' }}>
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'20px' }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: erLevert ? 0 : '20px' }}>
             <div><div style={{ fontSize:'13px', color:'#64748b', fontWeight:'600' }}>Din totalpris eks. mva</div></div>
-            <div style={{ fontSize:'26px', fontWeight:'800', color:'#0f172a' }}>{fmtT(totalAmount)}</div>
+            <div style={{ fontSize:'26px', fontWeight:'800', color:'#0f172a' }}>{fmtT(erLevert ? (ueData?.total_amount ?? totalAmount) : totalAmount)}</div>
           </div>
+          {erLevert ? null : <>
           <button data-tour="ue-lever" onClick={handleSubmit} disabled={submitting||totalAmount===0||fristUtlopt}
             style={{ width:'100%', padding:'16px', background:submitting||totalAmount===0||fristUtlopt?'#94a3b8':'#2563eb', color:'white', border:'none', borderRadius:'14px', fontSize:'16px', fontWeight:'700', cursor:submitting||totalAmount===0||fristUtlopt?'not-allowed':'pointer' }}>
             {fristUtlopt?'⏰ Fristen er utløpt':submitting?'Sender inn...':'📤 Lever priser'}
           </button>
           {totalAmount===0&&!fristUtlopt&&<p style={{ margin:'8px 0 0', fontSize:'13px', color:'#94a3b8', textAlign:'center' }}>Fyll inn priser for å levere</p>}
+          </>}
         </div>
         <p style={{ margin:0, fontSize:'12px', color:'#cbd5e1', textAlign:'center' }}>Sendt via En Plattform KS-system · enplattform.no</p>
       </div>
@@ -59262,6 +59381,322 @@ function usePrisbokSoek() {
   return { sok, aktivPrislisteKlar }
 }
 
+// ─── KOBLING AV MATERIALLINJER MOT PRISLISTE (Oppgave 2) ─────────────────────
+// En materiallinje kan bare hente pris fra prisboken når den har et NOBB-nummer.
+// Linjer uten NOBB har en STANDARDPRIS (veiledende) — den er ofte nyttig, men den
+// er ikke brukerens egen innkjøpspris. Alt herfra og ned handler om to ting:
+//   1) å vise ærlig hvilke linjer som faktisk er koblet, og
+//   2) å foreslå riktig vare fra prislisten når en linje skal kobles.
+//
+// Rangeringen er DIMENSJONSFØRST, ikke navnelikhet. Ren navnematching mot ekte
+// data foreslo treskruer for «Stenderverk 36x70» og isolasjonsplate for
+// «Gipsplate 13mm». En feil pris som ser riktig ut er verre enn ingen pris, så
+// en kandidat med feil dimensjon eller feil materialklasse blir DISKVALIFISERT,
+// ikke bare nedrangert.
+
+// Er materiallinjen koblet til prislisten?
+function matErKoblet(m) {
+  return !!(m && m.nobb != null && String(m.nobb).trim() !== '')
+}
+
+// { koblet, total, ukoblet } for materiallistene i én bygningsdel.
+function tellKobledeLinjer(materialer) {
+  const liste = Array.isArray(materialer) ? materialer : []
+  const koblet = liste.filter(matErKoblet).length
+  return { koblet, total: liste.length, ukoblet: liste.length - koblet }
+}
+
+// Normaliserer varetekst før dimensjonsuttrekk og ordmatching.
+// «×» → «x» (Maxbo og brukere blander), NBSP → vanlig mellomrom (finnes i JSX-
+// strengene våre), «13,5» → «13.5».
+function normaliserVaretekst(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[\u00D7\u2715\u2716\uFF58]/g, 'x')
+    .replace(/[\u2013\u2014]/g, '-')
+    .toLowerCase()
+    .replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const _DIM_PAR_RE = /(\d{1,4}(?:\.\d{1,2})?)\s*x\s*(\d{1,5}(?:\.\d{1,2})?)(?:\s*x\s*(\d{1,5}(?:\.\d{1,2})?))?/g
+const _DIM_MM_RE = /(\d{1,4}(?:\.\d{1,2})?)\s*mm\b/g
+
+// Trekker ut dimensjoner fra et varenavn.
+//   «Stenderverk 36x70»       → par [[36,70]]
+//   «GRAN UBH 36X073 C24»     → par [[36,73]]   (ledende null forsvinner i parseFloat)
+//   «Gipsplate 13mm»          → mm  [13]
+//   «GIPSPLATE 13X900X2400»   → par [[13,900,2400]]
+function ekstraherDimensjoner(tekst) {
+  const s = normaliserVaretekst(tekst)
+  const par = []
+  const tall = []
+  let m
+  _DIM_PAR_RE.lastIndex = 0
+  while ((m = _DIM_PAR_RE.exec(s)) !== null) {
+    const gruppe = [m[1], m[2], m[3]].filter(v => v !== undefined).map(v => parseFloat(v))
+    if (gruppe.some(n => !isFinite(n) || n <= 0)) continue
+    par.push(gruppe)
+    gruppe.forEach(n => tall.push(n))
+  }
+  const mm = []
+  _DIM_MM_RE.lastIndex = 0
+  while ((m = _DIM_MM_RE.exec(s)) !== null) {
+    const n = parseFloat(m[1])
+    if (isFinite(n) && n > 0) { mm.push(n); tall.push(n) }
+  }
+  return { par, mm, tall }
+}
+
+// Toleranse per måltall. Byggevarer selges i FAKTISKE mål mens folk snakker i
+// nominelle: «36x70» i kalkylen er «36x073» i prislisten, «36x95» er «36x098»,
+// «36x150» er «36x148». Toleransen må derfor slippe gjennom et par millimeter
+// på store mål, men IKKE på små — 13 mm gips og 15 mm gips er ulike varer.
+//   13 → 1.0   36 → 1.8   70 → 3.5   98 → 4.9   198 → 5.0
+function _dimTol(n) { return Math.max(1, Math.min(5, Math.abs(n) * 0.05)) }
+function _dimLik(a, b) { return Math.abs(a - b) <= Math.max(_dimTol(a), _dimTol(b)) }
+
+// Sammenligner kildelinjens dimensjon mot kandidatens.
+// Returnerer null når kilden HAR en dimensjon og kandidaten har en annen —
+// det er gaten som stopper «treskrue 5.0x70» for «Stenderverk 36x70».
+function sammenlignDimensjoner(kilde, kand) {
+  if (kilde.par.length > 0) {
+    if (kand.par.length === 0) {
+      const forste = kilde.par[0]
+      const alle = forste.every(n => kand.tall.some(t => _dimLik(n, t)))
+      if (alle && kand.tall.length > 0) return { score: 400, nivaa: 'delvis' }
+      return null
+    }
+    let best = null
+    for (const kp of kand.par) {
+      for (const sp of kilde.par) {
+        const a = sp.slice(0, 2), b = kp.slice(0, 2)
+        if (a.length < 2 || b.length < 2) continue
+        if (a[0] === b[0] && a[1] === b[1]) { best = { score: 1000, nivaa: 'eksakt' }; break }
+        if (_dimLik(a[0], b[0]) && _dimLik(a[1], b[1])) {
+          if (!best || best.score < 850) best = { score: 850, nivaa: 'naer' }
+        } else if (_dimLik(a[0], b[1]) && _dimLik(a[1], b[0])) {
+          if (!best || best.score < 700) best = { score: 700, nivaa: 'naer' }
+        }
+      }
+      if (best && best.score === 1000) break
+    }
+    return best  // null = feil dimensjon → diskvalifisert
+  }
+
+  if (kilde.mm.length > 0) {
+    const t = kilde.mm[0]
+    // Tykkelsen står nesten alltid FØRST i plate-navn: «GIPSPLATE 13X900X2400»
+    const forste = kand.par.length > 0 ? kand.par[0][0] : (kand.mm.length > 0 ? kand.mm[0] : null)
+    if (forste !== null && _dimLik(t, forste)) return { score: 900, nivaa: forste === t ? 'eksakt' : 'naer' }
+    if (kand.tall.some(n => _dimLik(t, n))) return { score: 500, nivaa: 'delvis' }
+    if (kand.tall.length === 0) return { score: 0, nivaa: null }  // kandidat uten mål i navnet — ingen gate
+    return null
+  }
+
+  return { score: 0, nivaa: null }  // kilden har ingen dimensjon — ingen gate å bruke
+}
+
+// Materialklasser. `kilde` er ordene brukeren skriver i kalkylen, `kandidat` er
+// ordene som faktisk står i prisbokens varenavn (5001-filene skriver STORE
+// bokstaver og forkortelser), `soek` er termer som er gode å søke på i prisboken.
+const KOB_MATERIALKLASSER = [
+  { id:'gips', navn:'Gipsplate',
+    kilde:['gips','gyproc','norgips','glasroc','fibergips'],
+    kandidat:['GIPS','GYPROC','NORGIPS','GLASROC','FIBERGIPS'],
+    soek:['gips'] },
+  { id:'isolasjon', navn:'Isolasjon',
+    kilde:['isolasjon','isoler','mineralull','steinull','glassull','glava','rockwool','eps','xps','sundolitt','jackon','isopor'],
+    kandidat:['ISOLASJON','ISOL','MINERALULL','STEINULL','GLASSULL','GLAVA','ROCKWOOL','EPS','XPS','SUNDOLITT','JACKON','FLEXI'],
+    soek:['isolasjon','glava','rockwool'] },
+  { id:'trevirke', navn:'Konstruksjonsvirke',
+    kilde:['stender','bindingsverk','reisverk','bjelke','sperre','taksperre','lekt','sløyfe','sloyfe','trelast','virke','konstruksjonsvirke','impregnert','gran','furu','c24','c18','svill','remstokk','losholt','stubbloft','tilfarer'],
+    kandidat:['GRAN','FURU','IMPR','KONSTR','C24','C18','LEKT','SLØYFE','SLOYFE','TRELAST','UBH','HØVL','HOVL','K-VIRKE','KVIRKE','STENDER','BJELKE'],
+    soek:['gran','impregnert','lekt'] },
+  { id:'treplate', navn:'Trebasert plate',
+    kilde:['osb','sponplate','kryssfiner','finer','mdf','huntonit','trefiber','gulvplate','undergulv'],
+    kandidat:['OSB','SPONPL','KRYSSFIN','FINER','MDF','HUNTONIT','TREFIBER','GULVPL'],
+    soek:['osb','sponplate','kryssfiner'] },
+  { id:'sperresjikt', navn:'Sperresjikt/membran',
+    kilde:['dampsperre','vindsperre','undertak','membran','radonsperre','radon','asfaltpapp','plastfolie','byggfolie','tyvek','vindtett','fuktsperre'],
+    kandidat:['DAMPSP','VINDSP','UNDERTAK','MEMBRAN','RADON','ASFALTPAPP','TYVEK','FOLIE','VINDTETT','PLATON'],
+    soek:['dampsperre','vindsperre','membran'] },
+  { id:'kledning', navn:'Kledning/panel/list',
+    kilde:['kledning','panel','veggpanel','takpanel','listverk','list','gerikt','fotlist','taklist','glattkant','tømmermannspanel','tommermannspanel'],
+    kandidat:['KLEDNING','PANEL','LIST','GERIKT','FOTLIST','GLATTKANT'],
+    soek:['kledning','panel','list'] },
+  { id:'fest', navn:'Feste/skruer',
+    kilde:['skrue','skruer','spiker','stift','bolt','beslag','vinkelbeslag','festemiddel','festemidler','plugg','ankerskinne','klammer','gjengestang'],
+    kandidat:['SKRUE','SPIKER','STIFT','BOLT','BESLAG','VINKEL','PLUGG','KLAMMER','ANKER','GJENGE'],
+    soek:['skrue','spiker','beslag'] },
+  { id:'betong', navn:'Betong/mur',
+    kilde:['betong','sement','mørtel','mortel','leca','blokk','armering','armeringsnett','støp','stop','pukk','grus','singel'],
+    kandidat:['BETONG','SEMENT','MØRTEL','MORTEL','LECA','BLOKK','ARMERING','PUKK','GRUS','SINGEL'],
+    soek:['betong','armering','leca'] },
+  { id:'flis', navn:'Flis/lim/sparkel',
+    kilde:['flis','fliser','flislim','sparkel','avretting','fugemasse','fugemørtel','fugemortel','flytsparkel'],
+    kandidat:['FLIS','LIM','SPARKEL','AVRETT','FUGE'],
+    soek:['flis','flislim','sparkel'] },
+  { id:'maling', navn:'Maling/beis',
+    kilde:['maling','beis','grunning','primer','lakk','trebeskyttelse','oljemaling'],
+    kandidat:['MALING','BEIS','GRUNNING','PRIMER','LAKK'],
+    soek:['maling','beis','grunning'] },
+  { id:'tak', navn:'Taktekking',
+    kilde:['takstein','takpanne','takplate','takrenne','nedløp','nedlop','møne','mone','shingel','takbelegg'],
+    kandidat:['TAKSTEIN','TAKPANNE','TAKPLATE','TAKRENNE','NEDLØP','NEDLOP','MØNE','MONE','SHINGEL'],
+    soek:['takstein','takrenne','takplate'] },
+  { id:'gulv', navn:'Gulvbelegg',
+    kilde:['parkett','laminat','vinyl','gulvbelegg','gulvbord','heltregulv'],
+    kandidat:['PARKETT','LAMINAT','VINYL','BELEGG','GULVBORD'],
+    soek:['parkett','laminat','gulvbord'] },
+  { id:'dor_vindu', navn:'Dør/vindu',
+    kilde:['dør','dor','vindu','karm','dørblad','dorblad','ytterdør','innerdør','vindusramme'],
+    kandidat:['DØR','DOR','VINDU','KARM'],
+    soek:['dør','vindu'] },
+]
+
+// Ordstart-match. «list» treffer «listverk», men ikke «prisliste».
+function _harOrdstart(normalisertNavn, ord) {
+  const i = normalisertNavn.indexOf(ord)
+  if (i === -1) return false
+  if (i === 0) return true
+  const forrige = normalisertNavn[i - 1]
+  return !/[a-zæøå0-9]/.test(forrige)
+}
+
+// Finner materialklassen til brukerens linje. Klassen med det LENGSTE
+// matchende ordet vinner, så «gipsplate» slår «plate».
+function finnMaterialklasse(varenavn) {
+  const s = normaliserVaretekst(varenavn)
+  if (!s) return null
+  let best = null, bestLengde = 0
+  for (const kl of KOB_MATERIALKLASSER) {
+    for (const ord of kl.kilde) {
+      if (ord.length > bestLengde && _harOrdstart(s, ord)) { best = kl; bestLengde = ord.length }
+    }
+  }
+  return best
+}
+
+// Har kandidaten fra prisboken samme materialklasse?
+function kandidatMatcherKlasse(varenavn, klasse) {
+  if (!klasse) return true
+  const s = String(varenavn || '').toUpperCase()
+  return klasse.kandidat.some(k => s.includes(k))
+}
+
+// Bygger søketermene vi prøver mot prisboken, i prioritert rekkefølge.
+// Vi kan ikke søke på «36x70» alene — prislisten skriver «36x073». Derfor er
+// den bredeste og viktigste varianten «klasseord + første måltall» («gran 36»),
+// som treffer alle skrivemåter. Presisjonen tas av gaten i JavaScript etterpå.
+function byggKoblingsSoek(varenavn, dim, klasse) {
+  const rent = normaliserVaretekst(varenavn)
+  const ut = []
+  const push = (t) => {
+    const v = sanitiserSoeketerm(String(t == null ? '' : t).trim()).replace(/\s+/g, ' ').trim()
+    if (v.length >= 2 && !ut.includes(v)) ut.push(v)
+  }
+  const par = dim.par[0] || null
+  const tykk = dim.mm.length > 0 ? dim.mm[0] : null
+  const forsteTall = par ? par[0] : tykk
+  const klasseOrd = (klasse && klasse.soek) || []
+
+  for (const ko of klasseOrd.slice(0, 3)) {
+    if (forsteTall != null) push(`${ko} ${_heltallTekst(forsteTall)}`)
+    else push(ko)
+  }
+  if (par && par.length >= 2) {
+    const a = _heltallTekst(par[0]), b = _heltallTekst(par[1])
+    push(`${a}x${b}`)
+    if (/^\d+$/.test(b)) push(`${a}x${b.padStart(3, '0')}`)
+  }
+  const utenDim = rent
+    .replace(/\d+(\.\d+)?\s*x\s*\d+(\.\d+)?(\s*x\s*\d+(\.\d+)?)?/g, ' ')
+    .replace(/\d+(\.\d+)?\s*mm\b/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+  const hovedord = utenDim.split(' ').filter(w => w.length >= 3).slice(0, 3)
+  if (hovedord.length > 0) push(hovedord.join(' '))
+  if (hovedord.length > 1) push(hovedord[0])
+  return ut.slice(0, 6)
+}
+
+function _heltallTekst(n) {
+  return Number.isInteger(n) ? String(n) : String(n)
+}
+
+// Henter og rangerer kandidater for ÉN materiallinje.
+// `sok` er funksjonen fra usePrisbokSoek(). Returnerer maks `maks` treff,
+// alle med dimensjon og materialklasse som faktisk stemmer.
+async function finnKoblingsKandidater(sok, material, maks = 5) {
+  const varenavn = String((material && material.varenavn) || '').trim()
+  if (!varenavn || typeof sok !== 'function') return []
+  const kildeDim = ekstraherDimensjoner(varenavn)
+  const klasse = finnMaterialklasse(varenavn)
+  const varianter = byggKoblingsSoek(varenavn, kildeDim, klasse)
+  if (varianter.length === 0) return []
+
+  const raa = new Map()
+  for (const term of varianter) {
+    if (raa.size >= 60) break
+    let treff = []
+    try { treff = await sok(term, { maxResultater: 40 }) } catch (e) { treff = [] }
+    for (const r of treff) {
+      const key = r.varenummer || `_${r.id}`
+      if (!raa.has(key)) raa.set(key, r)
+    }
+  }
+  if (raa.size === 0) return []
+
+  const linjeEnhet = String((material && material.enhet) || '').trim().toLowerCase()
+  // Navnelikheten må måles mot BRUKERENS varenavn, ikke mot søketermen som
+  // tilfeldigvis fant kandidaten. rad._score kommer fra den enkelte søkevarianten
+  // («gran 36», «dampsperre», …) og er ikke sammenlignbar på tvers av dem — en
+  // kandidat funnet via «dampsperre» ville ellers slå «Vindsperre» på egen bane.
+  const renKildeTerm = sanitiserSoeketerm(normaliserVaretekst(varenavn))
+  const kildeOrd = renKildeTerm.split(/\s+/).filter(w => w.length >= 2)
+  const vurdert = []
+  for (const rad of raa.values()) {
+    if (!kandidatMatcherKlasse(rad.varenavn, klasse)) continue
+    const kandDim = ekstraherDimensjoner(rad.varenavn)
+    const dimTreff = sammenlignDimensjoner(kildeDim, kandDim)
+    if (dimTreff === null) continue  // feil dimensjon → ut
+
+    let score = dimTreff.score * 3
+    if (klasse) score += 300
+    if (kildeOrd.length > 0) score += Math.min(500, rangerTreff(rad, renKildeTerm, kildeOrd))
+    const kandEnhet = String(rad.enhet || '').trim().toLowerCase()
+    if (linjeEnhet && kandEnhet && linjeEnhet === kandEnhet) score += 150
+
+    let tillit = 'lav'
+    if (klasse && dimTreff.nivaa === 'eksakt') tillit = 'hoy'
+    else if (klasse && (dimTreff.nivaa === 'naer' || dimTreff.nivaa === 'delvis')) tillit = 'middels'
+    else if (dimTreff.nivaa === 'eksakt') tillit = 'middels'
+
+    const begrunnelse = []
+    if (dimTreff.nivaa === 'eksakt') begrunnelse.push('samme dimensjon')
+    else if (dimTreff.nivaa === 'naer') begrunnelse.push('dimensjon stemmer (byggemål)')
+    else if (dimTreff.nivaa === 'delvis') begrunnelse.push('målet finnes i navnet')
+    if (klasse) begrunnelse.push(klasse.navn.toLowerCase())
+    if (linjeEnhet && kandEnhet && linjeEnhet === kandEnhet) begrunnelse.push(`enhet ${kandEnhet}`)
+
+    vurdert.push({ ...rad, _kobScore: score, _kobTillit: tillit, _kobBegrunnelse: begrunnelse.join(' · ') })
+  }
+
+  vurdert.sort((a, b) => {
+    if (b._kobScore !== a._kobScore) return b._kobScore - a._kobScore
+    return String(a.varenavn || '').localeCompare(String(b.varenavn || ''), 'nb')
+  })
+  return vurdert.slice(0, maks)
+}
+
+// Farger for tillitsmerket i koblingsassistenten.
+const KOB_TILLIT_STIL = {
+  hoy:     { bg:'#f0fdf4', color:'#15803d', border:'#bbf7d0', tekst:'Treffer godt' },
+  middels: { bg:'#fefce8', color:'#a16207', border:'#fef08a', tekst:'Sannsynlig' },
+  lav:     { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', tekst:'Usikker' },
+}
+
 // ─── PRISBOK-SØKEFELT (Patch 13 Sesjon C.2.B, refaktorert i Patch 13.B.5) ─────
 // Gjenbrukbart søkefelt mot prisbok-tabellen i Supabase.
 // Brukt i BimNyKonstruksjonDialog for å fylle ut materialer raskt.
@@ -69803,6 +70238,11 @@ function bibliotekTilBygningsdel(bd, mengde) {
     mengde: m,
     enhet: bd.enhet || 'stk',
     source_bibliotek_id: bd.id,
+    // Peker tilbake til raden i bruker_bibliotek når bygningsdelen ble hentet fra
+    // brukerens EGET bibliotek. Da skal «Lagre til bibliotek» oppdatere den raden
+    // i stedet for å lage en ny. Innebygde bygningsdeler har ingen slik rad — de
+    // får null og lagres som en ny rad i brukerens eget bibliotek.
+    source_bruker_mal_id: bd._isBrukerMal ? bd.id : null,
     arbeidsarter: arbeidsarter.map((a) => ({
       id: nyRadId(),
       beskrivelse: a.beskrivelse || '',
@@ -70909,6 +71349,201 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   )
 }
 
+// ─── KOBLINGSASSISTENT (Oppgave 2, del 2) ────────────────────────────────────
+// Går gjennom materiallinjene UTEN NOBB, én om gangen, og foreslår 3–5
+// kandidater fra brukerens aktive prisliste. Forslagene er dimensjonsstyrte:
+// en kandidat med feil dimensjon eller feil materialklasse vises ikke i det
+// hele tatt. Finner vi ingenting, sier vi det — og «Hopp over» er et fullgodt
+// svar. Ingen linje tvinges til å velge.
+//
+// Layout er bygget for 375 px: full skjerm på mobil, ett kort per forslag med
+// trykkflate over 56 px, og ingen sideveis scroll.
+function KoblingsassistentModal({ linjer, bdNavn, onKoble, onClose }) {
+  const { sok: prisbokSok } = usePrisbokSoek()
+  const [idx, setIdx] = useState(0)
+  const [kandidater, setKandidater] = useState([])
+  const [laster, setLaster] = useState(false)
+  const [egetSok, setEgetSok] = useState('')
+  const [sokTreff, setSokTreff] = useState([])
+  const [sokLaster, setSokLaster] = useState(false)
+  const [koblet, setKoblet] = useState(0)
+  const [hoppet, setHoppet] = useState(0)
+  const kjoringRef = React.useRef(0)
+  const sokRef = React.useRef(0)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  // Køen fryses ved åpning. Kobler brukeren linje 1, forsvinner den fra
+  // parentens `linjer` — uten frysing ville listen krympe under føttene på oss
+  // og indeksen hoppe over neste linje.
+  const koeRef = React.useRef(Array.isArray(linjer) ? linjer.slice() : [])
+  const koe = koeRef.current
+  const aktiv = koe[idx] || null
+
+  // Hent forslag for gjeldende linje
+  useEffect(() => {
+    if (!aktiv) { setKandidater([]); return }
+    const kjoring = ++kjoringRef.current
+    setLaster(true)
+    setKandidater([])
+    setEgetSok('')
+    setSokTreff([])
+    finnKoblingsKandidater(prisbokSok, aktiv, 5)
+      .then(res => { if (kjoringRef.current === kjoring) { setKandidater(res); setLaster(false) } })
+      .catch(() => { if (kjoringRef.current === kjoring) { setKandidater([]); setLaster(false) } })
+  }, [idx, aktiv && aktiv.id])
+
+  // Fritekstsøk (brukeren søker selv)
+  useEffect(() => {
+    const term = egetSok.trim()
+    if (term.length < 2) { setSokTreff([]); setSokLaster(false); return }
+    const kjoring = ++sokRef.current
+    setSokLaster(true)
+    const t = setTimeout(() => {
+      prisbokSok(term, { maxResultater: 15 })
+        .then(res => { if (sokRef.current === kjoring) { setSokTreff(res || []); setSokLaster(false) } })
+        .catch(() => { if (sokRef.current === kjoring) { setSokTreff([]); setSokLaster(false) } })
+    }, 350)
+    return () => clearTimeout(t)
+  }, [egetSok])
+
+  const nesteLinje = () => setIdx(i => i + 1)
+
+  const velgProdukt = (p) => {
+    if (!aktiv) return
+    onKoble(aktiv.id, p)
+    setKoblet(c => c + 1)
+    nesteLinje()
+  }
+  const hoppOver = () => { setHoppet(h => h + 1); nesteLinje() }
+
+  const ferdig = !aktiv
+  const totalt = koe.length
+
+  const kort = (p, visBegrunnelse) => {
+    const stil = KOB_TILLIT_STIL[p._kobTillit] || KOB_TILLIT_STIL.lav
+    return (
+      <button key={p.id || p.varenummer} onClick={() => velgProdukt(p)}
+        style={{ display:'block', width:'100%', textAlign:'left', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white', padding:'12px 14px', marginBottom:'8px', cursor:'pointer', minHeight:'56px', boxSizing:'border-box' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', justifyContent:'space-between' }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', lineHeight:1.35, wordBreak:'break-word' }}>{p.varenavn}</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'3px', fontFamily:'monospace' }}>NOBB {p.varenummer}</div>
+          </div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize:'15px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap' }}>{fmtI(p.pris_per_enhet)}</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8' }}>per {p.enhet || 'stk'}</div>
+          </div>
+        </div>
+        {visBegrunnelse && (
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'8px', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', background:stil.bg, color:stil.color, border:`1px solid ${stil.border}` }}>{stil.tekst}</span>
+            {p._kobBegrunnelse && <span style={{ fontSize:'11px', color:'#94a3b8' }}>{p._kobBegrunnelse}</span>}
+          </div>
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '560px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '86vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px' }}>
+            <div style={{ minWidth:0 }}>
+              <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔗 Koble til prisliste</h3>
+              <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bdNavn || 'Bygningsdel'}</p>
+            </div>
+            <button onClick={onClose} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor:'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+          </div>
+          {!ferdig && (
+            <>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'10px', fontSize:'11px', color:'#64748b' }}>
+                <span>Linje {idx + 1} av {totalt}</span>
+                <span>{koblet} koblet{hoppet > 0 ? ` · ${hoppet} hoppet over` : ''}</span>
+              </div>
+              <div style={{ height:'4px', borderRadius:'999px', background:'#f1f5f9', marginTop:'5px', overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${totalt ? (idx / totalt) * 100 : 0}%`, background:'#059669', transition:'width 0.2s' }} />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Innhold */}
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {ferdig ? (
+            <div style={{ textAlign:'center', padding:'32px 8px' }}>
+              <div style={{ fontSize:'40px', marginBottom:'10px' }}>{koblet > 0 ? '✅' : '👍'}</div>
+              <p style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Gjennomgangen er ferdig</p>
+              <p style={{ margin:0, fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>
+                {koblet} av {totalt} linjer er koblet til prislisten din.
+                {hoppet > 0 ? ` ${hoppet} ble hoppet over og beholder veiledende pris.` : ''}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Linjen som skal kobles */}
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.03em', marginBottom:'4px' }}>MATERIALLINJE</div>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{aktiv.varenavn || 'Uten navn'}</div>
+                <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
+                  {aktiv.mengde || 0} {aktiv.enhet || 'stk'} · veiledende {fmtI(aktiv.enhetspris)} per {aktiv.enhet || 'stk'}
+                </div>
+              </div>
+
+              {/* Forslag */}
+              {laster && (
+                <div style={{ textAlign:'center', padding:'22px', fontSize:'13px', color:'#2563eb' }}>Leter i prislisten din …</div>
+              )}
+              {!laster && kandidater.length > 0 && (
+                <>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>FORSLAG FRA PRISLISTEN DIN</div>
+                  {kandidater.map(p => kort(p, true))}
+                </>
+              )}
+              {!laster && kandidater.length === 0 && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
+                  <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
+                    Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk gjerne selv under — eller hopp over, så beholder linjen den veiledende prisen.
+                  </div>
+                </div>
+              )}
+
+              {/* Søk selv */}
+              <div style={{ marginTop:'14px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>SØK SELV</div>
+                <input value={egetSok} onChange={e => setEgetSok(e.target.value)}
+                  placeholder="Varenavn eller NOBB-nummer …"
+                  style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
+                {sokLaster && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker …</div>}
+                {!sokLaster && egetSok.trim().length >= 2 && sokTreff.length === 0 && (
+                  <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Ingen treff for «{egetSok.trim()}».</div>
+                )}
+                {sokTreff.length > 0 && <div style={{ marginTop:'8px' }}>{sokTreff.map(p => kort(p, false))}</div>}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Bunn */}
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {ferdig ? (
+            <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : (
+            <>
+              <button onClick={hoppOver} style={{ flex:1, background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Hopp over</button>
+              <button onClick={onClose} style={{ flex:1, background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Avslutt</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
 
 function PrisbokPage({ onBack }) {
@@ -71843,9 +72478,20 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // Reparér id-kollisjoner FØR første render, slik at ingen skriving kan treffe
   // to rader i en kalkyle som ble lagret med de gamle Date.now()-id-ene.
   const [k, setK] = useState(() => medReparerteKalkyleIder(init))
+  // Speiler siste kalkyle-tilstand. Koblingsassistenten skriver flere linjer
+  // rett etter hverandre, og må lese den NYESTE tilstanden — ikke den React
+  // rakk å rendre. Uten dette kan to raske valg overskrive hverandre.
+  const kRef = React.useRef(k)
+  kRef.current = k
   const [activeKalkId, setActiveKalkId] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
   const [showBibliotekPicker, setShowBibliotekPicker] = useState(null)
+  // Koblingsassistenten: { kalkId, bdId } når den er åpen.
+  const [showKoblingsassistent, setShowKoblingsassistent] = useState(null)
+  // Brukerens egne bibliotekrader (id/navn/fag). Avgjør om «Lagre til bibliotek»
+  // oppdaterer en eksisterende rad eller oppretter en ny — og lar knappen si det
+  // før brukeren trykker.
+  const [mineMaler, setMineMaler] = useState([])
   const [showSendModal, setShowSendModal] = useState(false)
   const [showPreviewMenu, setShowPreviewMenu] = useState(false)
   const [showTilbudPopup, setShowTilbudPopup] = useState(null) // null, 'no-module', 'created'
@@ -71867,6 +72513,17 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [init?.id])
+
+  // Brukerens egne bygningsdeler i biblioteket. Lett spørring (kun id/navn/fag) —
+  // brukes til å avgjøre lagre-modus, ikke til å vise innhold.
+  useEffect(() => {
+    if (!user?.id) return
+    let avbrutt = false
+    supabase.from('bruker_bibliotek').select('id, name, fag').eq('user_id', user.id).order('created_at', { ascending: false })
+      .then(({ data }) => { if (!avbrutt) setMineMaler(data || []) })
+      .catch(() => {})
+    return () => { avbrutt = true }
+  }, [user?.id])
 
   // Check if user has tilbud module + load UE-tilbud
   useEffect(() => {
@@ -71952,6 +72609,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const newBd = JSON.parse(JSON.stringify(bd))
     newBd.id = nyRadId()
     newBd.name = bd.name + ' (kopi)'
+    // Kopien er en NY bygningsdel. Den skal ikke peke på — og dermed overskrive —
+    // bibliotekraden originalen ble hentet fra.
+    newBd.source_bruker_mal_id = null
     // Reset all sub-IDs — kopien må ikke dele id med originalen, ellers treffer
     // en skriving begge bygningsdelene.
     newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a) => ({ ...a, id: nyRadId() }))
@@ -71975,20 +72635,98 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     setShowMoveBdModal(null)
   }
 
-  // Save bygningsdel to user library
+  // Hvilken rad i brukerens eget bibliotek hører bygningsdelen til?
+  //   1) source_bruker_mal_id — satt når bygningsdelen ble hentet fra eget
+  //      bibliotek, eller sist lagret dit. Dette er den sikre koblingen.
+  //   2) Fallback for bygningsdeler laget FØR koblingen fantes: eksakt navnetreff
+  //      innen samme faggruppe. mineMaler er sortert nyest først, så nyeste rad
+  //      vinner hvis brukeren allerede har rukket å lage duplikater.
+  // Returnerer null når bygningsdelen ikke finnes i brukerens bibliotek — da
+  // skal den lagres som en ny rad (typisk en innebygd bygningsdel han har hentet).
+  const finnBibliotekMalId = (bd, fag) => {
+    const direkte = bd && bd.source_bruker_mal_id
+    if (direkte && mineMaler.some(r => String(r.id) === String(direkte))) return direkte
+    const navn = String((bd && bd.name) || '').trim().toLowerCase()
+    if (!navn) return null
+    const treff = mineMaler.find(r => r.fag === fag && String(r.name || '').trim().toLowerCase() === navn)
+    return treff ? treff.id : null
+  }
+
+  // Sier om «Lagre til bibliotek» kommer til å oppdatere eller opprette.
+  // Brukes i knappeteksten, slik at brukeren vet det FØR han trykker.
+  const bibliotekLagreModus = (bd, fag) => (finnBibliotekMalId(bd, fag) ? 'oppdater' : 'ny')
+
+  // Skriver bibliotek-koblingen tilbake på bygningsdelen. Dette er bokføring,
+  // ikke en brukerendring, så den skal ikke havne på angre-stabelen.
+  // Leser fra kRef: kallet skjer ETTER en await mot Supabase, og render-closuren
+  // kan da være foreldet — uten dette ville endringer gjort i mellomtiden bli borte.
+  const merkBdBibliotekId = (kalId, bdId, malId) => {
+    const naa = kRef.current
+    if (!naa) return
+    const oppdatert = { ...naa, kalkyler: (naa.kalkyler || []).map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, source_bruker_mal_id: malId } : b) } : kl) }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
+  }
+
+  // Lagre bygningsdel til brukerens eget bibliotek.
+  // Eier brukeren allerede raden, OPPDATERES den. Ellers opprettes én ny rad i
+  // HANS bibliotek (bruker_bibliotek med user_id + company_id). Vi skriver aldri
+  // til det felles biblioteket — de innebygde bygningsdelene ligger i koden.
+  // Ingen dialog spør hvor det skal lagres; det finnes bare ett sted.
   const saveBdToLibrary = async (kalId, bd) => {
     const kl = kalkyler.find(k => k.id === kalId)
     if (!kl || !bd) return
+    const navn = String(bd.name || '').trim() || 'Uten navn'
+    const data = { arbeidsarter: bd.arbeidsarter, materialer: bd.materialer, underleverandorer: bd.underleverandorer, enhet: bd.enhet }
     try {
-      await supabase.from('bruker_bibliotek').insert({
-        user_id: user?.id,
-        fag: kl.fag,
-        kategori: 'Egne maler',
-        name: bd.name,
-        data: { arbeidsarter: bd.arbeidsarter, materialer: bd.materialer, underleverandorer: bd.underleverandorer, enhet: bd.enhet },
-      })
-      setToastMsg({ title: 'Lagret til bibliotek', message: `"${bd.name}" er lagret under Egne maler`, type: 'success' })
-    } catch(e) { setToastMsg({ title: 'Feil', message: 'Kunne ikke lagre: ' + e.message, type: 'error' }) }
+      const malId = finnBibliotekMalId(bd, kl.fag)
+      if (malId) {
+        // .select() er ikke pynt: uten en UPDATE-policy på raden returnerer
+        // Supabase 0 rader UTEN feil, og brukeren ville fått «oppdatert» i
+        // munnen mens ingenting ble lagret.
+        const { data: endret, error } = await supabase.from('bruker_bibliotek')
+          .update({ name: navn, kategori: 'Egne maler', data })
+          .eq('id', malId).eq('user_id', user?.id)
+          .select('id')
+        if (error) throw error
+        if (!endret || endret.length === 0) throw new Error('Fikk ikke oppdatert bygningsdelen i biblioteket (ingen rad ble endret)')
+        merkBdBibliotekId(kalId, bd.id, malId)
+        setMineMaler(prev => prev.map(r => String(r.id) === String(malId) ? { ...r, name: navn } : r))
+        setToastMsg({ title: 'Bygningsdel oppdatert', message: `"${navn}" er oppdatert i biblioteket ditt`, type: 'success' })
+        return
+      }
+      // company_id settes eksplisitt så raden er synlig for bedriften via RLS
+      let companyId = null
+      try {
+        const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
+        companyId = (prof && prof.company_id) || null
+      } catch(_) {}
+      const { data: nyRad, error } = await supabase.from('bruker_bibliotek')
+        .insert({ user_id: user?.id, company_id: companyId, fag: kl.fag, kategori: 'Egne maler', name: navn, data })
+        .select('id, name, fag').single()
+      if (error) throw error
+      if (nyRad && nyRad.id) {
+        merkBdBibliotekId(kalId, bd.id, nyRad.id)
+        setMineMaler(prev => [{ id: nyRad.id, name: nyRad.name, fag: nyRad.fag }, ...prev])
+      }
+      setToastMsg({ title: 'Lagret i biblioteket', message: `"${navn}" er lagret som ny bygningsdel i biblioteket ditt`, type: 'success' })
+    } catch(e) {
+      setToastMsg({ title: 'Feil', message: 'Kunne ikke lagre: ' + ((e && e.message) || 'ukjent feil'), type: 'error' })
+    }
+  }
+
+  // Koblingsassistenten skriver NOBB, varenavn, enhet og pris inn på linjen.
+  // Leser fra kRef, ikke fra render-closuren, så to raske valg ikke kolliderer.
+  const koblMaterialLinje = (kalkId, bdId, matId, p) => {
+    const naa = kRef.current
+    if (!naa || !p) return
+    const nyeKalkyler = (naa.kalkyler || []).map(kl => kl.id === kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === matId
+      ? { ...mt, nobb: p.varenummer, varenavn: p.varenavn || mt.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet, _ny: false, _varselVist: true }
+      : mt) } : b) } : kl)
+    setUndoStack(prev => [...prev.slice(-9), naa.kalkyler || []])
+    const oppdatert = { ...naa, kalkyler: nyeKalkyler }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
   }
 
   // Bygningsdel field update (name, mengde, enhet)
@@ -72931,16 +73669,24 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                               {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
                               {!isExpanded && (bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>📐 {(bd.flatetillegg||[]).length}</span>}
                               {!isExpanded && (bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#fef2f2', color:'#dc2626', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>🚪 {(bd.apningstillegg||[]).length}</span>}
+                              {/* Hvor mange materiallinjer henter pris fra brukerens egen prisliste */}
+                              {!isExpanded && (() => {
+                                const kob = tellKobledeLinjer(bd.materialer)
+                                if (kob.total === 0) return null
+                                const alle = kob.ukoblet === 0
+                                return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste`} style={{ fontSize:'10px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>{alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}</span>
+                              })()}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '6px' : '10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
                               {!isMobKV && <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>}
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
-                                {!isMobKV && <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>}
-                                {!isMobKV && kalkyler.length > 1 && <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })} title="Flytt til annen faggruppe" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>↗️</button>}
-                                {!isMobKV && <button onClick={() => saveBdToLibrary(kalk.id, bd)} title="Lagre til bibliotek" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>💾</button>}
-                                <button onClick={() => removeBd(kalk.id, bd.id)} title="Slett" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
+                                {/* Kopier / flytt / lagre lå her som tre ikoner uten tekst og gjorde
+                                    helt ulike ting. De står nå som tekstknapper i den utvidede
+                                    visningen — der er det plass til å si hva de gjør, og de er
+                                    tilgjengelige på mobil også. */}
+                                <button onClick={() => removeBd(kalk.id, bd.id)} title="Slett bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
                               </div>
                             </div>
                           </div>
@@ -72969,6 +73715,32 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                     <option value="rs">rs</option>
                                   </select>
                                 </div>
+                              </div>
+                              {/* Handlinger på bygningsdelen — med synlig tekst, ikke bare ikoner.
+                                  «Lagre» sier om den oppdaterer en eksisterende bygningsdel i
+                                  biblioteket eller oppretter en ny. */}
+                              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'12px' }}>
+                                <button onClick={() => copyBd(kalk.id, bd)}
+                                  title="Lager en ny kopi av bygningsdelen i denne faggruppen"
+                                  style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'600', color:'#374151', cursor:'pointer', minHeight:'34px' }}>📋 Kopier bygningsdel</button>
+                                {kalkyler.length > 1 && (
+                                  <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })}
+                                    title="Flytt bygningsdelen til en annen faggruppe i denne kalkylen"
+                                    style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'600', color:'#374151', cursor:'pointer', minHeight:'34px' }}>↗️ Flytt til annen faggruppe</button>
+                                )}
+                                {(() => {
+                                  const modus = bibliotekLagreModus(bd, kalk.fag)
+                                  const oppdaterer = modus === 'oppdater'
+                                  return (
+                                    <button onClick={() => saveBdToLibrary(kalk.id, bd)}
+                                      title={oppdaterer
+                                        ? `Oppdaterer «${bd.name || 'Uten navn'}» i biblioteket ditt — ingen ny kopi opprettes`
+                                        : `Lagrer «${bd.name || 'Uten navn'}» som en ny bygningsdel i biblioteket ditt`}
+                                      style={{ background: oppdaterer ? '#eff6ff' : '#f0fdf4', border: `1px solid ${oppdaterer ? '#bfdbfe' : '#bbf7d0'}`, borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'600', color: oppdaterer ? '#1d4ed8' : '#15803d', cursor:'pointer', minHeight:'34px' }}>
+                                      💾 {oppdaterer ? 'Oppdater i biblioteket' : 'Lagre som ny i biblioteket'}
+                                    </button>
+                                  )
+                                })()}
                               </div>
                               <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'12px', marginTop:'-8px', paddingLeft:'12px' }}>Postene nedenfor viser verdier per {bd.enhet || 'enhet'}. Totalen beregnes automatisk: per enhet × {bd.mengde ?? 1} {bd.enhet || ''}</div>
                               {/* Arbeidsarter - editable */}
@@ -73159,7 +73931,30 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
 
                               {/* Materialer - editable */}
                               <div style={{ marginBottom:'12px' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
+                                {/* Teller + inngang til koblingsassistenten. En linje uten
+                                    NOBB-nummer henter ikke pris fra brukerens prisliste — den
+                                    har en veiledende standardpris. Det skal stå der. */}
+                                {(() => {
+                                  const kob = tellKobledeLinjer(bd.materialer)
+                                  const alle = kob.total > 0 && kob.ukoblet === 0
+                                  return (
+                                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
+                                      <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>📦 MATERIALER</span>
+                                      {kob.total > 0 && (
+                                        <span style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', border: `1px solid ${alle ? '#bbf7d0' : '#fde68a'}` }}>
+                                          {alle ? '🔗' : '⚠️'} {kob.koblet} av {kob.total} linjer koblet til din prisliste
+                                        </span>
+                                      )}
+                                      {kob.ukoblet > 0 && (
+                                        <button onClick={() => setShowKoblingsassistent({ kalkId: kalk.id, bdId: bd.id })}
+                                          title="Gå gjennom linjene uten NOBB-nummer og koble dem til varer i prislisten din"
+                                          style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer', minHeight:'32px' }}>
+                                          🔗 Koble {kob.ukoblet} {kob.ukoblet === 1 ? 'linje' : 'linjer'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
                                 {bdT.totalApningsareal > 0 && (
                                   <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background: bd.fradrag_apninger !== false ? '#eff6ff' : '#f8fafc', borderRadius:'8px', fontSize:'11px', flexWrap:'wrap' }}>
                                     {bd.fradrag_apninger !== false ? (
@@ -73208,8 +74003,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         const bdMengde = parseFloat(bd.mengde) || 1
                                         // Bruk materialMengde fra motoren når åpningsfradrag er aktivt, ellers full bdMengde
                                         const effektivMengde = bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? bdT.materialMengde : bdMengde
+                                        const koblet = matErKoblet(m)
                                         return (
-                                          <tr key={m.id}>
+                                          <tr key={m.id} style={{ background: koblet ? 'transparent' : '#fffdf3' }}>
                                             <td style={{ padding:'3px 2px' }}>
                                               <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
                                                 <input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
@@ -73237,7 +74033,14 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                             <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            <td style={{ padding:'3px 2px' }}>
+                                              <input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
+                                              {/* Uten NOBB-nummer er prisen en standardverdi, ikke brukerens
+                                                  egen innkjøpspris. Vi fjerner den ikke — vi merker den. */}
+                                              {!koblet && (
+                                                <div title="Veiledende standardpris — linjen er ikke koblet til din prisliste" style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', marginTop:'2px', whiteSpace:'nowrap', textAlign:'right' }}>≈ veiledende</div>
+                                              )}
+                                            </td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.medFortjeneste)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * effektivMengde)}</td>
@@ -75667,6 +76470,25 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           )
         }
         return <PS ctx={showProduktSok} onClose={() => setShowProduktSok(null)} />
+      })()}
+
+      {/* Koblingsassistent — går gjennom materiallinjene uten NOBB, én om gangen */}
+      {showKoblingsassistent && (() => {
+        const kalk = kalkyler.find(kl => kl.id === showKoblingsassistent.kalkId)
+        const bd = kalk && (kalk.bygningsdeler||[]).find(b => b.id === showKoblingsassistent.bdId)
+        if (!bd) return null
+        // Køen låses ved åpning: linjer som kobles underveis skal ikke forsvinne
+        // fra listen mens brukeren står i den.
+        const koe = (bd.materialer||[]).filter(m => !matErKoblet(m))
+        return (
+          <KoblingsassistentModal
+            key={`${showKoblingsassistent.kalkId}:${showKoblingsassistent.bdId}`}
+            linjer={koe}
+            bdNavn={bd.name}
+            onKoble={(matId, produkt) => koblMaterialLinje(showKoblingsassistent.kalkId, showKoblingsassistent.bdId, matId, produkt)}
+            onClose={() => setShowKoblingsassistent(null)}
+          />
+        )
       })()}
 
       {/* Materialvarsel: sentrert popup ved bytte/tillegg av materiale.
