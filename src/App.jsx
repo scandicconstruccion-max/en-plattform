@@ -70822,6 +70822,12 @@ function bibliotekTilBygningsdel(bd, mengde) {
       beskrivelse: a.beskrivelse || '',
       grunntid: parseFloat(a.grunntid) || 0,
     })),
+    // MERK: denne listen er en HVITELISTE — felt som ikke står her, forsvinner
+    // når en bygningsdel hentes fra biblioteket. Det var årsaken til det falske
+    // varselet: `_omregning` (rull→m²-flagget) ble skrevet til biblioteket, men
+    // ikke lest tilbake. Linjen kom inn med riktig m²-pris og uten flagget, og
+    // da så varselet et enhetsavvik som allerede var håndtert. Legger du til nye
+    // felt på en materiallinje, må de inn HER også.
     materialer: materialer.map((mat) => ({
       id: nyRadId(),
       varenavn: mat.varenavn || '',
@@ -70829,6 +70835,10 @@ function bibliotekTilBygningsdel(bd, mengde) {
       mengde: parseFloat(mat.mengde) || 0,
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
+      // Rull→m²-omregningen og enheten prisen gjelder i. Begge er avgjørende for
+      // at varselet skal tie på linjer brukeren alt har rettet.
+      ...(mat._omregning ? { _omregning: mat._omregning } : {}),
+      ...(mat._prisEnhet ? { _prisEnhet: mat._prisEnhet } : {}),
     })),
     underleverandorer: underleverandorer.map((u) => ({
       id: nyRadId(),
@@ -73520,6 +73530,15 @@ function KalkBibliotekPage({ onBack }) {
                                         <span title="Ingen NOBB-kobling — prisen er en veiledende standardverdi"
                                           style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', background:'#fffbeb', border:'1px solid #fde68a', padding:'1px 5px', borderRadius:'4px' }}>≈ veiledende</span>
                                       )}
+                                      {/* Uten denne kunne man ikke se at prisen er en omregnet
+                                         m²-pris — og da ser en rull-pris delt på arealet bare
+                                         ut som en mistenkelig lav pris. */}
+                                      {m._omregning && parseFloat(m._omregning.areal) > 0 && (
+                                        <span title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${m._omregning.bredde ? `${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ` : ''}${fmtTall(m._omregning.areal)} m²`}
+                                          style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', background:'#eff6ff', border:'1px solid #bfdbfe', padding:'1px 5px', borderRadius:'4px' }}>
+                                          ↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}
+                                        </span>
+                                      )}
                                     </div>
                                   )
                                 })}
@@ -73910,7 +73929,30 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
                     const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbs)
                     if (priser) {
                       const prisMap = {}; priser.forEach(p => { prisMap[p.varenummer] = p })
-                      bd.materialer = bd.materialer.map(m => m.nobb && prisMap[m.nobb] ? { ...m, enhetspris: prisMap[m.nobb].pris_per_enhet, varenavn: prisMap[m.nobb].varenavn || m.varenavn } : m)
+                      // Enheten prisen gjelder i lagres her også. Uten den ville en
+                      // rull-pris kunne havne på en m²-linje uten at varselet kunne
+                      // se det — linjen er hentet fra biblioteket, ikke koblet av en
+                      // bruker, så ingen dialog har vært innom.
+                      //
+                      // Er linjen alt omregnet (_omregning fra biblioteket), skal den
+                      // nye leveranseprisen deles på det SAMME arealet — ellers ville
+                      // en omregnet m²-pris blitt overskrevet med rullprisen.
+                      bd.materialer = bd.materialer.map(m => {
+                        const vare = m.nobb ? prisMap[m.nobb] : null
+                        if (!vare) return m
+                        const omr = m._omregning
+                        const raa = parseFloat(vare.pris_per_enhet)
+                        const pris = (omr && parseFloat(omr.areal) > 0 && isFinite(raa))
+                          ? Math.round((raa / parseFloat(omr.areal)) * 100) / 100
+                          : vare.pris_per_enhet
+                        return {
+                          ...m,
+                          enhetspris: pris,
+                          varenavn: vare.varenavn || m.varenavn,
+                          ...(vare.enhet ? { _prisEnhet: vare.enhet } : {}),
+                          ...(omr && parseFloat(omr.areal) > 0 && isFinite(raa) ? { _omregning: { ...omr, fraPris: raa } } : {}),
+                        }
+                      })
                     }
                   }
                 } catch(e) {}
@@ -75583,7 +75625,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // bare en reserve for linjer som ble koblet før feltet fanst.
   const linjeEnhetsAvvik = (m) => {
     if (!m || !matErKoblet(m)) return null
-    if (m._omregning) return null
+    // Flagget må være BRUKBART for å dempe varselet. Er arealet 0 eller borte,
+    // er linjen ikke omregnet på en måte vi kan stå for — da skal varselet stå.
+    if (m._omregning && parseFloat(m._omregning.areal) > 0) return null
     if (m._prisEnhet) return enhetsAvvik(m.enhet, m._prisEnhet)
     const oppslag = prisEnheter[String(m.nobb).trim()]
     if (!oppslag) return null
