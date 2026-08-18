@@ -59529,9 +59529,14 @@ const KOB_MATERIALKLASSER = [
     kandidat:['DAMPSP','VINDSP','UNDERTAK','MEMBRAN','RADON','ASFALTPAPP','TYVEK','FOLIE','VINDTETT','PLATON'],
     soek:['dampsperre','vindsperre','membran'] },
   { id:'kledning', navn:'Kledning/panel/list',
-    kilde:['kledning','panel','veggpanel','takpanel','listverk','list','gerikt','fotlist','taklist','glattkant','tømmermannspanel','tommermannspanel'],
-    kandidat:['KLEDNING','PANEL','LIST','GERIKT','FOTLIST','GLATTKANT'],
-    soek:['kledning','panel','list'] },
+    // «REKTKLED», «FASADEKLED» og «TREKLEDNING» er hvordan prislistene faktisk
+    // skriver kledning. Kandidat-ordet er derfor 'KLED', ikke 'KLEDNING' — ellers
+    // ble «GRAN 19X148 REKTKLED KL1» avvist som feil materialtype for en linje
+    // som het «Utvendig kledning 19x148». «KLEDNINGSSKRUE» treffer også 'KLED',
+    // men den fanges av tilbehørs-straffen.
+    kilde:['kledning','trekledning','fasadekledning','panel','veggpanel','takpanel','listverk','list','gerikt','fotlist','taklist','glattkant','dobbelfals','tømmermannspanel','tommermannspanel','rektkled','utvendig kledning'],
+    kandidat:['KLED','PANEL','LIST','GERIKT','FOTLIST','GLATTKANT','DOBBELFALS'],
+    soek:['kledning','kled','panel'] },
   { id:'fest', navn:'Feste/skruer',
     kilde:['skrue','skruer','spiker','stift','bolt','beslag','vinkelbeslag','festemiddel','festemidler','plugg','ankerskinne','klammer','gjengestang'],
     kandidat:['SKRUE','SPIKER','STIFT','BOLT','BESLAG','VINKEL','PLUGG','KLAMMER','ANKER','GJENGE'],
@@ -71394,6 +71399,16 @@ async function byggPrisforslag(poster, userId) {
     const { data } = await supabase.from('prislister')
       .select('id, navn, created_at').eq('user_id', userId).eq('aktiv', true).limit(1).maybeSingle()
     prisliste = data || null
+    // Antall varer og importdato gjør det mulig å KJENNE IGJEN prislisten. Har
+    // brukeren flere, er en oppdatering mot feil liste like skadelig som ingen
+    // oppdatering — og verre, fordi den ser ut som den gikk bra.
+    if (prisliste) {
+      try {
+        const { count } = await supabase.from('prisbok')
+          .select('id', { count: 'exact', head: true }).eq('prisliste_id', prisliste.id)
+        prisliste = { ...prisliste, antallVarer: typeof count === 'number' ? count : null }
+      } catch (e) { /* antallet er en hjelp, ikke et krav */ }
+    }
   } catch (e) { /* faller gjennom til feilmeldingen under */ }
   if (!prisliste) {
     return { ...tomt, ukoblet, feil: 'Ingen aktiv prisliste. Gå til Prisbok og sett en prisliste som aktiv.' }
@@ -71468,46 +71483,78 @@ function prisforslagTilFelter(post) {
   return felter
 }
 
-// Den gamle stille jobben. Beholdt for BIM-flyten, som henter en bygningsdel fra
-// biblioteket og setter inn dagens priser i samme operasjon — der er det ingen
-// eksisterende pris å sammenligne med, så det er ingen endring å vise.
-// Alt brukeren selv starter går gjennom OppdaterPriserModal.
-async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
-  try {
-    // Find active prisliste
-    const { data: pl } = await supabase.from('prislister').select('id').eq('user_id', userId).eq('aktiv', true).limit(1).single()
-    if (!pl) return { kalkyler, count: 0 }
-    
-    // Collect all NOBB numbers from kalkyler
-    const allNobb = new Set()
-    kalkyler.forEach(kl => (kl.bygningsdeler || []).forEach(bd => (bd.materialer || []).forEach(m => { if (m.nobb) allNobb.add(m.nobb) })))
-    if (allNobb.size === 0) return { kalkyler, count: 0 }
-    
-    // Fetch prices from prisbok
-    const nobbArr = [...allNobb]
-    const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbArr)
-    if (!priser || priser.length === 0) return { kalkyler, count: 0 }
-    
-    const prisMap = {}
-    priser.forEach(p => { prisMap[p.varenummer] = p })
-    
-    let count = 0
-    const updatedKalkyler = kalkyler.map(kl => ({
-      ...kl,
-      bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
-        ...bd,
-        materialer: (bd.materialer || []).map(m => {
-          if (m.nobb && prisMap[m.nobb]) {
-            count++
-            return { ...m, enhetspris: prisMap[m.nobb].pris_per_enhet, varenavn: prisMap[m.nobb].varenavn || m.varenavn }
-          }
-          return m
-        })
-      }))
-    }))
-    return { kalkyler: updatedKalkyler, count }
-  } catch(e) { console.error('Prisoppdatering feil:', e); return { kalkyler, count: 0 } }
+// MERK: her lå oppdaterPriserFraPrisliste() — en prisoppdatering som skrev til
+// alle materiallinjer uten å vise brukeren hva som endret seg. Den ble kalt fra
+// «🔄 Oppdater priser» i Mer-menyen. Funksjonen er FJERNET, ikke bare koblet fra,
+// slik at den ikke kan bli tatt i bruk igjen ved et uhell.
+//
+// All prisoppdatering går nå gjennom OppdaterPriserModal, som viser gammel mot ny
+// pris og krever avkryssing. Eneste andre stedet en pris hentes fra prislisten er
+// når en bygningsdel LEGGES TIL fra biblioteket — der finnes det ingen tidligere
+// pris å overskrive.
+
+// Regner ut hva som skal skrives på materiallinjen når en vare velges.
+//
+// Kjernen i Oppgave 3: står linjen i m² og prislisten priser varen per rull,
+// stykk eller pakke, forsøker vi å lese «bredde x lengde m» ut av varenavnet.
+// Klarer vi det, VISER vi regnestykket og lar brukeren bekrefte. Vi regner
+// ALDRI om stille — mønsteret treffer riktig på dampsperre, vindsperre og
+// underlagsduk, men gir tull på «Grunnmur tykk 0,125x8m» og finner ingenting
+// på tape og pakninger. En feil omregning som ser riktig ut er verre enn
+// ingen omregning.
+//
+// Finner vi ingen dimensjon, spør vi ikke: prisen og enheten settes som før,
+// og et eventuelt enhetsavvik merkes på linjen i stedet.
+//
+// `confirm` kommer inn som parameter fordi funksjonen brukes både fra kalkylen
+// og fra biblioteket. Da får rull→m²-spørsmålet samme ordlyd og samme regler
+// uansett hvor varen velges — én sannhet, ikke to som kan gli fra hverandre.
+async function beregnVareFelter(confirm, vare, linje) {
+  const pris = parseFloat(vare?.pris_per_enhet) || 0
+  const vareEnhet = vare?.enhet || ''
+  const felter = {
+    nobb: String(vare?.varenummer ?? '').trim(),
+    varenavn: vare?.varenavn || linje?.varenavn || '',
+    enhetspris: pris,
+    enhet: vareEnhet || linje?.enhet || '',
+    _omregning: null,
+  }
+  const linjeEnhet = normaliserEnhet(linje?.enhet)
+  if (linjeEnhet !== 'm2') return felter
+  if (!LEVERANSE_ENHETER.has(normaliserEnhet(vareEnhet))) return felter
+  const rull = rullDekning(vare?.varenavn)
+  if (!rull || pris <= 0) return felter
+
+  const perM2 = Math.round((pris / rull.areal) * 100) / 100
+  const enhNavn = enhetTekst(normaliserEnhet(vareEnhet))
+  const ok = await confirm({
+    message: vare.varenavn,
+    subMessage: `Prislisten priser denne per ${enhNavn}. Linjen står i m². Vil du bruke m²-prisen?`,
+    details: {
+      stats: [{ title: 'Regnestykke', subtitle: 'lest ut av varenavnet', items: [
+        { label: 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` },
+        { label: `Én ${enhNavn} dekker`, value: `${fmtTall(rull.areal)} m²` },
+        { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+        { label: 'Pris per m²', value: fmtKr2(perM2), highlight: true },
+      ] }],
+      notes: [{ icon: 'ℹ️', kind: 'info', text: 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.' }],
+    },
+    confirmLabel: 'Ja, regn om',
+    cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
+  })
+  if (!ok) return felter
+  return {
+    ...felter,
+    enhet: linje?.enhet || 'm²',
+    enhetspris: perM2,
+    _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
+  }
 }
+
+// Kalkylestatuser der kunden ALT har fått tallene. Oppdaterer man prisene da,
+// stemmer ikke kalkylen med tilbudet kunden sitter med — og en godkjenning kan
+// være signert på de gamle prisene.
+const KALK_SENDT_STATUS = new Set(['Tilbud sendt', 'Tilbud godkjent'])
 
 // ─── OPPDATER PRISER — DIALOG (Oppgave 5, del 1) ─────────────────────────────
 // Viser hva som vil skje FØR noe skrives, med avkryssing per linje. Brukes både
@@ -71516,13 +71563,23 @@ async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
 //
 // onSkriv(valgte) skal returnere { antall, totalFor, totalEtter, totalLabel }
 // slik at resultatskjermen kan si hva totalen endret seg med.
-function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onClose }) {
+//
+// `sendtStatus` settes når kalkylen er sendt til kunde («Tilbud sendt» eller
+// «Tilbud godkjent»). Da kreves et eget bekreftelsessteg: kunden får IKKE beskjed
+// om at prisene endres, og det må brukeren si at han vet.
+// `onFinnErstatning(post)` gjør de utgåtte linjene handlingsrettede: kalleren
+// åpner koblingsassistenten for nettopp den linjen. Uten den blir en utgått linje
+// bare merket, og brukeren står fast.
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus, onSkriv, onFinnErstatning, onClose }) {
   const [laster, setLaster] = useState(true)
   const [forslag, setForslag] = useState(null)
   const [valgt, setValgt] = useState(() => new Set())
   const [skriver, setSkriver] = useState(false)
   const [resultat, setResultat] = useState(null)
   const [visUendret, setVisUendret] = useState(false)
+  // Bekreftelsessteget for sendte tilbud: 'liste' → 'bekreft' → skriving.
+  const [steg, setSteg] = useState('liste')
+  const [forstatt, setForstatt] = useState(false)
   const isMob = typeof window !== 'undefined' && window.innerWidth < 640
 
   useEffect(() => {
@@ -71542,6 +71599,13 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onC
   const veksle = (i) => setValgt(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
   const alleValgt = forslag && forslag.endret.length > 0 && valgt.size === forslag.endret.length
   const veksleAlle = () => setValgt(alleValgt ? new Set() : new Set((forslag?.endret || []).map((_, i) => i)))
+
+  // Er kalkylen sendt til kunde, må brukeren gjennom bekreftelsessteget først.
+  const gaaVidere = () => {
+    if (!forslag || valgt.size === 0 || skriver) return
+    if (sendtStatus && steg === 'liste') { setSteg('bekreft'); return }
+    skriv()
+  }
 
   const skriv = async () => {
     if (!forslag || valgt.size === 0 || skriver) return
@@ -71568,15 +71632,34 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onC
         <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
           <div style={{ minWidth:0 }}>
             <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 {tittel || 'Oppdater priser'}</h3>
-            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
-              {undertittel}
-              {forslag?.prisliste?.navn ? ` · prisliste: ${forslag.prisliste.navn}` : ''}
-            </p>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>{undertittel}</p>
           </div>
           <button onClick={onClose} disabled={skriver} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: skriver ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
         </div>
 
         <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {/* HVILKEN prisliste skrives det fra. Har bedriften flere, er en
+              oppdatering mot feil aktiv liste like ødeleggende som ingen — og
+              vanskeligere å oppdage, fordi den ser ut som den gikk bra. Derfor
+              står den som et eget felt, ikke som en bisetning i topplinjen. */}
+          {!laster && forslag?.prisliste && !resultat && (
+            <div style={{ background:'white', border:'2px solid #bfdbfe', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'11px', alignItems:'flex-start' }}>
+              <span style={{ fontSize:'20px', flexShrink:0, lineHeight:1.2 }}>📋</span>
+              <div style={{ minWidth:0, flex:1 }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#1d4ed8', letterSpacing:'0.04em', marginBottom:'3px' }}>PRISENE HENTES FRA</div>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word', lineHeight:1.3 }}>
+                  {forslag.prisliste.navn || 'Uten navn'}
+                </div>
+                <div style={{ fontSize:'11px', color:'#64748b', marginTop:'3px' }}>
+                  {typeof forslag.prisliste.antallVarer === 'number' ? `${forslag.prisliste.antallVarer.toLocaleString('nb-NO')} varer` : 'aktiv prisliste'}
+                  {forslag.prisliste.created_at ? ` · lastet inn ${new Date(forslag.prisliste.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}` : ''}
+                </div>
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'5px', lineHeight:1.5 }}>
+                  Er dette ikke listen du vil bruke, avbryt og bytt aktiv prisliste under Prisbok først.
+                </div>
+              </div>
+            </div>
+          )}
           {laster && <div style={{ textAlign:'center', padding:'28px', fontSize:'13px', color:'#2563eb' }}>Slår opp prisene i prislisten din …</div>}
 
           {!laster && forslag?.feil && (
@@ -71603,8 +71686,55 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onC
             </div>
           )}
 
-          {!laster && !resultat && forslag && !forslag.feil && (
+          {/* Bekreftelsessteg for kalkyler som ER SENDT TIL KUNDE. Et eget steg som
+              ERSTATTER listen — ikke en gul boks blant annet innhold. Brukeren skal
+              ikke kunne klikke seg forbi uten å ha lest hva han gjør. */}
+          {!laster && !resultat && steg === 'bekreft' && sendtStatus && forslag && (
+            <div style={{ background:'white', border:'2px solid #fecaca', borderRadius:'14px', padding:'18px 16px' }}>
+              <div style={{ fontSize:'34px', marginBottom:'10px', textAlign:'center' }}>⚠️</div>
+              <h4 style={{ margin:'0 0 8px', fontSize:'16px', fontWeight:'700', color:'#991b1b', textAlign:'center', lineHeight:1.35 }}>
+                Dette tilbudet er sendt til kunden
+              </h4>
+              <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#7f1d1d', lineHeight:1.6, textAlign:'center' }}>
+                Kalkylen har status «{sendtStatus}». Endrer du prisene nå, endres tallene i kalkylen din —
+                <strong> men kunden får ingen beskjed</strong>. Tilbudet han har fått, og en eventuell
+                signert godkjenning, viser fortsatt de gamle prisene.
+              </p>
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
+                <div style={{ fontSize:'12px', color:'#7f1d1d', lineHeight:1.6 }}>
+                  {valgt.size} {valgt.size === 1 ? 'linje' : 'linjer'} vil bli oppdatert.
+                  {(() => {
+                    const p = (forslag.endret || []).filter((_, i) => valgt.has(i))
+                    const opp = p.filter(x => x.diff > 0).length
+                    const ned = p.filter(x => x.diff < 0).length
+                    return ` ${opp} går opp i pris, ${ned} går ned.`
+                  })()}
+                  <br />
+                  Skal kunden ha de nye prisene, lag et nytt tilbud i stedet for å endre dette.
+                </div>
+              </div>
+              <label style={{ display:'flex', gap:'10px', alignItems:'flex-start', cursor:'pointer', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px 14px' }}>
+                <input type="checkbox" checked={forstatt} onChange={e => setForstatt(e.target.checked)}
+                  style={{ marginTop:'1px', width:'18px', height:'18px', flexShrink:0, cursor:'pointer' }} />
+                <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', lineHeight:1.5 }}>
+                  Jeg vet at kunden ikke får beskjed om prisendringen
+                </span>
+              </label>
+            </div>
+          )}
+
+          {!laster && !resultat && steg === 'liste' && forslag && !forslag.feil && (
             <>
+              {/* Kalkylen er sendt — si det med én gang, ikke først på slutten. */}
+              {sendtStatus && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 13px', marginBottom:'12px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+                  <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>⚠️</span>
+                  <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.55 }}>
+                    <strong>Status: {sendtStatus}.</strong> Kunden får ikke beskjed om prisendringer. Du blir bedt om å bekrefte før noe skrives.
+                  </div>
+                </div>
+              )}
+
               {/* Endringer */}
               {forslag.endret.length > 0 ? (
                 <>
@@ -71678,12 +71808,22 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onC
                 <>
                   {seksjon(`${forslag.utgatt.length} ${forslag.utgatt.length === 1 ? 'LINJE' : 'LINJER'} — UTGÅTT ELLER IKKE I DENNE LISTEN`, '#c2410c')}
                   <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 13px' }}>
-                    <div style={{ fontSize:'12px', color:'#9a3412', lineHeight:1.55, marginBottom:'8px' }}>
+                    <div style={{ fontSize:'12px', color:'#9a3412', lineHeight:1.55, marginBottom:'9px' }}>
                       NOBB-nummeret finnes ikke i den aktive prislisten. Prisen står som før — den er ikke satt til 0, og linjen regnes ikke som oppdatert.
+                      {onFinnErstatning ? ' Trykk «Finn erstatning» for å velge riktig vare fra listen du bruker nå.' : ''}
                     </div>
                     {forslag.utgatt.map((p, i) => (
-                      <div key={i} style={{ fontSize:'12px', color:'#7c2d12', padding:'3px 0' }}>
-                        {p.linje.varenavn || 'Uten navn'} <span style={{ fontFamily:'monospace', color:'#c2410c' }}>· NOBB {p.nobb}</span> · {fmtKr2(p.linje.enhetspris)}
+                      <div key={i} style={{ display:'flex', gap:'8px', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', padding:'5px 0', borderTop: i > 0 ? '1px solid #fed7aa' : 'none' }}>
+                        <div style={{ fontSize:'12px', color:'#7c2d12', minWidth:0, flex:'1 1 auto' }}>
+                          {p.linje.varenavn || 'Uten navn'} <span style={{ fontFamily:'monospace', color:'#c2410c' }}>· NOBB {p.nobb}</span> · {fmtKr2(p.linje.enhetspris)}
+                        </div>
+                        {onFinnErstatning && (
+                          <button onClick={() => onFinnErstatning(p)}
+                            title="Åpner koblingsassistenten for denne linjen. Du velger erstatningsvaren selv — ingenting kobles automatisk."
+                            style={{ background:'white', color:'#9a3412', border:'1px solid #fdba74', borderRadius:'8px', padding:'6px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer', flexShrink:0, minHeight:'32px', whiteSpace:'nowrap' }}>
+                            🔗 Finn erstatning
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -71713,12 +71853,23 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onC
         <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
           {resultat ? (
             <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : steg === 'bekreft' ? (
+            <>
+              <button onClick={() => { setSteg('liste'); setForstatt(false) }} disabled={skriver}
+                style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
+                ← Tilbake
+              </button>
+              <button onClick={skriv} disabled={!forstatt || skriver}
+                style={{ flex:'1 1 210px', background: (forstatt && !skriver) ? '#dc2626' : '#fca5a5', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (forstatt && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : 'Oppdater likevel'}
+              </button>
+            </>
           ) : (
             <>
               <button onClick={onClose} disabled={skriver} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>Avbryt</button>
-              <button onClick={skriv} disabled={laster || skriver || valgt.size === 0}
-                style={{ flex:'1 1 190px', background: (valgt.size > 0 && !skriver) ? '#059669' : '#a7f3d0', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (valgt.size > 0 && !skriver) ? 'pointer' : 'default' }}>
-                {skriver ? 'Oppdaterer …' : `Oppdater ${valgt.size} ${valgt.size === 1 ? 'linje' : 'linjer'}`}
+              <button onClick={gaaVidere} disabled={laster || skriver || valgt.size === 0}
+                style={{ flex:'1 1 190px', background: (valgt.size > 0 && !skriver) ? (sendtStatus ? '#c2410c' : '#059669') : '#a7f3d0', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (valgt.size > 0 && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : `Oppdater ${valgt.size} ${valgt.size === 1 ? 'linje' : 'linjer'}${sendtStatus ? ' →' : ''}`}
               </button>
             </>
           )}
@@ -71748,6 +71899,8 @@ function KalkBibliotekPage({ onBack }) {
   const [visKunUkoblede, setVisKunUkoblede] = useState(false)
   // «Oppdater priser» for én bygningsdel: bygningsdelen som er åpen i dialogen.
   const [prisBd, setPrisBd] = useState(null)
+  // Koblingsassistenten for én linje i biblioteket: { bd, kunMatId }.
+  const [assistent, setAssistent] = useState(null)
   // Kategoriendring: { bdId, verdi, egen } mens brukeren holder på.
   const [endrerKat, setEndrerKat] = useState(null)
   const [lagrerKat, setLagrerKat] = useState(false)
@@ -71793,6 +71946,27 @@ function KalkBibliotekPage({ onBack }) {
     if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
     await last()
     return { antall: valgte.length, totalFor, totalEtter, totalLabel: `Materialkostnad per ${bd.enhet || 'enhet'}` }
+  }
+
+  // Kobler ÉN materiallinje i en bibliotek-bygningsdel til en vare. Går gjennom
+  // den delte beregnVareFelter, så rull→m²-spørsmålet er det samme her som i
+  // kalkylen.
+  const koblLinjeIBd = async (bd, matId, produkt) => {
+    const rad = rader.find(r => String(r.id) === String(bd.id))
+    if (!rad || !produkt) return
+    const linje = (bd.materialer || []).find(m => String(m.id) === String(matId))
+    const felter = await beregnVareFelter(confirm, produkt, linje)
+    const nye = (bd.materialer || []).map(m => String(m.id) === String(matId) ? { ...m, ...felter } : m)
+    try {
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ data: { ...(rad.data || {}), materialer: nye } })
+        .eq('id', bd.id).select('id')
+      if (error) throw error
+      if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
+      await last()
+    } catch (e) {
+      await confirm({ message: 'Kunne ikke lagre koblingen', subMessage: (e && e.message) || 'ukjent feil', alertOnly: true, kind: 'error' })
+    }
   }
 
   // Flytter en egen bygningsdel til en annen kategori. Bygningsdelen kan ha
@@ -72084,9 +72258,31 @@ function KalkBibliotekPage({ onBack }) {
           poster={prisPoster(prisBd)}
           userId={user?.id}
           onSkriv={(valgte) => skrivPriserPaaBd(prisBd, valgte)}
+          onFinnErstatning={(p) => {
+            const linje = (prisBd.materialer || [])[p.sti.index]
+            if (!linje) return
+            setAssistent({ bd: prisBd, kunMatId: linje.id })
+            setPrisBd(null)
+          }}
           onClose={() => setPrisBd(null)}
         />
       )}
+
+      {/* Koblingsassistenten for én linje — brukeren velger erstatningsvaren */}
+      {assistent && (() => {
+        const linjer = (assistent.bd.materialer || []).filter(m => String(m.id) === String(assistent.kunMatId))
+        if (linjer.length === 0) return null
+        return (
+          <KoblingsassistentModal
+            key={`${assistent.bd.id}:${assistent.kunMatId}`}
+            linjer={linjer}
+            bdNavn={`${assistent.bd.name} · finn erstatning`}
+            prisLabel="nå"
+            onKoble={(matId, produkt) => koblLinjeIBd(assistent.bd, matId, produkt)}
+            onClose={() => setAssistent(null)}
+          />
+        )
+      })()}
     </div>
   )
 }
@@ -72373,7 +72569,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
 //
 // Layout er bygget for 375 px: full skjerm på mobil, ett kort per forslag med
 // trykkflate over 56 px, og ingen sideveis scroll.
-function KoblingsassistentModal({ linjer, bdNavn, onKoble, onClose }) {
+function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose }) {
   const { sok: prisbokSok } = usePrisbokSoek()
   const [idx, setIdx] = useState(0)
   const [kandidater, setKandidater] = useState([])
@@ -72509,7 +72705,7 @@ function KoblingsassistentModal({ linjer, bdNavn, onKoble, onClose }) {
                 <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.03em', marginBottom:'4px' }}>MATERIALLINJE</div>
                 <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{aktiv.varenavn || 'Uten navn'}</div>
                 <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
-                  {aktiv.mengde || 0} {aktiv.enhet || 'stk'} · veiledende {fmtI(aktiv.enhetspris)} per {aktiv.enhet || 'stk'}
+                  {aktiv.mengde || 0} {aktiv.enhet || 'stk'} · {prisLabel || 'veiledende'} {fmtI(aktiv.enhetspris)} per {aktiv.enhet || 'stk'}
                 </div>
               </div>
 
@@ -73844,59 +74040,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     return (bd && (bd.materialer || []).find(m => m.id === matId)) || null
   }
 
-  // Regner ut hva som skal skrives på materiallinjen når en vare velges.
-  //
-  // Kjernen i Oppgave 3: står linjen i m² og prislisten priser varen per rull,
-  // stykk eller pakke, forsøker vi å lese «bredde x lengde m» ut av varenavnet.
-  // Klarer vi det, VISER vi regnestykket og lar brukeren bekrefte. Vi regner
-  // ALDRI om stille — mønsteret treffer riktig på dampsperre, vindsperre og
-  // underlagsduk, men gir tull på «Grunnmur tykk 0,125x8m» og finner ingenting
-  // på tape og pakninger. En feil omregning som ser riktig ut er verre enn
-  // ingen omregning.
-  //
-  // Finner vi ingen dimensjon, spør vi ikke: prisen og enheten settes som før,
-  // og et eventuelt enhetsavvik merkes på linjen i stedet (del 4).
-  const beregnVareFelter = async (vare, linje) => {
-    const pris = parseFloat(vare?.pris_per_enhet) || 0
-    const vareEnhet = vare?.enhet || ''
-    const felter = {
-      nobb: String(vare?.varenummer ?? '').trim(),
-      varenavn: vare?.varenavn || linje?.varenavn || '',
-      enhetspris: pris,
-      enhet: vareEnhet || linje?.enhet || '',
-      _omregning: null,
-    }
-    const linjeEnhet = normaliserEnhet(linje?.enhet)
-    if (linjeEnhet !== 'm2') return felter
-    if (!LEVERANSE_ENHETER.has(normaliserEnhet(vareEnhet))) return felter
-    const rull = rullDekning(vare?.varenavn)
-    if (!rull || pris <= 0) return felter
+  // Bruker den delte beregnVareFelter, som kan spørre om rull→m²-omregning.
+  const beregnVareFelterLokal = (vare, linje) => beregnVareFelter(confirm, vare, linje)
 
-    const perM2 = Math.round((pris / rull.areal) * 100) / 100
-    const enhNavn = enhetTekst(normaliserEnhet(vareEnhet))
-    const ok = await confirm({
-      message: vare.varenavn,
-      subMessage: `Prislisten priser denne per ${enhNavn}. Linjen står i m². Vil du bruke m²-prisen?`,
-      details: {
-        stats: [{ title: 'Regnestykke', subtitle: 'lest ut av varenavnet', items: [
-          { label: 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` },
-          { label: `Én ${enhNavn} dekker`, value: `${fmtTall(rull.areal)} m²` },
-          { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
-          { label: 'Pris per m²', value: fmtKr2(perM2), highlight: true },
-        ] }],
-        notes: [{ icon: 'ℹ️', kind: 'info', text: 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.' }],
-      },
-      confirmLabel: 'Ja, regn om',
-      cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
-    })
-    if (!ok) return felter
-    return {
-      ...felter,
-      enhet: linje?.enhet || 'm²',
-      enhetspris: perM2,
-      _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
-    }
-  }
 
   // Skriver et varevalg inn på én materiallinje. Leser fra kRef fordi kallet
   // skjer etter en await (nettverk, og noen ganger en bekreftelsesdialog) —
@@ -73955,7 +74101,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const koblMaterialLinje = async (kalkId, bdId, matId, p) => {
     if (!p) return
     const linje = finnMatLinje(kalkId, bdId, matId)
-    const felter = await beregnVareFelter(p, linje)
+    const felter = await beregnVareFelterLokal(p, linje)
     skrivVarePaaLinje(kalkId, bdId, matId, felter)
   }
 
@@ -75294,7 +75440,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                       const vType = (m._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
                                                       // Samme vei som produktsøket og koblingsassistenten: rull→m²
                                                       // tilbys hvis dimensjonen kan leses ut av varenavnet.
-                                                      const felter = await beregnVareFelter({ ...data, varenummer: nobb }, finnMatLinje(kalk.id, bd.id, m.id) || m)
+                                                      const felter = await beregnVareFelterLokal({ ...data, varenummer: nobb }, finnMatLinje(kalk.id, bd.id, m.id) || m)
                                                       skrivVarePaaLinje(kalk.id, bd.id, m.id, felter)
                                                       if (!m._varselVist) setMaterialVarsel({ type: vType })
                                                     }
@@ -77720,7 +77866,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               const linje = finnMatLinje(ctx.kalkId, ctx.bdId, ctx.matId)
               const haddeNavn = !!(linje?.varenavn && String(linje.varenavn).trim())
               const vType = linje && !linje._varselVist ? ((linje._ny || !haddeNavn) ? 'lagt_til' : 'byttet') : null
-              const felter = await beregnVareFelter(p, linje)
+              const felter = await beregnVareFelterLokal(p, linje)
               skrivVarePaaLinje(ctx.kalkId, ctx.bdId, ctx.matId, felter)
               if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
             } finally { setVelger(false) }
@@ -77793,10 +77939,17 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
       {showOppdaterPriser && (
         <OppdaterPriserModal
           tittel="Oppdater priser"
-          undertittel={k.title || 'Kalkyle'}
+          undertittel={`${k.kalk_number ? k.kalk_number + ' · ' : ''}${k.title || 'Kalkyle'}`}
           poster={prisPosterFraKalkyle()}
           userId={user?.id}
+          sendtStatus={KALK_SENDT_STATUS.has(k.status) ? k.status : null}
           onSkriv={skrivPrisoppdatering}
+          onFinnErstatning={(p) => {
+            // Lukker prisdialogen og åpner assistenten for nettopp denne linjen.
+            // Erstatningen VELGES av brukeren — ingenting kobles automatisk.
+            setShowOppdaterPriser(false)
+            setShowKoblingsassistent({ kalkId: p.sti.kalkId, bdId: p.sti.bdId, kunMatId: p.sti.matId })
+          }}
           onClose={() => setShowOppdaterPriser(false)}
         />
       )}
@@ -77820,18 +77973,25 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
 
       {/* Koblingsassistent — går gjennom materiallinjene uten NOBB, én om gangen */}
       {showKoblingsassistent && (() => {
-        const kalk = kalkyler.find(kl => kl.id === showKoblingsassistent.kalkId)
-        const bd = kalk && (kalk.bygningsdeler||[]).find(b => b.id === showKoblingsassistent.bdId)
+        const ctx = showKoblingsassistent
+        const kalk = kalkyler.find(kl => kl.id === ctx.kalkId)
+        const bd = kalk && (kalk.bygningsdeler||[]).find(b => b.id === ctx.bdId)
         if (!bd) return null
-        // Køen låses ved åpning: linjer som kobles underveis skal ikke forsvinne
-        // fra listen mens brukeren står i den.
-        const koe = (bd.materialer||[]).filter(m => !matErKoblet(m))
+        // kunMatId settes når assistenten åpnes for ÉN bestemt linje — typisk en
+        // utgått vare som skal erstattes. Da skal køen være nettopp den linjen,
+        // selv om den har et NOBB-nummer fra før.
+        // Ellers: alle ukoblede linjer. Køen låses ved åpning, så linjer som
+        // kobles underveis ikke forsvinner mens brukeren står i den.
+        const koe = ctx.kunMatId
+          ? (bd.materialer||[]).filter(m => String(m.id) === String(ctx.kunMatId))
+          : (bd.materialer||[]).filter(m => !matErKoblet(m))
         return (
           <KoblingsassistentModal
-            key={`${showKoblingsassistent.kalkId}:${showKoblingsassistent.bdId}`}
+            key={`${ctx.kalkId}:${ctx.bdId}:${ctx.kunMatId || 'alle'}`}
             linjer={koe}
-            bdNavn={bd.name}
-            onKoble={(matId, produkt) => koblMaterialLinje(showKoblingsassistent.kalkId, showKoblingsassistent.bdId, matId, produkt)}
+            bdNavn={ctx.kunMatId ? `${bd.name} · finn erstatning` : bd.name}
+            prisLabel={ctx.kunMatId ? 'nå' : 'veiledende'}
+            onKoble={(matId, produkt) => koblMaterialLinje(ctx.kalkId, ctx.bdId, matId, produkt)}
             onClose={() => setShowKoblingsassistent(null)}
           />
         )
