@@ -2445,6 +2445,10 @@ function Registrer() {
           p_address: adresse.trim()
         })
         if (rpcErr) { setError('Konto opprettet, men oppsett av bedrift feilet: ' + rpcErr.message + '. Logg inn og prøv igjen.'); setSaving(false); return }
+        // Fabrikklisten settes i gang, men vi venter IKKE på den: brukeren skal
+        // rett inn. Blir kallet avbrutt av omlastingen under, oppretter
+        // sikkerhetsnettet i Prisbok/Kalkulasjon listen ved første besøk.
+        startStandardPrislisteIBakgrunnen(data.user.id)
         // Pakke-valg: «Kun Kalkulasjon» → frittstående uten grunnpakke.
         if (plan === 'kalkyle') {
           try {
@@ -2577,6 +2581,8 @@ function FullforRegistrering() {
         p_full_name: user?.user_metadata?.full_name || null
       })
       if (rpcErr) { setError(rpcErr.message); setBusy(false); return }
+      // Samme som i Registrer: settes i gang, ventes ikke på.
+      if (user?.id) startStandardPrislisteIBakgrunnen(user.id)
       window.location.reload()
     } catch (e) { setError(e.message); setBusy(false) }
   }
@@ -59191,25 +59197,143 @@ function BimKlassifiseringSeksjon({ mengder, isMob, onChange, kompakt = false, a
 //   const treff = await sok('rockwool 100mm', { maxResultater: 10 })
 
 // Cache aktiv prisliste én gang per session — globalt.
+// ─── HVEM EIER EN PRISLISTE — ÉN REGEL FOR HELE APPEN ────────────────────────
+//
+// Prislister og varelinjer tilhører BEDRIFTEN, ikke den enkelte brukeren. Før
+// filtrerte hvert oppslag på user_id, og da så ansatt nummer to en tom prisbok
+// selv om bedriften hadde en aktiv liste. Fabrikklisten som opprettes ved
+// registrering gjorde det uholdbart: den eies av den som registrerte bedriften,
+// og ingen andre ville sett den.
+//
+// Rader fra før company_id ble innført har company_id = NULL. De hører til
+// brukeren som importerte dem, og tas med i fallback-grenen. Samme mønster som
+// _hentBedriftensBibliotekrader bruker på bruker_bibliotek.
+function medPrislisteEier(q, companyId, userId) {
+  if (companyId) return q.or(`company_id.eq.${companyId},and(company_id.is.null,user_id.eq.${userId})`)
+  return q.eq('user_id', userId)
+}
+
+// Bedriftens aktive prisliste, eller null. Har bedriften flere aktive (skal ikke
+// skje), tas den nyeste — samme rekkefølge som listen i Prisbok viser.
+async function hentAktivPrisliste(companyId, userId, kolonner = 'id, navn') {
+  if (!companyId && !userId) return null
+  try {
+    const q = medPrislisteEier(
+      supabase.from('prislister').select(kolonner).eq('aktiv', true),
+      companyId, userId,
+    )
+    const { data } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle()
+    return data || null
+  } catch (e) { return null }
+}
+
+// Sørger for at bedriften har et prisgrunnlag.
+//
+// opprett_standard_prisliste er SECURITY DEFINER, har egen sperre mot duplikater
+// («bedriften har alt prislister» → NULL og ingen endring) og hevet
+// statement_timeout, siden den kopierer 60 453 rader.
+//
+// Kalles to steder: rett etter registrering (uten await — registreringen skal
+// ikke vente), og som sikkerhetsnett når Prisbok eller Kalkulasjon åpnes uten at
+// bedriften har noen liste. Nettet trengs fordi registreringen gjør
+// window.location.reload() umiddelbart etterpå: rekker ikke nettleseren å sende
+// forespørselen før omlastingen, blir den avbrutt, og da er det ingen som prøver
+// igjen. Idempotensen gjør det trygt å kalle den flere ganger.
+// Er fabrikklisten alt levert til denne bedriften?
+//
+// Uten denne markeringen ville sikkerhetsnettet under lagt inn listen på nytt
+// hver gang noen åpner Prisbok etter å ha slettet den — det ser ut som en feil,
+// og det overkjører et bevisst valg. Markeringen skiller «registreringen rakk
+// aldri å opprette listen» fra «vi hadde den, og kastet den».
+//
+// Finnes ikke kolonnen ennå (SQL-en er ikke kjørt), svarer vi nei og oppfører oss
+// som før. Da virker fabrikklisten fortsatt, den kan bare komme tilbake én gang
+// for mye — det er den minst skadelige feilen av de to.
+async function fabrikklisteAlleredeLevert() {
+  try {
+    const { data, error } = await supabase.from('company_settings').select('fabrikkliste_levert').limit(1).maybeSingle()
+    if (error) return false
+    return !!(data && data.fabrikkliste_levert)
+  } catch (e) { return false }
+}
+
+// Setter markeringen etter at listen faktisk er opprettet.
+async function merkFabrikklisteLevert() {
+  try {
+    const { data: cs } = await supabase.from('company_settings').select('id').limit(1).maybeSingle()
+    if (cs?.id) {
+      await supabase.from('company_settings').update({ fabrikkliste_levert: new Date().toISOString() }).eq('id', cs.id)
+    }
+  } catch (e) { /* markeringen er en hjelp, ikke en forutsetning */ }
+}
+
+// Starter fabrikklisten ved registrering, UTEN å vente. Registreringen skal ikke
+// bli tregere av at 60 453 rader kopieres, og feiler kallet skal brukeren likevel
+// komme inn. Finner vi ikke bedrifts-id-en, hopper vi over — sikkerhetsnettet i
+// Prisbok/Kalkulasjon tar den da.
+function startStandardPrislisteIBakgrunnen(userId) {
+  ;(async () => {
+    try {
+      let companyId = null
+      const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', userId).maybeSingle()
+      companyId = prof?.company_id || null
+      if (!companyId) {
+        const { data: cs } = await supabase.from('company_settings').select('id').limit(1).maybeSingle()
+        companyId = cs?.id || null
+      }
+      if (!companyId) { console.warn('[prisbok] fant ikke bedrift — standardprisliste hoppes over'); return }
+      const { error } = await supabase.rpc('opprett_standard_prisliste', { p_company_id: companyId, p_user_id: userId })
+      if (error) { console.warn('[prisbok] standardprisliste ved registrering feilet:', error.message); return }
+      await merkFabrikklisteLevert()
+    } catch (e) {
+      console.warn('[prisbok] standardprisliste ved registrering feilet:', (e && e.message) || e)
+    }
+  })()
+}
+
+async function sikreStandardPrisliste(companyId, userId, onStart) {
+  if (!companyId || !userId) return false
+  try {
+    const q = medPrislisteEier(
+      supabase.from('prislister').select('id', { count: 'exact', head: true }),
+      companyId, userId,
+    )
+    const { count, error } = await q
+    if (error) return false
+    if ((count || 0) > 0) return false
+    // Har bedriften fått listen før og slettet den, skal den IKKE komme tilbake.
+    if (await fabrikklisteAlleredeLevert()) return false
+    // Først NÅ vet vi at listen faktisk skal lages. Kalleren viser fremdrift her,
+    // slik at det ikke blinker et vindu i de tilfellene vi ikke gjør noe.
+    if (typeof onStart === 'function') onStart()
+    const { error: rpcFeil } = await supabase.rpc('opprett_standard_prisliste', {
+      p_company_id: companyId, p_user_id: userId,
+    })
+    if (rpcFeil) { console.warn('[prisbok] standardprisliste ble ikke opprettet:', rpcFeil.message); return false }
+    await merkFabrikklisteLevert()
+    return true
+  } catch (e) {
+    console.warn('[prisbok] standardprisliste feilet:', (e && e.message) || e)
+    return false
+  }
+}
+
 let _aktivPrislisteCache = null
-let _aktivPrislisteCacheUserId = null
+let _aktivPrislisteCacheNokkel = null
 let _aktivPrislistePromise = null  // for å forhindre parallelle oppslag
 
-const hentAktivPrislisteCached = async (userId) => {
-  if (!userId) return null
-  if (_aktivPrislisteCacheUserId === userId && _aktivPrislisteCache !== null) {
+const hentAktivPrislisteCached = async (userId, companyId) => {
+  if (!userId && !companyId) return null
+  const nokkel = `${companyId || ''}|${userId || ''}`
+  if (_aktivPrislisteCacheNokkel === nokkel && _aktivPrislisteCache !== null) {
     return _aktivPrislisteCache
   }
   if (_aktivPrislistePromise) return _aktivPrislistePromise
   _aktivPrislistePromise = (async () => {
     try {
-      const { data } = await supabase.from('prislister')
-        .select('id')
-        .eq('user_id', userId)
-        .eq('aktiv', true)
-        .limit(1).maybeSingle()
+      const data = await hentAktivPrisliste(companyId, userId, 'id')
       _aktivPrislisteCache = data?.id || null
-      _aktivPrislisteCacheUserId = userId
+      _aktivPrislisteCacheNokkel = nokkel
       return _aktivPrislisteCache
     } catch (e) {
       _aktivPrislisteCache = null
@@ -59381,14 +59505,14 @@ async function utforPrisbokSoek({
 
 // React hook som wrapper utforPrisbokSoek
 function usePrisbokSoek() {
-  const { user } = useAuth()
+  const { user, companyId } = useAuth()
   const [aktivPrislisteKlar, setAktivPrislisteKlar] = useState(false)
 
   // Forhåndsinnlast aktiv prisliste når brukeren er klar
   useEffect(() => {
     if (!user?.id) return
-    hentAktivPrislisteCached(user.id).then(() => setAktivPrislisteKlar(true))
-  }, [user?.id])
+    hentAktivPrislisteCached(user.id, companyId).then(() => setAktivPrislisteKlar(true))
+  }, [user?.id, companyId])
 
   const sok = React.useCallback(async (soeketerm, opts = {}) => {
     return utforPrisbokSoek({
@@ -68395,9 +68519,16 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
 // ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
 
 function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
-  const { user } = useAuth()
+  const { user, companyId } = useAuth()
   const appAlert = useAppAlert()
   const confirm = useConfirm()
+  // SIKKERHETSNETT for fabrikklisten. Stille her — en kalkyle skal åpne seg med
+  // én gang, og prisene slås opp per NOBB senere uansett. Se
+  // sikreStandardPrisliste for hvorfor nettet trengs.
+  useEffect(() => {
+    if (!companyId || !user?.id) return
+    sikreStandardPrisliste(companyId, user.id)
+  }, [companyId, user?.id])
   const [kalks, setKalks] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -71468,7 +71599,7 @@ function nyPrisForLinje(linje, vare) {
 // Klassifiserer materiallinjer mot bedriftens aktive prisliste.
 //   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
 // Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
-async function byggPrisforslag(poster, userId) {
+async function byggPrisforslag(poster, userId, companyId) {
   const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], utenPris: [], ukoblet: [], feil: null }
   const alle = Array.isArray(poster) ? poster : []
   if (alle.length === 0) return tomt
@@ -71479,9 +71610,7 @@ async function byggPrisforslag(poster, userId) {
 
   let prisliste = null
   try {
-    const { data } = await supabase.from('prislister')
-      .select('id, navn, created_at').eq('user_id', userId).eq('aktiv', true).limit(1).maybeSingle()
-    prisliste = data || null
+    prisliste = await hentAktivPrisliste(companyId, userId, 'id, navn, created_at')
     // Antall varer og importdato gjør det mulig å KJENNE IGJEN prislisten. Har
     // brukeren flere, er en oppdatering mot feil liste like skadelig som ingen
     // oppdatering — og verre, fordi den ser ut som den gikk bra.
@@ -72161,7 +72290,7 @@ const KALK_SENDT_STATUS = new Set(['Tilbud sendt', 'Tilbud godkjent'])
 // som er sendt til kunde: originalen står urørt med prisene kunden fikk, og de
 // nye prisene går i en ny versjon. Å rette originalen er fortsatt mulig, men
 // ligger bak bekreftelsessteget.
-function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
   const [laster, setLaster] = useState(true)
   const [forslag, setForslag] = useState(null)
   const [valgt, setValgt] = useState(() => new Set())
@@ -72175,7 +72304,7 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
 
   useEffect(() => {
     let avbrutt = false
-    byggPrisforslag(poster, userId)
+    byggPrisforslag(poster, userId, companyId)
       .then(res => {
         if (avbrutt) return
         setForslag(res)
@@ -73003,7 +73132,7 @@ function KalkyleDiffModal({ diff, onClose }) {
 
 function KalkBibliotekPage({ onBack }) {
   const confirm = useConfirm()
-  const { user, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
   const [activeFag, setActiveFag] = useState('tomrer')
   const [expandedKat, setExpandedKat] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
@@ -73381,6 +73510,7 @@ function KalkBibliotekPage({ onBack }) {
           undertittel={prisBd.name}
           poster={prisPoster(prisBd)}
           userId={user?.id}
+          companyId={companyId}
           onSkriv={(valgte) => skrivPriserPaaBd(prisBd, valgte)}
           onFinnErstatning={(p) => {
             const linje = (prisBd.materialer || [])[p.sti.index]
@@ -73690,7 +73820,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
               const nobbMats = bd.materialer.filter(m => m.nobb)
               if (nobbMats.length > 0) {
                 try {
-                  const { data: pl } = await supabase.from('prislister').select('id').eq('aktiv', true).limit(1).single()
+                  const pl = await hentAktivPrisliste(companyId, user?.id, 'id')
                   if (pl) {
                     const nobbs = nobbMats.map(m => m.nobb)
                     const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbs)
@@ -73930,7 +74060,6 @@ function PrisbokPage({ onBack }) {
   const [rawHeaders, setRawHeaders] = useState([])
   const [colMapping, setColMapping] = useState({ varenummer: '', varenavn: '', enhet: '', pris: '', kategori: '' })
   const [is5001, setIs5001] = useState(false)
-  const [importProgress, setImportProgress] = useState('')
   const [toast, setToast] = useState(null) // { type: 'success'|'error', message }
   // Oppsummeringen etter at biblioteket er oppdatert mot en ny aktiv prisliste.
   const [bibResultat, setBibResultat] = useState(null)   // { resultat, prislisteNavn }
@@ -73942,11 +74071,46 @@ function PrisbokPage({ onBack }) {
   const [visFremdrift, setVisFremdrift] = useState(false)
   const fremdriftTimer = React.useRef(null)
   const fileRef = React.useRef(null)
+  // Fremdrift gjennom HELE importen: { tekst, andel } — andel 0–1, eller null når
+  // fasen ikke kan måles. Dekker også lesing/parsing av fila og halen etterpå,
+  // slik at det aldri står stille uten forklaring.
+  const [impFremdrift, setImpFremdrift] = useState(null)
+  // Navnet på malen som er merket som standard — brukes til å kjenne igjen
+  // fabrikklisten, slik at brukerens egen import kan bli aktiv automatisk.
+  const [standardMalNavn, setStandardMalNavn] = useState(null)
+  // Omdøping: { id, navn } når dialogen er åpen.
+  const [dopOm, setDopOm] = useState(null)
+  const [doper, setDoper] = useState(false)
 
   const loadData = async () => {
-    const { data: pl } = await supabase.from('prislister').select('*').eq('user_id', user?.id).order('created_at', { ascending: false })
-    setPrislister(pl || [])
-    const aktiv = (pl || []).find(p => p.aktiv)
+    const hentListene = async () => {
+      const q = medPrislisteEier(supabase.from('prislister').select('*'), companyId, user?.id)
+      const { data } = await q.order('created_at', { ascending: false })
+      return data || []
+    }
+    // Navnet på standardmalen. Er den ikke lesbar for rollen, står det som null,
+    // og da faller aktiv-regelen ved import tilbake på «bedriften har én liste».
+    if (standardMalNavn === null) {
+      try {
+        const { data: mal } = await supabase.from('prisliste_mal').select('navn').eq('er_standard', true).limit(1).maybeSingle()
+        if (mal?.navn) setStandardMalNavn(mal.navn)
+      } catch (e) { /* malen er ikke lesbar — ikke kritisk */ }
+    }
+    let pl = await hentListene()
+    // SIKKERHETSNETT: har bedriften ingen prisliste, opprettes fabrikklisten nå.
+    // Normalt skjedde det ved registrering, men det kallet kan ha blitt avbrutt
+    // av sideomlastingen. Funksjonen er idempotent.
+    if (pl.length === 0 && companyId && user?.id) {
+      try {
+        const start = () => setImpFremdrift({ tekst: 'Legger inn standard prisliste — dette tar noen sekunder …', andel: null })
+        if (await sikreStandardPrisliste(companyId, user.id, start)) {
+          pl = await hentListene()
+          if (pl.length > 0) setToast({ type: 'success', message: `Standard prisliste «${pl[0].navn}» er lagt inn med ${(pl[0].antall_varer || 0).toLocaleString('nb-NO')} varer` })
+        }
+      } finally { setImpFremdrift(null) }
+    }
+    setPrislister(pl)
+    const aktiv = pl.find(p => p.aktiv)
     setAktivPrisliste(aktiv || null)
     // YTELSE: `order('varenavn').limit(200)` er en sortering av HELE prislisten
     // med mindre det finnes en indeks på (prisliste_id, varenavn). Uten den målte
@@ -73959,7 +74123,9 @@ function PrisbokPage({ onBack }) {
       const { data: pb } = await supabase.from('prisbok').select('*').eq('prisliste_id', aktiv.id).order('varenavn').limit(200)
       setPrisbok(pb || [])
     } else {
-      const { data: pb } = await supabase.from('prisbok').select('*').eq('user_id', user?.id).order('varenavn').limit(200)
+      // Ingen aktiv liste: vis eldre rader uten prisliste_id (fra før listene fanst).
+      const q = medPrislisteEier(supabase.from('prisbok').select('*'), companyId, user?.id)
+      const { data: pb } = await q.order('varenavn').limit(200)
       setPrisbok(pb || [])
     }
     setLoading(false)
@@ -74043,10 +74209,24 @@ function PrisbokPage({ onBack }) {
     return rows
   }
 
+  // Slipper tråden ett øyeblikk så React får tegnet fremdriftsteksten FØR en tung
+  // synkron jobb starter. Uten den vises «Leser fil …» først når jobben er ferdig.
+  const pust = () => new Promise(r => setTimeout(r, 30))
+
+  // Radene med pris, regnet ut ÉN gang. Sto før som to `rawRows.filter(...)` i
+  // render — og siden fremdriften oppdateres 121 ganger under en 60 453-vares
+  // import, ble det 121 × 2 fulle gjennomganger av hele listen bare for å tegne
+  // knappeteksten.
+  const gyldigeRader = React.useMemo(() => rawRows.filter(r => r.prisKr > 0), [rawRows])
+
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0]
     if (!file) return
     setImportNavn(file.name.replace(/\.[^.]+$/, ''))
+    // Parsingen av 60 453 linjer tar tid og blokkerer tråden. Uten dette står
+    // siden helt stille før forhåndsvisningen dukker opp.
+    setImpFremdrift({ tekst: `Leser ${file.name} …`, andel: null })
+    await pust()
     // Try to read with latin1 for 5001 files
     let text
     try {
@@ -74059,6 +74239,8 @@ function PrisbokPage({ onBack }) {
 
     if (detect5001(text)) {
       setIs5001(true)
+      setImpFremdrift({ tekst: 'Tolker prisfilen …', andel: null })
+      await pust()
       const rows = parse5001(text)
       setRawRows(rows)
       setImportStep('preview5001')
@@ -74087,6 +74269,7 @@ function PrisbokPage({ onBack }) {
       setColMapping(autoMap)
       setImportStep('mapping')
     }
+    setImpFremdrift(null)
     e.target.value = ''
   }
 
@@ -74132,34 +74315,57 @@ function PrisbokPage({ onBack }) {
   const doImport = async (items, navn) => {
     if (!kanStyrePrisgrunnlag) return
     setImporting(true)
+    setImpFremdrift({ tekst: 'Oppretter prislisten …', andel: 0 })
     try {
-      // Create prisliste entry
+      // Skal den nye listen bli aktiv? Ja hvis bedriften ikke har noen liste, og
+      // ja hvis den ENESTE listen er fabrikklisten — man importerer nettopp fordi
+      // man vil bruke sin egen. Har bedriften flere lister, styrer de aktiv selv.
+      const bareFabrikklisten = prislister.length === 1 &&
+        (standardMalNavn ? prislister[0].navn === standardMalNavn : true)
+      const skalBliAktiv = prislister.length === 0 || bareFabrikklisten
+
       const { data: pl, error: plErr } = await supabase.from('prislister').insert({
-        user_id: user?.id, navn, leverandor: navn, antall_varer: items.length, aktiv: prislister.length === 0
+        user_id: user?.id, company_id: companyId || null, navn, leverandor: navn,
+        antall_varer: items.length, aktiv: skalBliAktiv,
       }).select().single()
       if (plErr) throw plErr
-      // Insert items in batches
+      // Blir den nye aktiv, må de andre slås av — ellers står to som aktive.
+      if (skalBliAktiv) {
+        await medPrislisteEier(
+          supabase.from('prislister').update({ aktiv: false }).neq('id', pl.id),
+          companyId, user?.id,
+        )
+      }
       let inserted = 0
       for (let i = 0; i < items.length; i += 500) {
-        const batch = items.slice(i, i + 500).map(item => ({ ...item, prisliste_id: pl.id, prisliste_navn: navn }))
-        setImportProgress(`Importerer ${Math.min(i + 500, items.length)} av ${items.length}...`)
+        const batch = items.slice(i, i + 500).map(item => ({
+          ...item, prisliste_id: pl.id, prisliste_navn: navn, company_id: companyId || null,
+        }))
+        const ferdig = Math.min(i + 500, items.length)
+        setImpFremdrift({
+          tekst: `Importerer ${ferdig.toLocaleString('nb-NO')} av ${items.length.toLocaleString('nb-NO')} varer`,
+          andel: items.length ? ferdig / items.length : 0,
+        })
         const { error } = await supabase.from('prisbok').insert(batch)
         if (error) throw error
         inserted += batch.length
       }
-      setImportStep(null)
-      setImportProgress('')
+      // Panelet lukkes IKKE før halen er unnagjort. Lukket vi her, ville
+      // loadData og biblioteksoppdateringen gått uten at noe stod på skjermen.
+      setImpFremdrift({ tekst: 'Laster inn prislisten …', andel: 1 })
       await loadData()
-      setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
-      // Ble denne listen aktiv (første import), oppdateres biblioteket med én gang.
-      // Ellers skjer det når brukeren setter den aktiv.
-      if (pl.aktiv) await oppdaterBiblioteketNaa(pl)
+      if (pl.aktiv) {
+        setImpFremdrift({ tekst: 'Oppdaterer biblioteket med de nye prisene …', andel: 1 })
+        await oppdaterBiblioteketNaa(pl)
+      }
+      setImportStep(null)
+      setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som «${navn}»${pl.aktiv ? ' og satt som aktiv prisliste' : ''}` })
     } catch(e) { setToast({ type: 'error', message: 'Feil ved import: ' + e.message }) }
-    finally { setImporting(false); setImportProgress('') }
+    finally { setImporting(false); setImpFremdrift(null) }
   }
 
   const handleImport5001 = () => {
-    const items = rawRows.map(r => ({
+    const items = gyldigeRader.map(r => ({
       varenummer: r.nobb, varenavn: r.varenavn, enhet: r.enhet,
       pris_per_enhet: r.nettoPrisKr > 0 ? r.nettoPrisKr : r.prisKr,
       kategori: r.kategoriNavn, kilde: '5001', user_id: user?.id,
@@ -74183,7 +74389,7 @@ function PrisbokPage({ onBack }) {
   const toggleAktiv = async (pl) => {
     if (!kanStyrePrisgrunnlag) return
     // Deactivate all, activate this one
-    await supabase.from('prislister').update({ aktiv: false }).eq('user_id', user?.id)
+    await medPrislisteEier(supabase.from('prislister').update({ aktiv: false }), companyId, user?.id)
     await supabase.from('prislister').update({ aktiv: true }).eq('id', pl.id)
     // Byttet vises MED ÉN GANG, uten å hente varelisten først.
     //
@@ -74208,18 +74414,66 @@ function PrisbokPage({ onBack }) {
     await medFremdrift({ fase: 'laster', prislisteNavn: pl.navn, antall: pl.antall_varer }, () => loadData())
   }
 
+  // Sletting går gjennom slett_prisliste() (SECURITY DEFINER, statement_timeout
+  // 120 s). Grunnen står i SQL-en: rollen `authenticated` har 8 sekunder, og en
+  // sletting av 305 228 varelinjer bruker mer. Før ble den avbrutt uten at noen
+  // sjekket feilen, og så slettet koden prisliste-raden likevel — 1 rad, rask nok.
+  // Resultatet var 365 681 varelinjer uten en prisliste å høre til.
   const deletePrisliste = async (pl) => {
     if (!kanStyrePrisgrunnlag) return
+    // Antallet hentes fra prisbok, ikke fra antall_varer. Det feltet ble skrevet
+    // ved import, og er nettopp tallet som ikke stemmer når noe har gått galt.
+    let antall = pl.antall_varer || 0
+    try {
+      const { count } = await supabase.from('prisbok').select('id', { count: 'exact', head: true }).eq('prisliste_id', pl.id)
+      if (typeof count === 'number') antall = count
+    } catch (e) { /* faller tilbake på antall_varer */ }
+
     const ok = await confirm({
-      message: `Slett prisliste "${pl.navn}"`,
-      subMessage: `${pl.antall_varer} varer blir slettet permanent. Dette kan ikke angres.`,
+      message: `Slett prisliste «${pl.navn}»`,
+      subMessage: `${antall.toLocaleString('nb-NO')} varelinjer blir slettet permanent sammen med listen. Dette kan ikke angres.${pl.aktiv ? ' Listen er den aktive — etterpå har bedriften ingen aktiv prisliste.' : ''}`,
       confirmLabel: 'Slett prisliste',
       danger: true,
     })
     if (!ok) return
-    await supabase.from('prisbok').delete().eq('prisliste_id', pl.id)
-    await supabase.from('prislister').delete().eq('id', pl.id)
-    await loadData()
+
+    setImpFremdrift({ tekst: `Sletter ${antall.toLocaleString('nb-NO')} varelinjer …`, andel: null })
+    try {
+      const { data, error } = await supabase.rpc('slett_prisliste', { p_prisliste_id: pl.id })
+      if (error) throw error
+      const slettet = (data && (data.slettede_varelinjer ?? data.varelinjer)) ?? null
+      setToast({
+        type: 'success',
+        message: `«${pl.navn}» er slettet${slettet != null ? ` med ${Number(slettet).toLocaleString('nb-NO')} varelinjer` : ''}`,
+      })
+    } catch (e) {
+      setToast({ type: 'error', message: 'Prislisten ble IKKE slettet: ' + ((e && e.message) || 'ukjent feil') })
+    } finally {
+      setImpFremdrift(null)
+      await loadData()
+    }
+  }
+
+  // Omdøping går samme vei og av samme grunn: prisbok.prisliste_navn ligger på
+  // hver enkelt varelinje, og 60 000 rader rekker ikke innenfor 8 sekunder.
+  // `leverandor` røres IKKE — det er hvem som leverte filen, ikke hva listen heter.
+  const dopOmPrisliste = async () => {
+    const navn = (dopOm?.navn || '').trim()
+    if (!dopOm?.id || !navn || doper) return
+    setDoper(true)
+    try {
+      const { data, error } = await supabase.rpc('dop_om_prisliste', { p_prisliste_id: dopOm.id, p_navn: navn })
+      if (error) throw error
+      const linjer = (data && (data.oppdaterte_varelinjer ?? data.varelinjer)) ?? null
+      setDopOm(null)
+      setToast({
+        type: 'success',
+        message: `Prislisten heter nå «${navn}»${linjer != null ? ` — ${Number(linjer).toLocaleString('nb-NO')} varelinjer oppdatert` : ''}`,
+      })
+      await loadData()
+    } catch (e) {
+      setToast({ type: 'error', message: 'Navnet ble ikke endret: ' + ((e && e.message) || 'ukjent feil') })
+    } finally { setDoper(false) }
   }
 
   const searchPrisbok = async () => {
@@ -74288,20 +74542,31 @@ function PrisbokPage({ onBack }) {
         {/* Prisliste-oversikt */}
         {prislister.length > 0 && (
           <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', marginBottom:'16px' }}>
-            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Mine prislister</div>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Bedriftens prislister</div>
             {prislister.map(pl => (
-              <div key={pl.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
+              <div key={pl.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc', flexWrap:'wrap' }}>
                 <input type="radio" checked={pl.aktiv} disabled={!kanStyrePrisgrunnlag}
                   title={kanStyrePrisgrunnlag ? 'Sett denne prislisten aktiv' : 'Bare admin og leder kan bytte aktiv prisliste'}
-                  onChange={() => toggleAktiv(pl)} style={{ accentColor:'#059669', cursor: kanStyrePrisgrunnlag ? 'pointer' : 'not-allowed' }} />
-                <div style={{ flex:1 }}>
+                  onChange={() => toggleAktiv(pl)} style={{ accentColor:'#059669', cursor: kanStyrePrisgrunnlag ? 'pointer' : 'not-allowed', flexShrink:0 }} />
+                <div style={{ flex:'1 1 180px', minWidth:0 }}>
                   <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{pl.navn}</span>
-                  <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'8px' }}>{(pl.antall_varer || 0).toLocaleString('nb-NO')} varer</span>
-                  {pl.aktiv && <span style={{ background:'#f0fdf4', color:'#16a34a', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', marginLeft:'8px' }}>AKTIV</span>}
+                  {standardMalNavn && pl.navn === standardMalNavn && (
+                    <span title="Standardlisten som følger med. Importer din egen når du har fått prisfil fra leverandøren."
+                      style={{ background:'#f8fafc', color:'#64748b', border:'1px solid #e2e8f0', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', marginLeft:'8px' }}>STANDARD</span>
+                  )}
+                  <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'2px' }}>
+                    {(pl.antall_varer || 0).toLocaleString('nb-NO')} varer · {new Date(pl.created_at).toLocaleDateString('nb-NO')}
+                    {pl.leverandor && pl.leverandor !== pl.navn ? ` · ${pl.leverandor}` : ''}
+                  </div>
                 </div>
-                <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(pl.created_at).toLocaleDateString('nb-NO')}</span>
+                {pl.aktiv && <span style={{ background:'#f0fdf4', color:'#16a34a', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', flexShrink:0 }}>AKTIV</span>}
                 {kanStyrePrisgrunnlag && (
-                  <button onClick={() => deletePrisliste(pl)} title="Slett prislisten" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+                  <div style={{ display:'flex', gap:'2px', flexShrink:0, marginLeft:'auto' }}>
+                    <button onClick={() => setDopOm({ id: pl.id, navn: pl.navn })} title="Endre navn på prislisten"
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', padding:'6px 8px' }}>✏️</button>
+                    <button onClick={() => deletePrisliste(pl)} title="Slett prislisten"
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', padding:'6px 8px' }}>🗑️</button>
+                  </div>
                 )}
               </div>
             ))}
@@ -74331,7 +74596,7 @@ function PrisbokPage({ onBack }) {
                   ))}
                 </tr></thead>
                 <tbody>
-                  {rawRows.filter(r => r.prisKr > 0).slice(0, 8).map((r, i) => (
+                  {gyldigeRader.slice(0, 8).map((r, i) => (
                     <tr key={i} style={{ borderBottom:'1px solid #f8fafc' }}>
                       <td style={{ padding:'5px 8px', fontFamily:'monospace', color:'#64748b' }}>{r.nobb}</td>
                       <td style={{ padding:'5px 8px', color:'#0f172a', maxWidth:'300px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.varenavn}</td>
@@ -74345,11 +74610,10 @@ function PrisbokPage({ onBack }) {
                 </tbody>
               </table>
             </div>
-            {importProgress && <div style={{ fontSize:'13px', color:'#2563eb', marginBottom:'8px' }}>{importProgress}</div>}
             <div style={{ display:'flex', gap:'10px', justifyContent:'flex-end' }}>
               <button onClick={() => setImportStep(null)} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Avbryt</button>
               <button onClick={handleImport5001} disabled={importing} style={{ padding:'10px 24px', background:importing ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor:importing ? 'not-allowed' : 'pointer', fontSize:'14px', fontWeight:'700' }}>
-                {importing ? importProgress || 'Importerer...' : `Importer ${rawRows.filter(r => r.prisKr > 0).length.toLocaleString('nb-NO')} varer`}
+                {importing ? 'Importerer …' : `Importer ${gyldigeRader.length.toLocaleString('nb-NO')} varer`}
               </button>
             </div>
           </div>
@@ -74433,6 +74697,58 @@ function PrisbokPage({ onBack }) {
           </div>
         )}
       </div>
+
+      {/* Omdøping av prisliste. Navnet ligger både på listen og på hver varelinje,
+          så selve endringen går gjennom en databasefunksjon. */}
+      {dopOm && (
+        <>
+          <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:160 }} onMouseDown={e => { if (e.target === e.currentTarget && !doper) setDopOm(null) }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'18px', width:'min(460px, calc(100vw - 24px))',
+            zIndex:161, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', padding:'20px 22px', boxSizing:'border-box' }}>
+            <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>✏️ Endre navn på prislisten</h3>
+            <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+              Navnet vises i kalkylene og i «Oppdater priser», så det bør si hvilken fil og hvilken måned det er. Leverandøren endres ikke.
+            </p>
+            <input autoFocus value={dopOm.navn} onChange={e => setDopOm(d => ({ ...d, navn: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') dopOmPrisliste() }}
+              placeholder="F.eks. «Optimera 5001 – august 2026»" maxLength={120}
+              style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', fontFamily:'inherit' }} />
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:'8px', marginTop:'16px', flexWrap:'wrap' }}>
+              <button onClick={() => setDopOm(null)} disabled={doper}
+                style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: doper ? 'default' : 'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+              <button onClick={dopOmPrisliste} disabled={doper || !dopOm.navn.trim()}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', background: (doper || !dopOm.navn.trim()) ? '#a7f3d0' : '#059669', color:'white', cursor: (doper || !dopOm.navn.trim()) ? 'default' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+                {doper ? 'Lagrer …' : 'Lagre navnet'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Fremdrift gjennom import, sletting og omdøping. Vises MED ÉN GANG (ikke
+          etter to sekunder som biblioteksoppdateringen): her vet vi at jobben tar
+          tid, og lesing av fila blokkerer tråden mens den går. */}
+      {impFremdrift && (
+        <div style={{ position:'fixed', inset:0, zIndex:158, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(15,23,42,0.45)', padding:'16px' }}>
+          <div style={{ background:'white', borderRadius:'16px', padding:'22px 24px', maxWidth:'380px', width:'100%', boxSizing:'border-box', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
+            <div style={{ fontSize:'28px', marginBottom:'10px', textAlign:'center' }}>💰</div>
+            <div style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', marginBottom:'12px', textAlign:'center', lineHeight:1.45 }}>{impFremdrift.tekst}</div>
+            <div style={{ height:'8px', borderRadius:'999px', background:'#f1f5f9', overflow:'hidden', marginBottom:'8px' }}>
+              {impFremdrift.andel == null ? (
+                // Ukjent varighet: en stripe som beveger seg, så det ikke ser fastlåst ut.
+                <div style={{ height:'100%', width:'40%', background:'#059669', borderRadius:'999px', animation:'epPuls 1.1s ease-in-out infinite' }} />
+              ) : (
+                <div style={{ height:'100%', width:`${Math.round(Math.min(1, Math.max(0, impFremdrift.andel)) * 100)}%`, background:'#059669', transition:'width 0.25s' }} />
+              )}
+            </div>
+            <div style={{ fontSize:'12px', fontWeight:'700', color:'#059669', textAlign:'center', minHeight:'17px' }}>
+              {impFremdrift.andel == null ? '' : `${Math.round(Math.min(1, Math.max(0, impFremdrift.andel)) * 100)} %`}
+            </div>
+            <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.5, textAlign:'center', marginTop:'8px' }}>Ikke lukk siden.</div>
+            <style>{'@keyframes epPuls { 0% { margin-left: 0 } 50% { margin-left: 60% } 100% { margin-left: 0 } }'}</style>
+          </div>
+        </div>
+      )}
 
       {/* Fremdrift mens det jobbes — kommer først etter to sekunder, og viser hvor
           jobben står, ikke bare at den går. Dekker både biblioteksoppdateringen og
@@ -75136,7 +75452,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     let avbrutt = false
     ;(async () => {
       try {
-        const { data: pl } = await supabase.from('prislister').select('id').eq('user_id', user.id).eq('aktiv', true).limit(1).maybeSingle()
+        const pl = await hentAktivPrisliste(companyId, user.id, 'id')
         const funnet = []
         for (let i = 0; i < mangler.length; i += 100) {
           let q = supabase.from('prisbok').select('varenummer, enhet, pris_per_enhet').in('varenummer', mangler.slice(i, i + 100))
@@ -76884,7 +77200,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                   const nobb = e.target.value.trim()
                                                   if (!nobb) return
                                                   try {
-                                                    const { data: plData } = await supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).single()
+                                                    const plData = await hentAktivPrisliste(companyId, user?.id, 'id')
                                                     let query = supabase.from('prisbok').select('*').eq('varenummer', nobb)
                                                     if (plData) query = query.eq('prisliste_id', plData.id)
                                                     const { data } = await query.limit(1).single()
@@ -79139,8 +79455,8 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
 
           // Load prisliste ID once on mount (for category-only search fallback)
           useEffect(() => {
-            supabase.from('prislister').select('id').eq('user_id', user?.id).eq('aktiv', true).limit(1).maybeSingle()
-              .then(({ data }) => { if (data) setPlId(data.id) })
+            hentAktivPrisliste(companyId, user?.id, 'id')
+              .then(data => { if (data) setPlId(data.id) })
               .catch(() => {})
           }, [])
 
@@ -79283,6 +79599,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           undertittel={`${k.kalk_number ? k.kalk_number + ' · ' : ''}${k.title || 'Kalkyle'}`}
           poster={prisPosterFraKalkyle()}
           userId={user?.id}
+          companyId={companyId}
           sendtStatus={KALK_SENDT_STATUS.has(k.status) ? k.status : null}
           onSkriv={skrivPrisoppdatering}
           onFinnErstatning={(p) => {
