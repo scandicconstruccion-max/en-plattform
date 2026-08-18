@@ -59239,6 +59239,34 @@ async function hentAktivPrisliste(companyId, userId, kolonner = 'id, navn') {
 // window.location.reload() umiddelbart etterpå: rekker ikke nettleseren å sende
 // forespørselen før omlastingen, blir den avbrutt, og da er det ingen som prøver
 // igjen. Idempotensen gjør det trygt å kalle den flere ganger.
+// Er fabrikklisten alt levert til denne bedriften?
+//
+// Uten denne markeringen ville sikkerhetsnettet under lagt inn listen på nytt
+// hver gang noen åpner Prisbok etter å ha slettet den — det ser ut som en feil,
+// og det overkjører et bevisst valg. Markeringen skiller «registreringen rakk
+// aldri å opprette listen» fra «vi hadde den, og kastet den».
+//
+// Finnes ikke kolonnen ennå (SQL-en er ikke kjørt), svarer vi nei og oppfører oss
+// som før. Da virker fabrikklisten fortsatt, den kan bare komme tilbake én gang
+// for mye — det er den minst skadelige feilen av de to.
+async function fabrikklisteAlleredeLevert() {
+  try {
+    const { data, error } = await supabase.from('company_settings').select('fabrikkliste_levert').limit(1).maybeSingle()
+    if (error) return false
+    return !!(data && data.fabrikkliste_levert)
+  } catch (e) { return false }
+}
+
+// Setter markeringen etter at listen faktisk er opprettet.
+async function merkFabrikklisteLevert() {
+  try {
+    const { data: cs } = await supabase.from('company_settings').select('id').limit(1).maybeSingle()
+    if (cs?.id) {
+      await supabase.from('company_settings').update({ fabrikkliste_levert: new Date().toISOString() }).eq('id', cs.id)
+    }
+  } catch (e) { /* markeringen er en hjelp, ikke en forutsetning */ }
+}
+
 // Starter fabrikklisten ved registrering, UTEN å vente. Registreringen skal ikke
 // bli tregere av at 60 453 rader kopieres, og feiler kallet skal brukeren likevel
 // komme inn. Finner vi ikke bedrifts-id-en, hopper vi over — sikkerhetsnettet i
@@ -59254,14 +59282,16 @@ function startStandardPrislisteIBakgrunnen(userId) {
         companyId = cs?.id || null
       }
       if (!companyId) { console.warn('[prisbok] fant ikke bedrift — standardprisliste hoppes over'); return }
-      await supabase.rpc('opprett_standard_prisliste', { p_company_id: companyId, p_user_id: userId })
+      const { error } = await supabase.rpc('opprett_standard_prisliste', { p_company_id: companyId, p_user_id: userId })
+      if (error) { console.warn('[prisbok] standardprisliste ved registrering feilet:', error.message); return }
+      await merkFabrikklisteLevert()
     } catch (e) {
       console.warn('[prisbok] standardprisliste ved registrering feilet:', (e && e.message) || e)
     }
   })()
 }
 
-async function sikreStandardPrisliste(companyId, userId) {
+async function sikreStandardPrisliste(companyId, userId, onStart) {
   if (!companyId || !userId) return false
   try {
     const q = medPrislisteEier(
@@ -59271,10 +59301,16 @@ async function sikreStandardPrisliste(companyId, userId) {
     const { count, error } = await q
     if (error) return false
     if ((count || 0) > 0) return false
+    // Har bedriften fått listen før og slettet den, skal den IKKE komme tilbake.
+    if (await fabrikklisteAlleredeLevert()) return false
+    // Først NÅ vet vi at listen faktisk skal lages. Kalleren viser fremdrift her,
+    // slik at det ikke blinker et vindu i de tilfellene vi ikke gjør noe.
+    if (typeof onStart === 'function') onStart()
     const { error: rpcFeil } = await supabase.rpc('opprett_standard_prisliste', {
       p_company_id: companyId, p_user_id: userId,
     })
     if (rpcFeil) { console.warn('[prisbok] standardprisliste ble ikke opprettet:', rpcFeil.message); return false }
+    await merkFabrikklisteLevert()
     return true
   } catch (e) {
     console.warn('[prisbok] standardprisliste feilet:', (e && e.message) || e)
@@ -74065,9 +74101,9 @@ function PrisbokPage({ onBack }) {
     // Normalt skjedde det ved registrering, men det kallet kan ha blitt avbrutt
     // av sideomlastingen. Funksjonen er idempotent.
     if (pl.length === 0 && companyId && user?.id) {
-      setImpFremdrift({ tekst: 'Legger inn standard prisliste — dette tar noen sekunder …', andel: null })
       try {
-        if (await sikreStandardPrisliste(companyId, user.id)) {
+        const start = () => setImpFremdrift({ tekst: 'Legger inn standard prisliste — dette tar noen sekunder …', andel: null })
+        if (await sikreStandardPrisliste(companyId, user.id, start)) {
           pl = await hentListene()
           if (pl.length > 0) setToast({ type: 'success', message: `Standard prisliste «${pl[0].navn}» er lagt inn med ${(pl[0].antall_varer || 0).toLocaleString('nb-NO')} varer` })
         }
