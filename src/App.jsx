@@ -59445,13 +59445,36 @@ function rangerTreff(rad, soeketermSanitisert, soekeOrd) {
 }
 
 // Hovedsøkefunksjonen. Returnerer rangerte, dedupliserte resultater.
+// Forklaringen når prisboken er stengt for rollen.
+//
+// sok_prisbok er SECURITY DEFINER og omgår RLS, så uten en rollesjekk der ville
+// en ansatt kunnet søke opp innkjøpsprisene likevel. Sjekken ligger nå i
+// funksjonen, og da får klienten tomt svar. Et søk som bare gir «ingen treff»
+// ser ut som en feil — brukeren leter videre og melder det inn. Derfor sier vi
+// hvorfor, og hva som fortsatt virker.
+const PRIS_TILGANG_TEKST = 'Innkjøpsprisene er økonomidata, og din rolle har ikke tilgang til prisboken. Prisene som alt står på materiallinjene vises som før. Skal en vare kobles eller en pris oppdateres, må admin eller leder gjøre det.'
+
+function PrisTilgangNotis({ kompakt }) {
+  return (
+    <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding: kompakt ? '8px 10px' : '12px 14px',
+      display:'flex', alignItems:'flex-start', gap:'8px' }}>
+      <span style={{ fontSize: kompakt ? '13px' : '15px', lineHeight:1.2, flexShrink:0 }}>🔒</span>
+      <div style={{ fontSize: kompakt ? '11px' : '12px', color:'#475569', lineHeight:1.5 }}>{PRIS_TILGANG_TEKST}</div>
+    </div>
+  )
+}
+
 async function utforPrisbokSoek({
   userId,
   soeketerm,
   maxResultater = 10,
   kategoriFilter = null,
+  kanSePriser = true,
 }) {
   if (!userId) return []
+  // Rollesjekken ligger i sok_prisbok. Her sparer vi den dømte rundturen — og
+  // kalleren viser PrisTilgangNotis i stedet for «ingen treff».
+  if (!kanSePriser) return []
   const renTerm = sanitiserSoeketerm(soeketerm)
   if (!renTerm || renTerm.length < 2) return []
 
@@ -59475,7 +59498,15 @@ async function utforPrisbokSoek({
       p_maks: 100,
     })
     if (error) {
-      console.warn('[prisbok] sok_prisbok feilet:', error.message)
+      // 42501 = insufficient_privilege: rollesjekken i sok_prisbok avviste kallet.
+      // Kommer den hit, er den klientside speilingen (rolleKanSePriser) ute av takt
+      // med policyen i databasen — og da viser vi «ingen treff» der vi skulle vist
+      // forklaringen. Loggen sier det tydelig, slik at det er til å finne.
+      if (error.code === '42501') {
+        console.warn('[prisbok] sok_prisbok nektet tilgang for denne rollen. Sjekk at rolleKanSePriser() stemmer med rbac_okonomi_sel.')
+      } else {
+        console.warn('[prisbok] sok_prisbok feilet:', error.message)
+      }
       return []
     }
     rader = data || []
@@ -59517,7 +59548,7 @@ async function utforPrisbokSoek({
 
 // React hook som wrapper utforPrisbokSoek
 function usePrisbokSoek() {
-  const { user, companyId } = useAuth()
+  const { user, companyId, kanSePriser } = useAuth()
   const [aktivPrislisteKlar, setAktivPrislisteKlar] = useState(false)
 
   // Forhåndsinnlast aktiv prisliste når brukeren er klar
@@ -59530,11 +59561,12 @@ function usePrisbokSoek() {
     return utforPrisbokSoek({
       userId: user?.id,
       soeketerm,
+      kanSePriser,
       ...opts,
     })
-  }, [user?.id])
+  }, [user?.id, kanSePriser])
 
-  return { sok, aktivPrislisteKlar }
+  return { sok, aktivPrislisteKlar, kanSePriser }
 }
 
 // ─── KOBLING AV MATERIALLINJER MOT PRISLISTE (Oppgave 2) ─────────────────────
@@ -60075,7 +60107,7 @@ function NobbKnapp({ varenavn, isMob, style }) {
 }
 
 function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) {
-  const { sok } = usePrisbokSoek()
+  const { sok, kanSePriser } = usePrisbokSoek()
   const [soekTekst, setSoekTekst] = useState(value?.varenavn || '')
   const [resultater, setResultater] = useState([])
   const [aapenDropdown, setAapenDropdown] = useState(false)
@@ -60205,9 +60237,13 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
             </div>
           )}
           {!laster && resultater.length === 0 && (soekTekst.trim().length >= 2 || foreslagSoek) && (
-            <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
-              Ingen treff i prisboken — skriv inn manuelt
-            </div>
+            kanSePriser ? (
+              <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                Ingen treff i prisboken — skriv inn manuelt
+              </div>
+            ) : (
+              <div style={{ padding: '8px' }}><PrisTilgangNotis kompakt /></div>
+            )
           )}
           {!laster && resultater.length > 0 && foreslagSoek && !soekTekst.trim() && (
             <div style={{ padding: '6px 12px', fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
@@ -73873,7 +73909,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
 // Layout er bygget for 375 px: full skjerm på mobil, ett kort per forslag med
 // trykkflate over 56 px, og ingen sideveis scroll.
 function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose }) {
-  const { sok: prisbokSok } = usePrisbokSoek()
+  const { sok: prisbokSok, kanSePriser } = usePrisbokSoek()
   const [idx, setIdx] = useState(0)
   const [kandidater, setKandidater] = useState([])
   const [laster, setLaster] = useState(false)
@@ -74023,12 +74059,18 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
                 </>
               )}
               {!laster && kandidater.length === 0 && (
-                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
-                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
-                  <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
-                    Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk gjerne selv under — eller hopp over, så beholder linjen den veiledende prisen.
+                kanSePriser ? (
+                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
+                    <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
+                      Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk gjerne selv under — eller hopp over, så beholder linjen den veiledende prisen.
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  // «Ingen god kandidat» ville vært feil svar her: det er ikke
+                  // dimensjonen som mangler, det er tilgangen.
+                  <div style={{ marginBottom:'14px' }}><PrisTilgangNotis /></div>
+                )
               )}
 
               {/* Søk selv */}
@@ -74039,7 +74081,9 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
                   style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
                 {sokLaster && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker …</div>}
                 {!sokLaster && egetSok.trim().length >= 2 && sokTreff.length === 0 && (
-                  <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Ingen treff for «{egetSok.trim()}».</div>
+                  kanSePriser
+                    ? <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Ingen treff for «{egetSok.trim()}».</div>
+                    : <div style={{ marginTop:'8px' }}><PrisTilgangNotis kompakt /></div>
                 )}
                 {sokTreff.length > 0 && <div style={{ marginTop:'8px' }}>{sokTreff.map(p => kort(p, false))}</div>}
               </div>
@@ -74066,7 +74110,7 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
 // ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
 
 function PrisbokPage({ onBack }) {
-  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag, kanSePriser } = useAuth()
   const confirm = useConfirm()
   const [prislister, setPrislister] = useState([])
   const [aktivPrisliste, setAktivPrisliste] = useState(null)
@@ -74498,6 +74542,8 @@ function PrisbokPage({ onBack }) {
 
   const searchPrisbok = async () => {
     if (!search.trim()) { setPrisbok([]); return }
+    // Rollesjekken ligger i sok_prisbok — kallet ville bare gitt en feil.
+    if (!kanSePriser) { setPrisbok([]); return }
     try {
       // Bruker sok_prisbok (SECURITY DEFINER) — direkte ILIKE mot prisbok kan ikke
       // bruke trigram-indeksen under RLS og gir statement timeout på 305k rader.
@@ -74668,9 +74714,15 @@ function PrisbokPage({ onBack }) {
           </div>
         )}
 
+        {/* Uten pristilgang er både listen og søket tomt. Da skal siden si hvorfor,
+            ikke la brukeren søke forgjeves. */}
+        {!kanSePriser && <div style={{ marginBottom:'16px' }}><PrisTilgangNotis /></div>}
+
         {/* Search */}
         <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'16px' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk NOBB-nummer, varenavn eller kategori (min. 2 tegn)..." style={{ ...qInp, maxWidth:'500px', flex:1 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} disabled={!kanSePriser}
+            placeholder={kanSePriser ? '🔍 Søk NOBB-nummer, varenavn eller kategori (min. 2 tegn)...' : 'Søk er ikke tilgjengelig for din rolle'}
+            style={{ ...qInp, maxWidth:'500px', flex:1, background: kanSePriser ? undefined : '#f8fafc', color: kanSePriser ? undefined : '#94a3b8' }} />
           {prisbok.length > 0 && <span style={{ fontSize:'13px', color:'#94a3b8' }}>{prisbok.length} treff{aktivPrisliste ? ` i "${aktivPrisliste.navn}"` : ''}</span>}
         </div>
 
@@ -79460,7 +79512,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const [plId, setPlId] = useState(null)
           const [velger, setVelger] = useState(false)
           const searchRef = React.useRef(0)
-          const { sok: prisbokSok } = usePrisbokSoek()
+          const { sok: prisbokSok, kanSePriser } = usePrisbokSoek()
 
           const PRODUKT_KATEGORIER = [
             { id: 'isolasjon', label: 'Isolasjon', emoji: '🧱', keywords: ['ISOLASJON','EPS','XPS','GLAVA','ROCKWOOL','FLEXI','SUNDOLITT','JACKO','MINERALULL'] },
@@ -79582,7 +79634,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv søketekst eller velg en kategori</div>
                   )}
                   {hasSearched && res.length === 0 && !searching && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
+                    kanSePriser
+                      ? <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
+                      : <div style={{ padding:'16px' }}><PrisTilgangNotis /></div>
                   )}
                   {res.map(p => (
                     <button key={p.id} onClick={() => selectProduct(p)}
