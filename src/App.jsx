@@ -1883,6 +1883,7 @@ function AuthProvider({ children }) {
   const erAdmin = erAdminRolle(role)           // styrer brukere + innstillinger
   const kanSlette = rolleKanSlette(role)       // kun admin/leder
   const kanStyreProsjekt = rolleKanStyreProsjekt(role) // opprette/slette prosjekt: admin/leder
+  const kanStyrePrisgrunnlag = rolleKanStyrePrisgrunnlag(role) // prislister + erstatte standarder
 
   // Marker en opplæringstur som sett — DB er fasit, localStorage er cache.
   const markTourSeen = async (tourKey) => {
@@ -1892,7 +1893,7 @@ function AuthProvider({ children }) {
     try { await supabase.from('user_profiles').update({ seen_tours: merged }).eq('id', user.id) } catch (_) {}
   }
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -52335,6 +52336,19 @@ function rolleKanRedigere(role) { return role !== 'les' }
 // Kan denne rollen SLETTE forretningsdata? Kun admin/leder (ansatt og les kan ikke).
 function rolleKanSlette(role) { return role === 'admin' || role === 'leder' }
 
+// Kan denne rollen endre bedriftens FELLES PRISGRUNNLAG? Kun admin/leder.
+//
+// Dette dekker tre handlinger som alle skriver om grunnlaget for hele firmaets
+// tilbud, ikke bare den enkeltes arbeid:
+//   · importere en prisliste
+//   · sette en prisliste aktiv (oppdaterer hele biblioteket)
+//   · slette en prisliste
+//   · «Erstatt min standard» på en innebygd bygningsdel
+// Det er en større handling enn å lagre en egen bygningsdel, og angre-knappen
+// hjelper bare hvis noen oppdager feilen. Ansatt kan fortsatt lage VARIANTER i
+// biblioteket og bruke «Oppdater priser» på sine egne kalkyler.
+function rolleKanStyrePrisgrunnlag(role) { return role === 'admin' || role === 'leder' }
+
 // Kan denne rollen REDIGERE en bestemt modul? Les kan aldri; ansatt er view-only på enkelte (Ordre/Endringer).
 function rolleKanRedigereModul(role, navId) {
   if (role === 'les') return false
@@ -72247,7 +72261,7 @@ function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose
 // arbeidslisten for NOBB-koblingen.
 function KalkBibliotekPage({ onBack }) {
   const confirm = useConfirm()
-  const { user } = useAuth()
+  const { user, kanStyrePrisgrunnlag } = useAuth()
   const [activeFag, setActiveFag] = useState('tomrer')
   const [expandedKat, setExpandedKat] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
@@ -72267,6 +72281,17 @@ function KalkBibliotekPage({ onBack }) {
   // Sletter bedriftens egen bygningsdel. Var den en erstatning, kommer den
   // innebygde tilbake — den har ligget i koden hele tiden.
   const slettEgen = async (bd) => {
+    // Å slette en ERSTATNING gir hele bedriften den innebygde tilbake. Det er
+    // samme type handling som å lage erstatningen, og hører under samme rolle.
+    // Egne varianter kan alle slette.
+    if (bd._erstatterId && !kanStyrePrisgrunnlag) {
+      await confirm({
+        message: 'Krever admin eller leder',
+        subMessage: `«${bd.name}» er bedriftens versjon av en innebygd bygningsdel. Sletter du den, får hele bedriften den innebygde tilbake — derfor er det forbeholdt admin og leder.`,
+        alertOnly: true, kind: 'info',
+      })
+      return
+    }
     const ok = await confirm({
       message: `Slette «${bd.name}»?`,
       subMessage: bd._erstatterId
@@ -72652,9 +72677,14 @@ function KalkBibliotekPage({ onBack }) {
 //
 // Dialogen henter også kategori, fordi alt skal ligge i kategoritreet og ikke i
 // en flat «Egne maler»-liste.
-function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, onLagre, onClose }) {
+//
+// `kanErstatte` styrer om «Erstatt min standard» er tilgjengelig. Å erstatte en
+// innebygd bygningsdel endrer hva HELE bedriften ser, og faller derfor under
+// samme regel som prislister: admin og leder. Ansatt kan lage varianter.
+function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, kanErstatte, onLagre, onClose }) {
   const startNavn = String(bd?.name || '').trim() || 'Uten navn'
-  const [modus, setModus] = useState(innebygd ? 'erstatt' : 'ny')
+  const kanErstatteNaa = !!innebygd && kanErstatte !== false
+  const [modus, setModus] = useState(kanErstatteNaa ? 'erstatt' : 'ny')
   const [navn, setNavn] = useState(startNavn)
   const [kategori, setKategori] = useState(innebygd?.kategori || (kategorier && kategorier[0]) || '')
   const [egenKategori, setEgenKategori] = useState('')
@@ -72667,6 +72697,12 @@ function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, onLagre, onClo
     if (modus === 'ny' && innebygd && navn === startNavn) setNavn(`${startNavn} — variant`)
     if (modus === 'erstatt' && innebygd) setNavn(startNavn)
   }, [modus])
+
+  // Mangler brukeren rettigheten, skal han aldri stå i erstatt-modus — heller
+  // ikke hvis komponenten rendres om.
+  useEffect(() => {
+    if (!kanErstatteNaa && modus === 'erstatt') setModus('ny')
+  }, [kanErstatteNaa, modus])
 
   const endeligKategori = (brukEgenKategori ? egenKategori : kategori).trim()
   const kanLagre = navn.trim().length > 0 && endeligKategori.length > 0 && !lagrer
@@ -72716,8 +72752,15 @@ function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, onLagre, onClo
           {innebygd ? (
             <>
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>HVA SKAL SKJE?</div>
-              {valgkort('erstatt', 'Erstatt min standard',
-                <>Din versjon overtar plassen til «{innebygd.name}». Den innebygde vises ikke lenger for din bedrift.</>)}
+              {kanErstatteNaa ? valgkort('erstatt', 'Erstatt min standard',
+                <>Din versjon overtar plassen til «{innebygd.name}». Den innebygde vises ikke lenger for din bedrift.</>) : (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'8px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+                  <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>🔒</span>
+                  <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.55 }}>
+                    <strong>«Erstatt min standard» krever admin eller leder.</strong> Å erstatte «{innebygd.name}» endrer hva hele bedriften ser. Du kan lagre din versjon som en variant i stedet.
+                  </div>
+                </div>
+              )}
               {valgkort('ny', 'Lagre som ny variant',
                 <>Begge ligger i biblioteket. Gi varianten et navn som skiller den, f.eks. «{innebygd.name} — uten dampsperre».</>)}
 
@@ -72783,6 +72826,7 @@ function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, onLagre, onClo
 // bygningsdeler lå i én haug på tvers av yttervegg, gulv og himling.
 function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   const confirm = useConfirm()
+  const { kanStyrePrisgrunnlag } = useAuth()
   const [mengde, setMengde] = useState(1)
   const [selectedBd, setSelectedBd] = useState(null)
   const [expandedKat, setExpandedKat] = useState(null)
@@ -72794,6 +72838,16 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   const slettEgen = async (bd, e) => {
     e.stopPropagation()
     const erErstatning = !!bd._erstatterId
+    // Samme regel som på Bibliotek-siden: sletter man en erstatning, får hele
+    // bedriften den innebygde tilbake. Det er admin/leder.
+    if (erErstatning && !kanStyrePrisgrunnlag) {
+      await confirm({
+        message: 'Krever admin eller leder',
+        subMessage: `«${bd.name}» er bedriftens versjon av en innebygd bygningsdel. Sletter du den, får hele bedriften den innebygde tilbake.`,
+        alertOnly: true, kind: 'info',
+      })
+      return
+    }
     const ok = await confirm({
       message: `Slette «${bd.name}»?`,
       subMessage: erErstatning
@@ -73120,7 +73174,7 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
 // ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
 
 function PrisbokPage({ onBack }) {
-  const { user, companyId } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
   const confirm = useConfirm()
   const [prislister, setPrislister] = useState([])
   const [aktivPrisliste, setAktivPrisliste] = useState(null)
@@ -73301,6 +73355,7 @@ function PrisbokPage({ onBack }) {
   }
 
   const doImport = async (items, navn) => {
+    if (!kanStyrePrisgrunnlag) return
     setImporting(true)
     try {
       // Create prisliste entry
@@ -73351,6 +73406,7 @@ function PrisbokPage({ onBack }) {
   }
 
   const toggleAktiv = async (pl) => {
+    if (!kanStyrePrisgrunnlag) return
     // Deactivate all, activate this one
     await supabase.from('prislister').update({ aktiv: false }).eq('user_id', user?.id)
     await supabase.from('prislister').update({ aktiv: true }).eq('id', pl.id)
@@ -73368,6 +73424,7 @@ function PrisbokPage({ onBack }) {
   }
 
   const deletePrisliste = async (pl) => {
+    if (!kanStyrePrisgrunnlag) return
     const ok = await confirm({
       message: `Slett prisliste "${pl.navn}"`,
       subMessage: `${pl.antall_varer} varer blir slettet permanent. Dette kan ikke angres.`,
@@ -73425,8 +73482,20 @@ function PrisbokPage({ onBack }) {
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>💰 Prisbok</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Importer prislister fra byggevareleverandører. Velg aktiv prisliste for NOBB-oppslag.</p>
           </div>
-          <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
-          <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFileUpload} style={{ display:'none' }} />
+          {/* Import, «sett aktiv» og sletting skriver om prisgrunnlaget for HELE
+              firmaets tilbud. Derfor admin/leder. Ansatt kan bruke prislisten,
+              lage varianter i biblioteket og oppdatere sine egne kalkyler. */}
+          {kanStyrePrisgrunnlag ? (
+            <>
+              <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
+              <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFileUpload} style={{ display:'none' }} />
+            </>
+          ) : (
+            <span title="Import og bytte av aktiv prisliste er forbeholdt admin og leder, fordi det endrer prisgrunnlaget for hele bedriften"
+              style={{ fontSize:'12px', color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 14px' }}>
+              🔒 Bare admin og leder kan importere prislister
+            </span>
+          )}
         </div>
       </div>
 
@@ -73437,14 +73506,18 @@ function PrisbokPage({ onBack }) {
             <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Mine prislister</div>
             {prislister.map(pl => (
               <div key={pl.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
-                <input type="radio" checked={pl.aktiv} onChange={() => toggleAktiv(pl)} style={{ accentColor:'#059669' }} />
+                <input type="radio" checked={pl.aktiv} disabled={!kanStyrePrisgrunnlag}
+                  title={kanStyrePrisgrunnlag ? 'Sett denne prislisten aktiv' : 'Bare admin og leder kan bytte aktiv prisliste'}
+                  onChange={() => toggleAktiv(pl)} style={{ accentColor:'#059669', cursor: kanStyrePrisgrunnlag ? 'pointer' : 'not-allowed' }} />
                 <div style={{ flex:1 }}>
                   <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{pl.navn}</span>
                   <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'8px' }}>{(pl.antall_varer || 0).toLocaleString('nb-NO')} varer</span>
                   {pl.aktiv && <span style={{ background:'#f0fdf4', color:'#16a34a', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', marginLeft:'8px' }}>AKTIV</span>}
                 </div>
                 <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(pl.created_at).toLocaleDateString('nb-NO')}</span>
-                <button onClick={() => deletePrisliste(pl)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+                {kanStyrePrisgrunnlag && (
+                  <button onClick={() => deletePrisliste(pl)} title="Slett prislisten" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+                )}
               </div>
             ))}
           </div>
@@ -74103,7 +74176,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
 function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
-  const { user, companyId } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
   // Bedriftens egne bygningsdeler. `rader` er de lagrede overstyringene —
   // finnBibliotekMalId og lagre-knappen leser dem for å vite om bygningsdelen
   // alt finnes i biblioteket.
@@ -74404,6 +74477,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const fullforLagreBd = async ({ modus, navn, kategori, erstatterId }) => {
     const ctx = showLagreBd
     if (!ctx) return
+    // Vakt i skrivingen, ikke bare i knappen: en erstatning endrer hva hele
+    // bedriften ser, og skal ikke kunne komme gjennom en annen vei.
+    if (erstatterId && !kanStyrePrisgrunnlag) {
+      setToastMsg({ title: 'Krever admin eller leder', message: 'Bare admin og leder kan erstatte en innebygd bygningsdel. Lagre den som variant i stedet.', type: 'error' })
+      return
+    }
     const kl = (kRef.current?.kalkyler || []).find(x => x.id === ctx.kalkId)
     const bd = kl && (kl.bygningsdeler || []).find(b => b.id === ctx.bdId)
     if (!bd) { setShowLagreBd(null); return }
@@ -78378,6 +78457,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             fagId={showLagreBd.fag}
             innebygd={innebygdBygningsdel(bd.source_bibliotek_id)}
             kategorier={kategorierForFag(showLagreBd.fag, mineMaler)}
+            kanErstatte={kanStyrePrisgrunnlag}
             onLagre={fullforLagreBd}
             onClose={() => setShowLagreBd(null)}
           />
