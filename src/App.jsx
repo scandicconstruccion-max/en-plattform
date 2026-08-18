@@ -13893,12 +13893,20 @@ const ConfirmContext = React.createContext(null)
 function ConfirmProvider({ children }) {
   // Keep ALL state in a single ref to avoid stale closure issues
   const [dialog, setDialog] = React.useState(null)
+  // Verdien i tallfeltet når dialogen ber om et tall (dialog.input).
+  const [inputVerdi, setInputVerdi] = React.useState('')
   // dialog = { message, subMessage, confirmLabel, cancelLabel, danger, alertOnly, kind } | null
   //   cancelLabel: egen tekst på avbryt-knappen. Noen valg er ikke «gjør / ikke gjør»
   //     men to reelle alternativ («Ja, regn om» / «Nei, behold prisen per rull») —
   //     da må begge knappene si hva de gjør. Faller tilbake til 'Avbryt'.
   //   alertOnly: true  → vis kun OK-knapp (ingen Avbryt), for "info"/"obs"-meldinger
   //   kind: 'info' | 'warn' | 'success' | 'error' — styrer ikon og farge på toppen
+  //   input: { label, enhet, plassholder, min, max, hjelp } → dialogen viser et
+  //     TALLFELT, og confirm() svarer med tallet i stedet for true. Avbryt gir
+  //     false som før. Brukes når vi mangler en opplysning brukeren har foran seg
+  //     — rullengden på en duk, antall plater i en pakke — og alternativet ville
+  //     vært å gi opp eller gjette. Ligger her, ikke i hver kaller, fordi vi
+  //     aldri bruker nettleserens prompt().
   const cbRef = React.useRef(null) // holds { resolve }
 
   // confirm() opens the dialog and returns a Promise
@@ -13906,15 +13914,31 @@ function ConfirmProvider({ children }) {
     const options = typeof opts === 'string' ? { message: opts } : opts
     return new Promise((resolve) => {
       cbRef.current = resolve
+      setInputVerdi(options?.input?.verdi != null ? String(options.input.verdi) : '')
       setDialog(options)
     })
   }, [])
 
+  // Tallet i feltet, eller null når det ikke er brukbart.
+  const inputTall = (() => {
+    if (!dialog?.input) return null
+    const n = parseFloat(String(inputVerdi).replace(',', '.'))
+    if (!isFinite(n) || n <= 0) return null
+    const { min, max } = dialog.input
+    if (min != null && n < min) return null
+    if (max != null && n > max) return null
+    return n
+  })()
+
   const respond = (value) => {
+    // Ber dialogen om et tall, er tallet svaret — ikke true.
+    const svar = (value === true && dialog?.input) ? inputTall : value
+    if (value === true && dialog?.input && svar === null) return   // ugyldig: bli stående
     setDialog(null)
+    setInputVerdi('')
     const cb = cbRef.current
     cbRef.current = null
-    if (cb) cb(value)
+    if (cb) cb(svar)
   }
 
   // Hent ikon og bakgrunnsfarge fra kind (eller danger-flagget)
@@ -13995,6 +14019,31 @@ function ConfirmProvider({ children }) {
                 </div>
               )}
             </div>
+            {/* Tallfelt når dialogen ber om en opplysning brukeren har foran seg. */}
+            {dialog.input && (
+              <div style={{ padding:'0 24px 4px' }}>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+                  {dialog.input.label || 'Verdi'}
+                </label>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <input autoFocus type="text" inputMode="decimal" value={inputVerdi}
+                    onChange={e => setInputVerdi(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') respond(true) }}
+                    placeholder={dialog.input.plassholder || ''}
+                    style={{ flex:1, minWidth:0, padding:'11px 13px', border:`1px solid ${inputVerdi && inputTall === null ? '#fecaca' : '#e2e8f0'}`,
+                      borderRadius:'10px', fontSize:'16px', fontFamily:'inherit', color:'#0f172a', background:'white', boxSizing:'border-box' }} />
+                  {dialog.input.enhet && <span style={{ fontSize:'14px', color:'#64748b', fontWeight:'600', flexShrink:0 }}>{dialog.input.enhet}</span>}
+                </div>
+                {inputVerdi && inputTall === null ? (
+                  <div style={{ fontSize:'11px', color:'#dc2626', marginTop:'6px' }}>
+                    Skriv et tall{dialog.input.min != null && dialog.input.max != null ? ` mellom ${fmtTall(dialog.input.min)} og ${fmtTall(dialog.input.max)}` : ''}.
+                  </div>
+                ) : dialog.input.hjelp ? (
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px', lineHeight:1.5 }}>{dialog.input.hjelp}</div>
+                ) : null}
+              </div>
+            )}
+
             {/* flexWrap: en egendefinert cancelLabel kan være lang («Nei, behold
                 407,40 per rull»). På 375 px legger knappene seg da under hverandre
                 i stedet for å presses ut av dialogen. */}
@@ -14006,8 +14055,10 @@ function ConfirmProvider({ children }) {
                 </button>
               )}
               <button onClick={() => respond(true)}
-                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: dialog.alertOnly ? '#059669' : (dialog.danger ? '#dc2626' : '#059669') }}
-                autoFocus>
+                disabled={!!dialog.input && inputTall === null}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor: (dialog.input && inputTall === null) ? 'default' : 'pointer', fontSize:'14px', fontWeight:'700', color:'white',
+                  background: (dialog.input && inputTall === null) ? '#a7f3d0' : (dialog.alertOnly ? '#059669' : (dialog.danger ? '#dc2626' : '#059669')) }}
+                autoFocus={!dialog.input}>
                 {dialog.confirmLabel || (dialog.alertOnly ? 'OK' : (dialog.danger ? 'Slett' : 'Bekreft'))}
               </button>
             </div>
@@ -59991,40 +60042,237 @@ const ENHET_NAVN = {
 }
 function enhetTekst(kanonisk) { return ENHET_NAVN[kanonisk] || kanonisk }
 
-// Enheter der prisen gjelder en hel leveranse, ikke et areal. Bare disse er
-// kandidater for rull→m²-omregning.
+// Interne felt på en materiallinje — de som starter med _. ÉN kilde til sannhet:
+// hvitelisten i bibliotekTilBygningsdel bygges FRA denne listen, så et felt som
+// føres opp under `lagres` blir automatisk med når en bygningsdel hentes fra
+// biblioteket. Det var nettopp den drifta som ga det falske rull-varselet:
+// _omregning ble skrevet til biblioteket, men ikke lest tilbake.
+//
+//   lagres     — hører til linjen og skal overleve lagring
+//   lagresIkke — arbeidsflagg som bare gjelder i økten de ble satt i
+//
+// tests/materiallinje-felt.mjs feiler dersom et _-felt brukes på en
+// materiallinje uten å stå i én av de to listene.
+const MAT_INTERNE_FELT = {
+  lagres: ['_omregning', '_prisEnhet'],
+  lagresIkke: ['_ny', '_varselVist'],
+}
+
+// Enheter der prisen gjelder en hel leveranse, ikke et areal. Disse utløser
+// VARSELET når linjen står i m² eller løpemeter.
 const LEVERANSE_ENHETER = new Set(['rul', 'stk', 'pk'])
 
-// Rimelighetsgrenser for en rull byggduk. De er der for å stoppe mønsteret fra
-// å treffe noe som ikke er en rull: «Grunnmur tykk 0,125x8m» ville gitt 1 m²,
-// men 0,125 m er en TYKKELSE, ikke en rullbredde.
-const RULL_MIN_BREDDE = 0.5,  RULL_MAKS_BREDDE = 5
-const RULL_MIN_LENGDE = 5,    RULL_MAKS_LENGDE = 250
-const RULL_MIN_AREAL  = 5
+// Enheter vi kan REGNE OM automatisk. «pk» er utelatt: dimensjonen i navnet
+// gjelder da én plate, mens prisen gjelder hele pakken («Glava plate 36 150mm
+// 565x1200mm», PK). Antall plater per pakke står ingen steder i prislisten —
+// pakn_str er tom på alle rader — så en omregning ville blitt feil med nøyaktig
+// antallet i pakken. Det er samme klasse feil som vi jakter på, bare innført av
+// oss selv. Slike linjer får spørsmål eller varsel, ikke stille omregning.
+const OMREGN_ENHETER = new Set(['rul', 'stk'])
 
-// «bredde x lengde m» i varenavnet. Krever «m» rett etter lengden, og at det
-// ikke er starten på et annet ord — ellers ville «200my» og «2400mm» treffe.
-const _RULL_RE = /(\d{1,3}(?:\.\d{1,3})?)\s*x\s*(\d{1,4}(?:\.\d{1,3})?)\s*m(?![a-zæøå0-9])/g
+// Rimelighetsgrenser, i METER og m². De skiller ting som DEKKER et areal —
+// ruller, duk, plater — fra ting som bare har mål i navnet.
+//
+// Det er BREDDEN som gjør jobben, ikke arealet. «Damp- og vindsperretape
+// 25m x 50mm» dekker 1,25 m² og «Brannmurplate 1220x1000x50mm» 1,22 m² — helt
+// likt areal, men tapen er 5 cm bred og platen 1 meter. Arealgrensen kan derfor
+// ikke skille dem; breddegrensen kan.
+//
+// Målt mot ekte navn fra prislisten:
+//   godkjennes: dampsperre 2,6×15 m (39 m²) · vindsperre 1,3×25 (32,5) ·
+//               gipsplate 1200x2400mm (2,88) · OSB 600x2400 (1,44) ·
+//               brannmurplate 1220x1000mm (1,22) · armeringsnett 2x5m (10) ·
+//               dekkfilt 0.65mx25m (16,25) · stålnett 77x117cm (0,90)
+//   avvises:    tape 25m x 50mm (bredde 0,05) · fugearmering 18mmx4m (0,018) ·
+//               Leca-blokk 10x25x50cm (0,25) · vinkelbeslag 88x88mm (0,088) ·
+//               skrue 4,2x55mm · «Gran 48x148» og «Bjelke kerto 48x200» (0,048)
+const RULL_MIN_BREDDE = 0.3,  RULL_MAKS_BREDDE = 6
+const RULL_MIN_LENGDE = 0.8,  RULL_MAKS_LENGDE = 250
+const RULL_MIN_AREAL  = 0.5,  RULL_MAKS_AREAL  = 500
+
+// Millimeter og centimeter til meter. Enheten leses PER TALL, ikke for hele
+// uttrykket: «25m x 50mm» er 25 meter ganger 50 millimeter, og leser vi begge
+// som samme enhet blir arealet 1000 ganger feil.
+const _DIM_ENHET_M = { mm: 0.001, cm: 0.01, m: 1 }
+
+// Arealet oppgitt DIREKTE i navnet: «DAMPSPERRE 3,00M 0,20MM 75M2 BACA» → 75 m².
+// Det er det sikreste signalet vi har når det finnes — ingen utregning, ingen
+// gjetning om hvilket tall som er hva.
+const _AREAL_RE = /(\d{1,4}(?:\.\d{1,3})?)\s*m(?:2|²)(?![a-zæøå0-9])/g
+
+// En kjede av «tall (enhet) x tall (enhet) …», med inntil fire ledd.
+//
+// MERK plasseringen av grensen (?![a-wyzæøå0-9]): den ligger INNE i den valgfrie
+// enhetsgruppen. Sto den utenfor, ville «1.30x25m» blitt avvist — etter tallet
+// «1.30» kommer «x», og grensen ville slått til før kjeden fikk begynne. Grensen
+// skal bare gjelde når en enhet faktisk er lest, slik at «2400mm» ikke leses som
+// 2400 meter og «300ml» ikke som 300 meter.
+//
+// Og «x» er utelatt fra grensen (a-w, y, z) med vilje: «Dekkfilt 0.65mx25m»
+// skriver enheten midt i kjeden, og da må x-en få følge rett etter «m».
+const _KJEDE_RE = /\d{1,5}(?:\.\d{1,3})?\s*(?:(?:mm|cm|m)(?![a-wyzæøå0-9]))?(?:\s*x\s*\d{1,5}(?:\.\d{1,3})?\s*(?:(?:mm|cm|m)(?![a-wyzæøå0-9]))?){1,3}/g
+
+// Ett ledd i kjeden: tallet og enheten det selv bærer.
+const _LEDD_RE = /^(\d{1,5}(?:\.\d{1,3})?)\s*(mm|cm|m)?$/
+
+// Leser leddene i en kjede om til METER. Et ledd uten egen enhet arver den
+// enheten som står i kjeden ellers («0,20x2600x15000mm» → alle i mm,
+// «2x5m» → begge i meter). Står det ingen enhet noe sted, leses tallene som
+// millimeter — det er det konservative valget: da blir arealet lite, og lite
+// areal avvises av grensene over. «Gran 48x148» skal ikke bli en rull.
+function _kjedeTilMeter(kjede) {
+  const ledd = kjede.split('x').map(d => d.trim()).filter(Boolean)
+  const lest = []
+  for (const d of ledd) {
+    const m = _LEDD_RE.exec(d)
+    _LEDD_RE.lastIndex = 0
+    if (!m) return []
+    const tall = parseFloat(m[1])
+    if (!isFinite(tall) || tall <= 0) return []
+    lest.push({ tall, enhet: m[2] || null })
+  }
+  const felles = (lest.find(l => l.enhet) || {}).enhet || 'mm'
+  return lest.map(l => l.tall * _DIM_ENHET_M[l.enhet || felles])
+}
 
 // Hvor mange m² dekker én rull/pakke av denne varen?
-// Returnerer null når vi ikke kan lese det trygt ut av navnet — og da skal
-// ingen omregning tilbys. Mønsteret treffer dampsperre, vindsperre og
-// underlagsduk; det finner ingenting på tape, bånd og pakninger, og det avviser
-// «Grunnmur tykk 0,125x8m».
+//
+// Returnerer null når vi ikke kan lese det trygt ut av navnet — og da skal ingen
+// omregning tilbys. Det er ikke en sjelden utgang: «ULTIPRO DAMPSPERRE 0,20MM
+// 2,6M» oppgir bredden, men ikke lengden på rullen. Ingen parser kan gjette
+// den. Der er enhetsvarselet den eneste beskyttelsen, og derfor må varselet stå
+// på egne ben — se enhetsAvvik og _prisEnhet.
+//
+// To veier, i prioritert rekkefølge:
+//   1. arealet står i navnet («75M2»)  → bruk det
+//   2. en dimensjonskjede             → regn hvert ledd om til meter, dropp alt
+//                                        unntatt de to største, gang dem
+// Regel 2 er din: det minste tallet er tykkelsen, de to største er bredde og
+// lengde. Den holder også for fire ledd og for omvendt rekkefølge.
 function rullDekning(varenavn) {
   const s = normaliserVaretekst(varenavn)
   if (!s) return null
-  _RULL_RE.lastIndex = 0
-  let m
-  while ((m = _RULL_RE.exec(s)) !== null) {
-    const bredde = parseFloat(m[1])
-    const lengde = parseFloat(m[2])
-    if (!isFinite(bredde) || !isFinite(lengde)) continue
-    if (bredde < RULL_MIN_BREDDE || bredde > RULL_MAKS_BREDDE) continue
-    if (lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) continue
+
+  // 1) Areal oppgitt direkte.
+  _AREAL_RE.lastIndex = 0
+  let a
+  while ((a = _AREAL_RE.exec(s)) !== null) {
+    const areal = parseFloat(a[1])
+    if (!isFinite(areal)) continue
+    if (areal < RULL_MIN_AREAL || areal > RULL_MAKS_AREAL) continue
+    return { bredde: null, lengde: null, areal: Math.round(areal * 1000) / 1000, kilde: 'areal' }
+  }
+
+  // 2) Dimensjonskjede. Bare den FØRSTE brukbare kjeden vurderes, og holder den
+  // ikke målene, gir vi opp i stedet for å lete videre i navnet.
+  //
+  // «Fugearmering 18mmx4m 100x4m=400lm» er grunnen: første kjede er produktets
+  // egen dimensjon (18 mm × 4 m — for smal, avvises), mens den andre er
+  // pakningsinformasjon (100 stk × 4 m = 400 lm). Leste vi videre, ville vi lest
+  // 100 m × 4 m = 400 m² og priset en armeringsstrimmel som en presenning.
+  _KJEDE_RE.lastIndex = 0
+  let k
+  while ((k = _KJEDE_RE.exec(s)) !== null) {
+    const meter = _kjedeTilMeter(k[0]).filter(v => isFinite(v) && v > 0)
+    if (meter.length < 2) continue
+    const sortert = [...meter].sort((x, y) => y - x)
+    const lengde = sortert[0]
+    const bredde = sortert[1]
+    if (lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) return null
     const areal = bredde * lengde
-    if (areal < RULL_MIN_AREAL) continue
-    return { bredde, lengde, areal: Math.round(areal * 1000) / 1000 }
+    if (bredde < RULL_MIN_BREDDE || bredde > RULL_MAKS_BREDDE) return null
+    if (areal < RULL_MIN_AREAL || areal > RULL_MAKS_AREAL) return null
+    return {
+      bredde: Math.round(bredde * 1000) / 1000,
+      lengde: Math.round(lengde * 1000) / 1000,
+      areal: Math.round(areal * 1000) / 1000,
+      kilde: 'dimensjon',
+    }
+  }
+  return null
+}
+
+// ── PAKNINGSSTØRRELSE — SPØR NÅR NAVNET IKKE HOLDER ─────────────────────────
+// rullDekning() gir opp på helt lovlige varenavn. «ULTIPRO DAMPSPERRE 0,20MM
+// 2,6M» oppgir bredden men ikke lengden på rullen; «GLAVA PLATE 36 150MM
+// 565X1200MM» oppgir platen men ikke hvor mange plater som ligger i pakken.
+// Ingen regex kan gjette de tallene — men brukeren har pakken foran seg.
+//
+// Da spør vi, én gang per VARE, og lagrer svaret i prisbok (pakn_str,
+// pakn_enhet, pakn_manuell = true). Neste gang varen velges leses det lagrede
+// svaret FØRST, og spørsmålet stilles ikke igjen.
+//
+// pakn_enhet forteller hva tallet er, og bare tre verdier skrives:
+//   'm2'  → arealet én leveranseenhet dekker. Brukes rett.
+//   'm'   → lengden. Ganges med bredden, som fortsatt leses av navnet.
+//   'stk' → antall plater i pakken. Ganges med platearealet fra navnet.
+// Vi lagrer det brukeren faktisk svarte, ikke et avledet tall. Da kan en feil
+// rettes ved å se på raden, og tallet betyr noe også for et menneske.
+
+// Alle «tall + enhet» i navnet. Samme grense som i kjeden, av samme grunn:
+// «2400mm» skal ikke leses som 2400 meter, og «300ml» ikke som 300 meter.
+const _TALL_ENHET_RE = /(\d{1,5}(?:\.\d{1,3})?)\s*(mm|cm|m)(?![a-wyzæøå0-9])/g
+
+// Ett enkelt mål i navnet som kan være en BREDDE. Vi tør bare kalle det bredden
+// når det er NØYAKTIG ett tall innenfor breddegrensene: «0,20mm 2,6m» har bare
+// ett (2,6 m — 0,20 mm er tykkelsen), mens «1,2m 2,4m» har to, og da vet vi
+// ikke hvilket som er bredden. Der spør vi om arealet i stedet for å gjette.
+function rullBreddeAlene(varenavn) {
+  const s = normaliserVaretekst(varenavn)
+  if (!s) return null
+  _TALL_ENHET_RE.lastIndex = 0
+  const kandidater = []
+  let m
+  while ((m = _TALL_ENHET_RE.exec(s)) !== null) {
+    const meter = parseFloat(m[1]) * (_DIM_ENHET_M[m[2]] || 0)
+    if (!isFinite(meter) || meter <= 0) continue
+    if (meter < RULL_MIN_BREDDE || meter > RULL_MAKS_BREDDE) continue
+    kandidater.push(Math.round(meter * 1000) / 1000)
+  }
+  const unike = [...new Set(kandidater)]
+  return unike.length === 1 ? unike[0] : null
+}
+
+// Er arealet innenfor det vi tør regne med? Gjelder også et tall brukeren har
+// skrevet selv — en tastefeil på antall plater skal ikke gi 4000 m² per pakke.
+function _arealOk(a) { return isFinite(a) && a >= RULL_MIN_AREAL && a <= RULL_MAKS_AREAL }
+
+// pakn_enhet slik den er lagret, normalisert til de tre verdiene vi skriver.
+// Egen mapper, ikke normaliserEnhet(): der er «m» et synonym for løpemeter, og
+// her betyr det lengden på rullen.
+function _paknEnhet(e) {
+  const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\s+/g, '')
+  if (s === 'm2' || s === 'm²' || s === 'kvm') return 'm2'
+  if (s === 'm' || s === 'lm' || s === 'meter') return 'm'
+  if (s === 'stk' || s === 'pl' || s === 'plater') return 'stk'
+  return ''
+}
+
+// Dekningen som er LAGRET på varen — brukerens eget svar fra sist, eller
+// leverandørens pakningsstørrelse om den noen gang kommer med i importen.
+// Har forrang over navnet: et oppgitt tall er sikrere enn en tolkning.
+function pakningsDekning(vare) {
+  const str = parseFloat(String(vare?.pakn_str ?? '').replace(',', '.'))
+  if (!isFinite(str) || str <= 0) return null
+  const enhet = _paknEnhet(vare?.pakn_enhet)
+  const kilde = vare?.pakn_manuell === true ? 'lagret_manuell' : 'lagret'
+  if (enhet === 'm2') {
+    if (!_arealOk(str)) return null
+    return { bredde: null, lengde: null, areal: Math.round(str * 1000) / 1000, kilde }
+  }
+  if (enhet === 'm') {
+    const bredde = rullBreddeAlene(vare?.varenavn)
+    if (!bredde) return null
+    const areal = Math.round(bredde * str * 1000) / 1000
+    if (!_arealOk(areal)) return null
+    return { bredde, lengde: str, areal, kilde }
+  }
+  if (enhet === 'stk') {
+    const plate = rullDekning(vare?.varenavn)
+    if (!plate || !(plate.areal > 0)) return null
+    const areal = Math.round(plate.areal * str * 1000) / 1000
+    if (!_arealOk(areal)) return null
+    return { bredde: plate.bredde, lengde: plate.lengde, antall: str, areal, kilde }
   }
   return null
 }
@@ -70822,12 +71070,11 @@ function bibliotekTilBygningsdel(bd, mengde) {
       beskrivelse: a.beskrivelse || '',
       grunntid: parseFloat(a.grunntid) || 0,
     })),
-    // MERK: denne listen er en HVITELISTE — felt som ikke står her, forsvinner
-    // når en bygningsdel hentes fra biblioteket. Det var årsaken til det falske
-    // varselet: `_omregning` (rull→m²-flagget) ble skrevet til biblioteket, men
-    // ikke lest tilbake. Linjen kom inn med riktig m²-pris og uten flagget, og
-    // da så varselet et enhetsavvik som allerede var håndtert. Legger du til nye
-    // felt på en materiallinje, må de inn HER også.
+    // MERK: dette er en HVITELISTE — felt som ikke står her, forsvinner når en
+    // bygningsdel hentes fra biblioteket. Det var årsaken til det falske varselet:
+    // `_omregning` ble skrevet til biblioteket, men ikke lest tilbake. De interne
+    // _-feltene styres nå av MAT_INTERNE_FELT, og tests/materiallinje-felt.mjs
+    // feiler hvis et nytt felt ikke er ført opp der.
     materialer: materialer.map((mat) => ({
       id: nyRadId(),
       varenavn: mat.varenavn || '',
@@ -70835,10 +71082,13 @@ function bibliotekTilBygningsdel(bd, mengde) {
       mengde: parseFloat(mat.mengde) || 0,
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
-      // Rull→m²-omregningen og enheten prisen gjelder i. Begge er avgjørende for
-      // at varselet skal tie på linjer brukeren alt har rettet.
-      ...(mat._omregning ? { _omregning: mat._omregning } : {}),
-      ...(mat._prisEnhet ? { _prisEnhet: mat._prisEnhet } : {}),
+      // De interne feltene som skal overleve, hentet fra MAT_INTERNE_FELT.lagres
+      // — ikke en egen liste her, for to lister glir fra hverandre.
+      ...Object.fromEntries(
+        MAT_INTERNE_FELT.lagres
+          .filter(felt => mat[felt] !== undefined && mat[felt] !== null)
+          .map(felt => [felt, mat[felt]])
+      ),
     })),
     underleverandorer: underleverandorer.map((u) => ({
       id: nyRadId(),
@@ -71813,33 +72063,180 @@ async function beregnVareFelter(confirm, vare, linje) {
   }
   const linjeEnhet = normaliserEnhet(linje?.enhet)
   if (linjeEnhet !== 'm2') return felter
-  if (!LEVERANSE_ENHETER.has(normaliserEnhet(vareEnhet))) return felter
-  const rull = rullDekning(vare?.varenavn)
-  if (!rull || pris <= 0) return felter
+  const vEnhet = normaliserEnhet(vareEnhet)
+  if (!LEVERANSE_ENHETER.has(vEnhet)) return felter
+  if (pris <= 0) return felter
+
+  // Lagret svar FØRST, deretter navnet. «pk» leses aldri av navnet alene:
+  // dimensjonen der gjelder én plate, prisen hele pakken — se OMREGN_ENHETER.
+  const lagret = pakningsDekning(vare)
+  const rull = lagret || (OMREGN_ENHETER.has(vEnhet) ? rullDekning(vare?.varenavn) : null)
+  const enhNavn = enhetTekst(vEnhet)
+  const enhOrd = vEnhet === 'rul' ? 'rull' : vEnhet === 'pk' ? 'pakke' : 'enhet'
+
+  // Kan vi ikke lese dekningen, spør vi om det ene tallet som mangler i stedet
+  // for å gi opp. Se sporOmPakning.
+  if (!rull) return await sporOmPakning(confirm, felter, { vare, linje, pris, vEnhet, enhNavn, enhOrd })
 
   const perM2 = Math.round((pris / rull.areal) * 100) / 100
-  const enhNavn = enhetTekst(normaliserEnhet(vareEnhet))
+  // Hvor tallene kommer fra skal stå i dialogen. En omregning brukeren ikke kan
+  // etterprøve er like ugjennomsiktig som den feilen vi prøver å fange.
+  const kildeTekst = rull.kilde === 'lagret_manuell'
+    ? 'Pakningsstørrelsen ble oppgitt manuelt på denne varen tidligere, og er lagret i prislisten. Stemmer den ikke, velg «Nei» — da får du spørsmålet på nytt neste gang.'
+    : rull.kilde === 'lagret'
+    ? 'Pakningsstørrelsen står oppgitt i prislisten.'
+    : rull.kilde === 'areal'
+    ? 'Arealet står i varenavnet. Stemmer det ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.'
+    : 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.'
   const ok = await confirm({
     message: vare.varenavn,
     subMessage: `Prislisten priser denne per ${enhNavn}. Linjen står i m². Vil du bruke m²-prisen?`,
     details: {
-      stats: [{ title: 'Regnestykke', subtitle: 'lest ut av varenavnet', items: [
-        { label: 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` },
+      stats: [{ title: 'Regnestykke', subtitle: rull.kilde === 'dimensjon' || rull.kilde === 'areal' ? 'lest ut av varenavnet' : 'lagret på varen', items: [
+        ...(rull.antall > 0 ? [{ label: 'Antall i pakken', value: `${fmtTall(rull.antall)} stk` }] : []),
+        ...(rull.bredde > 0 && rull.lengde > 0 ? [{ label: rull.antall > 0 ? 'Platemål' : 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` }] : []),
         { label: `Én ${enhNavn} dekker`, value: `${fmtTall(rull.areal)} m²` },
         { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
         { label: 'Pris per m²', value: fmtKr2(perM2), highlight: true },
       ] }],
-      notes: [{ icon: 'ℹ️', kind: 'info', text: 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.' }],
+      notes: [{ icon: 'ℹ️', kind: 'info', text: kildeTekst }],
     },
     confirmLabel: 'Ja, regn om',
     cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
   })
   if (!ok) return felter
+  return _omregnetFelter(felter, linje, vareEnhet, pris, rull)
+}
+
+// Bygger de omregnede feltene. Egen funksjon fordi den brukes fra fire steder
+// (lest dekning + tre spørsmålsvarianter), og da skal `_omregning` få nøyaktig
+// samme form uansett — det er dette objektet varselet leser for å tie, og
+// markøren «↩ fra rull» for å vise seg.
+function _omregnetFelter(felter, linje, vareEnhet, pris, dek) {
+  const perM2 = Math.round((pris / dek.areal) * 100) / 100
   return {
     ...felter,
     enhet: linje?.enhet || 'm²',
     enhetspris: perM2,
-    _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
+    _omregning: {
+      fraEnhet: vareEnhet, fraPris: pris,
+      bredde: dek.bredde > 0 ? dek.bredde : null,
+      lengde: dek.lengde > 0 ? dek.lengde : null,
+      antall: dek.antall > 0 ? dek.antall : null,
+      areal: dek.areal,
+      kilde: dek.kilde || null,
+    },
+  }
+}
+
+// Spør om det ENE tallet som mangler, og regn om med svaret. Tre spørsmål, i
+// denne rekkefølgen:
+//   1. pakke med lesbart platemål  → «Hvor mange plater i pakken?»
+//   2. lesbar bredde, ukjent lengde → «Hvor lang er én rull?»
+//   3. ellers                       → «Hvor mange m² dekker én rull?»
+//
+// Avbryter brukeren, står prisen per leveranseenhet og enhetsvarselet blir
+// stående. Det er den viktigste beskyttelsen, og den skal ikke kunne forsvinne
+// fordi et spørsmål ble lukket.
+//
+// Svaret lagres på varen (best effort — en feilet skriving skal ikke rulle
+// tilbake en omregning brukeren nettopp har bekreftet i skjermen).
+async function sporOmPakning(confirm, felter, ctx) {
+  const { vare, linje, pris, vEnhet, enhNavn, enhOrd } = ctx
+  const felles = {
+    message: vare?.varenavn || 'Varen',
+    confirmLabel: 'Regn om',
+    cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
+  }
+  const hjelp = `Vet du ikke tallet, velg «Nei». Da står prisen per ${enhNavn}, og linjen blir merket med at enheten ikke stemmer.`
+  const lagres = { icon: '💾', kind: 'info', text: 'Svaret lagres på varen i prislisten, så du blir ikke spurt om den igjen.' }
+
+  // 1) Pakke: platemålet står i navnet, antallet i pakken gjør ikke.
+  const plate = vEnhet === 'pk' ? rullDekning(vare?.varenavn) : null
+  if (plate && plate.areal > 0) {
+    const svar = await confirm({
+      ...felles,
+      subMessage: `Prislisten priser denne per pakke, men linjen regnes i m². Platemålet står i varenavnet — antallet plater i pakken gjør det ikke.`,
+      details: {
+        stats: [{ title: 'Én plate', subtitle: 'lest ut av varenavnet', items: [
+          ...(plate.bredde > 0 ? [{ label: 'Bredde × lengde', value: `${fmtTall(plate.bredde)} m × ${fmtTall(plate.lengde)} m` }] : []),
+          { label: 'Plateareal', value: `${fmtTall(plate.areal)} m²` },
+          { label: 'Pris per pakke', value: fmtKr2(pris) },
+        ] }],
+        notes: [lagres],
+      },
+      input: { label: 'Antall plater i pakken', enhet: 'plater', plassholder: 'f.eks. 12', min: 1, max: 500, hjelp },
+    })
+    const antall = parseFloat(svar)
+    if (!isFinite(antall) || antall <= 0) return felter
+    const areal = Math.round(plate.areal * antall * 1000) / 1000
+    if (!_arealOk(areal)) return felter
+    lagrePakningsstorrelse(vare, antall, 'stk')
+    return _omregnetFelter(felter, linje, vare?.enhet || '', pris, { ...plate, antall, areal, kilde: 'lagret_manuell' })
+  }
+
+  // 2) Bredden står i navnet, lengden gjør ikke. Gjelder bare rull og stk —
+  // for en pakke ville bredde × lengde gitt arealet av ÉN plate, ikke pakken.
+  const bredde = OMREGN_ENHETER.has(vEnhet) ? rullBreddeAlene(vare?.varenavn) : null
+  if (bredde) {
+    const svar = await confirm({
+      ...felles,
+      subMessage: `Prislisten priser denne per ${enhNavn}, men linjen regnes i m². Bredden står i varenavnet — lengden gjør den ikke.`,
+      details: {
+        stats: [{ title: 'Det vi vet', subtitle: 'lest ut av varenavnet', items: [
+          { label: 'Bredde', value: `${fmtTall(bredde)} m` },
+          { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+        ] }],
+        notes: [lagres],
+      },
+      input: { label: `Lengde per ${enhOrd}`, enhet: 'm', plassholder: 'f.eks. 25', min: RULL_MIN_LENGDE, max: RULL_MAKS_LENGDE, hjelp },
+    })
+    const lengde = parseFloat(svar)
+    if (!isFinite(lengde) || lengde <= 0) return felter
+    const areal = Math.round(bredde * lengde * 1000) / 1000
+    if (!_arealOk(areal)) return felter
+    lagrePakningsstorrelse(vare, lengde, 'm')
+    return _omregnetFelter(felter, linje, vare?.enhet || '', pris, { bredde, lengde, areal, kilde: 'lagret_manuell' })
+  }
+
+  // 3) Ingenting brukbart i navnet. Da er arealet det eneste tallet vi kan be
+  // om — brukeren leser det av pakken.
+  const svar = await confirm({
+    ...felles,
+    subMessage: `Prislisten priser denne per ${enhNavn}, men linjen regnes i m². Vi finner ingen mål i varenavnet vi tør regne på.`,
+    details: {
+      stats: [{ title: 'Det vi vet', subtitle: 'fra prislisten', items: [
+        { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+      ] }],
+      notes: [lagres],
+    },
+    input: { label: `Hvor mange m² dekker én ${enhOrd}?`, enhet: 'm²', plassholder: 'f.eks. 32,5', min: RULL_MIN_AREAL, max: RULL_MAKS_AREAL, hjelp },
+  })
+  const areal = parseFloat(svar)
+  if (!isFinite(areal) || !_arealOk(areal)) return felter
+  lagrePakningsstorrelse(vare, areal, 'm2')
+  return _omregnetFelter(felter, linje, vare?.enhet || '', pris, { bredde: null, lengde: null, areal, kilde: 'lagret_manuell' })
+}
+
+// Skriver brukerens svar til prisbok. SECURITY DEFINER-funksjon av samme grunn
+// som sletting og omdøping: den setter statement_timeout selv, gjør sin egen
+// bedrifts- og rollesjekk, og treffer raden på (prisliste_id, varenummer).
+//
+// Best effort. Feiler skrivingen, er omregningen på linjen fortsatt riktig —
+// brukeren får bare spørsmålet på nytt neste gang varen velges.
+async function lagrePakningsstorrelse(vare, str, enhet) {
+  try {
+    const nummer = String(vare?.varenummer ?? '').trim()
+    if (!nummer || !vare?.prisliste_id) return
+    const { error } = await supabase.rpc('lagre_pakningsstorrelse', {
+      p_prisliste_id: vare.prisliste_id,
+      p_varenummer: nummer,
+      p_str: String(str),
+      p_enhet: enhet,
+    })
+    if (error) console.warn('[pakning] kunne ikke lagre pakningsstørrelse:', error.message)
+  } catch (e) {
+    console.warn('[pakning] kunne ikke lagre pakningsstørrelse:', e?.message || e)
   }
 }
 
@@ -72619,7 +73016,7 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, k
                             </div>
                           )}
                           {p.prisEnhetAvviker && (
-                            <div style={{ fontSize:'11px', color:'#c2410c', marginTop:'5px', lineHeight:1.5 }}>
+                            <div style={{ fontSize:'11px', color:'#be123c', marginTop:'5px', lineHeight:1.5 }}>
                               ⚠ prisen gjelder per {enhetTekst(normaliserEnhet(p.vareEnhet))}, men linjen står i {enhetTekst(normaliserEnhet(p.enhet))}.
                               Mengden og prisen regnes i ulike enheter — kontroller linjen etter oppdateringen.
                             </div>
@@ -76976,9 +77373,14 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                 // enn ingen teller.
                                 const avvik = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
                                 const alle = kob.ukoblet === 0 && avvik === 0
+                                // Sammenslått er dette det ENESTE signalet om enhetsavvik, så
+                                // det må skille seg fra gult: gult = mangler kobling (uferdig),
+                                // dempet rødt = prisen står i feil enhet (feil tall).
+                                const bgT = avvik > 0 ? '#fff1f2' : alle ? '#f0fdf4' : '#fffbeb'
+                                const fgT = avvik > 0 ? '#be123c' : alle ? '#15803d' : '#a16207'
                                 return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste${avvik > 0 ? ` · ${avvik} har pris i en annen enhet enn linjen` : ''}`}
-                                  style={{ fontSize:'10px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>
-                                  {alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}{avvik > 0 ? ` · ${avvik}⚠` : ''}</span>
+                                  style={{ fontSize:'10px', background: bgT, color: fgT, padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>
+                                  {avvik > 0 ? '⚠' : alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}{avvik > 0 ? ` · ${avvik} feil` : ''}</span>
                               })()}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '6px' : '10px', flexShrink:0 }}>
@@ -77253,11 +77655,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                       {kob.total > 0 && (
                                         <span style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', border: `1px solid ${alle ? '#bbf7d0' : '#fde68a'}` }}>
                                           {alle ? '🔗' : '⚠️'} {kob.koblet} av {kob.total} linjer koblet til din prisliste
-                                          {avvikAntall > 0 ? ` · ${avvikAntall} må sjekkes` : ''}
                                         </span>
                                       )}
                                       {avvikAntall > 0 && (
-                                        <span title="Prisen på disse linjene gjelder en annen enhet enn linjen regnes i. Velg varen på nytt med 🔍 for å rette det." style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa' }}>
+                                        <span title="Prisen på disse linjene gjelder en annen enhet enn linjen regnes i. Velg varen på nytt med 🔍 for å rette det." style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background:'#fff1f2', color:'#be123c', border:'1px solid #fecdd3' }}>
                                           ⚠ {avvikAntall} {avvikAntall === 1 ? 'linje' : 'linjer'} med feil enhet
                                         </span>
                                       )}
@@ -77300,7 +77701,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                       const koblet = matErKoblet(m)
                                       const avvik = linjeEnhetsAvvik(m)
                                       return (
-                                        <div key={m.id} style={{ border:'1px solid ' + (avvik ? '#fed7aa' : koblet ? '#f1f5f9' : '#fde68a'), background: avvik ? '#fff7ed' : (koblet ? 'white' : '#fffdf3'), borderRadius:'10px', padding:'9px 11px' }}>
+                                        <div key={m.id} style={{ border:'1px solid ' + (avvik ? '#fecdd3' : koblet ? '#f1f5f9' : '#fde68a'), background: avvik ? '#fff1f2' : (koblet ? 'white' : '#fffdf3'), borderRadius:'10px', padding:'9px 11px' }}>
                                           <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', alignItems:'baseline' }}>
                                             <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word', minWidth:0 }}>{m.varenavn || 'Uten navn'}</span>
                                             <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap', flexShrink:0 }}>{fmt(r.medFortjeneste * effM)}</span>
@@ -77312,7 +77713,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                           {(!koblet || avvik || m._omregning) && (
                                             <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'6px' }}>
                                               {!koblet && <span style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', background:'#fffbeb', border:'1px solid #fde68a', padding:'2px 6px', borderRadius:'4px' }}>≈ veiledende</span>}
-                                              {avvik && <span style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', border:'1px solid #fed7aa', padding:'2px 6px', borderRadius:'4px' }}>⚠ {avvik.kort}</span>}
+                                              {avvik && <span style={{ fontSize:'9px', fontWeight:'700', color:'#be123c', background:'#fff1f2', border:'1px solid #fecdd3', padding:'2px 6px', borderRadius:'4px' }}>⚠ {avvik.kort}</span>}
                                               {m._omregning && <span style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', background:'#eff6ff', border:'1px solid #bfdbfe', padding:'2px 6px', borderRadius:'4px' }}>↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}</span>}
                                             </div>
                                           )}
@@ -77356,7 +77757,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         const koblet = matErKoblet(m)
                                         const avvik = linjeEnhetsAvvik(m)
                                         return (
-                                          <tr key={m.id} style={{ background: avvik ? '#fff7ed' : (koblet ? 'transparent' : '#fffdf3') }}>
+                                          <tr key={m.id} style={{ background: avvik ? '#fff1f2' : (koblet ? 'transparent' : '#fffdf3') }}>
                                             <td style={{ padding:'3px 2px' }}>
                                               <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
                                                 <input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
@@ -77412,11 +77813,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                   er galt — det er denne feilen som gjorde 407,40 kr/rull til
                                                   407,40 kr/m². */}
                                               {avvik && (
-                                                <div title={avvik.lang} style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>⚠ {avvik.kort}</div>
+                                                <div title={avvik.lang} style={{ fontSize:'9px', fontWeight:'700', color:'#be123c', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>⚠ {avvik.kort}</div>
                                               )}
                                               {/* Bevisst omregnet fra leveranseenhet — vis hva som ligger bak tallet. */}
                                               {koblet && m._omregning && (
-                                                <div title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ${fmtTall(m._omregning.areal)} m²`}
+                                                <div title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${m._omregning.bredde ? `${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ` : ''}${fmtTall(m._omregning.areal)} m²`}
                                                   style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>
                                                   ↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}
                                                 </div>
