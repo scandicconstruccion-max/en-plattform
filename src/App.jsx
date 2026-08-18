@@ -68515,12 +68515,16 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   const regularKalks = kalks.filter(k => !k.is_template)
 
   const filtered = regularKalks.filter(k => {
+    // Erstattede kalkyler er forrige versjon av noe som finnes i en nyere
+    // revisjon. De skal ikke ligge side om side med den gjeldende — man åpner
+    // den gale. De finnes under revisjonshistorikken, og i filteret «Erstattet».
+    if (k.status === KALK_STATUS_ERSTATTET && filterStatus !== KALK_STATUS_ERSTATTET) return false
     if (filterStatus !== 'alle' && k.status !== filterStatus) return false
     if (search && ![k.title, k.customer_name, k.kalk_number].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
     return true
   })
 
-  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0, 'Avslått': 0 }
+  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0, 'Avslått': 0, 'Erstattet': 0 }
   regularKalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
 
   // Ny fra mal
@@ -68574,6 +68578,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
     'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+    'Erstattet':        { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', emoji: '🗃️' },
   }
 
   const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
@@ -68980,7 +68985,13 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'4px' }}>
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobK ? '13px' : '15px' }}>{k.title}</span>
-                      {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
+                      {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{kalkNrMedRev(k)}</span>}
+                      {(k.revision_number || 1) > 1 && (
+                        <span title={`Revisjon ${(k.revision_number || 1) - 1} av denne kalkylen`}
+                          style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', fontSize:'11px', fontWeight:'700', padding:'2px 7px', borderRadius:'4px' }}>
+                          {kalkRevLabel(k.revision_number)}
+                        </span>
+                      )}
                       <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
                       {/* Patch 20: Prosjekt-type-pille */}
                       {(() => {
@@ -71598,14 +71609,36 @@ function _dypkopi(v) {
   try { return JSON.parse(JSON.stringify(v)) } catch (e) { return v }
 }
 
+// Hvor mange NOBB-numre vi ber om per spørring. 200 holder URL-en godt under
+// grensen (200 × ~10 tegn) og halverer antall rundturer mot 100.
+const PRIS_PULJE = 200
+
 // Leser prisene for en mengde NOBB-numre fra én prisliste, i puljer.
-async function _hentPriserForNummer(prislisteId, nummer) {
+//
+// YTELSE — målt lokalt mot 1 308 / 60 453 / 305 228 rader:
+// Spørringen er `prisliste_id = X AND varenummer IN (...)`. Uten en sammensatt
+// indeks på (prisliste_id, varenummer) bruker Postgres indeksen på prisliste_id
+// alene og FILTRERER varenummer etterpå — altså leses hele prislisten for hver
+// pulje. Ved 305k rader gir planleggeren opp indeksen og kjører Parallel Seq Scan:
+//     60 453 rader:  6,73 ms  ·  «Rows Removed by Filter: 60353»
+//    305 228 rader: 19,81 ms  ·  Parallel Seq Scan
+// Med indeksen på plass blir det et rent Index Scan, og tiden er FLAT:
+//     60 453 rader:  0,75 ms   (9× raskere)
+//    305 228 rader:  0,84 ms  (24× raskere)
+// Det forklarer hvorfor tiden skalerte med prislistens størrelse i stedet for
+// med hvor mye som skulle oppdateres. Indeksen ligger i SQL-blokken.
+async function _hentPriserForNummer(prislisteId, nummer, onFremdrift) {
   const kart = {}
-  for (let i = 0; i < nummer.length; i += 100) {
+  const antPuljer = Math.ceil(nummer.length / PRIS_PULJE) || 1
+  for (let i = 0; i < nummer.length; i += PRIS_PULJE) {
+    const pulje = Math.floor(i / PRIS_PULJE) + 1
+    if (typeof onFremdrift === 'function') {
+      onFremdrift({ fase: 'priser', pulje, antPuljer, antNummer: nummer.length })
+    }
     const { data, error } = await supabase.from('prisbok')
       .select('varenummer, varenavn, enhet, pris_per_enhet')
       .eq('prisliste_id', prislisteId)
-      .in('varenummer', nummer.slice(i, i + 100))
+      .in('varenummer', nummer.slice(i, i + PRIS_PULJE))
     if (error) throw error
     ;(data || []).forEach(r => { kart[String(r.varenummer)] = r })
   }
@@ -71628,10 +71661,12 @@ async function _hentBedriftensBibliotekrader(companyId, userId) {
 
 // Oppdaterer alle bedriftens bygningsdeler mot prislisten.
 // Returnerer statistikken oppsummeringen viser, og id-en til angre-loggen.
-async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, companyId, userId }) {
+async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, companyId, userId, onFremdrift }) {
+  const meld = (info) => { if (typeof onFremdrift === 'function') onFremdrift(info) }
   const tomt = { rader: 0, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, ukoblet: 0, detaljer: [], loggId: null, feil: null }
   if (!prislisteId || !userId) return { ...tomt, feil: 'Mangler prisliste eller bruker.' }
 
+  meld({ fase: 'bibliotek' })
   let rader = []
   try { rader = await _hentBedriftensBibliotekrader(companyId, userId) }
   catch (e) { return { ...tomt, feil: 'Kunne ikke lese biblioteket: ' + ((e && e.message) || 'ukjent feil') } }
@@ -71645,7 +71680,7 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
 
   let priser = {}
   if (nummer.size > 0) {
-    try { priser = await _hentPriserForNummer(prislisteId, [...nummer]) }
+    try { priser = await _hentPriserForNummer(prislisteId, [...nummer], onFremdrift) }
     catch (e) { return { ...tomt, rader: rader.length, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') } }
   }
 
@@ -71724,6 +71759,7 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
 
   let skrevet = 0
   for (const r of skriv) {
+    meld({ fase: 'lagrer', skrevet, avRader: skriv.length })
     try {
       const { data: endret, error } = await supabase.from('bruker_bibliotek').update({ data: r.data }).eq('id', r.id).select('id')
       if (error) throw error
@@ -71785,6 +71821,109 @@ async function angreBibliotekPrisoppdatering(loggId) {
   return { gjenopprettet, hoppet, rortEtterpaa, feil: null }
 }
 
+// ─── REVISJON AV KALKYLE (Del B) ─────────────────────────────────────────────
+// Et tilbud sendes i august. Kunden kommer tilbake i februar, og prisene har
+// endret seg. Da skal det IKKE skrives nye priser inn i det gamle tilbudet — det
+// skal lages en REVISJON. Originalen står urørt med prisene kunden faktisk fikk.
+//
+// Mønsteret er hentet fra Tilbud (quotes): revision_number, parent-peker,
+// revision_note, og originalen settes til «Erstattet». Koden er egen, fordi
+// Kalkulasjon har andre felter — men feltnavn og oppførsel er de samme, så
+// «Rev. 1» betyr det samme i hele appen.
+
+// Etiketten. Original (1) heter «Original», første revidering «Rev. 1».
+// MERK: Tilbud skriver «Rev 1» uten punktum i selve nummeret (revNumSuffix).
+// Her brukes punktum begge steder, etter avtale. Ser man KA-2026-0002 Rev. 1 og
+// TB-2026-0005 Rev 1 side om side, er avviket ett tegn — det er en kjent løs ende.
+const kalkRevLabel = (n) => (!n || n <= 1) ? 'Original' : 'Rev. ' + (n - 1)
+const kalkRevSuffix = (n) => (!n || n <= 1) ? '' : ' Rev. ' + (n - 1)
+// Kalkylenummer med revisjonssuffiks: «KA-2026-0002 Rev. 1»
+const kalkNrMedRev = (k) => String((k && k.kalk_number) || '') + kalkRevSuffix(k && k.revision_number)
+
+// Statusen originalen får når den er erstattet av en revisjon.
+const KALK_STATUS_ERSTATTET = 'Erstattet'
+
+// Oppretter en revisjon av en kalkyle.
+//
+//   k             — kalkylen som revideres (gjeldende versjon)
+//   nyeKalkyler   — valgfritt: kalkyle-treet revisjonen skal ha. Sendes inn når
+//                   revisjonen lages fra «Oppdater priser», der de nye prisene
+//                   alt er beregnet. Utelates den, arves innholdet uendret.
+//   note          — brukerens beskrivelse av hva som endret seg
+//   totals        — { total_cost, total_ex_mva, profit_percent } for revisjonen
+//
+// Originalen settes til «Erstattet». Revisjonen beholder SAMME kalk_number —
+// det er revision_number som skiller dem, akkurat som i Tilbud.
+async function opprettKalkyleRevisjon({ k, nyeKalkyler, note, totals, userId }) {
+  if (!k?.id) return { data: null, error: new Error('Mangler kalkyle.') }
+  const rotId = k.parent_calculation_id || k.id
+
+  // Høyeste revisjonsnummer i familien — ikke bare på den vi står i, siden en
+  // gammel revisjon kan være åpnet fra historikken.
+  let maksRev = k.revision_number || 1
+  try {
+    const { data } = await supabase.from('calculations')
+      .select('revision_number')
+      .or(`id.eq.${rotId},parent_calculation_id.eq.${rotId}`)
+    ;(data || []).forEach(r => { if ((r.revision_number || 1) > maksRev) maksRev = r.revision_number || 1 })
+  } catch (e) { /* faller tilbake på det vi vet */ }
+
+  const kalkylerForRev = nyeKalkyler || k.kalkyler || []
+  const payload = {
+    ...k,
+    kalk_number: k.kalk_number,           // samme nummer, nytt revisjonsnummer
+    revision_number: maksRev + 1,
+    parent_calculation_id: rotId,
+    revision_note: (note || '').trim() || null,
+    kalkyler: kalkylerForRev,
+    status: 'Aktiv',
+    total_cost: totals?.total_cost ?? k.total_cost,
+    total_ex_mva: totals?.total_ex_mva ?? k.total_ex_mva,
+    profit_percent: totals?.profit_percent ?? k.profit_percent,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: userId || k.created_by || null,
+  }
+  delete payload.id
+
+  // Statusen leses FØR oppdateringen. Rullbacken kan ikke lese den fra k etterpå:
+  // objektet kan være samme referanse som den vi nettopp skrev til.
+  const statusFor = k.status
+  // Sett originalen til «Erstattet» FØRST. Feiler innsettingen etterpå, sitter vi
+  // med en erstattet original og ingen revisjon — derfor rulles den tilbake.
+  try {
+    await supabase.from('calculations')
+      .update({ status: KALK_STATUS_ERSTATTET, updated_at: new Date().toISOString() })
+      .eq('id', k.id)
+  } catch (e) {
+    return { data: null, error: new Error('Kunne ikke markere originalen som erstattet: ' + ((e && e.message) || 'ukjent feil')) }
+  }
+
+  const { data, error } = await supabase.from('calculations').insert(payload).select().single()
+  if (error) {
+    // Rull tilbake statusen, så originalen ikke blir stående som erstattet
+    // av en revisjon som ikke finnes.
+    try {
+      await supabase.from('calculations').update({ status: statusFor, updated_at: new Date().toISOString() }).eq('id', k.id)
+    } catch (e2) { /* logges av kalleren via feilmeldingen */ }
+    return { data: null, error }
+  }
+  return { data, error: null }
+}
+
+// Henter hele revisjonsfamilien til en kalkyle, eldste først.
+async function hentKalkyleRevisjoner(k) {
+  if (!k?.id) return []
+  const rotId = k.parent_calculation_id || k.id
+  try {
+    const { data } = await supabase.from('calculations')
+      .select('id, kalk_number, title, revision_number, revision_note, status, total_ex_mva, created_at')
+      .or(`id.eq.${rotId},parent_calculation_id.eq.${rotId}`)
+      .order('revision_number', { ascending: true })
+    return data || []
+  } catch (e) { return [] }
+}
+
 // Kalkylestatuser der kunden ALT har fått tallene. Oppdaterer man prisene da,
 // stemmer ikke kalkylen med tilbudet kunden sitter med — og en godkjenning kan
 // være signert på de gamle prisene.
@@ -71804,7 +71943,11 @@ const KALK_SENDT_STATUS = new Set(['Tilbud sendt', 'Tilbud godkjent'])
 // `onFinnErstatning(post)` gjør de utgåtte linjene handlingsrettede: kalleren
 // åpner koblingsassistenten for nettopp den linjen. Uten den blir en utgått linje
 // bare merket, og brukeren står fast.
-function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus, onSkriv, onFinnErstatning, onClose }) {
+// `onLagRevisjon(valgte)` gjør revisjon til det ANBEFALTE valget på en kalkyle
+// som er sendt til kunde: originalen står urørt med prisene kunden fikk, og de
+// nye prisene går i en ny versjon. Å rette originalen er fortsatt mulig, men
+// ligger bak bekreftelsessteget.
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
   const [laster, setLaster] = useState(true)
   const [forslag, setForslag] = useState(null)
   const [valgt, setValgt] = useState(() => new Set())
@@ -71834,10 +71977,13 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
   const alleValgt = forslag && forslag.endret.length > 0 && valgt.size === forslag.endret.length
   const veksleAlle = () => setValgt(alleValgt ? new Set() : new Set((forslag?.endret || []).map((_, i) => i)))
 
-  // Er kalkylen sendt til kunde, må brukeren gjennom bekreftelsessteget først.
+  const valgtePoster = () => (forslag ? forslag.endret.filter((_, i) => valgt.has(i)) : [])
+
+  // Er kalkylen sendt til kunde, må brukeren velge vei først: revisjon (anbefalt)
+  // eller rette originalen.
   const gaaVidere = () => {
     if (!forslag || valgt.size === 0 || skriver) return
-    if (sendtStatus && steg === 'liste') { setSteg('bekreft'); return }
+    if (sendtStatus && steg === 'liste') { setSteg(onLagRevisjon ? 'velgVei' : 'bekreft'); return }
     skriv()
   }
 
@@ -71920,6 +72066,39 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
             </div>
           )}
 
+          {/* Veivalget for en kalkyle som er sendt til kunde. Revisjon er det
+              anbefalte — originalen beholder prisene kunden fikk. Å rette
+              originalen er fortsatt mulig, men ligger bak bekreftelsessteget. */}
+          {!laster && !resultat && steg === 'velgVei' && sendtStatus && forslag && (
+            <div>
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color:'#991b1b', lineHeight:1.6 }}>
+                <strong>Kalkylen har status «{sendtStatus}».</strong> Kunden har fått tallene. Hva vil du gjøre med
+                de {valgt.size} {valgt.size === 1 ? 'linjen' : 'linjene'} som har ny pris?
+              </div>
+
+              <button onClick={() => onLagRevisjon(valgtePoster())}
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'2px solid #7c3aed', borderRadius:'12px', padding:'14px 16px', marginBottom:'10px', cursor:'pointer', boxSizing:'border-box' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'5px', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 Lag en revisjon</span>
+                  <span style={{ fontSize:'10px', fontWeight:'700', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', padding:'2px 7px', borderRadius:'999px' }}>ANBEFALT</span>
+                </div>
+                <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
+                  De nye prisene går i en ny versjon. Denne kalkylen står urørt med prisene kunden
+                  faktisk fikk, og du har begge å vise til.
+                </div>
+              </button>
+
+              <button onClick={() => setSteg('bekreft')}
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'14px 16px', cursor:'pointer', boxSizing:'border-box' }}>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', marginBottom:'5px' }}>✏️ Rett denne kalkylen</div>
+                <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
+                  Prisene skrives inn her. Det som sto før er borte, og kalkylen stemmer ikke lenger med
+                  tilbudet kunden har. Du må bekrefte i neste steg.
+                </div>
+              </button>
+            </div>
+          )}
+
           {/* Bekreftelsessteg for kalkyler som ER SENDT TIL KUNDE. Et eget steg som
               ERSTATTER listen — ikke en gul boks blant annet innhold. Brukeren skal
               ikke kunne klikke seg forbi uten å ha lest hva han gjør. */}
@@ -71964,7 +72143,10 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
                 <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 13px', marginBottom:'12px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
                   <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>⚠️</span>
                   <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.55 }}>
-                    <strong>Status: {sendtStatus}.</strong> Kunden får ikke beskjed om prisendringer. Du blir bedt om å bekrefte før noe skrives.
+                    <strong>Status: {sendtStatus}.</strong> Kunden har fått tallene.
+                    {onLagRevisjon
+                      ? ' I neste steg kan du legge de nye prisene i en revisjon, slik at denne kalkylen står urørt.'
+                      : ' Du blir bedt om å bekrefte før noe skrives.'}
                   </div>
                 </div>
               )}
@@ -72087,9 +72269,14 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
         <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
           {resultat ? (
             <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : steg === 'velgVei' ? (
+            <button onClick={() => setSteg('liste')} disabled={skriver}
+              style={{ flex:1, background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
+              ← Tilbake til listen
+            </button>
           ) : steg === 'bekreft' ? (
             <>
-              <button onClick={() => { setSteg('liste'); setForstatt(false) }} disabled={skriver}
+              <button onClick={() => { setSteg(onLagRevisjon ? 'velgVei' : 'liste'); setForstatt(false) }} disabled={skriver}
                 style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
                 ← Tilbake
               </button>
@@ -72243,6 +72430,103 @@ function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose
           )}
           <button onClick={onClose} disabled={angrer} style={{ flex:'1 1 150px', background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: angrer ? 'default' : 'pointer' }}>
             {angreSvar ? 'Lukk' : 'Greit'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── NY REVISJON — DIALOG (Del B) ────────────────────────────────────────────
+// Brukes fra to steder: «🔄 Ny revisjon» i Mer-menyen, og fra «Oppdater priser»
+// når kalkylen er sendt til kunde. `prisendringer` er satt i det andre tilfellet,
+// og viser hva revisjonen kommer til å inneholde av nye priser.
+function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
+  const [note, setNote] = useState('')
+  const [jobber, setJobber] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+  const nyEtikett = kalkRevLabel((k?.revision_number || 1) + 1)
+  const nyttNr = `${k?.kalk_number || ''} ${nyEtikett}`.trim()
+  const antall = (prisendringer || []).length
+
+  const opprett = async () => {
+    if (jobber) return
+    setJobber(true)
+    try { await onOpprett(note) } finally { setJobber(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:165, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !jobber) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '580px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny revisjon</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
+              {k?.title || 'Kalkyle'} · {kalkNrMedRev(k)} i dag
+            </p>
+          </div>
+          <button onClick={onClose} disabled={jobber} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: jobber ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          <div style={{ background:'white', border:'2px solid #ddd6fe', borderRadius:'12px', padding:'13px 15px', marginBottom:'14px' }}>
+            <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', letterSpacing:'0.04em', marginBottom:'4px' }}>DETTE OPPRETTES</div>
+            <div style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{k?.title} {nyttNr}</div>
+            <div style={{ fontSize:'12px', color:'#64748b', marginTop:'5px', lineHeight:1.55 }}>
+              {kalkNrMedRev(k)} settes til «Erstattet» og står urørt med prisene kunden faktisk fikk.
+              Du finner den under revisjonshistorikken i den nye versjonen.
+            </div>
+          </div>
+
+          {antall > 0 && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'8px' }}>
+                REVISJONEN FÅR {antall} {antall === 1 ? 'NY PRIS' : 'NYE PRISER'}
+              </div>
+              {(prisendringer || []).slice(0, 8).map((p, i) => (
+                <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'3px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
+                  <span style={{ minWidth:0 }}>{p.nyttVarenavn || p.varenavn}</span>
+                  <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(p.gammelPris)}</span>
+                  <span style={{ color:'#94a3b8' }}>→</span>
+                  <strong>{fmtKr2(p.nyPris)}</strong>
+                  <span style={{ fontSize:'11px', fontWeight:'700', color: p.diff > 0 ? '#c2410c' : '#15803d' }}>
+                    {p.diff > 0 ? '+' : ''}{fmtKr2(p.diff)}
+                  </span>
+                </div>
+              ))}
+              {antall > 8 && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'5px' }}>… og {antall - 8} til</div>}
+            </div>
+          )}
+
+          {/* Løs ende brukeren MÅ vite om: et allerede sendt tilbud peker på
+              originalen, og følger ikke revisjonen. Uten dette ender noen med å
+              tro at kunden har fått de nye prisene. */}
+          <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+            <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>📄</span>
+            <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.6 }}>
+              <strong>Tilbudet kunden har, følger ikke med.</strong> Er det laget et tilbud fra denne
+              kalkylen, peker det fortsatt på {kalkNrMedRev(k)} og viser de gamle prisene.
+              Skal kunden ha de nye, må du generere et nytt tilbud fra revisjonen etterpå.
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>
+              HVA ENDRET SEG? <span style={{ fontWeight:'400', color:'#cbd5e1' }}>(valgfritt, men nyttig om et halvt år)</span>
+            </label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
+              placeholder={antall > 0 ? 'F.eks. «Nye materialpriser fra Optimera, februar 2027»' : 'F.eks. «Kunden ba om tilbygget i to etasjer i stedet for én»'}
+              style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', borderRadius:'10px', border:'1px solid #e2e8f0', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white', resize:'vertical' }} />
+          </div>
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          <button onClick={onClose} disabled={jobber} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: jobber ? 'default' : 'pointer' }}>Avbryt</button>
+          <button onClick={opprett} disabled={jobber}
+            style={{ flex:'1 1 190px', background: jobber ? '#c4b5fd' : '#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: jobber ? 'default' : 'pointer' }}>
+            {jobber ? 'Oppretter …' : `🔄 Opprett ${nyEtikett}`}
           </button>
         </div>
       </div>
@@ -73193,6 +73477,12 @@ function PrisbokPage({ onBack }) {
   // Oppsummeringen etter at biblioteket er oppdatert mot en ny aktiv prisliste.
   const [bibResultat, setBibResultat] = useState(null)   // { resultat, prislisteNavn }
   const [oppdatererBib, setOppdatererBib] = useState(false)
+  const [bibFremdrift, setBibFremdrift] = useState(null)
+  // Overlayen vises FØRST etter to sekunder. Går jobben unna på 300 ms, skal det
+  // ikke blinke et vindu — men tar den lang tid, skal brukeren se at det jobbes
+  // og ikke tro at siden har hengt seg.
+  const [visFremdrift, setVisFremdrift] = useState(false)
+  const fremdriftTimer = React.useRef(null)
   const fileRef = React.useRef(null)
 
   const loadData = async () => {
@@ -73340,19 +73630,30 @@ function PrisbokPage({ onBack }) {
   const oppdaterBiblioteketNaa = async (prisliste) => {
     if (!prisliste?.id) return
     setOppdatererBib(true)
+    setBibFremdrift(null)
+    setVisFremdrift(false)
+    if (fremdriftTimer.current) clearTimeout(fremdriftTimer.current)
+    fremdriftTimer.current = setTimeout(() => setVisFremdrift(true), 2000)
     try {
       const res = await oppdaterBibliotekMotPrisliste({
         prislisteId: prisliste.id,
         prislisteNavn: prisliste.navn,
         companyId: companyId || null,
         userId: user?.id,
+        onFremdrift: setBibFremdrift,
       })
       // Har bedriften ingen egne bygningsdeler, er det ingenting å fortelle om.
       if (res && (res.linjerTotalt > 0 || res.feil)) setBibResultat({ resultat: res, prislisteNavn: prisliste.navn })
     } catch (e) {
       setToast({ type: 'error', message: 'Biblioteket ble ikke oppdatert: ' + ((e && e.message) || 'ukjent feil') })
-    } finally { setOppdatererBib(false) }
+    } finally {
+      if (fremdriftTimer.current) { clearTimeout(fremdriftTimer.current); fremdriftTimer.current = null }
+      setOppdatererBib(false); setVisFremdrift(false); setBibFremdrift(null)
+    }
   }
+
+  // Rydd timeren om siden lukkes midt i en oppdatering.
+  useEffect(() => () => { if (fremdriftTimer.current) clearTimeout(fremdriftTimer.current) }, [])
 
   const doImport = async (items, navn) => {
     if (!kanStyrePrisgrunnlag) return
@@ -73649,16 +73950,37 @@ function PrisbokPage({ onBack }) {
         )}
       </div>
 
-      {/* Framdrift mens biblioteket oppdateres */}
-      {oppdatererBib && (
-        <div style={{ position:'fixed', inset:0, zIndex:155, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(15,23,42,0.45)', padding:'16px' }}>
-          <div style={{ background:'white', borderRadius:'16px', padding:'22px 26px', textAlign:'center', maxWidth:'320px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
-            <div style={{ fontSize:'28px', marginBottom:'10px' }}>📚</div>
-            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>Oppdaterer biblioteket …</div>
-            <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>Henter nye priser til bedriftens bygningsdeler. Kalkylene røres ikke.</div>
+      {/* Fremdrift mens biblioteket oppdateres — kommer først etter to sekunder,
+          og viser hvor jobben står, ikke bare at den går. */}
+      {oppdatererBib && visFremdrift && (() => {
+        const f = bibFremdrift || {}
+        let steg = 'Leser bedriftens bygningsdeler …'
+        let andel = 0.08
+        let detalj = null
+        if (f.fase === 'priser') {
+          steg = 'Henter priser fra prislisten …'
+          andel = 0.1 + 0.6 * (f.antPuljer ? (f.pulje - 1) / f.antPuljer : 0)
+          detalj = `Oppslag ${f.pulje} av ${f.antPuljer} · ${(f.antNummer || 0).toLocaleString('nb-NO')} varenumre`
+        } else if (f.fase === 'lagrer') {
+          steg = 'Lagrer bygningsdelene …'
+          andel = 0.7 + 0.3 * (f.avRader ? f.skrevet / f.avRader : 0)
+          detalj = `${f.skrevet} av ${f.avRader} bygningsdeler`
+        }
+        return (
+          <div style={{ position:'fixed', inset:0, zIndex:155, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(15,23,42,0.45)', padding:'16px' }}>
+            <div style={{ background:'white', borderRadius:'16px', padding:'22px 24px', maxWidth:'360px', width:'100%', boxSizing:'border-box', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
+              <div style={{ fontSize:'28px', marginBottom:'10px', textAlign:'center' }}>📚</div>
+              <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'3px', textAlign:'center' }}>Oppdaterer biblioteket</div>
+              <div style={{ fontSize:'12px', color:'#374151', marginBottom:'3px', textAlign:'center' }}>{steg}</div>
+              {detalj && <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'10px', textAlign:'center' }}>{detalj}</div>}
+              <div style={{ height:'6px', borderRadius:'999px', background:'#f1f5f9', overflow:'hidden', margin:'10px 0 12px' }}>
+                <div style={{ height:'100%', width:`${Math.round(Math.min(1, andel) * 100)}%`, background:'#059669', transition:'width 0.3s' }} />
+              </div>
+              <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.5, textAlign:'center' }}>Kalkylene dine røres ikke. Ikke lukk siden.</div>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* Oppsummering, med detaljer og «Angre alt» */}
       {bibResultat && (
@@ -74198,6 +74520,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showLagreBd, setShowLagreBd] = useState(null)
   // «Oppdater priser»-dialogen. true når den er åpen for hele kalkylen.
   const [showOppdaterPriser, setShowOppdaterPriser] = useState(false)
+  // Ny revisjon: { prisendringer } når den er åpen. prisendringer er tom når
+  // revisjonen startes fra Mer-menyen uten prisoppdatering.
+  const [showNyRevisjon, setShowNyRevisjon] = useState(null)
+  // Revisjonsfamilien til denne kalkylen, eldste først.
+  const [revisjoner, setRevisjoner] = useState([])
+  const [visRevHistorikk, setVisRevHistorikk] = useState(false)
   // På telefon vises materiallinjene som en LESEVISNING i stedet for den brede
   // tabellen: ingen bygger en kalkyle på mobil, men mange åpner en på farta og
   // skal se hva som er med, hvilke priser som gjelder og hva som er merket.
@@ -74230,6 +74558,14 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [init?.id])
+
+  // Revisjonsfamilien — vises som historikk, og trengs for å finne neste
+  // revisjonsnummer når man reviderer en gammel versjon åpnet fra historikken.
+  const lastRevisjoner = React.useCallback(async () => {
+    const liste = await hentKalkyleRevisjoner(k)
+    setRevisjoner(liste)
+  }, [k.id, k.parent_calculation_id])
+  useEffect(() => { lastRevisjoner() }, [lastRevisjoner])
 
   // Alle NOBB-numre som finnes i kalkylen, som en stabil signatur.
   const nobbSignatur = React.useMemo(() => {
@@ -74324,6 +74660,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
     'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+    'Erstattet':        { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', emoji: '🗃️' },
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
 
@@ -74549,6 +74886,54 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const oppdatert = { ...naa, kalkyler: nyeKalkyler }
     kRef.current = oppdatert
     saveProject(oppdatert)
+  }
+
+  // Oppretter revisjonen. `prisendringer` er de avkryssede linjene fra
+  // «Oppdater priser» — er de med, får revisjonen de nye prisene med én gang,
+  // og originalen beholder de gamle.
+  const opprettRevisjon = async (note) => {
+    const ctx = showNyRevisjon
+    const naa = kRef.current
+    if (!naa) return
+    const valgte = (ctx && ctx.prisendringer) || []
+    const faktorer = naa.faktorer || {}
+
+    let nyeKalkyler = naa.kalkyler || []
+    if (valgte.length > 0) {
+      const noekkel = (a, b, c) => `${a}|${b}|${c}`
+      const map = new Map(valgte.map(p => [noekkel(p.sti.kalkId, p.sti.bdId, p.sti.matId), p]))
+      nyeKalkyler = (naa.kalkyler || []).map(kl => ({
+        ...kl,
+        bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
+          ...bd,
+          materialer: (bd.materialer || []).map(m => {
+            const p = map.get(noekkel(kl.id, bd.id, m.id))
+            return p ? { ...m, ...prisforslagTilFelter(p) } : m
+          }),
+        })),
+      }))
+    }
+    const t = beregnProsjektTotal(nyeKalkyler, faktorer)
+    const { data, error } = await opprettKalkyleRevisjon({
+      k: naa, nyeKalkyler, note, userId: user?.id,
+      totals: { total_cost: t.totSelvkost, total_ex_mva: t.totMedFortjeneste, profit_percent: t.fortjenesteProsent },
+    })
+    if (error) {
+      setToastMsg({ title: 'Feil', message: 'Kunne ikke opprette revisjon: ' + ((error && error.message) || 'ukjent feil'), type: 'error' })
+      return
+    }
+    setShowNyRevisjon(null)
+    setShowOppdaterPriser(false)
+    // Bytt til revisjonen. Den er nå den gjeldende versjonen.
+    const oppdatert = medReparerteKalkyleIder(data)
+    kRef.current = oppdatert
+    setK(oppdatert)
+    setUndoStack([])
+    setToastMsg({
+      title: `${kalkRevLabel(data.revision_number)} opprettet`,
+      message: `${kalkNrMedRev(data)} er nå gjeldende. Forrige versjon står som «Erstattet».`,
+      type: 'success',
+    })
   }
 
   // Alle materiallinjer i kalkylen, med en peker tilbake til hver av dem.
@@ -75318,10 +75703,71 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKV ? '14px' : '20px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '8px' : '12px', marginBottom:'12px', flexWrap:'wrap' }}>
           <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding: isMobKV ? '6px 10px' : '8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
-          {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
+          {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{kalkNrMedRev(k)}</span>}
           <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+          {(k.revision_number || 1) > 1 && (
+            <span style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700' }}>
+              {kalkRevLabel(k.revision_number)}
+            </span>
+          )}
+          {revisjoner.length > 1 && (
+            <button onClick={() => setVisRevHistorikk(v => !v)}
+              title="Se alle versjoner av denne kalkylen"
+              style={{ background:'white', border:'1px solid #ddd6fe', color:'#7c3aed', borderRadius:'999px', padding: isMobKV ? '3px 9px' : '3px 11px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600', cursor:'pointer' }}>
+              📜 {revisjoner.length} versjoner
+            </button>
+          )}
+          {k.status === KALK_STATUS_ERSTATTET && (
+            <span title="Denne versjonen er erstattet av en nyere revisjon. Den står urørt med prisene kunden fikk."
+              style={{ fontSize: isMobKV ? '10px' : '11px', color:'#7c3aed', background:'#f5f3ff', border:'1px solid #ddd6fe', padding:'3px 9px', borderRadius:'999px', fontWeight:'600' }}>
+              🗃️ Erstattet av nyere versjon
+            </span>
+          )}
           {saving && <span style={{ fontSize:'12px', color:'#94a3b8' }}>Lagrer...</span>}
         </div>
+
+        {/* Revisjonshistorikk — alle versjoner av denne kalkylen, eldste først.
+            Samme prinsipp som revisjonslisten i Tilbud. Gjeldende er markert,
+            og notatet forteller hva som endret seg. */}
+        {visRevHistorikk && revisjoner.length > 1 && (
+          <div style={{ background:'#faf9ff', border:'1px solid #ddd6fe', borderRadius:'12px', padding:'12px 14px', marginBottom:'12px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'8px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', letterSpacing:'0.03em' }}>VERSJONER AV DENNE KALKYLEN</span>
+              <button onClick={() => setVisRevHistorikk(false)} style={{ background:'none', border:'none', fontSize:'12px', color:'#7c3aed', cursor:'pointer', fontWeight:'600' }}>Skjul</button>
+            </div>
+            {revisjoner.map((rev, i) => {
+              const erGjeldende = String(rev.id) === String(k.id)
+              const forrige = i > 0 ? revisjoner[i - 1] : null
+              const diff = forrige ? (parseFloat(rev.total_ex_mva) || 0) - (parseFloat(forrige.total_ex_mva) || 0) : null
+              return (
+                <div key={rev.id} style={{ background: erGjeldende ? 'white' : 'transparent', border: erGjeldende ? '1px solid #ddd6fe' : '1px solid transparent', borderRadius:'10px', padding:'9px 11px', marginBottom:'4px' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                    <span style={{ background: erGjeldende ? '#7c3aed' : '#e2e8f0', color: erGjeldende ? 'white' : '#64748b', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', flexShrink:0 }}>
+                      {kalkRevLabel(rev.revision_number)}
+                    </span>
+                    <span style={{ fontSize:'12px', color:'#64748b', fontFamily:'monospace' }}>{kalkNrMedRev(rev)}</span>
+                    {erGjeldende && <span style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed' }}>← du ser på denne</span>}
+                    {rev.status === KALK_STATUS_ERSTATTET && !erGjeldende && <span style={{ fontSize:'10px', color:'#94a3b8' }}>erstattet</span>}
+                    <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(rev.total_ex_mva)}</span>
+                    {diff !== null && Math.abs(diff) >= 1 && (
+                      <span style={{ fontSize:'11px', fontWeight:'700', color: diff > 0 ? '#c2410c' : '#15803d', whiteSpace:'nowrap' }}>
+                        {diff > 0 ? '+' : ''}{fmt(diff)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'3px' }}>
+                    {rev.created_at ? new Date(rev.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) : ''}
+                    {rev.revision_note ? ` · ${rev.revision_note}` : ''}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ fontSize:'11px', color:'#7c3aed', marginTop:'6px', lineHeight:1.5 }}>
+              Tilbud som alt er sendt peker på den versjonen de ble laget fra, og følger ikke revisjonene.
+            </div>
+          </div>
+        )}
+
         <div style={{ display:'flex', alignItems: isMobKV ? 'flex-start' : 'center', justifyContent:'space-between', flexDirection: isMobKV ? 'column' : 'row', gap: isMobKV ? '10px' : '0' }}>
           <div>
             <h1 style={{ fontSize: isMobKV ? '17px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
@@ -75357,6 +75803,12 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       sendt til kunde — brukeren skal se hva som endres. */}
                   <button onClick={() => { setShowOppdaterPriser(true); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
+                  {/* Man reviderer av flere grunner enn nye priser — kunden vil ha
+                      to etasjer i stedet for én, mengdene er justert. Derfor egen
+                      inngang, ikke bare via «Oppdater priser». */}
+                  <button onClick={() => { setShowNyRevisjon({ prisendringer: [] }); setShowMoreMenu(false) }}
+                    title="Lager en ny versjon av kalkylen. Denne står urørt som «Erstattet»."
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>🔄 Ny revisjon</button>
                   <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
                   <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
@@ -78442,7 +78894,18 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             setShowOppdaterPriser(false)
             setShowKoblingsassistent({ kalkId: p.sti.kalkId, bdId: p.sti.bdId, kunMatId: p.sti.matId })
           }}
+          onLagRevisjon={KALK_SENDT_STATUS.has(k.status) ? ((valgte) => setShowNyRevisjon({ prisendringer: valgte })) : undefined}
           onClose={() => setShowOppdaterPriser(false)}
+        />
+      )}
+
+      {/* Ny revisjon — fra Mer-menyen, eller som anbefalt vei fra «Oppdater priser» */}
+      {showNyRevisjon && (
+        <NyKalkyleRevisjonModal
+          k={k}
+          prisendringer={showNyRevisjon.prisendringer}
+          onOpprett={opprettRevisjon}
+          onClose={() => setShowNyRevisjon(null)}
         />
       )}
 
