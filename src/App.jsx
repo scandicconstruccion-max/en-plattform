@@ -71624,7 +71624,7 @@ function nyPrisForLinje(linje, vare) {
   const gammelPris = parseFloat(linje?.enhetspris) || 0
   const raaPris = _prisTall(vare?.pris_per_enhet)
   if (raaPris === null) {
-    return { gammelPris, nyPris: null, harNyPris: false, nyEnhet: linje?.enhet || '', nyOmregning: null, omregnetFra: null }
+    return { gammelPris, nyPris: null, harNyPris: false, nyEnhet: linje?.enhet || '', vareEnhet: vare?.enhet || '', nyOmregning: null, omregnetFra: null }
   }
   const omr = linje?._omregning
   if (omr && parseFloat(omr.areal) > 0) {
@@ -71635,6 +71635,7 @@ function nyPrisForLinje(linje, vare) {
       nyPris: Math.round((raaPris / parseFloat(omr.areal)) * 100) / 100,
       harNyPris: true,
       nyEnhet: linje.enhet,
+      vareEnhet: vare?.enhet || '',
       nyOmregning: { ...omr, fraPris: raaPris },
       omregnetFra: { pris: raaPris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) },
     }
@@ -71643,7 +71644,11 @@ function nyPrisForLinje(linje, vare) {
     gammelPris,
     nyPris: raaPris,
     harNyPris: true,
-    nyEnhet: vare?.enhet || linje?.enhet || '',
+    // Linjens enhet beholdes. En prisoppdatering endrer prisen, ikke hva linjen
+    // måles i. Før ble den satt til varens enhet, og da forsvant nettopp det
+    // avviket som skulle varsles om.
+    nyEnhet: linje?.enhet || vare?.enhet || '',
+    vareEnhet: vare?.enhet || '',
     nyOmregning: null,
     omregnetFra: null,
   }
@@ -71708,7 +71713,7 @@ async function byggPrisforslag(poster, userId, companyId, kanSePriser = true) {
     const vare = prisMap[nobb]
     if (!vare) { utgatt.push({ ...p, nobb }); continue }
 
-    const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
+    const { gammelPris, nyPris, harNyPris, nyEnhet, vareEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
     // Varen finnes, men prislisten har ingen brukbar pris. Da rører vi den ikke.
     if (!harNyPris) {
       utenPris.push({ ...p, nobb, varenavn: p.linje.varenavn || vare.varenavn || '', nyttVarenavn: vare.varenavn || '', gammelPris, raaPris: vare.pris_per_enhet })
@@ -71725,8 +71730,10 @@ async function byggPrisforslag(poster, userId, companyId, kanSePriser = true) {
       diffProsent: gammelPris > 0 ? ((nyPris - gammelPris) / gammelPris) * 100 : null,
       mengde: parseFloat(p.linje.mengde) || 0,
       enhet: p.linje.enhet || '',
-      nyEnhet, nyOmregning, omregnetFra,
-      enhetByttes: normaliserEnhet(nyEnhet) !== normaliserEnhet(p.linje.enhet || ''),
+      nyEnhet, vareEnhet, nyOmregning, omregnetFra,
+      // Prisen gjelder en ANNEN enhet enn linjen måles i. Linjen endres ikke —
+      // vi sier det, slik at brukeren kan rette mengden eller velge en annen vare.
+      prisEnhetAvviker: !nyOmregning && !!enhetsAvvik(p.linje.enhet || '', vareEnhet),
     }
     if (_prisLik(gammelPris, nyPris)) uendret.push(post)
     else endret.push(post)
@@ -71740,8 +71747,12 @@ async function byggPrisforslag(poster, userId, companyId, kanSePriser = true) {
 // Feltene som skal skrives på linjen når en prisendring godtas.
 function prisforslagTilFelter(post) {
   const felter = { enhetspris: post.nyPris, varenavn: post.nyttVarenavn || post.varenavn }
+  // Enheten prisen gjelder i, slik at varselet virker også på linjer som bare
+  // har fått ny pris (ikke ny vare). Se beregnVareFelter.
+  if (post.vareEnhet) felter._prisEnhet = post.vareEnhet
   if (post.nyOmregning) felter._omregning = post.nyOmregning
-  else if (post.nyEnhet) felter.enhet = post.nyEnhet
+  // Linjens egen enhet røres IKKE av en prisoppdatering. Sto den i m² før, står
+  // den i m² etter — det er prisen som er ny, ikke hva linjen måles i.
   return felter
 }
 
@@ -71778,7 +71789,16 @@ async function beregnVareFelter(confirm, vare, linje) {
     nobb: String(vare?.varenummer ?? '').trim(),
     varenavn: vare?.varenavn || linje?.varenavn || '',
     enhetspris: pris,
-    enhet: vareEnhet || linje?.enhet || '',
+    // LINJENS enhet vinner. Her sto det motsatt, og det var årsaken til at en
+    // 562,40 kr/STK-pris kunne stå på en m²-linje uten et eneste varsel: å
+    // skrive om linjens enhet til varens gjorde de to like, og enhetsAvvik()
+    // sammenlignet STK mot STK og fant ingenting. Koblingen slettet beviset.
+    // Har linjen ingen enhet, arver den fortsatt varens.
+    enhet: linje?.enhet || vareEnhet || '',
+    // Enheten PRISEN gjelder i. Lagres på linjen slik at varselet kan
+    // sammenligne uten å slå opp i prisboken — det virker da også for roller
+    // uten pristilgang, og etter at en prisliste er slettet.
+    _prisEnhet: vareEnhet || null,
     _omregning: null,
   }
   const linjeEnhet = normaliserEnhet(linje?.enhet)
@@ -71925,7 +71945,7 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
         radLinjer.push({ navn: m.varenavn || 'Uten navn', nobb: String(m.nobb).trim(), type: 'utgatt', pris: parseFloat(m.enhetspris) || 0 })
         return m
       }
-      const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning } = nyPrisForLinje(m, vare)
+      const { gammelPris, nyPris, harNyPris, nyEnhet, vareEnhet, nyOmregning } = nyPrisForLinje(m, vare)
       // Varen finnes i prislisten, men uten en brukbar pris. Da rører vi den
       // ikke. Før ble slike linjer skrevet til 0 kr, eller talt som «uendret»
       // når biblioteklinjen også sto på 0 — begge er villedende.
@@ -71948,8 +71968,10 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
         omregnet: !!nyOmregning,
       })
       const felter = { ...m, enhetspris: nyPris, varenavn: vare.varenavn || m.varenavn }
+      // Enheten på linjen røres ikke — se nyPrisForLinje. Varens enhet lagres,
+      // slik at varselet virker også på bibliotekrader.
+      if (vareEnhet) felter._prisEnhet = vareEnhet
       if (nyOmregning) felter._omregning = nyOmregning
-      else felter.enhet = nyEnhet
       return felter
     })
 
@@ -72586,9 +72608,10 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, k
                               ↩ ny pris per {enhetTekst(normaliserEnhet(p.omregnetFra.enhet))} er {fmtKr2(p.omregnetFra.pris)} — delt på {fmtTall(p.omregnetFra.areal)} m², som før
                             </div>
                           )}
-                          {p.enhetByttes && !p.nyOmregning && (
-                            <div style={{ fontSize:'11px', color:'#c2410c', marginTop:'5px' }}>
-                              ⚠ enheten endres fra {p.enhet || '—'} til {p.nyEnhet} — kontroller mengden etterpå
+                          {p.prisEnhetAvviker && (
+                            <div style={{ fontSize:'11px', color:'#c2410c', marginTop:'5px', lineHeight:1.5 }}>
+                              ⚠ prisen gjelder per {enhetTekst(normaliserEnhet(p.vareEnhet))}, men linjen står i {enhetTekst(normaliserEnhet(p.enhet))}.
+                              Mengden og prisen regnes i ulike enheter — kontroller linjen etter oppdateringen.
                             </div>
                           )}
                         </div>
@@ -75552,9 +75575,16 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
 
   // Enhetsavviket på én materiallinje, eller null når alt stemmer.
   // Er linjen bevisst omregnet (bruker bekreftet rull→m²), er det ikke et avvik.
+  //
+  // `_prisEnhet` er enheten prisen ble hentet i, lagret på linjen da varen ble
+  // valgt eller prisen oppdatert. Den leses FØRST, og det er det som gjør
+  // varselet uavhengig av prisboken: det virker uten nettverk, for roller uten
+  // pristilgang, og etter at prislisten er slettet eller byttet. Oppslaget er
+  // bare en reserve for linjer som ble koblet før feltet fanst.
   const linjeEnhetsAvvik = (m) => {
     if (!m || !matErKoblet(m)) return null
     if (m._omregning) return null
+    if (m._prisEnhet) return enhetsAvvik(m.enhet, m._prisEnhet)
     const oppslag = prisEnheter[String(m.nobb).trim()]
     if (!oppslag) return null
     return enhetsAvvik(m.enhet, oppslag.enhet)
@@ -76897,8 +76927,14 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                               {!isExpanded && (() => {
                                 const kob = tellKobledeLinjer(bd.materialer)
                                 if (kob.total === 0) return null
-                                const alle = kob.ukoblet === 0
-                                return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste`} style={{ fontSize:'10px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>{alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}</span>
+                                // «8 av 8 koblet» skal ikke lyse grønt når en av dem har
+                                // pris i feil enhet. En grønn teller som lyver er verre
+                                // enn ingen teller.
+                                const avvik = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
+                                const alle = kob.ukoblet === 0 && avvik === 0
+                                return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste${avvik > 0 ? ` · ${avvik} har pris i en annen enhet enn linjen` : ''}`}
+                                  style={{ fontSize:'10px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>
+                                  {alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}{avvik > 0 ? ` · ${avvik}⚠` : ''}</span>
                               })()}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '6px' : '10px', flexShrink:0 }}>
@@ -77160,16 +77196,20 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                     har en veiledende standardpris. Det skal stå der. */}
                                 {(() => {
                                   const kob = tellKobledeLinjer(bd.materialer)
-                                  const alle = kob.total > 0 && kob.ukoblet === 0
                                   // Uten denne telleren må brukeren åpne hver rad for å finne
                                   // linjen der enheten ikke stemmer.
                                   const avvikAntall = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
+                                  // «8 av 8 koblet» skal ikke være grønn når én av linjene har
+                                  // pris i feil enhet. Den sa alt var i orden mens en dampsperre
+                                  // sto 39 ganger for høyt.
+                                  const alle = kob.total > 0 && kob.ukoblet === 0 && avvikAntall === 0
                                   return (
                                     <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
                                       <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>📦 MATERIALER</span>
                                       {kob.total > 0 && (
                                         <span style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', border: `1px solid ${alle ? '#bbf7d0' : '#fde68a'}` }}>
                                           {alle ? '🔗' : '⚠️'} {kob.koblet} av {kob.total} linjer koblet til din prisliste
+                                          {avvikAntall > 0 ? ` · ${avvikAntall} må sjekkes` : ''}
                                         </span>
                                       )}
                                       {avvikAntall > 0 && (
