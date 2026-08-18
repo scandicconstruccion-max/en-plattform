@@ -71395,11 +71395,15 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
 // kunde, og brukeren skal se hva som endres før det skrives.
 //
 // Linjene deles i fire:
-//   endret   — ny pris i prislisten, vises med gammel → ny og differanse
-//   uendret  — samme pris, oppsummeres som ett tall (skal ikke fylle listen)
-//   utgatt   — NOBB-nummeret finnes ikke i den aktive prislisten lenger.
-//              Prisen røres IKKE, og linjen står ikke som oppdatert.
-//   ukoblet  — ingen NOBB. Kan ikke oppdateres; dette er arbeidslisten.
+//   endret     — ny pris i prislisten, vises med gammel → ny og differanse
+//   uendret    — samme pris, oppsummeres som ett tall (skal ikke fylle listen)
+//   utgatt     — NOBB-nummeret finnes ikke i den aktive prislisten lenger.
+//                Prisen røres IKKE, og linjen står ikke som oppdatert.
+//   utenPris   — varen FINNES i prislisten, men uten en brukbar pris (tom, 0
+//                eller tekst). Prisen røres ikke. Dette er den kategorien som
+//                manglet: før ble slike linjer «oppdatert» til 0 kr, eller
+//                rapportert som «uendret» når begge sider var 0.
+//   ukoblet    — ingen NOBB. Kan ikke oppdateres; dette er arbeidslisten.
 
 // Er to priser like nok til å regnes som uendret? Ører teller, men
 // flyttallsstøy skal ikke gi en «endring» på 0,00 kr.
@@ -71407,29 +71411,54 @@ function _prisLik(a, b) {
   return Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 0.005
 }
 
+// Leser et pristall. Returnerer null når verdien ikke er en brukbar pris —
+// tom, null, tekst, eller null/negativ.
+//
+// `parseFloat(x) || 0` duger IKKE her. Den gjør null, '' og 'NaN' til 0, og en
+// pris på 0 er ikke en pris — den er en manglende pris. Behandler vi dem som 0,
+// SKRIVER vi 0 kr inn på materiallinjen, og en linje som kostet 44,02 blir
+// gratis uten at noen får beskjed.
+// Den takler også komma: parseFloat('44,02') gir 44, altså ørene forsvinner.
+function _prisTall(v) {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'number') return (isFinite(v) && v > 0) ? v : null
+  const s = String(v).trim().replace(/\s/g, '').replace(',', '.')
+  if (s === '') return null
+  const n = parseFloat(s)
+  return (isFinite(n) && n > 0) ? n : null
+}
+
 // Hva skal én materiallinje ha av pris og enhet, gitt varen fra prislisten?
 //
 // Delt mellom «Oppdater priser»-dialogen (manuell, med forhåndsvisning) og den
 // automatiske biblioteksoppdateringen ved import. Én regel, ett sted — ellers
 // ville rull→m² kunne oppføre seg ulikt avhengig av hvor oppdateringen startet.
+// `harNyPris: false` betyr at varen finnes i prislisten, men uten en pris vi kan
+// bruke. Da skal linjen IKKE røres — den er ikke oppdatert, og den er ikke
+// «uendret». Kallerne rapporterer den som egen kategori.
 function nyPrisForLinje(linje, vare) {
   const gammelPris = parseFloat(linje?.enhetspris) || 0
+  const raaPris = _prisTall(vare?.pris_per_enhet)
+  if (raaPris === null) {
+    return { gammelPris, nyPris: null, harNyPris: false, nyEnhet: linje?.enhet || '', nyOmregning: null, omregnetFra: null }
+  }
   const omr = linje?._omregning
   if (omr && parseFloat(omr.areal) > 0) {
     // Linjen er bevisst regnet om fra leveranseenhet til m². Ny leveransepris
     // deles på det SAMME arealet — omregningen skal overleve prisoppdateringer.
-    const nyLeveransePris = parseFloat(vare?.pris_per_enhet) || 0
     return {
       gammelPris,
-      nyPris: Math.round((nyLeveransePris / parseFloat(omr.areal)) * 100) / 100,
+      nyPris: Math.round((raaPris / parseFloat(omr.areal)) * 100) / 100,
+      harNyPris: true,
       nyEnhet: linje.enhet,
-      nyOmregning: { ...omr, fraPris: nyLeveransePris },
-      omregnetFra: { pris: nyLeveransePris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) },
+      nyOmregning: { ...omr, fraPris: raaPris },
+      omregnetFra: { pris: raaPris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) },
     }
   }
   return {
     gammelPris,
-    nyPris: parseFloat(vare?.pris_per_enhet) || 0,
+    nyPris: raaPris,
+    harNyPris: true,
     nyEnhet: vare?.enhet || linje?.enhet || '',
     nyOmregning: null,
     omregnetFra: null,
@@ -71440,7 +71469,7 @@ function nyPrisForLinje(linje, vare) {
 //   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
 // Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
 async function byggPrisforslag(poster, userId) {
-  const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], ukoblet: [], feil: null }
+  const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], utenPris: [], ukoblet: [], feil: null }
   const alle = Array.isArray(poster) ? poster : []
   if (alle.length === 0) return tomt
 
@@ -71484,13 +71513,18 @@ async function byggPrisforslag(poster, userId) {
     return { ...tomt, ukoblet, prisliste, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') }
   }
 
-  const endret = [], uendret = [], utgatt = []
+  const endret = [], uendret = [], utgatt = [], utenPris = []
   for (const p of koblede) {
     const nobb = String(p.linje.nobb).trim()
     const vare = prisMap[nobb]
     if (!vare) { utgatt.push({ ...p, nobb }); continue }
 
-    const { gammelPris, nyPris, nyEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
+    const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
+    // Varen finnes, men prislisten har ingen brukbar pris. Da rører vi den ikke.
+    if (!harNyPris) {
+      utenPris.push({ ...p, nobb, varenavn: p.linje.varenavn || vare.varenavn || '', nyttVarenavn: vare.varenavn || '', gammelPris, raaPris: vare.pris_per_enhet })
+      continue
+    }
 
     const post = {
       ...p,
@@ -71511,7 +71545,7 @@ async function byggPrisforslag(poster, userId) {
 
   // Størst utslag først — det er der brukeren vil se etter.
   endret.sort((a, b) => Math.abs(b.diff * (b.mengde || 1)) - Math.abs(a.diff * (a.mengde || 1)))
-  return { prisliste, endret, uendret, utgatt, ukoblet, feil: null }
+  return { prisliste, endret, uendret, utgatt, utenPris, ukoblet, feil: null }
 }
 
 // Feltene som skal skrives på linjen når en prisendring godtas.
@@ -71663,7 +71697,7 @@ async function _hentBedriftensBibliotekrader(companyId, userId) {
 // Returnerer statistikken oppsummeringen viser, og id-en til angre-loggen.
 async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, companyId, userId, onFremdrift }) {
   const meld = (info) => { if (typeof onFremdrift === 'function') onFremdrift(info) }
-  const tomt = { rader: 0, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, ukoblet: 0, detaljer: [], loggId: null, feil: null }
+  const tomt = { rader: 0, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, utenPris: 0, ukoblet: 0, detaljer: [], loggId: null, feil: null }
   if (!prislisteId || !userId) return { ...tomt, feil: 'Mangler prisliste eller bruker.' }
 
   meld({ fase: 'bibliotek' })
@@ -71684,7 +71718,7 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
     catch (e) { return { ...tomt, rader: rader.length, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') } }
   }
 
-  const stat = { rader: rader.length, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, ukoblet: 0 }
+  const stat = { rader: rader.length, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, utenPris: 0, ukoblet: 0 }
   const detaljer = []      // per bygningsdel, til «se detaljene»
   const snapshot = []      // gamle materialer per rad, til angring
   const skriv = []         // radene som faktisk endres
@@ -71702,7 +71736,15 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
         radLinjer.push({ navn: m.varenavn || 'Uten navn', nobb: String(m.nobb).trim(), type: 'utgatt', pris: parseFloat(m.enhetspris) || 0 })
         return m
       }
-      const { gammelPris, nyPris, nyEnhet, nyOmregning } = nyPrisForLinje(m, vare)
+      const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning } = nyPrisForLinje(m, vare)
+      // Varen finnes i prislisten, men uten en brukbar pris. Da rører vi den
+      // ikke. Før ble slike linjer skrevet til 0 kr, eller talt som «uendret»
+      // når biblioteklinjen også sto på 0 — begge er villedende.
+      if (!harNyPris) {
+        stat.utenPris += 1
+        radLinjer.push({ navn: vare.varenavn || m.varenavn, nobb: String(m.nobb).trim(), type: 'utenPris', pris: gammelPris, raaPris: vare.pris_per_enhet })
+        return m
+      }
       if (_prisLik(gammelPris, nyPris)) {
         stat.uendret += 1
         radLinjer.push({ navn: vare.varenavn || m.varenavn, type: 'uendret', pris: gammelPris })
@@ -72194,8 +72236,10 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
                   })}
                 </>
               ) : (
-                <div style={{ background:'white', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'14px', fontSize:'13px', color:'#15803d', fontWeight:'600' }}>
-                  ✅ Alle koblede linjer har allerede prisen som står i prislisten.
+                <div style={{ background:'white', border:`1px solid ${(forslag.utenPris || []).length > 0 || forslag.utgatt.length > 0 ? '#fde68a' : '#bbf7d0'}`, borderRadius:'12px', padding:'14px', fontSize:'13px', color: (forslag.utenPris || []).length > 0 || forslag.utgatt.length > 0 ? '#a16207' : '#15803d', fontWeight:'600' }}>
+                  {(forslag.utenPris || []).length > 0 || forslag.utgatt.length > 0
+                    ? '⚠ Ingen priser å oppdatere. Se listene under — noen varer finnes ikke i prislisten, eller mangler pris der.'
+                    : '✅ Alle koblede linjer har allerede prisen som står i prislisten.'}
                 </div>
               )}
 
@@ -72240,6 +72284,27 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
                             🔗 Finn erstatning
                           </button>
                         )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Finnes i prislisten, men uten pris. Nesten alltid feil
+                  kolonnemapping ved import — si det, i stedet for å telle dem
+                  som «uendret» eller skrive 0 kr inn på linjen. */}
+              {(forslag.utenPris || []).length > 0 && (
+                <>
+                  {seksjon(`${forslag.utenPris.length} ${forslag.utenPris.length === 1 ? 'LINJE' : 'LINJER'} — VAREN FINNES, MEN UTEN PRIS`, '#991b1b')}
+                  <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.55, marginBottom:'8px' }}>
+                      Varenummeret finnes i prislisten, men prisfeltet er tomt eller null. Prisen på linjen er
+                      IKKE rørt. Skjer dette for mange varer, er prisfilen sannsynligvis importert med feil
+                      kolonne — sjekk prislisten under Prisbok.
+                    </div>
+                    {forslag.utenPris.map((p, i) => (
+                      <div key={i} style={{ fontSize:'12px', color:'#7f1d1d', padding:'3px 0' }}>
+                        {p.nyttVarenavn || p.varenavn || 'Uten navn'} <span style={{ fontFamily:'monospace', color:'#b91c1c' }}>· NOBB {p.nobb}</span> · står med {fmtKr2(p.gammelPris)}
                       </div>
                     ))}
                   </div>
@@ -72371,13 +72436,29 @@ function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose
           <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#374151', lineHeight:1.6 }}>
             <strong>{r.oppdatert || 0} av {r.linjerTotalt || 0} materiallinjer</strong> i biblioteket fikk ny pris.
             {r.utgatt > 0 ? ` ${r.utgatt} ${r.utgatt === 1 ? 'vare er' : 'varer er'} utgått og står med gammel pris.` : ''}
+            {r.utenPris > 0 ? ` ${r.utenPris} ${r.utenPris === 1 ? 'vare finnes' : 'varer finnes'} i prislisten uten pris — de er ikke rørt.` : ''}
             {r.ukoblet > 0 ? ` ${r.ukoblet} ${r.ukoblet === 1 ? 'linje mangler' : 'linjer mangler'} kobling.` : ''}
           </p>
+
+          {/* Varer som finnes i prislisten men mangler pris er nesten alltid et
+              tegn på at filen ble importert med feil kolonne. Si det, i stedet for
+              å la tallet stå der og bety ingenting. */}
+          {r.utenPris > 0 && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+              <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>🔍</span>
+              <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.6 }}>
+                <strong>{r.utenPris} {r.utenPris === 1 ? 'vare har' : 'varer har'} ingen pris i prislisten.</strong> Varenummeret finnes,
+                men prisfeltet er tomt eller null. Det skjer oftest når prisfilen er importert med feil
+                kolonne — sjekk prislisten under Prisbok. Prisene i biblioteket er ikke rørt.
+              </div>
+            </div>
+          )}
 
           <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'14px' }}>
             {tall(r.oppdatert || 0, 'fikk ny pris', { bg:'#f0fdf4', kant:'#bbf7d0', tekst:'#15803d' })}
             {tall(r.uendret || 0, 'uendret pris', { bg:'#f8fafc', kant:'#e2e8f0', tekst:'#475569' })}
             {tall(r.utgatt || 0, 'utgått — står med gammel pris', { bg:'#fff7ed', kant:'#fed7aa', tekst:'#c2410c' })}
+            {r.utenPris > 0 && tall(r.utenPris, 'finnes i prislisten uten pris', { bg:'#fef2f2', kant:'#fecaca', tekst:'#991b1b' })}
             {tall(r.ukoblet || 0, 'mangler NOBB-kobling', { bg:'#fffbeb', kant:'#fde68a', tekst:'#a16207' })}
           </div>
 
@@ -72391,14 +72472,22 @@ function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose
               <button onClick={() => setVisDetaljer(v => !v)}
                 style={{ display:'flex', alignItems:'center', gap:'7px', width:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', fontSize:'13px', color:'#374151', cursor:'pointer', textAlign:'left', fontWeight:'600' }}>
                 <span style={{ color:'#94a3b8' }}>{visDetaljer ? '▼' : '▶'}</span>
-                Se detaljene ({(r.detaljer || []).filter(dd => dd.endret > 0).length} bygningsdeler endret)
+                Se detaljene ({(r.detaljer || []).filter(dd => dd.endret > 0 || (dd.linjer || []).some(l => l.type === 'utenPris')).length} bygningsdeler)
               </button>
               {visDetaljer && (
                 <div style={{ marginTop:'8px' }}>
-                  {(r.detaljer || []).filter(dd => dd.endret > 0).map(dd => (
+                  {(r.detaljer || []).filter(dd => dd.endret > 0 || (dd.linjer || []).some(l => l.type === 'utenPris')).map(dd => (
                     <div key={dd.radId} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', marginBottom:'7px' }}>
                       <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{dd.navn}</div>
-                      <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'6px' }}>{dd.kategori || 'uten kategori'} · {dd.endret} {dd.endret === 1 ? 'linje' : 'linjer'} endret</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'6px' }}>
+                        {dd.kategori || 'uten kategori'} · {dd.endret} {dd.endret === 1 ? 'linje' : 'linjer'} endret
+                        {(() => { const n = (dd.linjer || []).filter(l => l.type === 'utenPris').length; return n > 0 ? ` · ${n} uten pris` : '' })()}
+                      </div>
+                      {dd.linjer.filter(l => l.type === 'utenPris').map((l, i) => (
+                        <div key={'u'+i} style={{ fontSize:'12px', color:'#991b1b', padding:'2px 0' }}>
+                          {l.navn} <span style={{ fontFamily:'monospace', fontSize:'11px' }}>· NOBB {l.nobb}</span> — ingen pris i prislisten, står med {fmtKr2(l.pris)}
+                        </div>
+                      ))}
                       {dd.linjer.filter(l => l.type === 'oppdatert').map((l, i) => (
                         <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'2px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
                           <span style={{ minWidth:0 }}>{l.navn}</span>
@@ -73490,6 +73579,13 @@ function PrisbokPage({ onBack }) {
     setPrislister(pl || [])
     const aktiv = (pl || []).find(p => p.aktiv)
     setAktivPrisliste(aktiv || null)
+    // YTELSE: `order('varenavn').limit(200)` er en sortering av HELE prislisten
+    // med mindre det finnes en indeks på (prisliste_id, varenavn). Uten den målte
+    // vi 75 ms lokalt mot 60 453 rader — og med RLS-sjekk per rad og nett i mellom
+    // ble det de 7–8 sekundene som så ut som at biblioteksoppdateringen hang.
+    // Med indeksen stopper Postgres etter 200 rader: 0,75 ms, flatt uansett
+    // listestørrelse. Indeksen ligger i SQL-blokken; fjernes den, kommer tregheten
+    // tilbake her.
     if (aktiv) {
       const { data: pb } = await supabase.from('prisbok').select('*').eq('prisliste_id', aktiv.id).order('varenavn').limit(200)
       setPrisbok(pb || [])
