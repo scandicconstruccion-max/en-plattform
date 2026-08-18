@@ -1884,6 +1884,7 @@ function AuthProvider({ children }) {
   const kanSlette = rolleKanSlette(role)       // kun admin/leder
   const kanStyreProsjekt = rolleKanStyreProsjekt(role) // opprette/slette prosjekt: admin/leder
   const kanStyrePrisgrunnlag = rolleKanStyrePrisgrunnlag(role) // prislister + erstatte standarder
+  const kanSePriser = rolleKanSePriser(role)   // innkjøpspriser er økonomidata
 
   // Marker en opplæringstur som sett — DB er fasit, localStorage er cache.
   const markTourSeen = async (tourKey) => {
@@ -1893,7 +1894,7 @@ function AuthProvider({ children }) {
     try { await supabase.from('user_profiles').update({ seen_tours: merged }).eq('id', user.id) } catch (_) {}
   }
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, kanSePriser, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -52355,6 +52356,17 @@ function rolleKanSlette(role) { return role === 'admin' || role === 'leder' }
 // biblioteket og bruke «Oppdater priser» på sine egne kalkyler.
 function rolleKanStyrePrisgrunnlag(role) { return role === 'admin' || role === 'leder' }
 
+// Kan denne rollen SE innkjøpsprisene i prisboken?
+//
+// Speiler RLS-policyen rbac_okonomi_sel på prisbok og prislister, som er
+// RESTRICTIVE: auth_role() in ('admin','leder','les'). «ansatt» står bevisst
+// utenfor — innkjøpspriser er økonomidata. Endres policyen, må denne endres i
+// samme runde, ellers lyver grensesnittet om hva brukeren får se.
+//
+// Prisene som ALT står på materiallinjene i en kalkyle er ikke berørt: de er
+// lagret på raden, og vises som før for alle.
+function rolleKanSePriser(role) { return role === 'admin' || role === 'leder' || role === 'les' }
+
 // Kan denne rollen REDIGERE en bestemt modul? Les kan aldri; ansatt er view-only på enkelte (Ordre/Endringer).
 function rolleKanRedigereModul(role, navId) {
   if (role === 'les') return false
@@ -71599,7 +71611,7 @@ function nyPrisForLinje(linje, vare) {
 // Klassifiserer materiallinjer mot bedriftens aktive prisliste.
 //   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
 // Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
-async function byggPrisforslag(poster, userId, companyId) {
+async function byggPrisforslag(poster, userId, companyId, kanSePriser = true) {
   const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], utenPris: [], ukoblet: [], feil: null }
   const alle = Array.isArray(poster) ? poster : []
   if (alle.length === 0) return tomt
@@ -71610,7 +71622,8 @@ async function byggPrisforslag(poster, userId, companyId) {
 
   let prisliste = null
   try {
-    prisliste = await hentAktivPrisliste(companyId, userId, 'id, navn, created_at')
+    // Uten pristilgang blir spørringen avvist av RLS uansett — vi hopper over den.
+    if (kanSePriser) prisliste = await hentAktivPrisliste(companyId, userId, 'id, navn, created_at')
     // Antall varer og importdato gjør det mulig å KJENNE IGJEN prislisten. Har
     // brukeren flere, er en oppdatering mot feil liste like skadelig som ingen
     // oppdatering — og verre, fordi den ser ut som den gikk bra.
@@ -71623,6 +71636,12 @@ async function byggPrisforslag(poster, userId, companyId) {
     }
   } catch (e) { /* faller gjennom til feilmeldingen under */ }
   if (!prisliste) {
+    // Har rollen ikke tilgang til prisboken, er «ingen aktiv prisliste» feil svar:
+    // bedriften HAR en liste, brukeren får bare ikke lese den. Sender vi ham til
+    // Prisbok, finner han ingenting og tror det er en feil.
+    if (!kanSePriser) {
+      return { ...tomt, ukoblet, feil: 'Innkjøpsprisene er økonomidata, og din rolle har ikke tilgang til dem. Prisene som står i kalkylen er lagret på linjene og gjelder fortsatt — men de kan bare oppdateres av admin eller leder.' }
+    }
     return { ...tomt, ukoblet, feil: 'Ingen aktiv prisliste. Gå til Prisbok og sett en prisliste som aktiv.' }
   }
 
@@ -72290,7 +72309,7 @@ const KALK_SENDT_STATUS = new Set(['Tilbud sendt', 'Tilbud godkjent'])
 // som er sendt til kunde: originalen står urørt med prisene kunden fikk, og de
 // nye prisene går i en ny versjon. Å rette originalen er fortsatt mulig, men
 // ligger bak bekreftelsessteget.
-function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, kanSePriser = true, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
   const [laster, setLaster] = useState(true)
   const [forslag, setForslag] = useState(null)
   const [valgt, setValgt] = useState(() => new Set())
@@ -72304,7 +72323,7 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, s
 
   useEffect(() => {
     let avbrutt = false
-    byggPrisforslag(poster, userId, companyId)
+    byggPrisforslag(poster, userId, companyId, kanSePriser)
       .then(res => {
         if (avbrutt) return
         setForslag(res)
@@ -73132,7 +73151,7 @@ function KalkyleDiffModal({ diff, onClose }) {
 
 function KalkBibliotekPage({ onBack }) {
   const confirm = useConfirm()
-  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag, kanSePriser } = useAuth()
   const [activeFag, setActiveFag] = useState('tomrer')
   const [expandedKat, setExpandedKat] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
@@ -73511,6 +73530,7 @@ function KalkBibliotekPage({ onBack }) {
           poster={prisPoster(prisBd)}
           userId={user?.id}
           companyId={companyId}
+          kanSePriser={kanSePriser}
           onSkriv={(valgte) => skrivPriserPaaBd(prisBd, valgte)}
           onFinnErstatning={(p) => {
             const linje = (prisBd.materialer || [])[p.sti.index]
@@ -75304,7 +75324,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
 function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
-  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag, kanSePriser } = useAuth()
   // Bedriftens egne bygningsdeler. `rader` er de lagrede overstyringene —
   // finnBibliotekMalId og lagre-knappen leser dem for å vite om bygningsdelen
   // alt finnes i biblioteket.
@@ -75445,7 +75465,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // opp ennå. Ett kall per pulje på 100. Numre som ikke finnes lagres som null,
   // så vi ikke spør om dem igjen.
   useEffect(() => {
-    if (!user?.id) return
+    // Uten pristilgang blir oppslaget avvist av RLS. Merkingen av enhetsavvik
+    // uteblir da — den er en hjelp, ikke en forutsetning.
+    if (!user?.id || !kanSePriser) return
     const alle = nobbSignatur ? nobbSignatur.split(',').filter(Boolean) : []
     const mangler = alle.filter(n => !(n in prisEnhetRef.current))
     if (mangler.length === 0) return
@@ -75469,7 +75491,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       } catch(e) { /* stille: merkingen er en hjelp, ikke en forutsetning */ }
     })()
     return () => { avbrutt = true }
-  }, [nobbSignatur, user?.id])
+  }, [nobbSignatur, user?.id, kanSePriser])
 
   // Enhetsavviket på én materiallinje, eller null når alt stemmer.
   // Er linjen bevisst omregnet (bruker bekreftet rull→m²), er det ikke et avvik.
@@ -79600,6 +79622,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           poster={prisPosterFraKalkyle()}
           userId={user?.id}
           companyId={companyId}
+          kanSePriser={kanSePriser}
           sendtStatus={KALK_SENDT_STATUS.has(k.status) ? k.status : null}
           onSkriv={skrivPrisoppdatering}
           onFinnErstatning={(p) => {
