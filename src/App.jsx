@@ -1883,6 +1883,7 @@ function AuthProvider({ children }) {
   const erAdmin = erAdminRolle(role)           // styrer brukere + innstillinger
   const kanSlette = rolleKanSlette(role)       // kun admin/leder
   const kanStyreProsjekt = rolleKanStyreProsjekt(role) // opprette/slette prosjekt: admin/leder
+  const kanStyrePrisgrunnlag = rolleKanStyrePrisgrunnlag(role) // prislister + erstatte standarder
 
   // Marker en opplæringstur som sett — DB er fasit, localStorage er cache.
   const markTourSeen = async (tourKey) => {
@@ -1892,7 +1893,7 @@ function AuthProvider({ children }) {
     try { await supabase.from('user_profiles').update({ seen_tours: merged }).eq('id', user.id) } catch (_) {}
   }
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -13882,7 +13883,10 @@ const ConfirmContext = React.createContext(null)
 function ConfirmProvider({ children }) {
   // Keep ALL state in a single ref to avoid stale closure issues
   const [dialog, setDialog] = React.useState(null)
-  // dialog = { message, subMessage, confirmLabel, danger, alertOnly, kind } | null
+  // dialog = { message, subMessage, confirmLabel, cancelLabel, danger, alertOnly, kind } | null
+  //   cancelLabel: egen tekst på avbryt-knappen. Noen valg er ikke «gjør / ikke gjør»
+  //     men to reelle alternativ («Ja, regn om» / «Nei, behold prisen per rull») —
+  //     da må begge knappene si hva de gjør. Faller tilbake til 'Avbryt'.
   //   alertOnly: true  → vis kun OK-knapp (ingen Avbryt), for "info"/"obs"-meldinger
   //   kind: 'info' | 'warn' | 'success' | 'error' — styrer ikon og farge på toppen
   const cbRef = React.useRef(null) // holds { resolve }
@@ -13981,11 +13985,14 @@ function ConfirmProvider({ children }) {
                 </div>
               )}
             </div>
-            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end', flexShrink:0, borderTop: dialog.details ? '1px solid #f1f5f9' : 'none' }}>
+            {/* flexWrap: en egendefinert cancelLabel kan være lang («Nei, behold
+                407,40 per rull»). På 375 px legger knappene seg da under hverandre
+                i stedet for å presses ut av dialogen. */}
+            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end', flexShrink:0, flexWrap:'wrap', borderTop: dialog.details ? '1px solid #f1f5f9' : 'none' }}>
               {!dialog.alertOnly && (
                 <button onClick={() => respond(false)}
-                  style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
-                  Avbryt
+                  style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151', flex:'0 1 auto', minWidth:0 }}>
+                  {dialog.cancelLabel || 'Avbryt'}
                 </button>
               )}
               <button onClick={() => respond(true)}
@@ -52329,6 +52336,19 @@ function rolleKanRedigere(role) { return role !== 'les' }
 // Kan denne rollen SLETTE forretningsdata? Kun admin/leder (ansatt og les kan ikke).
 function rolleKanSlette(role) { return role === 'admin' || role === 'leder' }
 
+// Kan denne rollen endre bedriftens FELLES PRISGRUNNLAG? Kun admin/leder.
+//
+// Dette dekker tre handlinger som alle skriver om grunnlaget for hele firmaets
+// tilbud, ikke bare den enkeltes arbeid:
+//   · importere en prisliste
+//   · sette en prisliste aktiv (oppdaterer hele biblioteket)
+//   · slette en prisliste
+//   · «Erstatt min standard» på en innebygd bygningsdel
+// Det er en større handling enn å lagre en egen bygningsdel, og angre-knappen
+// hjelper bare hvis noen oppdager feilen. Ansatt kan fortsatt lage VARIANTER i
+// biblioteket og bruke «Oppdater priser» på sine egne kalkyler.
+function rolleKanStyrePrisgrunnlag(role) { return role === 'admin' || role === 'leder' }
+
 // Kan denne rollen REDIGERE en bestemt modul? Les kan aldri; ansatt er view-only på enkelte (Ordre/Endringer).
 function rolleKanRedigereModul(role, navId) {
   if (role === 'les') return false
@@ -59381,6 +59401,488 @@ function usePrisbokSoek() {
   return { sok, aktivPrislisteKlar }
 }
 
+// ─── KOBLING AV MATERIALLINJER MOT PRISLISTE (Oppgave 2) ─────────────────────
+// En materiallinje kan bare hente pris fra prisboken når den har et NOBB-nummer.
+// Linjer uten NOBB har en STANDARDPRIS (veiledende) — den er ofte nyttig, men den
+// er ikke brukerens egen innkjøpspris. Alt herfra og ned handler om to ting:
+//   1) å vise ærlig hvilke linjer som faktisk er koblet, og
+//   2) å foreslå riktig vare fra prislisten når en linje skal kobles.
+//
+// Rangeringen er DIMENSJONSFØRST, ikke navnelikhet. Ren navnematching mot ekte
+// data foreslo treskruer for «Stenderverk 36x70» og isolasjonsplate for
+// «Gipsplate 13mm». En feil pris som ser riktig ut er verre enn ingen pris, så
+// en kandidat med feil dimensjon eller feil materialklasse blir DISKVALIFISERT,
+// ikke bare nedrangert.
+
+// Er materiallinjen koblet til prislisten?
+function matErKoblet(m) {
+  return !!(m && m.nobb != null && String(m.nobb).trim() !== '')
+}
+
+// { koblet, total, ukoblet } for materiallistene i én bygningsdel.
+function tellKobledeLinjer(materialer) {
+  const liste = Array.isArray(materialer) ? materialer : []
+  const koblet = liste.filter(matErKoblet).length
+  return { koblet, total: liste.length, ukoblet: liste.length - koblet }
+}
+
+// Normaliserer varetekst før dimensjonsuttrekk og ordmatching.
+// «×» → «x» (Maxbo og brukere blander), NBSP → vanlig mellomrom (finnes i JSX-
+// strengene våre), «13,5» → «13.5».
+function normaliserVaretekst(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[\u00D7\u2715\u2716\uFF58]/g, 'x')
+    .replace(/[\u2013\u2014]/g, '-')
+    .toLowerCase()
+    .replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+const _DIM_PAR_RE = /(\d{1,4}(?:\.\d{1,2})?)\s*x\s*(\d{1,5}(?:\.\d{1,2})?)(?:\s*x\s*(\d{1,5}(?:\.\d{1,2})?))?/g
+const _DIM_MM_RE = /(\d{1,4}(?:\.\d{1,2})?)\s*mm\b/g
+
+// Trekker ut dimensjoner fra et varenavn.
+//   «Stenderverk 36x70»       → par [[36,70]]
+//   «GRAN UBH 36X073 C24»     → par [[36,73]]   (ledende null forsvinner i parseFloat)
+//   «Gipsplate 13mm»          → mm  [13]
+//   «GIPSPLATE 13X900X2400»   → par [[13,900,2400]]
+function ekstraherDimensjoner(tekst) {
+  const s = normaliserVaretekst(tekst)
+  const par = []
+  const tall = []
+  let m
+  _DIM_PAR_RE.lastIndex = 0
+  while ((m = _DIM_PAR_RE.exec(s)) !== null) {
+    const gruppe = [m[1], m[2], m[3]].filter(v => v !== undefined).map(v => parseFloat(v))
+    if (gruppe.some(n => !isFinite(n) || n <= 0)) continue
+    par.push(gruppe)
+    gruppe.forEach(n => tall.push(n))
+  }
+  const mm = []
+  _DIM_MM_RE.lastIndex = 0
+  while ((m = _DIM_MM_RE.exec(s)) !== null) {
+    const n = parseFloat(m[1])
+    if (isFinite(n) && n > 0) { mm.push(n); tall.push(n) }
+  }
+  return { par, mm, tall }
+}
+
+// Toleranse per måltall. Byggevarer selges i FAKTISKE mål mens folk snakker i
+// nominelle: «36x70» i kalkylen er «36x073» i prislisten, «36x95» er «36x098»,
+// «36x150» er «36x148». Toleransen må derfor slippe gjennom et par millimeter
+// på store mål, men IKKE på små — 13 mm gips og 15 mm gips er ulike varer.
+//   13 → 1.0   36 → 1.8   70 → 3.5   98 → 4.9   198 → 5.0
+function _dimTol(n) { return Math.max(1, Math.min(5, Math.abs(n) * 0.05)) }
+function _dimLik(a, b) { return Math.abs(a - b) <= Math.max(_dimTol(a), _dimTol(b)) }
+
+// Sammenligner kildelinjens dimensjon mot kandidatens.
+// Returnerer null når kilden HAR en dimensjon og kandidaten har en annen —
+// det er gaten som stopper «treskrue 5.0x70» for «Stenderverk 36x70».
+function sammenlignDimensjoner(kilde, kand) {
+  if (kilde.par.length > 0) {
+    if (kand.par.length === 0) {
+      const forste = kilde.par[0]
+      const alle = forste.every(n => kand.tall.some(t => _dimLik(n, t)))
+      if (alle && kand.tall.length > 0) return { score: 400, nivaa: 'delvis' }
+      return null
+    }
+    let best = null
+    for (const kp of kand.par) {
+      for (const sp of kilde.par) {
+        const a = sp.slice(0, 2), b = kp.slice(0, 2)
+        if (a.length < 2 || b.length < 2) continue
+        if (a[0] === b[0] && a[1] === b[1]) { best = { score: 1000, nivaa: 'eksakt' }; break }
+        if (_dimLik(a[0], b[0]) && _dimLik(a[1], b[1])) {
+          if (!best || best.score < 850) best = { score: 850, nivaa: 'naer' }
+        } else if (_dimLik(a[0], b[1]) && _dimLik(a[1], b[0])) {
+          if (!best || best.score < 700) best = { score: 700, nivaa: 'naer' }
+        }
+      }
+      if (best && best.score === 1000) break
+    }
+    return best  // null = feil dimensjon → diskvalifisert
+  }
+
+  if (kilde.mm.length > 0) {
+    const t = kilde.mm[0]
+    // Tykkelsen står nesten alltid FØRST i plate-navn: «GIPSPLATE 13X900X2400»
+    const forste = kand.par.length > 0 ? kand.par[0][0] : (kand.mm.length > 0 ? kand.mm[0] : null)
+    if (forste !== null && _dimLik(t, forste)) return { score: 900, nivaa: forste === t ? 'eksakt' : 'naer' }
+    if (kand.tall.some(n => _dimLik(t, n))) return { score: 500, nivaa: 'delvis' }
+    if (kand.tall.length === 0) return { score: 0, nivaa: null }  // kandidat uten mål i navnet — ingen gate
+    return null
+  }
+
+  return { score: 0, nivaa: null }  // kilden har ingen dimensjon — ingen gate å bruke
+}
+
+// Materialklasser. `kilde` er ordene brukeren skriver i kalkylen, `kandidat` er
+// ordene som faktisk står i prisbokens varenavn (5001-filene skriver STORE
+// bokstaver og forkortelser), `soek` er termer som er gode å søke på i prisboken.
+const KOB_MATERIALKLASSER = [
+  { id:'gips', navn:'Gipsplate',
+    kilde:['gips','gyproc','norgips','glasroc','fibergips'],
+    kandidat:['GIPS','GYPROC','NORGIPS','GLASROC','FIBERGIPS'],
+    soek:['gips'] },
+  { id:'isolasjon', navn:'Isolasjon',
+    kilde:['isolasjon','isoler','mineralull','steinull','glassull','glava','rockwool','eps','xps','sundolitt','jackon','isopor'],
+    kandidat:['ISOLASJON','ISOL','MINERALULL','STEINULL','GLASSULL','GLAVA','ROCKWOOL','EPS','XPS','SUNDOLITT','JACKON','FLEXI'],
+    soek:['isolasjon','glava','rockwool'] },
+  { id:'trevirke', navn:'Konstruksjonsvirke',
+    kilde:['stender','bindingsverk','reisverk','bjelke','sperre','taksperre','lekt','sløyfe','sloyfe','trelast','virke','konstruksjonsvirke','impregnert','gran','furu','c24','c18','svill','remstokk','losholt','stubbloft','tilfarer'],
+    kandidat:['GRAN','FURU','IMPR','KONSTR','C24','C18','LEKT','SLØYFE','SLOYFE','TRELAST','UBH','HØVL','HOVL','K-VIRKE','KVIRKE','STENDER','BJELKE'],
+    soek:['gran','impregnert','lekt'] },
+  { id:'treplate', navn:'Trebasert plate',
+    kilde:['osb','sponplate','kryssfiner','finer','mdf','huntonit','trefiber','gulvplate','undergulv'],
+    kandidat:['OSB','SPONPL','KRYSSFIN','FINER','MDF','HUNTONIT','TREFIBER','GULVPL'],
+    soek:['osb','sponplate','kryssfiner'] },
+  { id:'sperresjikt', navn:'Sperresjikt/membran',
+    kilde:['dampsperre','vindsperre','undertak','membran','radonsperre','radon','asfaltpapp','plastfolie','byggfolie','tyvek','vindtett','fuktsperre'],
+    kandidat:['DAMPSP','VINDSP','UNDERTAK','MEMBRAN','RADON','ASFALTPAPP','TYVEK','FOLIE','VINDTETT','PLATON'],
+    soek:['dampsperre','vindsperre','membran'] },
+  { id:'kledning', navn:'Kledning/panel/list',
+    // «REKTKLED», «FASADEKLED» og «TREKLEDNING» er hvordan prislistene faktisk
+    // skriver kledning. Kandidat-ordet er derfor 'KLED', ikke 'KLEDNING' — ellers
+    // ble «GRAN 19X148 REKTKLED KL1» avvist som feil materialtype for en linje
+    // som het «Utvendig kledning 19x148». «KLEDNINGSSKRUE» treffer også 'KLED',
+    // men den fanges av tilbehørs-straffen.
+    kilde:['kledning','trekledning','fasadekledning','panel','veggpanel','takpanel','listverk','list','gerikt','fotlist','taklist','glattkant','dobbelfals','tømmermannspanel','tommermannspanel','rektkled','utvendig kledning'],
+    kandidat:['KLED','PANEL','LIST','GERIKT','FOTLIST','GLATTKANT','DOBBELFALS'],
+    soek:['kledning','kled','panel'] },
+  { id:'fest', navn:'Feste/skruer',
+    kilde:['skrue','skruer','spiker','stift','bolt','beslag','vinkelbeslag','festemiddel','festemidler','plugg','ankerskinne','klammer','gjengestang'],
+    kandidat:['SKRUE','SPIKER','STIFT','BOLT','BESLAG','VINKEL','PLUGG','KLAMMER','ANKER','GJENGE'],
+    soek:['skrue','spiker','beslag'] },
+  { id:'betong', navn:'Betong/mur',
+    kilde:['betong','sement','mørtel','mortel','leca','blokk','armering','armeringsnett','støp','stop','pukk','grus','singel'],
+    kandidat:['BETONG','SEMENT','MØRTEL','MORTEL','LECA','BLOKK','ARMERING','PUKK','GRUS','SINGEL'],
+    soek:['betong','armering','leca'] },
+  { id:'flis', navn:'Flis/lim/sparkel',
+    kilde:['flis','fliser','flislim','sparkel','avretting','fugemasse','fugemørtel','fugemortel','flytsparkel'],
+    kandidat:['FLIS','LIM','SPARKEL','AVRETT','FUGE'],
+    soek:['flis','flislim','sparkel'] },
+  { id:'maling', navn:'Maling/beis',
+    kilde:['maling','beis','grunning','primer','lakk','trebeskyttelse','oljemaling'],
+    kandidat:['MALING','BEIS','GRUNNING','PRIMER','LAKK'],
+    soek:['maling','beis','grunning'] },
+  { id:'tak', navn:'Taktekking',
+    kilde:['takstein','takpanne','takplate','takrenne','nedløp','nedlop','møne','mone','shingel','takbelegg'],
+    kandidat:['TAKSTEIN','TAKPANNE','TAKPLATE','TAKRENNE','NEDLØP','NEDLOP','MØNE','MONE','SHINGEL'],
+    soek:['takstein','takrenne','takplate'] },
+  { id:'gulv', navn:'Gulvbelegg',
+    kilde:['parkett','laminat','vinyl','gulvbelegg','gulvbord','heltregulv'],
+    kandidat:['PARKETT','LAMINAT','VINYL','BELEGG','GULVBORD'],
+    soek:['parkett','laminat','gulvbord'] },
+  { id:'dor_vindu', navn:'Dør/vindu',
+    kilde:['dør','dor','vindu','karm','dørblad','dorblad','ytterdør','innerdør','vindusramme'],
+    kandidat:['DØR','DOR','VINDU','KARM'],
+    soek:['dør','vindu'] },
+]
+
+// Varer som er TILBEHØR til noe annet. Observert i staging: materiallinjen
+// «Vindsperre» ga fire tape-varianter øverst og selve vindsperren nederst —
+// «vindsperretape» inneholder hele ordet «vindsperre», og når linjen mangler
+// dimensjon er navnelikhet alt rangeringen har å gå på. En bruker som ikke er
+// byggmester tar den øverste.
+//
+// Regelen: nevner ikke linjenavnet selv tilbehøret, rangeres tilbehør ned. Det
+// diskvalifiserer dem ikke — trenger du tapen, finner du den — men de skal
+// aldri stå over hovedvaren.
+const KOB_TILBEHOR_ORD = [
+  'tape','teip','skjøtebånd','skjoteband','skjøtemasse','bånd','pakning','pakninger',
+  'lim','klips','klemme','klammer','skrue','skruer','spiker','stift','mutter','bolt',
+  'fugemasse','fugeskum','tetningsmasse','tetningsband','tetningsbånd','primer',
+  'borrelås','borrelas','strips','malje','maljer','mansjett','krage','gjennomføring',
+  'gjennomforing','stussmansjett','festebrakett','brakett','beslag','vinkel','plugg',
+  'grunning','sparkelbånd','sparkelband','fugebånd','fugeband','hjørnebånd','hjorneband',
+]
+// Straffen må være større enn klassebonus (300) + maks navnescore (500), slik at
+// tilbehør havner under alt som faktisk er hovedvaren.
+const KOB_TILBEHOR_STRAFF = 900
+
+// Er kandidaten tilbehør som linjen ikke selv har spurt om?
+function kandidatErUonsketTilbehor(kandidatNavn, linjeNavn) {
+  const kand = normaliserVaretekst(kandidatNavn)
+  const linje = normaliserVaretekst(linjeNavn)
+  if (!kand) return false
+  for (const ord of KOB_TILBEHOR_ORD) {
+    if (!kand.includes(ord)) continue
+    // Nevner linjen selv tilbehøret, er det nettopp det brukeren leter etter.
+    if (linje.includes(ord)) continue
+    return true
+  }
+  return false
+}
+
+// Ordstart-match. «list» treffer «listverk», men ikke «prisliste».
+function _harOrdstart(normalisertNavn, ord) {
+  const i = normalisertNavn.indexOf(ord)
+  if (i === -1) return false
+  if (i === 0) return true
+  const forrige = normalisertNavn[i - 1]
+  return !/[a-zæøå0-9]/.test(forrige)
+}
+
+// Finner materialklassen til brukerens linje. Klassen med det LENGSTE
+// matchende ordet vinner, så «gipsplate» slår «plate».
+function finnMaterialklasse(varenavn) {
+  const s = normaliserVaretekst(varenavn)
+  if (!s) return null
+  let best = null, bestLengde = 0
+  for (const kl of KOB_MATERIALKLASSER) {
+    for (const ord of kl.kilde) {
+      if (ord.length > bestLengde && _harOrdstart(s, ord)) { best = kl; bestLengde = ord.length }
+    }
+  }
+  return best
+}
+
+// Har kandidaten fra prisboken samme materialklasse?
+function kandidatMatcherKlasse(varenavn, klasse) {
+  if (!klasse) return true
+  const s = String(varenavn || '').toUpperCase()
+  return klasse.kandidat.some(k => s.includes(k))
+}
+
+// Bygger søketermene vi prøver mot prisboken, i prioritert rekkefølge.
+// Vi kan ikke søke på «36x70» alene — prislisten skriver «36x073». Derfor er
+// den bredeste og viktigste varianten «klasseord + første måltall» («gran 36»),
+// som treffer alle skrivemåter. Presisjonen tas av gaten i JavaScript etterpå.
+function byggKoblingsSoek(varenavn, dim, klasse) {
+  const rent = normaliserVaretekst(varenavn)
+  const ut = []
+  const push = (t) => {
+    const v = sanitiserSoeketerm(String(t == null ? '' : t).trim()).replace(/\s+/g, ' ').trim()
+    if (v.length >= 2 && !ut.includes(v)) ut.push(v)
+  }
+  const par = dim.par[0] || null
+  const tykk = dim.mm.length > 0 ? dim.mm[0] : null
+  const forsteTall = par ? par[0] : tykk
+  const klasseOrd = (klasse && klasse.soek) || []
+
+  for (const ko of klasseOrd.slice(0, 3)) {
+    if (forsteTall != null) push(`${ko} ${_heltallTekst(forsteTall)}`)
+    else push(ko)
+  }
+  if (par && par.length >= 2) {
+    const a = _heltallTekst(par[0]), b = _heltallTekst(par[1])
+    push(`${a}x${b}`)
+    if (/^\d+$/.test(b)) push(`${a}x${b.padStart(3, '0')}`)
+  }
+  const utenDim = rent
+    .replace(/\d+(\.\d+)?\s*x\s*\d+(\.\d+)?(\s*x\s*\d+(\.\d+)?)?/g, ' ')
+    .replace(/\d+(\.\d+)?\s*mm\b/g, ' ')
+    .replace(/\s+/g, ' ').trim()
+  const hovedord = utenDim.split(' ').filter(w => w.length >= 3).slice(0, 3)
+  if (hovedord.length > 0) push(hovedord.join(' '))
+  if (hovedord.length > 1) push(hovedord[0])
+  return ut.slice(0, 6)
+}
+
+function _heltallTekst(n) {
+  return Number.isInteger(n) ? String(n) : String(n)
+}
+
+// Henter og rangerer kandidater for ÉN materiallinje.
+// `sok` er funksjonen fra usePrisbokSoek(). Returnerer maks `maks` treff,
+// alle med dimensjon og materialklasse som faktisk stemmer.
+async function finnKoblingsKandidater(sok, material, maks = 5) {
+  const varenavn = String((material && material.varenavn) || '').trim()
+  if (!varenavn || typeof sok !== 'function') return []
+  const kildeDim = ekstraherDimensjoner(varenavn)
+  const klasse = finnMaterialklasse(varenavn)
+  const varianter = byggKoblingsSoek(varenavn, kildeDim, klasse)
+  if (varianter.length === 0) return []
+
+  const raa = new Map()
+  for (const term of varianter) {
+    if (raa.size >= 60) break
+    let treff = []
+    try { treff = await sok(term, { maxResultater: 40 }) } catch (e) { treff = [] }
+    for (const r of treff) {
+      const key = r.varenummer || `_${r.id}`
+      if (!raa.has(key)) raa.set(key, r)
+    }
+  }
+  if (raa.size === 0) return []
+
+  const linjeEnhet = String((material && material.enhet) || '').trim().toLowerCase()
+  // Navnelikheten må måles mot BRUKERENS varenavn, ikke mot søketermen som
+  // tilfeldigvis fant kandidaten. rad._score kommer fra den enkelte søkevarianten
+  // («gran 36», «dampsperre», …) og er ikke sammenlignbar på tvers av dem — en
+  // kandidat funnet via «dampsperre» ville ellers slå «Vindsperre» på egen bane.
+  const renKildeTerm = sanitiserSoeketerm(normaliserVaretekst(varenavn))
+  const kildeOrd = renKildeTerm.split(/\s+/).filter(w => w.length >= 2)
+  const vurdert = []
+  for (const rad of raa.values()) {
+    if (!kandidatMatcherKlasse(rad.varenavn, klasse)) continue
+    const kandDim = ekstraherDimensjoner(rad.varenavn)
+    const dimTreff = sammenlignDimensjoner(kildeDim, kandDim)
+    if (dimTreff === null) continue  // feil dimensjon → ut
+
+    let score = dimTreff.score * 3
+    if (klasse) score += 300
+    if (kildeOrd.length > 0) score += Math.min(500, rangerTreff(rad, renKildeTerm, kildeOrd))
+    const erTilbehor = kandidatErUonsketTilbehor(rad.varenavn, varenavn)
+    if (erTilbehor) score -= KOB_TILBEHOR_STRAFF
+    const kandEnhet = String(rad.enhet || '').trim().toLowerCase()
+    if (linjeEnhet && kandEnhet && linjeEnhet === kandEnhet) score += 150
+
+    let tillit = 'lav'
+    if (klasse && dimTreff.nivaa === 'eksakt') tillit = 'hoy'
+    else if (klasse && (dimTreff.nivaa === 'naer' || dimTreff.nivaa === 'delvis')) tillit = 'middels'
+    else if (dimTreff.nivaa === 'eksakt') tillit = 'middels'
+    // Tilbehør er aldri et sikkert treff på en linje som ikke ba om tilbehør.
+    if (erTilbehor) tillit = 'lav'
+
+    const begrunnelse = []
+    if (erTilbehor) begrunnelse.push('tilbehør, ikke hovedvare')
+    if (dimTreff.nivaa === 'eksakt') begrunnelse.push('samme dimensjon')
+    else if (dimTreff.nivaa === 'naer') begrunnelse.push('dimensjon stemmer (byggemål)')
+    else if (dimTreff.nivaa === 'delvis') begrunnelse.push('målet finnes i navnet')
+    if (klasse) begrunnelse.push(klasse.navn.toLowerCase())
+    if (linjeEnhet && kandEnhet && linjeEnhet === kandEnhet) begrunnelse.push(`enhet ${kandEnhet}`)
+
+    vurdert.push({ ...rad, _kobScore: score, _kobTillit: tillit, _kobBegrunnelse: begrunnelse.join(' · ') })
+  }
+
+  vurdert.sort((a, b) => {
+    if (b._kobScore !== a._kobScore) return b._kobScore - a._kobScore
+    return String(a.varenavn || '').localeCompare(String(b.varenavn || ''), 'nb')
+  })
+  return vurdert.slice(0, maks)
+}
+
+// Farger for tillitsmerket i koblingsassistenten.
+const KOB_TILLIT_STIL = {
+  hoy:     { bg:'#f0fdf4', color:'#15803d', border:'#bbf7d0', tekst:'Treffer godt' },
+  middels: { bg:'#fefce8', color:'#a16207', border:'#fef08a', tekst:'Sannsynlig' },
+  lav:     { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', tekst:'Usikker' },
+}
+
+// ─── ENHETER OG MENGDER PÅ MATERIALLINJER (Oppgave 3) ────────────────────────
+// Prisboken selger i LEVERANSEENHETER (rull, stykk, pakke), mens kalkylen regner
+// i BYGGEENHETER (m², lm). Verifisert i staging: «Solid dampsperre 2,6x15m» koster
+// 407,40 kr per rull. Lagt inn på en m²-linje sto den som 407,40 kr/m² — rullen
+// dekker 39 m², så riktig tall er 10,45. Nesten førti ganger feil, uten varsel.
+//
+// To ting skjer her: vi TILBYR omregning når vi kan lese dimensjonen ut av
+// varenavnet (aldri stille — brukeren bekrefter regnestykket), og vi MERKER
+// linjen når enheten på linjen ikke er den prislisten priser i.
+
+// Enhetsnormalisering. 5001-filene skriver «M2», «RUL», «STK», «LM»; kalkylen
+// skriver «m²», «lm», «stk». Uten en felles nøkkel kan vi ikke se om to enheter
+// er den samme, og vi ville varslet om avvik som ikke finnes.
+const ENHET_SYNONYMER = {
+  m2:   ['m2','m²','kvm','kvadratmeter','sqm'],
+  lm:   ['lm','m','meter','løpemeter','lopemeter','lm.','rm'],
+  stk:  ['stk','st','stk.','pcs','styk'],
+  rul:  ['rul','rull','rl','rull.','rulle'],
+  pk:   ['pk','pak','pakke','pk.','pack','esk','eske','krt','kartong'],
+  m3:   ['m3','m³','kubikk','kubikkmeter'],
+  kg:   ['kg','kilo','kilogram'],
+  tonn: ['tonn','t'],
+  l:    ['l','ltr','liter','lit'],
+  sekk: ['sekk','sk','sack'],
+  sett: ['sett','set'],
+  rs:   ['rs','rundsum','sum'],
+  tim:  ['tim','time','timer','t.'],
+}
+const _ENHET_OPPSLAG = (() => {
+  const m = {}
+  for (const [kanonisk, ord] of Object.entries(ENHET_SYNONYMER)) {
+    for (const o of ord) m[o] = kanonisk
+  }
+  return m
+})()
+
+// Returnerer den kanoniske enhetsnøkkelen, eller '' når enheten er tom, og
+// den nedskrevne teksten når vi ikke kjenner den igjen (fritekst som «bunt»).
+function normaliserEnhet(e) {
+  const s = String(e == null ? '' : e)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .trim().toLowerCase()
+    .replace(/\s+/g, '')
+  if (!s) return ''
+  return _ENHET_OPPSLAG[s] || s
+}
+function erKjentEnhet(kanonisk) {
+  return !!kanonisk && Object.prototype.hasOwnProperty.call(ENHET_SYNONYMER, kanonisk)
+}
+// Hvordan enheten skrives i en setning til brukeren.
+const ENHET_NAVN = {
+  m2:'m²', lm:'løpemeter', stk:'stk', rul:'rull', pk:'pakke', m3:'m³',
+  kg:'kg', tonn:'tonn', l:'liter', sekk:'sekk', sett:'sett', rs:'rundsum', tim:'time',
+}
+function enhetTekst(kanonisk) { return ENHET_NAVN[kanonisk] || kanonisk }
+
+// Enheter der prisen gjelder en hel leveranse, ikke et areal. Bare disse er
+// kandidater for rull→m²-omregning.
+const LEVERANSE_ENHETER = new Set(['rul', 'stk', 'pk'])
+
+// Rimelighetsgrenser for en rull byggduk. De er der for å stoppe mønsteret fra
+// å treffe noe som ikke er en rull: «Grunnmur tykk 0,125x8m» ville gitt 1 m²,
+// men 0,125 m er en TYKKELSE, ikke en rullbredde.
+const RULL_MIN_BREDDE = 0.5,  RULL_MAKS_BREDDE = 5
+const RULL_MIN_LENGDE = 5,    RULL_MAKS_LENGDE = 250
+const RULL_MIN_AREAL  = 5
+
+// «bredde x lengde m» i varenavnet. Krever «m» rett etter lengden, og at det
+// ikke er starten på et annet ord — ellers ville «200my» og «2400mm» treffe.
+const _RULL_RE = /(\d{1,3}(?:\.\d{1,3})?)\s*x\s*(\d{1,4}(?:\.\d{1,3})?)\s*m(?![a-zæøå0-9])/g
+
+// Hvor mange m² dekker én rull/pakke av denne varen?
+// Returnerer null når vi ikke kan lese det trygt ut av navnet — og da skal
+// ingen omregning tilbys. Mønsteret treffer dampsperre, vindsperre og
+// underlagsduk; det finner ingenting på tape, bånd og pakninger, og det avviser
+// «Grunnmur tykk 0,125x8m».
+function rullDekning(varenavn) {
+  const s = normaliserVaretekst(varenavn)
+  if (!s) return null
+  _RULL_RE.lastIndex = 0
+  let m
+  while ((m = _RULL_RE.exec(s)) !== null) {
+    const bredde = parseFloat(m[1])
+    const lengde = parseFloat(m[2])
+    if (!isFinite(bredde) || !isFinite(lengde)) continue
+    if (bredde < RULL_MIN_BREDDE || bredde > RULL_MAKS_BREDDE) continue
+    if (lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) continue
+    const areal = bredde * lengde
+    if (areal < RULL_MIN_AREAL) continue
+    return { bredde, lengde, areal: Math.round(areal * 1000) / 1000 }
+  }
+  return null
+}
+
+// Kroner med to desimaler — omregnede enhetspriser er små tall der ørene betyr
+// noe (10,45 kr/m²), så fmtI()s avrunding til hele kroner duger ikke her.
+function fmtKr2(n) {
+  const v = Math.round((parseFloat(n) || 0) * 100) / 100
+  return v.toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr'
+}
+// Tall med inntil to desimaler, uten kr (til «2,6 m × 15 m» og «39 m²»).
+function fmtTall(n) {
+  const v = Math.round((parseFloat(n) || 0) * 100) / 100
+  return v.toLocaleString('nb-NO', { maximumFractionDigits: 2 })
+}
+
+// Er linjens enhet en annen enn den prislisten priser varen i?
+// Returnerer null når det ikke er noe å melde: like enheter, tomme enheter,
+// eller enheter vi ikke kjenner igjen (fritekst som «bunt» skal ikke gi varsel).
+function enhetsAvvik(linjeEnhet, vareEnhet) {
+  const linje = normaliserEnhet(linjeEnhet)
+  const vare = normaliserEnhet(vareEnhet)
+  if (!linje || !vare || linje === vare) return null
+  if (!erKjentEnhet(linje) || !erKjentEnhet(vare)) return null
+  return {
+    linje, vare,
+    kort: `pris per ${enhetTekst(vare)}, ikke ${enhetTekst(linje)}`,
+    lang: `Prislisten priser denne varen per ${enhetTekst(vare)}, men linjen står i ${enhetTekst(linje)}. Mengden og prisen regnes derfor i ulike enheter. Velg varen på nytt med 🔍 for å rette det.`,
+  }
+}
+
 // ─── PRISBOK-SØKEFELT (Patch 13 Sesjon C.2.B, refaktorert i Patch 13.B.5) ─────
 // Gjenbrukbart søkefelt mot prisbok-tabellen i Supabase.
 // Brukt i BimNyKonstruksjonDialog for å fylle ut materialer raskt.
@@ -63094,7 +63596,8 @@ function BimMatchingSeksjon({ mengder, isMob, onChange, klassifiseringVersjon, k
         const { data: maler } = await supabase.from('bruker_bibliotek')
           .select('*')
           .eq('user_id', user.id)
-          .in('kategori', ['Yttervegg', 'Innervegg', 'Sokkel', 'Etasjeskille', 'Bunnplate', 'Tak', 'Egne maler'])
+          .in('kategori', ['Yttervegg', 'Innervegg', 'Sokkel', 'Etasjeskille', 'Bunnplate', 'Tak', 'Egne maler',
+                           'Yttertak', 'Gulv', 'Gulvplate', 'Fundament', 'Betongvegg', 'Betongdekke', 'Bæresystem'])
           .order('created_at', { ascending: false })
         setBrukerBibliotek((maler || []).map(brukerMalToKonstruksjon))
 
@@ -68012,12 +68515,16 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   const regularKalks = kalks.filter(k => !k.is_template)
 
   const filtered = regularKalks.filter(k => {
+    // Erstattede kalkyler er forrige versjon av noe som finnes i en nyere
+    // revisjon. De skal ikke ligge side om side med den gjeldende — man åpner
+    // den gale. De finnes under revisjonshistorikken, og i filteret «Erstattet».
+    if (k.status === KALK_STATUS_ERSTATTET && filterStatus !== KALK_STATUS_ERSTATTET) return false
     if (filterStatus !== 'alle' && k.status !== filterStatus) return false
     if (search && ![k.title, k.customer_name, k.kalk_number].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false
     return true
   })
 
-  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0, 'Avslått': 0 }
+  const statusCounts = { 'Utkast': 0, 'Aktiv': 0, 'Tilbud sendt': 0, 'Tilbud godkjent': 0, 'Avslått': 0, 'Erstattet': 0 }
   regularKalks.forEach(k => { if (statusCounts[k.status] !== undefined) statusCounts[k.status]++ })
 
   // Ny fra mal
@@ -68071,6 +68578,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
     'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+    'Erstattet':        { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '🗃️' },
   }
 
   const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
@@ -68477,7 +68985,13 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', marginBottom:'4px' }}>
                       <span style={{ fontWeight:'700', color:'#0f172a', fontSize: isMobK ? '13px' : '15px' }}>{k.title}</span>
-                      {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
+                      {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{kalkNrMedRev(k)}</span>}
+                      {(k.revision_number || 1) > 1 && (
+                        <span title={`Revisjon ${(k.revision_number || 1) - 1} av denne kalkylen`}
+                          style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', fontSize:'11px', fontWeight:'700', padding:'2px 7px', borderRadius:'4px' }}>
+                          {kalkRevLabel(k.revision_number)}
+                        </span>
+                      )}
                       <span style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
                       {/* Patch 20: Prosjekt-type-pille */}
                       {(() => {
@@ -69907,6 +70421,195 @@ function getBibliotekByFag() {
   return grouped
 }
 
+// ─── BEDRIFTENS EGET BYGNINGSDELBIBLIOTEK (Oppgave 4) ────────────────────────
+// De innebygde bygningsdelene BLIR LIGGENDE i koden. Bare bedriftens
+// overstyringer lagres i basen, som rader i bruker_bibliotek:
+//   erstatter_id satt  → bedriftens versjon av en innebygd bygningsdel.
+//                        Den innebygde vises ikke lenger for denne bedriften.
+//   erstatter_id null  → en egen variant som ligger side om side med resten.
+//
+// Alternativet — å migrere alle 73 innebygde til rader i basen — er avvist:
+// da må hver bedrift ha sin egen kopi av alle 73 (slik de 58 sjekklistemalene
+// gjøres i dag, se DEFAULT_TEMPLATES-seedingen), og en forbedring i koden når
+// aldri noen. Her er det motsatt: rører bedriften ikke en bygningsdel, følger
+// den med på forbedringer automatisk.
+//
+// «Egne maler» som egen flat kategori er borte. Alt ligger i kategoritreet.
+
+// Finn en innebygd bygningsdel på id. Returnerer null for uuid-er og ukjente id-er.
+function innebygdBygningsdel(id) {
+  if (!id || typeof BYGNINGSDEL_BIBLIOTEK === 'undefined') return null
+  return BYGNINGSDEL_BIBLIOTEK.find(b => b.id === id) || null
+}
+
+// Kategoriene som finnes for en faggruppe i det innebygde biblioteket, pluss de
+// bedriften har tatt i bruk selv. Dette er listen brukeren velger fra ved lagring.
+function kategorierForFag(fagId, egneRader) {
+  const sett = new Set()
+  if (typeof BYGNINGSDEL_BIBLIOTEK !== 'undefined') {
+    BYGNINGSDEL_BIBLIOTEK.forEach(bd => { if (bd.fag === fagId && bd.kategori) sett.add(bd.kategori) })
+  }
+  ;(egneRader || []).forEach(r => { if (r.fag === fagId && r.kategori && r.kategori !== 'Egne maler') sett.add(r.kategori) })
+  return [...sett].sort((a, b) => a.localeCompare(b, 'nb'))
+}
+
+// Gjetter kategori ut fra navnet på bygningsdelen, blant kategoriene som finnes
+// for faggruppen. Kategorinavnene er ordene folk faktisk bruker i navnene sine,
+// så treffraten er høy: «Flatt tak m/membran» → Yttertak for tømrer, Membran for
+// murer. «Innervegg 98mm gips» → Innervegg.
+//
+// Dette er det som gjør at rader lagret FØR Oppgave 4 ikke danner en egen gruppe
+// nederst i treet. Lengste ordtreff vinner, så «innervegg» slår «vegg».
+function gjettKategoriFraNavn(navn, fagId) {
+  const kategorier = kategorierForFag(fagId, [])
+  if (kategorier.length === 0) return null
+  const navnN = normaliserVaretekst(navn)
+  if (!navnN) return null
+  const delOpp = (s) => s.split(/[^a-zæøå0-9]+/).filter(o => o.length >= 3)
+  const navnOrd = delOpp(navnN)
+  let best = null, bestScore = 0
+  for (const kat of kategorier) {
+    const katN = normaliserVaretekst(kat)
+    for (const o of delOpp(katN)) {
+      if (o.length > bestScore && navnN.includes(o)) { best = kat; bestScore = o.length }
+    }
+    for (const o of navnOrd) {
+      if (o.length > bestScore && katN.includes(o)) { best = kat; bestScore = o.length }
+    }
+  }
+  return best
+}
+
+// Kategorinavn som aldri skal vises som en gruppe i treet — de er rester fra
+// tidligere runder, ikke ekte kategorier.
+const BD_IKKE_EKTE_KATEGORIER = new Set(['Egne maler', 'Egne bygningsdeler'])
+
+// Gjør en rad fra bruker_bibliotek om til samme form som en innebygd bygningsdel,
+// slik at velgeren og bibliotek-siden kan behandle dem likt.
+function bibliotekRadTilBygningsdel(rad) {
+  const data = rad?.data || {}
+  const rader = medReparerteBibliotekRader(data)
+  const erstatter = rad?.erstatter_id ? innebygdBygningsdel(rad.erstatter_id) : null
+  return {
+    id: rad.id,
+    fag: rad.fag,
+    ...(() => {
+      // Kategorien avgjøres i denne rekkefølgen:
+      //   1) radens egen kategori, hvis den er en ekte kategori
+      //   2) kategorien til den innebygde raden erstatter
+      //   3) gjettet fra navnet
+      //   4) første kategori for faget — og da MERKES bygningsdelen, slik at
+      //      brukeren ser at den må plasseres. Ingen egen restgruppe i treet.
+      const egen = rad.kategori && !BD_IKKE_EKTE_KATEGORIER.has(rad.kategori) ? rad.kategori : null
+      if (egen) return { kategori: egen }
+      if (erstatter?.kategori) return { kategori: erstatter.kategori }
+      const gjettet = gjettKategoriFraNavn(rad.name, rad.fag)
+      if (gjettet) return { kategori: gjettet, _kategoriGjettet: true }
+      const forste = kategorierForFag(rad.fag, [])[0]
+      return { kategori: forste || 'Annet', _kategoriUsikker: true }
+    })(),
+    name: rad.name,
+    beskrivelse: data.beskrivelse || (erstatter ? 'Din versjon' : 'Egen bygningsdel'),
+    arbeidsarter: rader.arbeidsarter,
+    materialer: rader.materialer,
+    underleverandorer: rader.underleverandorer,
+    enhet: data.enhet || 'stk',
+    prosjektType: data.prosjektType || rad.prosjekt_type || null,
+    _egen: true,
+    _erstatterId: rad.erstatter_id || null,
+    _erstatterNavn: erstatter?.name || null,
+    _isBrukerMal: true,
+    _oppdatert: rad.updated_at || rad.created_at || null,
+  }
+}
+
+// Det sammenslåtte biblioteket: innebygde MINUS de bedriften har erstattet,
+// PLUSS bedriftens egne. Alt havner i sin riktige kategori.
+function byggBedriftsbibliotek(egneRader) {
+  const egne = (egneRader || []).map(bibliotekRadTilBygningsdel)
+  const erstattede = new Set(egne.map(b => b._erstatterId).filter(Boolean))
+  const innebygde = (typeof BYGNINGSDEL_BIBLIOTEK === 'undefined' ? [] : BYGNINGSDEL_BIBLIOTEK)
+    .filter(bd => !erstattede.has(bd.id))
+  return [...innebygde, ...egne]
+}
+
+// Grupper en vilkårlig bygningsdel-liste som { [fag]: { [kategori]: [...] } }.
+// Samme form som getBibliotekByFag(), men på en liste vi har satt sammen selv.
+function grupperBibliotekPerFag(liste) {
+  const raa = {}
+  ;(liste || []).forEach(bd => {
+    const fag = bd.fag || 'ukjent'
+    const kat = bd.kategori || 'Annet'
+    if (!raa[fag]) raa[fag] = {}
+    if (!raa[fag][kat]) raa[fag][kat] = []
+    raa[fag][kat].push(bd)
+  })
+
+  const ut = {}
+  for (const [fag, katObj] of Object.entries(raa)) {
+    // Egne først innen hver kategori — det bedriften har bestemt seg for skal øverst.
+    Object.values(katObj).forEach(arr => {
+      arr.sort((a, b) => (b._egen ? 1 : 0) - (a._egen ? 1 : 0) || String(a.name || '').localeCompare(String(b.name || ''), 'nb'))
+    })
+    // Og kategorier som INNEHOLDER noe av bedriftens eget sorteres øverst. Ellers
+    // ligger det bedriften faktisk jobber med nederst, bak en skjermlengde med
+    // innebygde kategorier. JS-objekter beholder innsettingsrekkefølgen, så vi
+    // bygger objektet på nytt i den rekkefølgen vi vil vise det.
+    const noekler = Object.keys(katObj).sort((a, b) => {
+      const egneA = katObj[a].some(x => x._egen) ? 1 : 0
+      const egneB = katObj[b].some(x => x._egen) ? 1 : 0
+      if (egneA !== egneB) return egneB - egneA
+      return a.localeCompare(b, 'nb')
+    })
+    ut[fag] = {}
+    noekler.forEach(kat => { ut[fag][kat] = katObj[kat] })
+  }
+  return ut
+}
+
+// Koblingsstatus for en bygningsdel: hvor mange materiallinjer har NOBB-nummer.
+// Dette er tallet som gjør bibliotek-siden til arbeidslisten for NOBB-koblingen.
+function bdKoblingsStatus(bd) {
+  return tellKobledeLinjer(bd?.materialer)
+}
+
+// Laster bedriftens egne bibliotekrader og setter sammen biblioteket.
+//
+// Leses på company_id, ikke user_id: biblioteket tilhører BEDRIFTEN, ikke den
+// enkelte. Rader lagret før company_id fantes har den tom, og tas med via
+// user_id slik at ingen mister det de har laget.
+function useBedriftsbibliotek() {
+  const { user, companyId } = useAuth()
+  const [rader, setRader] = useState([])
+  const [laster, setLaster] = useState(true)
+
+  const last = React.useCallback(async () => {
+    if (!user?.id) { setRader([]); setLaster(false); return }
+    try {
+      let q = supabase.from('bruker_bibliotek').select('*')
+      if (companyId) q = q.or(`company_id.eq.${companyId},and(company_id.is.null,user_id.eq.${user.id})`)
+      else q = q.eq('user_id', user.id)
+      const { data, error } = await q.order('created_at', { ascending: false })
+      if (error) throw error
+      setRader(data || [])
+    } catch (e) {
+      // Faller tilbake til egne rader hvis company-spørringen blir avvist av RLS.
+      try {
+        const { data } = await supabase.from('bruker_bibliotek').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+        setRader(data || [])
+      } catch (e2) { setRader([]) }
+    }
+    setLaster(false)
+  }, [user?.id, companyId])
+
+  useEffect(() => { last() }, [last])
+
+  const bibliotek = React.useMemo(() => byggBedriftsbibliotek(rader), [rader])
+  const perFag = React.useMemo(() => grupperBibliotekPerFag(bibliotek), [bibliotek])
+
+  return { rader, bibliotek, perFag, laster, last, setRader }
+}
+
 // Convert a bibliotek-bygningsdel to the runtime format used in kalkyler
 function bibliotekTilBygningsdel(bd, mengde) {
   const m = parseFloat(mengde) || 1
@@ -69921,7 +70624,15 @@ function bibliotekTilBygningsdel(bd, mengde) {
     name: bd.name || bd.navn || 'Uten navn',
     mengde: m,
     enhet: bd.enhet || 'stk',
-    source_bibliotek_id: bd.id,
+    // Peker til den INNEBYGDE bygningsdelen. Er bd bedriftens egen versjon av en
+    // innebygd, er det den innebygde id-en som er interessant — det er den
+    // «Lagre til bibliotek» skal kunne kjenne igjen senere.
+    source_bibliotek_id: bd._erstatterId || bd.id,
+    // Peker tilbake til raden i bruker_bibliotek når bygningsdelen ble hentet fra
+    // brukerens EGET bibliotek. Da skal «Lagre til bibliotek» oppdatere den raden
+    // i stedet for å lage en ny. Innebygde bygningsdeler har ingen slik rad — de
+    // får null og lagres som en ny rad i brukerens eget bibliotek.
+    source_bruker_mal_id: bd._isBrukerMal ? bd.id : null,
     arbeidsarter: arbeidsarter.map((a) => ({
       id: nyRadId(),
       beskrivelse: a.beskrivelse || '',
@@ -70678,174 +71389,1899 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
 }
 
 // Oppdater materialpriser fra aktiv prisliste basert på NOBB
-async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
+// ─── OPPDATER PRISER FRA AKTIV PRISLISTE (Oppgave 5) ─────────────────────────
+// Nytten av hele koblingsjobben ligger her: når leverandøren sender ny prisfil,
+// skal én knapp oppdatere alt. Men aldri stille — noen kalkyler er sendt til
+// kunde, og brukeren skal se hva som endres før det skrives.
+//
+// Linjene deles i fire:
+//   endret     — ny pris i prislisten, vises med gammel → ny og differanse
+//   uendret    — samme pris, oppsummeres som ett tall (skal ikke fylle listen)
+//   utgatt     — NOBB-nummeret finnes ikke i den aktive prislisten lenger.
+//                Prisen røres IKKE, og linjen står ikke som oppdatert.
+//   utenPris   — varen FINNES i prislisten, men uten en brukbar pris (tom, 0
+//                eller tekst). Prisen røres ikke. Dette er den kategorien som
+//                manglet: før ble slike linjer «oppdatert» til 0 kr, eller
+//                rapportert som «uendret» når begge sider var 0.
+//   ukoblet    — ingen NOBB. Kan ikke oppdateres; dette er arbeidslisten.
+
+// Er to priser like nok til å regnes som uendret? Ører teller, men
+// flyttallsstøy skal ikke gi en «endring» på 0,00 kr.
+function _prisLik(a, b) {
+  return Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 0.005
+}
+
+// Leser et pristall. Returnerer null når verdien ikke er en brukbar pris —
+// tom, null, tekst, eller null/negativ.
+//
+// `parseFloat(x) || 0` duger IKKE her. Den gjør null, '' og 'NaN' til 0, og en
+// pris på 0 er ikke en pris — den er en manglende pris. Behandler vi dem som 0,
+// SKRIVER vi 0 kr inn på materiallinjen, og en linje som kostet 44,02 blir
+// gratis uten at noen får beskjed.
+// Den takler også komma: parseFloat('44,02') gir 44, altså ørene forsvinner.
+function _prisTall(v) {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'number') return (isFinite(v) && v > 0) ? v : null
+  const s = String(v).trim().replace(/\s/g, '').replace(',', '.')
+  if (s === '') return null
+  const n = parseFloat(s)
+  return (isFinite(n) && n > 0) ? n : null
+}
+
+// Hva skal én materiallinje ha av pris og enhet, gitt varen fra prislisten?
+//
+// Delt mellom «Oppdater priser»-dialogen (manuell, med forhåndsvisning) og den
+// automatiske biblioteksoppdateringen ved import. Én regel, ett sted — ellers
+// ville rull→m² kunne oppføre seg ulikt avhengig av hvor oppdateringen startet.
+// `harNyPris: false` betyr at varen finnes i prislisten, men uten en pris vi kan
+// bruke. Da skal linjen IKKE røres — den er ikke oppdatert, og den er ikke
+// «uendret». Kallerne rapporterer den som egen kategori.
+function nyPrisForLinje(linje, vare) {
+  const gammelPris = parseFloat(linje?.enhetspris) || 0
+  const raaPris = _prisTall(vare?.pris_per_enhet)
+  if (raaPris === null) {
+    return { gammelPris, nyPris: null, harNyPris: false, nyEnhet: linje?.enhet || '', nyOmregning: null, omregnetFra: null }
+  }
+  const omr = linje?._omregning
+  if (omr && parseFloat(omr.areal) > 0) {
+    // Linjen er bevisst regnet om fra leveranseenhet til m². Ny leveransepris
+    // deles på det SAMME arealet — omregningen skal overleve prisoppdateringer.
+    return {
+      gammelPris,
+      nyPris: Math.round((raaPris / parseFloat(omr.areal)) * 100) / 100,
+      harNyPris: true,
+      nyEnhet: linje.enhet,
+      nyOmregning: { ...omr, fraPris: raaPris },
+      omregnetFra: { pris: raaPris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) },
+    }
+  }
+  return {
+    gammelPris,
+    nyPris: raaPris,
+    harNyPris: true,
+    nyEnhet: vare?.enhet || linje?.enhet || '',
+    nyOmregning: null,
+    omregnetFra: null,
+  }
+}
+
+// Klassifiserer materiallinjer mot bedriftens aktive prisliste.
+//   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
+// Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
+async function byggPrisforslag(poster, userId) {
+  const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], utenPris: [], ukoblet: [], feil: null }
+  const alle = Array.isArray(poster) ? poster : []
+  if (alle.length === 0) return tomt
+
+  const ukoblet = alle.filter(p => !matErKoblet(p.linje))
+  const koblede = alle.filter(p => matErKoblet(p.linje))
+  if (koblede.length === 0) return { ...tomt, ukoblet }
+
+  let prisliste = null
   try {
-    // Find active prisliste
-    const { data: pl } = await supabase.from('prislister').select('id').eq('user_id', userId).eq('aktiv', true).limit(1).single()
-    if (!pl) return { kalkyler, count: 0 }
-    
-    // Collect all NOBB numbers from kalkyler
-    const allNobb = new Set()
-    kalkyler.forEach(kl => (kl.bygningsdeler || []).forEach(bd => (bd.materialer || []).forEach(m => { if (m.nobb) allNobb.add(m.nobb) })))
-    if (allNobb.size === 0) return { kalkyler, count: 0 }
-    
-    // Fetch prices from prisbok
-    const nobbArr = [...allNobb]
-    const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbArr)
-    if (!priser || priser.length === 0) return { kalkyler, count: 0 }
-    
-    const prisMap = {}
-    priser.forEach(p => { prisMap[p.varenummer] = p })
-    
-    let count = 0
-    const updatedKalkyler = kalkyler.map(kl => ({
-      ...kl,
-      bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
-        ...bd,
-        materialer: (bd.materialer || []).map(m => {
-          if (m.nobb && prisMap[m.nobb]) {
-            count++
-            return { ...m, enhetspris: prisMap[m.nobb].pris_per_enhet, varenavn: prisMap[m.nobb].varenavn || m.varenavn }
-          }
-          return m
+    const { data } = await supabase.from('prislister')
+      .select('id, navn, created_at').eq('user_id', userId).eq('aktiv', true).limit(1).maybeSingle()
+    prisliste = data || null
+    // Antall varer og importdato gjør det mulig å KJENNE IGJEN prislisten. Har
+    // brukeren flere, er en oppdatering mot feil liste like skadelig som ingen
+    // oppdatering — og verre, fordi den ser ut som den gikk bra.
+    if (prisliste) {
+      try {
+        const { count } = await supabase.from('prisbok')
+          .select('id', { count: 'exact', head: true }).eq('prisliste_id', prisliste.id)
+        prisliste = { ...prisliste, antallVarer: typeof count === 'number' ? count : null }
+      } catch (e) { /* antallet er en hjelp, ikke et krav */ }
+    }
+  } catch (e) { /* faller gjennom til feilmeldingen under */ }
+  if (!prisliste) {
+    return { ...tomt, ukoblet, feil: 'Ingen aktiv prisliste. Gå til Prisbok og sett en prisliste som aktiv.' }
+  }
+
+  // Slå opp alle NOBB-numrene i puljer — URL-en tåler ikke hundrevis på én gang.
+  const nummer = [...new Set(koblede.map(p => String(p.linje.nobb).trim()))]
+  const prisMap = {}
+  try {
+    for (let i = 0; i < nummer.length; i += 100) {
+      const { data, error } = await supabase.from('prisbok')
+        .select('varenummer, varenavn, enhet, pris_per_enhet')
+        .eq('prisliste_id', prisliste.id)
+        .in('varenummer', nummer.slice(i, i + 100))
+      if (error) throw error
+      ;(data || []).forEach(r => { prisMap[String(r.varenummer)] = r })
+    }
+  } catch (e) {
+    return { ...tomt, ukoblet, prisliste, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') }
+  }
+
+  const endret = [], uendret = [], utgatt = [], utenPris = []
+  for (const p of koblede) {
+    const nobb = String(p.linje.nobb).trim()
+    const vare = prisMap[nobb]
+    if (!vare) { utgatt.push({ ...p, nobb }); continue }
+
+    const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
+    // Varen finnes, men prislisten har ingen brukbar pris. Da rører vi den ikke.
+    if (!harNyPris) {
+      utenPris.push({ ...p, nobb, varenavn: p.linje.varenavn || vare.varenavn || '', nyttVarenavn: vare.varenavn || '', gammelPris, raaPris: vare.pris_per_enhet })
+      continue
+    }
+
+    const post = {
+      ...p,
+      nobb,
+      varenavn: p.linje.varenavn || vare.varenavn || '',
+      nyttVarenavn: vare.varenavn || p.linje.varenavn || '',
+      gammelPris, nyPris,
+      diff: Math.round((nyPris - gammelPris) * 100) / 100,
+      diffProsent: gammelPris > 0 ? ((nyPris - gammelPris) / gammelPris) * 100 : null,
+      mengde: parseFloat(p.linje.mengde) || 0,
+      enhet: p.linje.enhet || '',
+      nyEnhet, nyOmregning, omregnetFra,
+      enhetByttes: normaliserEnhet(nyEnhet) !== normaliserEnhet(p.linje.enhet || ''),
+    }
+    if (_prisLik(gammelPris, nyPris)) uendret.push(post)
+    else endret.push(post)
+  }
+
+  // Størst utslag først — det er der brukeren vil se etter.
+  endret.sort((a, b) => Math.abs(b.diff * (b.mengde || 1)) - Math.abs(a.diff * (a.mengde || 1)))
+  return { prisliste, endret, uendret, utgatt, utenPris, ukoblet, feil: null }
+}
+
+// Feltene som skal skrives på linjen når en prisendring godtas.
+function prisforslagTilFelter(post) {
+  const felter = { enhetspris: post.nyPris, varenavn: post.nyttVarenavn || post.varenavn }
+  if (post.nyOmregning) felter._omregning = post.nyOmregning
+  else if (post.nyEnhet) felter.enhet = post.nyEnhet
+  return felter
+}
+
+// MERK: her lå oppdaterPriserFraPrisliste() — en prisoppdatering som skrev til
+// alle materiallinjer uten å vise brukeren hva som endret seg. Den ble kalt fra
+// «🔄 Oppdater priser» i Mer-menyen. Funksjonen er FJERNET, ikke bare koblet fra,
+// slik at den ikke kan bli tatt i bruk igjen ved et uhell.
+//
+// All prisoppdatering går nå gjennom OppdaterPriserModal, som viser gammel mot ny
+// pris og krever avkryssing. Eneste andre stedet en pris hentes fra prislisten er
+// når en bygningsdel LEGGES TIL fra biblioteket — der finnes det ingen tidligere
+// pris å overskrive.
+
+// Regner ut hva som skal skrives på materiallinjen når en vare velges.
+//
+// Kjernen i Oppgave 3: står linjen i m² og prislisten priser varen per rull,
+// stykk eller pakke, forsøker vi å lese «bredde x lengde m» ut av varenavnet.
+// Klarer vi det, VISER vi regnestykket og lar brukeren bekrefte. Vi regner
+// ALDRI om stille — mønsteret treffer riktig på dampsperre, vindsperre og
+// underlagsduk, men gir tull på «Grunnmur tykk 0,125x8m» og finner ingenting
+// på tape og pakninger. En feil omregning som ser riktig ut er verre enn
+// ingen omregning.
+//
+// Finner vi ingen dimensjon, spør vi ikke: prisen og enheten settes som før,
+// og et eventuelt enhetsavvik merkes på linjen i stedet.
+//
+// `confirm` kommer inn som parameter fordi funksjonen brukes både fra kalkylen
+// og fra biblioteket. Da får rull→m²-spørsmålet samme ordlyd og samme regler
+// uansett hvor varen velges — én sannhet, ikke to som kan gli fra hverandre.
+async function beregnVareFelter(confirm, vare, linje) {
+  const pris = parseFloat(vare?.pris_per_enhet) || 0
+  const vareEnhet = vare?.enhet || ''
+  const felter = {
+    nobb: String(vare?.varenummer ?? '').trim(),
+    varenavn: vare?.varenavn || linje?.varenavn || '',
+    enhetspris: pris,
+    enhet: vareEnhet || linje?.enhet || '',
+    _omregning: null,
+  }
+  const linjeEnhet = normaliserEnhet(linje?.enhet)
+  if (linjeEnhet !== 'm2') return felter
+  if (!LEVERANSE_ENHETER.has(normaliserEnhet(vareEnhet))) return felter
+  const rull = rullDekning(vare?.varenavn)
+  if (!rull || pris <= 0) return felter
+
+  const perM2 = Math.round((pris / rull.areal) * 100) / 100
+  const enhNavn = enhetTekst(normaliserEnhet(vareEnhet))
+  const ok = await confirm({
+    message: vare.varenavn,
+    subMessage: `Prislisten priser denne per ${enhNavn}. Linjen står i m². Vil du bruke m²-prisen?`,
+    details: {
+      stats: [{ title: 'Regnestykke', subtitle: 'lest ut av varenavnet', items: [
+        { label: 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` },
+        { label: `Én ${enhNavn} dekker`, value: `${fmtTall(rull.areal)} m²` },
+        { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+        { label: 'Pris per m²', value: fmtKr2(perM2), highlight: true },
+      ] }],
+      notes: [{ icon: 'ℹ️', kind: 'info', text: 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.' }],
+    },
+    confirmLabel: 'Ja, regn om',
+    cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
+  })
+  if (!ok) return felter
+  return {
+    ...felter,
+    enhet: linje?.enhet || 'm²',
+    enhetspris: perM2,
+    _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
+  }
+}
+
+// ─── AUTOMATISK PRISOPPDATERING AV BIBLIOTEKET (Oppgave 5, punkt 6) ──────────
+// Når en prisliste importeres og settes aktiv, oppdateres ALLE bedriftens egne
+// bygningsdeler i biblioteket. Å måtte huske «Oppdater priser» per kalkyle
+// fungerer ikke i praksis — da var hele koblingsjobben forgjeves.
+//
+// KALKYLER RØRES IKKE. En kalkyle er et konkret tilbud, og noen er sendt til
+// kunde. Der er «Oppdater priser» fortsatt den manuelle veien, med bekreftelse
+// på sendte tilbud.
+//
+// Biblioteket er trygt å oppdatere automatisk fordi det er en MAL: ingen kunde
+// har fått den, og neste kalkyle skal ha dagens priser. Men det skjer i stor
+// skala uten at noen ser på, så hele operasjonen kan angres samlet — snapshotet
+// av de gamle prisene lagres før noe skrives.
+
+// Frittstående kopi, uten delte objektreferanser.
+function _dypkopi(v) {
+  try { return JSON.parse(JSON.stringify(v)) } catch (e) { return v }
+}
+
+// Hvor mange NOBB-numre vi ber om per spørring. 200 holder URL-en godt under
+// grensen (200 × ~10 tegn) og halverer antall rundturer mot 100.
+const PRIS_PULJE = 200
+
+// Leser prisene for en mengde NOBB-numre fra én prisliste, i puljer.
+//
+// YTELSE — målt lokalt mot 1 308 / 60 453 / 305 228 rader:
+// Spørringen er `prisliste_id = X AND varenummer IN (...)`. Uten en sammensatt
+// indeks på (prisliste_id, varenummer) bruker Postgres indeksen på prisliste_id
+// alene og FILTRERER varenummer etterpå — altså leses hele prislisten for hver
+// pulje. Ved 305k rader gir planleggeren opp indeksen og kjører Parallel Seq Scan:
+//     60 453 rader:  6,73 ms  ·  «Rows Removed by Filter: 60353»
+//    305 228 rader: 19,81 ms  ·  Parallel Seq Scan
+// Med indeksen på plass blir det et rent Index Scan, og tiden er FLAT:
+//     60 453 rader:  0,75 ms   (9× raskere)
+//    305 228 rader:  0,84 ms  (24× raskere)
+// Det forklarer hvorfor tiden skalerte med prislistens størrelse i stedet for
+// med hvor mye som skulle oppdateres. Indeksen ligger i SQL-blokken.
+async function _hentPriserForNummer(prislisteId, nummer, onFremdrift) {
+  const kart = {}
+  const antPuljer = Math.ceil(nummer.length / PRIS_PULJE) || 1
+  for (let i = 0; i < nummer.length; i += PRIS_PULJE) {
+    const pulje = Math.floor(i / PRIS_PULJE) + 1
+    if (typeof onFremdrift === 'function') {
+      onFremdrift({ fase: 'priser', pulje, antPuljer, antNummer: nummer.length })
+    }
+    const { data, error } = await supabase.from('prisbok')
+      .select('varenummer, varenavn, enhet, pris_per_enhet')
+      .eq('prisliste_id', prislisteId)
+      .in('varenummer', nummer.slice(i, i + PRIS_PULJE))
+    if (error) throw error
+    ;(data || []).forEach(r => { kart[String(r.varenummer)] = r })
+  }
+  return kart
+}
+
+// Bedriftens bibliotekrader. Samme lesemønster som useBedriftsbibliotek(), men
+// utenfor React — importflyten er ikke en komponent.
+async function _hentBedriftensBibliotekrader(companyId, userId) {
+  let q = supabase.from('bruker_bibliotek').select('id, name, fag, kategori, data')
+  if (companyId) q = q.or(`company_id.eq.${companyId},and(company_id.is.null,user_id.eq.${userId})`)
+  else q = q.eq('user_id', userId)
+  const { data, error } = await q
+  if (error) {
+    const { data: egne } = await supabase.from('bruker_bibliotek').select('id, name, fag, kategori, data').eq('user_id', userId)
+    return egne || []
+  }
+  return data || []
+}
+
+// Oppdaterer alle bedriftens bygningsdeler mot prislisten.
+// Returnerer statistikken oppsummeringen viser, og id-en til angre-loggen.
+async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, companyId, userId, onFremdrift }) {
+  const meld = (info) => { if (typeof onFremdrift === 'function') onFremdrift(info) }
+  const tomt = { rader: 0, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, utenPris: 0, ukoblet: 0, detaljer: [], loggId: null, feil: null }
+  if (!prislisteId || !userId) return { ...tomt, feil: 'Mangler prisliste eller bruker.' }
+
+  meld({ fase: 'bibliotek' })
+  let rader = []
+  try { rader = await _hentBedriftensBibliotekrader(companyId, userId) }
+  catch (e) { return { ...tomt, feil: 'Kunne ikke lese biblioteket: ' + ((e && e.message) || 'ukjent feil') } }
+  if (rader.length === 0) return { ...tomt }
+
+  // Alle NOBB-numre på tvers av hele biblioteket — ett oppslag, ikke ett per rad.
+  const nummer = new Set()
+  rader.forEach(r => (r.data?.materialer || []).forEach(m => {
+    if (matErKoblet(m)) nummer.add(String(m.nobb).trim())
+  }))
+
+  let priser = {}
+  if (nummer.size > 0) {
+    try { priser = await _hentPriserForNummer(prislisteId, [...nummer], onFremdrift) }
+    catch (e) { return { ...tomt, rader: rader.length, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') } }
+  }
+
+  const stat = { rader: rader.length, linjerTotalt: 0, oppdatert: 0, uendret: 0, utgatt: 0, utenPris: 0, ukoblet: 0 }
+  const detaljer = []      // per bygningsdel, til «se detaljene»
+  const snapshot = []      // gamle materialer per rad, til angring
+  const skriv = []         // radene som faktisk endres
+
+  for (const rad of rader) {
+    const mats = rad.data?.materialer || []
+    stat.linjerTotalt += mats.length
+    const radLinjer = []
+    let radEndret = 0
+    const nyeMats = mats.map(m => {
+      if (!matErKoblet(m)) { stat.ukoblet += 1; radLinjer.push({ navn: m.varenavn || 'Uten navn', type: 'ukoblet' }); return m }
+      const vare = priser[String(m.nobb).trim()]
+      if (!vare) {
+        stat.utgatt += 1
+        radLinjer.push({ navn: m.varenavn || 'Uten navn', nobb: String(m.nobb).trim(), type: 'utgatt', pris: parseFloat(m.enhetspris) || 0 })
+        return m
+      }
+      const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning } = nyPrisForLinje(m, vare)
+      // Varen finnes i prislisten, men uten en brukbar pris. Da rører vi den
+      // ikke. Før ble slike linjer skrevet til 0 kr, eller talt som «uendret»
+      // når biblioteklinjen også sto på 0 — begge er villedende.
+      if (!harNyPris) {
+        stat.utenPris += 1
+        radLinjer.push({ navn: vare.varenavn || m.varenavn, nobb: String(m.nobb).trim(), type: 'utenPris', pris: gammelPris, raaPris: vare.pris_per_enhet })
+        return m
+      }
+      if (_prisLik(gammelPris, nyPris)) {
+        stat.uendret += 1
+        radLinjer.push({ navn: vare.varenavn || m.varenavn, type: 'uendret', pris: gammelPris })
+        return m
+      }
+      stat.oppdatert += 1
+      radEndret += 1
+      radLinjer.push({
+        navn: vare.varenavn || m.varenavn, nobb: String(m.nobb).trim(), type: 'oppdatert',
+        gammelPris, nyPris, diff: Math.round((nyPris - gammelPris) * 100) / 100,
+        diffProsent: gammelPris > 0 ? ((nyPris - gammelPris) / gammelPris) * 100 : null,
+        omregnet: !!nyOmregning,
+      })
+      const felter = { ...m, enhetspris: nyPris, varenavn: vare.varenavn || m.varenavn }
+      if (nyOmregning) felter._omregning = nyOmregning
+      else felter.enhet = nyEnhet
+      return felter
+    })
+
+    detaljer.push({ radId: rad.id, navn: rad.name, fag: rad.fag, kategori: rad.kategori, endret: radEndret, linjer: radLinjer })
+    if (radEndret > 0) {
+      // `materialer` = slik det var før. `satte` = slik vi skrev det.
+      // Angringen trenger begge: den setter tilbake bare der linjen fortsatt har
+      // den prisen VI satte. Er den noe annet, har noen rørt linjen etterpå, og
+      // det arbeidet skal ikke overskrives.
+      //
+      // Dypkopi: uten den deler snapshotet objekter med det som skrives til
+      // biblioteket, og en senere endring på en linje ville også endret
+      // snapshotet — da mister angringen grunnlaget for å se hva VI satte.
+      snapshot.push({ rad_id: rad.id, navn: rad.name, ..._dypkopi({ materialer: mats, satte: nyeMats }) })
+      skriv.push({ id: rad.id, data: { ...(rad.data || {}), materialer: nyeMats } })
+    }
+  }
+
+  if (skriv.length === 0) return { ...stat, detaljer, loggId: null, feil: null }
+
+  // Snapshotet skrives FØR radene. Feiler loggen, avbryter vi — en
+  // masseoppdatering ingen kan angre er verre enn ingen oppdatering.
+  let loggId = null
+  try {
+    const { data: logg, error } = await supabase.from('bibliotek_prisoppdateringer')
+      .insert({
+        company_id: companyId || null, user_id: userId,
+        prisliste_id: prislisteId, prisliste_navn: prislisteNavn || null,
+        statistikk: stat, snapshot,
+      })
+      .select('id').single()
+    if (error) throw error
+    loggId = logg?.id || null
+  } catch (e) {
+    return { ...stat, detaljer, loggId: null,
+      feil: 'Kunne ikke lagre angre-punktet, så ingenting ble oppdatert. Kjør SQL-en for bibliotek_prisoppdateringer først. (' + ((e && e.message) || 'ukjent feil') + ')' }
+  }
+
+  let skrevet = 0
+  for (const r of skriv) {
+    meld({ fase: 'lagrer', skrevet, avRader: skriv.length })
+    try {
+      const { data: endret, error } = await supabase.from('bruker_bibliotek').update({ data: r.data }).eq('id', r.id).select('id')
+      if (error) throw error
+      if (endret && endret.length > 0) skrevet += 1
+    } catch (e) { /* fortsett — resten skal ikke stoppe av én rad */ }
+  }
+
+  return { ...stat, detaljer, loggId, skrevetRader: skrevet, feil: skrevet === skriv.length ? null
+    : `${skriv.length - skrevet} av ${skriv.length} bygningsdeler ble ikke lagret. Sjekk at du har skrivetilgang til bedriftens bibliotek.` }
+}
+
+// Angrer en samlet biblioteksoppdatering.
+//
+// Angrer BARE linjer som fortsatt har den prisen oppdateringen satte. Har noen
+// rørt en linje etterpå, skal ikke angringen overskrive det arbeidet — den
+// linjen hoppes over og telles i `hoppet`.
+async function angreBibliotekPrisoppdatering(loggId) {
+  if (!loggId) return { gjenopprettet: 0, hoppet: 0, feil: 'Mangler angre-punkt.' }
+  let logg = null
+  try {
+    const { data, error } = await supabase.from('bibliotek_prisoppdateringer')
+      .select('id, snapshot, angret_at').eq('id', loggId).single()
+    if (error) throw error
+    logg = data
+  } catch (e) {
+    return { gjenopprettet: 0, hoppet: 0, feil: 'Fant ikke angre-punktet: ' + ((e && e.message) || 'ukjent feil') }
+  }
+  if (logg.angret_at) return { gjenopprettet: 0, hoppet: 0, feil: 'Denne oppdateringen er allerede angret.' }
+
+  const snapshot = Array.isArray(logg.snapshot) ? logg.snapshot : []
+  let gjenopprettet = 0, hoppet = 0, rortEtterpaa = 0
+  for (const post of snapshot) {
+    try {
+      const { data: naa } = await supabase.from('bruker_bibliotek').select('id, data').eq('id', post.rad_id).single()
+      if (!naa) { hoppet += 1; continue }
+      const gamleMats = Array.isArray(post.materialer) ? post.materialer : []
+      const satteMats = Array.isArray(post.satte) ? post.satte : []
+      const naaMats = naa.data?.materialer || []
+      let radRortEtterpaa = 0
+      const tilbake = naaMats.map(m => {
+        const gml = gamleMats.find(g => String(g.id) === String(m.id))
+        if (!gml) return m
+        const satt = satteMats.find(g => String(g.id) === String(m.id))
+        // Ingen endring å angre på denne linjen.
+        if (satt && _prisLik(gml.enhetspris, satt.enhetspris)) return m
+        // Står linjen med noe ANNET enn det vi satte, har noen rørt den etterpå.
+        // Da lar vi den stå — angringen skal ikke spise andres arbeid.
+        if (satt && !_prisLik(m.enhetspris, satt.enhetspris)) { radRortEtterpaa += 1; return m }
+        return { ...m, enhetspris: gml.enhetspris, varenavn: gml.varenavn, enhet: gml.enhet, _omregning: gml._omregning || null }
+      })
+      if (radRortEtterpaa > 0) rortEtterpaa += radRortEtterpaa
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ data: { ...(naa.data || {}), materialer: tilbake } }).eq('id', post.rad_id).select('id')
+      if (error) throw error
+      if (endret && endret.length > 0) gjenopprettet += 1; else hoppet += 1
+    } catch (e) { hoppet += 1 }
+  }
+  try { await supabase.from('bibliotek_prisoppdateringer').update({ angret_at: new Date().toISOString() }).eq('id', loggId) } catch (e) {}
+  return { gjenopprettet, hoppet, rortEtterpaa, feil: null }
+}
+
+// ─── REVISJON AV KALKYLE (Del B) ─────────────────────────────────────────────
+// Et tilbud sendes i august. Kunden kommer tilbake i februar, og prisene har
+// endret seg. Da skal det IKKE skrives nye priser inn i det gamle tilbudet — det
+// skal lages en REVISJON. Originalen står urørt med prisene kunden faktisk fikk.
+//
+// Mønsteret er hentet fra Tilbud (quotes): revision_number, parent-peker,
+// revision_note, og originalen settes til «Erstattet». Koden er egen, fordi
+// Kalkulasjon har andre felter — men feltnavn og oppførsel er de samme, så
+// «Rev. 1» betyr det samme i hele appen.
+
+// Etiketten. Original (1) heter «Original», første revidering «Rev. 1».
+// MERK: Tilbud skriver «Rev 1» uten punktum i selve nummeret (revNumSuffix).
+// Her brukes punktum begge steder, etter avtale. Ser man KA-2026-0002 Rev. 1 og
+// TB-2026-0005 Rev 1 side om side, er avviket ett tegn — det er en kjent løs ende.
+const kalkRevLabel = (n) => (!n || n <= 1) ? 'Original' : 'Rev. ' + (n - 1)
+const kalkRevSuffix = (n) => (!n || n <= 1) ? '' : ' Rev. ' + (n - 1)
+// Kalkylenummer med revisjonssuffiks: «KA-2026-0002 Rev. 1»
+const kalkNrMedRev = (k) => String((k && k.kalk_number) || '') + kalkRevSuffix(k && k.revision_number)
+
+// Statusen originalen får når den er erstattet av en revisjon.
+const KALK_STATUS_ERSTATTET = 'Erstattet'
+
+// Oppretter en revisjon av en kalkyle.
+//
+//   k             — kalkylen som revideres (gjeldende versjon)
+//   nyeKalkyler   — valgfritt: kalkyle-treet revisjonen skal ha. Sendes inn når
+//                   revisjonen lages fra «Oppdater priser», der de nye prisene
+//                   alt er beregnet. Utelates den, arves innholdet uendret.
+//   note          — brukerens beskrivelse av hva som endret seg
+//   totals        — { total_cost, total_ex_mva, profit_percent } for revisjonen
+//
+// Originalen settes til «Erstattet». Revisjonen beholder SAMME kalk_number —
+// det er revision_number som skiller dem, akkurat som i Tilbud.
+async function opprettKalkyleRevisjon({ k, nyeKalkyler, note, totals, userId }) {
+  if (!k?.id) return { data: null, error: new Error('Mangler kalkyle.') }
+  const rotId = k.parent_calculation_id || k.id
+
+  // Høyeste revisjonsnummer i familien — ikke bare på den vi står i, siden en
+  // gammel revisjon kan være åpnet fra historikken.
+  let maksRev = k.revision_number || 1
+  try {
+    const { data } = await supabase.from('calculations')
+      .select('revision_number')
+      .or(`id.eq.${rotId},parent_calculation_id.eq.${rotId}`)
+    ;(data || []).forEach(r => { if ((r.revision_number || 1) > maksRev) maksRev = r.revision_number || 1 })
+  } catch (e) { /* faller tilbake på det vi vet */ }
+
+  const kalkylerForRev = nyeKalkyler || k.kalkyler || []
+  const payload = {
+    ...k,
+    kalk_number: k.kalk_number,           // samme nummer, nytt revisjonsnummer
+    revision_number: maksRev + 1,
+    parent_calculation_id: rotId,
+    revision_note: (note || '').trim() || null,
+    kalkyler: kalkylerForRev,
+    status: 'Aktiv',
+    total_cost: totals?.total_cost ?? k.total_cost,
+    total_ex_mva: totals?.total_ex_mva ?? k.total_ex_mva,
+    profit_percent: totals?.profit_percent ?? k.profit_percent,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    created_by: userId || k.created_by || null,
+  }
+  delete payload.id
+
+  // Statusen leses FØR oppdateringen. Rullbacken kan ikke lese den fra k etterpå:
+  // objektet kan være samme referanse som den vi nettopp skrev til.
+  const statusFor = k.status
+  // Sett originalen til «Erstattet» FØRST. Feiler innsettingen etterpå, sitter vi
+  // med en erstattet original og ingen revisjon — derfor rulles den tilbake.
+  try {
+    await supabase.from('calculations')
+      .update({ status: KALK_STATUS_ERSTATTET, updated_at: new Date().toISOString() })
+      .eq('id', k.id)
+  } catch (e) {
+    return { data: null, error: new Error('Kunne ikke markere originalen som erstattet: ' + ((e && e.message) || 'ukjent feil')) }
+  }
+
+  const { data, error } = await supabase.from('calculations').insert(payload).select().single()
+  if (error) {
+    // Rull tilbake statusen, så originalen ikke blir stående som erstattet
+    // av en revisjon som ikke finnes.
+    try {
+      await supabase.from('calculations').update({ status: statusFor, updated_at: new Date().toISOString() }).eq('id', k.id)
+    } catch (e2) { /* logges av kalleren via feilmeldingen */ }
+    return { data: null, error }
+  }
+  return { data, error: null }
+}
+
+// Henter hele revisjonsfamilien til en kalkyle, eldste først.
+async function hentKalkyleRevisjoner(k) {
+  if (!k?.id) return []
+  const rotId = k.parent_calculation_id || k.id
+  try {
+    const { data } = await supabase.from('calculations')
+      .select('id, kalk_number, title, revision_number, revision_note, status, total_ex_mva, created_at')
+      .or(`id.eq.${rotId},parent_calculation_id.eq.${rotId}`)
+      .order('revision_number', { ascending: true })
+    return data || []
+  } catch (e) { return [] }
+}
+
+// ─── SAMMENLIGNING AV TO VERSJONER (materiallinjenivå) ───────────────────────
+//
+// Sidene er { label, kalkyler, faktorer } — kalkyler → bygningsdeler →
+// materialer. Motoren er uavhengig av hvor treet kom fra.
+//
+// Kalkulasjon hadde to overlappende historikker: revisjonene (egne rader i
+// calculations) og navngitte snapshot i calculation_versions. Snapshotene er
+// fjernet — de var i praksis ubrukte (2 rader på 2 kalkyler, alle i
+// testbedriften), og to historikker som svarte ulikt på samme spørsmål var
+// verre enn én. Den gamle buildDiff() gikk dessuten bare til faggruppe og TALTE
+// bygningsdeler («+2 bygn.deler»); den kunne ikke svare på det man faktisk spør
+// om: hvilke materiallinjer fikk ny pris, og hva det gjorde med totalen.
+//
+// Hver side er { label, kalkyler, faktorer }. Tallene hentes fra appens egne
+// beregninger (beregnKalkyle / beregnBygningsdel / beregnProsjektTotal), ikke
+// fra en egen formel — ellers ville sammenligningen kunne vise andre kroner
+// enn kalkylen selv.
+
+// Navn normalisert for sammenligning: små bokstaver, ett mellomrom, uten
+// ikke-brytende mellomrom. Brukes bare som SISTE utvei når verken rad-id eller
+// NOBB finnes på begge sider.
+function _diffNavn(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+// Nøklene en rad kan matches på, i prioritert rekkefølge.
+function _diffNokler(rad, prefiks) {
+  const ut = []
+  if (rad && rad.id != null && String(rad.id) !== '') ut.push('id:' + String(rad.id))
+  if (rad && rad.nobb != null && String(rad.nobb).trim() !== '') ut.push('nobb:' + String(rad.nobb).trim())
+  const n = _diffNavn(rad && (rad.varenavn || rad.name || rad.navn))
+  if (n) ut.push('navn:' + prefiks + ':' + n)
+  return ut
+}
+
+// Parer rader fra to lister. Returnerer [{ v, h }] der v eller h kan være null.
+// Én rad kan bare brukes én gang — derfor plukkes den ut av kartet ved treff.
+function _parRader(vRader, hRader, prefiks) {
+  // Én nøkkel kan peke på FLERE rader — to «Sparkel»-linjer uten NOBB i samme
+  // bygningsdel er helt vanlig. Da tar vi den første som ikke alt er brukt,
+  // ellers ville den andre blitt rapportert som fjernet + lagt til.
+  const kart = new Map()
+  ;(vRader || []).forEach((r, i) => {
+    _diffNokler(r, prefiks).forEach(n => {
+      if (!kart.has(n)) kart.set(n, [])
+      kart.get(n).push(i)
+    })
+  })
+  const brukt = new Set()
+  const par = []
+  ;(hRader || []).forEach(h => {
+    let treff = -1
+    for (const n of _diffNokler(h, prefiks)) {
+      const kandidater = kart.get(n) || []
+      const ledig = kandidater.find(i => !brukt.has(i))
+      if (ledig != null) { treff = ledig; break }
+    }
+    if (treff >= 0) { brukt.add(treff); par.push({ v: vRader[treff], h }) }
+    else par.push({ v: null, h })
+  })
+  ;(vRader || []).forEach((v, i) => { if (!brukt.has(i)) par.push({ v, h: null }) })
+  return par
+}
+
+// Er to mengder like? Samme toleranse som prisene: ørene/desimalene teller,
+// flyttallsstøy gjør det ikke.
+function _diffTallLik(a, b) {
+  return Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 0.005
+}
+
+function _diffLinje(m) {
+  if (!m) return null
+  const mengde = parseFloat(m.mengde) || 0
+  const pris = parseFloat(m.enhetspris) || 0
+  return { navn: m.varenavn || 'Uten navn', nobb: m.nobb != null ? String(m.nobb).trim() : '',
+           mengde, enhet: m.enhet || '', pris, sum: mengde * pris }
+}
+
+// Sammenligner to versjoner. Returnerer et tre klart til visning.
+function byggKalkyleDiff(venstre, hoyre) {
+  const vKalk = (venstre && venstre.kalkyler) || []
+  const hKalk = (hoyre && hoyre.kalkyler) || []
+  const vFakt = (venstre && venstre.faktorer) || {}
+  const hFakt = (hoyre && hoyre.faktorer) || {}
+  const vTot = beregnProsjektTotal(vKalk, vFakt)
+  const hTot = beregnProsjektTotal(hKalk, hFakt)
+
+  const antall = { nyPris: 0, endretMengde: 0, lagtTil: 0, fjernet: 0, lik: 0 }
+  const fagListe = []
+
+  // Faggruppene pares på fag-id.
+  const fagIder = []
+  ;[...vKalk, ...hKalk].forEach(kl => { if (kl && !fagIder.includes(kl.fag)) fagIder.push(kl.fag) })
+
+  fagIder.forEach(fagId => {
+    const vk = vKalk.find(x => x.fag === fagId) || null
+    const hk = hKalk.find(x => x.fag === fagId) || null
+    const fag = getFaggruppe(fagId)
+    const vf = vFakt[fagId] || getDefaultFaktorer(fagId)
+    const hf = hFakt[fagId] || getDefaultFaktorer(fagId)
+    const sumV = vk ? beregnKalkyle(vk, vf).totMedFortjeneste : 0
+    const sumH = hk ? beregnKalkyle(hk, hf).totMedFortjeneste : 0
+
+    const bdListe = []
+    _parRader(vk ? vk.bygningsdeler : [], hk ? hk.bygningsdeler : [], 'bd').forEach(({ v: vbd, h: hbd }) => {
+      const linjer = []
+      _parRader(vbd ? vbd.materialer : [], hbd ? hbd.materialer : [], 'mat').forEach(({ v, h }) => {
+        const lv = _diffLinje(v), lh = _diffLinje(h)
+        let status = 'lik'
+        if (!lv) { status = 'lagt til'; antall.lagtTil += 1 }
+        else if (!lh) { status = 'fjernet'; antall.fjernet += 1 }
+        else {
+          const prisLik = _diffTallLik(lv.pris, lh.pris)
+          const mengdeLik = _diffTallLik(lv.mengde, lh.mengde)
+          if (!prisLik && !mengdeLik) { status = 'ny pris og mengde'; antall.nyPris += 1; antall.endretMengde += 1 }
+          else if (!prisLik) { status = 'ny pris'; antall.nyPris += 1 }
+          else if (!mengdeLik) { status = 'endret mengde'; antall.endretMengde += 1 }
+          else antall.lik += 1
+        }
+        linjer.push({
+          navn: (lh || lv).navn, nobb: (lh || lv).nobb, status, v: lv, h: lh,
+          prisDiff: (lv && lh) ? Math.round((lh.pris - lv.pris) * 100) / 100 : null,
+          sumDiff: (lv && lh) ? Math.round((lh.sum - lv.sum) * 100) / 100 : null,
         })
-      }))
-    }))
-    return { kalkyler: updatedKalkyler, count }
-  } catch(e) { console.error('Prisoppdatering feil:', e); return { kalkyler, count: 0 } }
+      })
+      // Arbeid og UE sammenlignes ikke linje for linje her, men endringer der
+      // flytter totalen. Uten et varsel ville brukeren se en total som beveget
+      // seg «uten grunn».
+      const jsonLik = (a, b) => JSON.stringify(a || []) === JSON.stringify(b || [])
+      bdListe.push({
+        navn: (hbd || vbd).name || 'Uten navn',
+        status: !vbd ? 'lagt til' : !hbd ? 'fjernet' : 'endret',
+        mengdeV: vbd ? (parseFloat(vbd.mengde) || 0) : null,
+        mengdeH: hbd ? (parseFloat(hbd.mengde) || 0) : null,
+        enhet: (hbd || vbd).enhet || '',
+        sumV: vbd ? beregnBygningsdel(vbd, vf).totalMedFortjeneste : 0,
+        sumH: hbd ? beregnBygningsdel(hbd, hf).totalMedFortjeneste : 0,
+        arbeidEndret: !!(vbd && hbd) && !jsonLik(vbd.arbeidsarter, hbd.arbeidsarter),
+        ueEndret: !!(vbd && hbd) && !jsonLik(vbd.underleverandorer, hbd.underleverandorer),
+        linjer,
+      })
+    })
+
+    fagListe.push({
+      fagId, navn: fag.name, emoji: fag.emoji,
+      status: !vk ? 'lagt til' : !hk ? 'fjernet' : 'endret',
+      sumV, sumH, bygningsdeler: bdListe,
+    })
+  })
+
+  return {
+    labelV: (venstre && venstre.label) || 'Før',
+    labelH: (hoyre && hoyre.label) || 'Nå',
+    totalV: vTot.totMedFortjeneste, totalH: hTot.totMedFortjeneste,
+    totalDiff: hTot.totMedFortjeneste - vTot.totMedFortjeneste,
+    timerV: vTot.totTimer, timerH: hTot.totTimer,
+    timerDiff: hTot.totTimer - vTot.totTimer,
+    antall, fag: fagListe,
+  }
+}
+
+// Har bygningsdelen noe å vise når man ber om «bare endringer»?
+function bdHarEndring(bd) {
+  if (!bd) return false
+  if (bd.status !== 'endret') return true
+  if (bd.arbeidEndret || bd.ueEndret) return true
+  if (!_diffTallLik(bd.mengdeV, bd.mengdeH)) return true
+  return bd.linjer.some(l => l.status !== 'lik')
+}
+
+// Kalkylestatuser der kunden ALT har fått tallene. Oppdaterer man prisene da,
+// stemmer ikke kalkylen med tilbudet kunden sitter med — og en godkjenning kan
+// være signert på de gamle prisene.
+const KALK_SENDT_STATUS = new Set(['Tilbud sendt', 'Tilbud godkjent'])
+
+// ─── OPPDATER PRISER — DIALOG (Oppgave 5, del 1) ─────────────────────────────
+// Viser hva som vil skje FØR noe skrives, med avkryssing per linje. Brukes både
+// på en åpen kalkyle og på en bygningsdel i biblioteket; forskjellen ligger bare
+// i hva kalleren gjør i onSkriv.
+//
+// onSkriv(valgte) skal returnere { antall, totalFor, totalEtter, totalLabel }
+// slik at resultatskjermen kan si hva totalen endret seg med.
+//
+// `sendtStatus` settes når kalkylen er sendt til kunde («Tilbud sendt» eller
+// «Tilbud godkjent»). Da kreves et eget bekreftelsessteg: kunden får IKKE beskjed
+// om at prisene endres, og det må brukeren si at han vet.
+// `onFinnErstatning(post)` gjør de utgåtte linjene handlingsrettede: kalleren
+// åpner koblingsassistenten for nettopp den linjen. Uten den blir en utgått linje
+// bare merket, og brukeren står fast.
+// `onLagRevisjon(valgte)` gjør revisjon til det ANBEFALTE valget på en kalkyle
+// som er sendt til kunde: originalen står urørt med prisene kunden fikk, og de
+// nye prisene går i en ny versjon. Å rette originalen er fortsatt mulig, men
+// ligger bak bekreftelsessteget.
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
+  const [laster, setLaster] = useState(true)
+  const [forslag, setForslag] = useState(null)
+  const [valgt, setValgt] = useState(() => new Set())
+  const [skriver, setSkriver] = useState(false)
+  const [resultat, setResultat] = useState(null)
+  const [visUendret, setVisUendret] = useState(false)
+  // Bekreftelsessteget for sendte tilbud: 'liste' → 'bekreft' → skriving.
+  const [steg, setSteg] = useState('liste')
+  const [forstatt, setForstatt] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  useEffect(() => {
+    let avbrutt = false
+    byggPrisforslag(poster, userId)
+      .then(res => {
+        if (avbrutt) return
+        setForslag(res)
+        // Alle endringer huket av som standard — men brukeren kan velge bort.
+        setValgt(new Set(res.endret.map((_, i) => i)))
+        setLaster(false)
+      })
+      .catch(() => { if (!avbrutt) { setForslag({ prisliste:null, endret:[], uendret:[], utgatt:[], ukoblet:[], feil:'Kunne ikke lese prislisten.' }); setLaster(false) } })
+    return () => { avbrutt = true }
+  }, [])
+
+  const veksle = (i) => setValgt(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
+  const alleValgt = forslag && forslag.endret.length > 0 && valgt.size === forslag.endret.length
+  const veksleAlle = () => setValgt(alleValgt ? new Set() : new Set((forslag?.endret || []).map((_, i) => i)))
+
+  const valgtePoster = () => (forslag ? forslag.endret.filter((_, i) => valgt.has(i)) : [])
+
+  // Er kalkylen sendt til kunde, må brukeren velge vei først: revisjon (anbefalt)
+  // eller rette originalen.
+  const gaaVidere = () => {
+    if (!forslag || valgt.size === 0 || skriver) return
+    if (sendtStatus && steg === 'liste') { setSteg(onLagRevisjon ? 'velgVei' : 'bekreft'); return }
+    skriv()
+  }
+
+  const skriv = async () => {
+    if (!forslag || valgt.size === 0 || skriver) return
+    setSkriver(true)
+    try {
+      const valgtePoster = forslag.endret.filter((_, i) => valgt.has(i))
+      const res = await onSkriv(valgtePoster)
+      setResultat(res || { antall: valgtePoster.length })
+    } finally { setSkriver(false) }
+  }
+
+  const kr = (n) => (n > 0 ? '+' : '') + fmtKr2(n)
+  const pst = (p) => p === null ? '—' : (p > 0 ? '+' : '') + p.toFixed(1) + ' %'
+
+  const seksjon = (tekst, farge) => (
+    <div style={{ fontSize:'11px', fontWeight:'700', color: farge || '#94a3b8', margin:'14px 0 7px', letterSpacing:'0.02em' }}>{tekst}</div>
+  )
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !skriver) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '720px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 {tittel || 'Oppdater priser'}</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>{undertittel}</p>
+          </div>
+          <button onClick={onClose} disabled={skriver} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: skriver ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {/* HVILKEN prisliste skrives det fra. Har bedriften flere, er en
+              oppdatering mot feil aktiv liste like ødeleggende som ingen — og
+              vanskeligere å oppdage, fordi den ser ut som den gikk bra. Derfor
+              står den som et eget felt, ikke som en bisetning i topplinjen. */}
+          {!laster && forslag?.prisliste && !resultat && (
+            <div style={{ background:'white', border:'2px solid #bfdbfe', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'11px', alignItems:'flex-start' }}>
+              <span style={{ fontSize:'20px', flexShrink:0, lineHeight:1.2 }}>📋</span>
+              <div style={{ minWidth:0, flex:1 }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#1d4ed8', letterSpacing:'0.04em', marginBottom:'3px' }}>PRISENE HENTES FRA</div>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word', lineHeight:1.3 }}>
+                  {forslag.prisliste.navn || 'Uten navn'}
+                </div>
+                <div style={{ fontSize:'11px', color:'#64748b', marginTop:'3px' }}>
+                  {typeof forslag.prisliste.antallVarer === 'number' ? `${forslag.prisliste.antallVarer.toLocaleString('nb-NO')} varer` : 'aktiv prisliste'}
+                  {forslag.prisliste.created_at ? ` · lastet inn ${new Date(forslag.prisliste.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}` : ''}
+                </div>
+                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'5px', lineHeight:1.5 }}>
+                  Er dette ikke listen du vil bruke, avbryt og bytt aktiv prisliste under Prisbok først.
+                </div>
+              </div>
+            </div>
+          )}
+          {laster && <div style={{ textAlign:'center', padding:'28px', fontSize:'13px', color:'#2563eb' }}>Slår opp prisene i prislisten din …</div>}
+
+          {!laster && forslag?.feil && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', fontSize:'13px', color:'#991b1b', lineHeight:1.55 }}>{forslag.feil}</div>
+          )}
+
+          {/* Resultatskjerm etter skriving */}
+          {resultat && (
+            <div style={{ background:'white', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'34px', marginBottom:'8px' }}>✅</div>
+              <p style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
+                {resultat.antall} {resultat.antall === 1 ? 'linje' : 'linjer'} oppdatert
+              </p>
+              {typeof resultat.totalFor === 'number' && typeof resultat.totalEtter === 'number' && (
+                <p style={{ margin:0, fontSize:'13px', color:'#64748b', lineHeight:1.6 }}>
+                  {resultat.totalLabel || 'Total'}: {fmtKr2(resultat.totalFor)} → <strong style={{ color:'#0f172a' }}>{fmtKr2(resultat.totalEtter)}</strong>
+                  <br />
+                  <span style={{ fontWeight:'700', color: resultat.totalEtter > resultat.totalFor ? '#c2410c' : '#15803d' }}>
+                    {kr(resultat.totalEtter - resultat.totalFor)}
+                    {resultat.totalFor > 0 ? ` (${pst(((resultat.totalEtter - resultat.totalFor) / resultat.totalFor) * 100)})` : ''}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Veivalget for en kalkyle som er sendt til kunde. Revisjon er det
+              anbefalte — originalen beholder prisene kunden fikk. Å rette
+              originalen er fortsatt mulig, men ligger bak bekreftelsessteget. */}
+          {!laster && !resultat && steg === 'velgVei' && sendtStatus && forslag && (
+            <div>
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color:'#991b1b', lineHeight:1.6 }}>
+                <strong>Kalkylen har status «{sendtStatus}».</strong> Kunden har fått tallene. Hva vil du gjøre med
+                de {valgt.size} {valgt.size === 1 ? 'linjen' : 'linjene'} som har ny pris?
+              </div>
+
+              <button onClick={() => onLagRevisjon(valgtePoster())}
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'2px solid #059669', borderRadius:'12px', padding:'14px 16px', marginBottom:'10px', cursor:'pointer', boxSizing:'border-box' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'5px', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 Lag en revisjon</span>
+                  <span style={{ fontSize:'10px', fontWeight:'700', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', padding:'2px 7px', borderRadius:'999px' }}>ANBEFALT</span>
+                </div>
+                <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
+                  De nye prisene går i en ny versjon. Denne kalkylen står urørt med prisene kunden
+                  faktisk fikk, og du har begge å vise til.
+                </div>
+              </button>
+
+              <button onClick={() => setSteg('bekreft')}
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'14px 16px', cursor:'pointer', boxSizing:'border-box' }}>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', marginBottom:'5px' }}>✏️ Rett denne kalkylen</div>
+                <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
+                  Prisene skrives inn her. Det som sto før er borte, og kalkylen stemmer ikke lenger med
+                  tilbudet kunden har. Du må bekrefte i neste steg.
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Bekreftelsessteg for kalkyler som ER SENDT TIL KUNDE. Et eget steg som
+              ERSTATTER listen — ikke en gul boks blant annet innhold. Brukeren skal
+              ikke kunne klikke seg forbi uten å ha lest hva han gjør. */}
+          {!laster && !resultat && steg === 'bekreft' && sendtStatus && forslag && (
+            <div style={{ background:'white', border:'2px solid #fecaca', borderRadius:'14px', padding:'18px 16px' }}>
+              <div style={{ fontSize:'34px', marginBottom:'10px', textAlign:'center' }}>⚠️</div>
+              <h4 style={{ margin:'0 0 8px', fontSize:'16px', fontWeight:'700', color:'#991b1b', textAlign:'center', lineHeight:1.35 }}>
+                Dette tilbudet er sendt til kunden
+              </h4>
+              <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#7f1d1d', lineHeight:1.6, textAlign:'center' }}>
+                Kalkylen har status «{sendtStatus}». Endrer du prisene nå, endres tallene i kalkylen din —
+                <strong> men kunden får ingen beskjed</strong>. Tilbudet han har fått, og en eventuell
+                signert godkjenning, viser fortsatt de gamle prisene.
+              </p>
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
+                <div style={{ fontSize:'12px', color:'#7f1d1d', lineHeight:1.6 }}>
+                  {valgt.size} {valgt.size === 1 ? 'linje' : 'linjer'} vil bli oppdatert.
+                  {(() => {
+                    const p = (forslag.endret || []).filter((_, i) => valgt.has(i))
+                    const opp = p.filter(x => x.diff > 0).length
+                    const ned = p.filter(x => x.diff < 0).length
+                    return ` ${opp} går opp i pris, ${ned} går ned.`
+                  })()}
+                  <br />
+                  Skal kunden ha de nye prisene, lag et nytt tilbud i stedet for å endre dette.
+                </div>
+              </div>
+              <label style={{ display:'flex', gap:'10px', alignItems:'flex-start', cursor:'pointer', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px 14px' }}>
+                <input type="checkbox" checked={forstatt} onChange={e => setForstatt(e.target.checked)}
+                  style={{ marginTop:'1px', width:'18px', height:'18px', flexShrink:0, cursor:'pointer' }} />
+                <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', lineHeight:1.5 }}>
+                  Jeg vet at kunden ikke får beskjed om prisendringen
+                </span>
+              </label>
+            </div>
+          )}
+
+          {!laster && !resultat && steg === 'liste' && forslag && !forslag.feil && (
+            <>
+              {/* Kalkylen er sendt — si det med én gang, ikke først på slutten. */}
+              {sendtStatus && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 13px', marginBottom:'12px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+                  <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>⚠️</span>
+                  <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.55 }}>
+                    <strong>Status: {sendtStatus}.</strong> Kunden har fått tallene.
+                    {onLagRevisjon
+                      ? ' I neste steg kan du legge de nye prisene i en revisjon, slik at denne kalkylen står urørt.'
+                      : ' Du blir bedt om å bekrefte før noe skrives.'}
+                  </div>
+                </div>
+              )}
+
+              {/* Endringer */}
+              {forslag.endret.length > 0 ? (
+                <>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap' }}>
+                    {seksjon(`${forslag.endret.length} ${forslag.endret.length === 1 ? 'LINJE HAR' : 'LINJER HAR'} NY PRIS`, '#0f172a')}
+                    <button onClick={veksleAlle} style={{ background:'none', border:'none', fontSize:'12px', color:'#059669', fontWeight:'600', cursor:'pointer', padding:'4px 0' }}>
+                      {alleValgt ? 'Fjern alle' : 'Velg alle'}
+                    </button>
+                  </div>
+                  {forslag.endret.map((p, i) => {
+                    const på = valgt.has(i)
+                    const opp = p.diff > 0
+                    return (
+                      <label key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start', background:'white', border:`1px solid ${på ? '#bfdbfe' : '#e2e8f0'}`, borderRadius:'12px', padding:'11px 13px', marginBottom:'7px', cursor:'pointer' }}>
+                        <input type="checkbox" checked={på} onChange={() => veksle(i)} style={{ marginTop:'2px', width:'17px', height:'17px', flexShrink:0, cursor:'pointer' }} />
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word' }}>{p.nyttVarenavn || p.varenavn}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace', marginTop:'2px' }}>NOBB {p.nobb}</div>
+                          <div style={{ display:'flex', gap:'8px', alignItems:'baseline', flexWrap:'wrap', marginTop:'6px', fontSize:'13px' }}>
+                            <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(p.gammelPris)}</span>
+                            <span style={{ color:'#94a3b8' }}>→</span>
+                            <strong style={{ color:'#0f172a' }}>{fmtKr2(p.nyPris)}</strong>
+                            <span style={{ fontSize:'12px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', background: opp ? '#fff7ed' : '#f0fdf4', color: opp ? '#c2410c' : '#15803d', border:`1px solid ${opp ? '#fed7aa' : '#bbf7d0'}` }}>
+                              {kr(p.diff)} · {pst(p.diffProsent)}
+                            </span>
+                            <span style={{ fontSize:'11px', color:'#94a3b8' }}>per {p.nyEnhet || p.enhet}</span>
+                          </div>
+                          {p.omregnetFra && (
+                            <div style={{ fontSize:'11px', color:'#1d4ed8', marginTop:'5px' }}>
+                              ↩ ny pris per {enhetTekst(normaliserEnhet(p.omregnetFra.enhet))} er {fmtKr2(p.omregnetFra.pris)} — delt på {fmtTall(p.omregnetFra.areal)} m², som før
+                            </div>
+                          )}
+                          {p.enhetByttes && !p.nyOmregning && (
+                            <div style={{ fontSize:'11px', color:'#c2410c', marginTop:'5px' }}>
+                              ⚠ enheten endres fra {p.enhet || '—'} til {p.nyEnhet} — kontroller mengden etterpå
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    )
+                  })}
+                </>
+              ) : (
+                <div style={{ background:'white', border:`1px solid ${(forslag.utenPris || []).length > 0 || forslag.utgatt.length > 0 ? '#fde68a' : '#bbf7d0'}`, borderRadius:'12px', padding:'14px', fontSize:'13px', color: (forslag.utenPris || []).length > 0 || forslag.utgatt.length > 0 ? '#a16207' : '#15803d', fontWeight:'600' }}>
+                  {(forslag.utenPris || []).length > 0 || forslag.utgatt.length > 0
+                    ? '⚠ Ingen priser å oppdatere. Se listene under — noen varer finnes ikke i prislisten, eller mangler pris der.'
+                    : '✅ Alle koblede linjer har allerede prisen som står i prislisten.'}
+                </div>
+              )}
+
+              {/* Uendret — samlet, skal ikke fylle listen */}
+              {forslag.uendret.length > 0 && (
+                <div style={{ marginTop:'12px' }}>
+                  <button onClick={() => setVisUendret(v => !v)}
+                    style={{ display:'flex', alignItems:'center', gap:'7px', width:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 13px', fontSize:'12px', color:'#64748b', cursor:'pointer', textAlign:'left' }}>
+                    <span style={{ color:'#94a3b8' }}>{visUendret ? '▼' : '▶'}</span>
+                    {forslag.uendret.length} {forslag.uendret.length === 1 ? 'linje' : 'linjer'} uendret
+                  </button>
+                  {visUendret && (
+                    <div style={{ padding:'8px 13px 0' }}>
+                      {forslag.uendret.map((p, i) => (
+                        <div key={i} style={{ fontSize:'12px', color:'#64748b', padding:'3px 0' }}>
+                          {p.varenavn} <span style={{ color:'#cbd5e1' }}>·</span> {fmtKr2(p.gammelPris)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Utgått */}
+              {forslag.utgatt.length > 0 && (
+                <>
+                  {seksjon(`${forslag.utgatt.length} ${forslag.utgatt.length === 1 ? 'LINJE' : 'LINJER'} — UTGÅTT ELLER IKKE I DENNE LISTEN`, '#c2410c')}
+                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#9a3412', lineHeight:1.55, marginBottom:'9px' }}>
+                      NOBB-nummeret finnes ikke i den aktive prislisten. Prisen står som før — den er ikke satt til 0, og linjen regnes ikke som oppdatert.
+                      {onFinnErstatning ? ' Trykk «Finn erstatning» for å velge riktig vare fra listen du bruker nå.' : ''}
+                    </div>
+                    {forslag.utgatt.map((p, i) => (
+                      <div key={i} style={{ display:'flex', gap:'8px', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', padding:'5px 0', borderTop: i > 0 ? '1px solid #fed7aa' : 'none' }}>
+                        <div style={{ fontSize:'12px', color:'#7c2d12', minWidth:0, flex:'1 1 auto' }}>
+                          {p.linje.varenavn || 'Uten navn'} <span style={{ fontFamily:'monospace', color:'#c2410c' }}>· NOBB {p.nobb}</span> · {fmtKr2(p.linje.enhetspris)}
+                        </div>
+                        {onFinnErstatning && (
+                          <button onClick={() => onFinnErstatning(p)}
+                            title="Åpner koblingsassistenten for denne linjen. Du velger erstatningsvaren selv — ingenting kobles automatisk."
+                            style={{ background:'white', color:'#9a3412', border:'1px solid #fdba74', borderRadius:'8px', padding:'6px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer', flexShrink:0, minHeight:'32px', whiteSpace:'nowrap' }}>
+                            🔗 Finn erstatning
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Finnes i prislisten, men uten pris. Nesten alltid feil
+                  kolonnemapping ved import — si det, i stedet for å telle dem
+                  som «uendret» eller skrive 0 kr inn på linjen. */}
+              {(forslag.utenPris || []).length > 0 && (
+                <>
+                  {seksjon(`${forslag.utenPris.length} ${forslag.utenPris.length === 1 ? 'LINJE' : 'LINJER'} — VAREN FINNES, MEN UTEN PRIS`, '#991b1b')}
+                  <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.55, marginBottom:'8px' }}>
+                      Varenummeret finnes i prislisten, men prisfeltet er tomt eller null. Prisen på linjen er
+                      IKKE rørt. Skjer dette for mange varer, er prisfilen sannsynligvis importert med feil
+                      kolonne — sjekk prislisten under Prisbok.
+                    </div>
+                    {forslag.utenPris.map((p, i) => (
+                      <div key={i} style={{ fontSize:'12px', color:'#7f1d1d', padding:'3px 0' }}>
+                        {p.nyttVarenavn || p.varenavn || 'Uten navn'} <span style={{ fontFamily:'monospace', color:'#b91c1c' }}>· NOBB {p.nobb}</span> · står med {fmtKr2(p.gammelPris)}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Ukoblet — arbeidslisten */}
+              {forslag.ukoblet.length > 0 && (
+                <>
+                  {seksjon(`${forslag.ukoblet.length} ${forslag.ukoblet.length === 1 ? 'LINJE' : 'LINJER'} — IKKE KOBLET, KAN IKKE OPPDATERES`, '#a16207')}
+                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.55, marginBottom:'8px' }}>
+                      Disse har ingen NOBB-kobling, så prislisten vet ikke hva de koster. Bruk «🔗 Koble linjer» på bygningsdelen for å knytte dem til varer.
+                    </div>
+                    {forslag.ukoblet.map((p, i) => (
+                      <div key={i} style={{ fontSize:'12px', color:'#78350f', padding:'3px 0' }}>
+                        {p.linje.varenavn || 'Uten navn'} · {fmtKr2(p.linje.enhetspris)} <span style={{ color:'#a16207' }}>(veiledende)</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {resultat ? (
+            <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : steg === 'velgVei' ? (
+            <button onClick={() => setSteg('liste')} disabled={skriver}
+              style={{ flex:1, background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
+              ← Tilbake til listen
+            </button>
+          ) : steg === 'bekreft' ? (
+            <>
+              <button onClick={() => { setSteg(onLagRevisjon ? 'velgVei' : 'liste'); setForstatt(false) }} disabled={skriver}
+                style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
+                ← Tilbake
+              </button>
+              <button onClick={skriv} disabled={!forstatt || skriver}
+                style={{ flex:'1 1 210px', background: (forstatt && !skriver) ? '#dc2626' : '#fca5a5', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (forstatt && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : 'Oppdater likevel'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onClose} disabled={skriver} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>Avbryt</button>
+              <button onClick={gaaVidere} disabled={laster || skriver || valgt.size === 0}
+                style={{ flex:'1 1 190px', background: (valgt.size > 0 && !skriver) ? (sendtStatus ? '#c2410c' : '#059669') : '#a7f3d0', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (valgt.size > 0 && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : `Oppdater ${valgt.size} ${valgt.size === 1 ? 'linje' : 'linjer'}${sendtStatus ? ' →' : ''}`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── OPPSUMMERING ETTER AUTOMATISK BIBLIOTEKSOPPDATERING ─────────────────────
+// Vises etter at en prisliste er importert eller satt aktiv. Oppdateringen har
+// alt skjedd — dette er kvitteringen, med detaljene og muligheten til å angre alt.
+function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose }) {
+  const [visDetaljer, setVisDetaljer] = useState(false)
+  const [angrer, setAngrer] = useState(false)
+  const [angreSvar, setAngreSvar] = useState(null)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+  const r = resultat || {}
+
+  const angre = async () => {
+    if (angrer || !r.loggId) return
+    setAngrer(true)
+    try {
+      const svar = await angreBibliotekPrisoppdatering(r.loggId)
+      setAngreSvar(svar)
+      if (!svar.feil && typeof onAngret === 'function') onAngret(svar)
+    } finally { setAngrer(false) }
+  }
+
+  const tall = (verdi, tekst, farger) => (
+    <div style={{ flex:'1 1 140px', background: farger.bg, border:`1px solid ${farger.kant}`, borderRadius:'12px', padding:'12px 14px', minWidth:0 }}>
+      <div style={{ fontSize:'22px', fontWeight:'800', color: farger.tekst, lineHeight:1.1 }}>{verdi}</div>
+      <div style={{ fontSize:'11px', color: farger.tekst, marginTop:'4px', lineHeight:1.4 }}>{tekst}</div>
+    </div>
+  )
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:160, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !angrer) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '660px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>📚 Biblioteket er oppdatert</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
+              mot {prislisteNavn || 'den nye prislisten'}
+            </p>
+          </div>
+          <button onClick={onClose} disabled={angrer} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: angrer ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {r.feil && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color:'#991b1b', lineHeight:1.55 }}>
+              {r.feil}
+            </div>
+          )}
+
+          {angreSvar && (
+            <div style={{ background: angreSvar.feil ? '#fef2f2' : '#f0fdf4', border:`1px solid ${angreSvar.feil ? '#fecaca' : '#bbf7d0'}`, borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color: angreSvar.feil ? '#991b1b' : '#15803d', lineHeight:1.6 }}>
+              {angreSvar.feil ? angreSvar.feil : (
+                <>
+                  <strong>Prisene er satt tilbake.</strong> {angreSvar.gjenopprettet} {angreSvar.gjenopprettet === 1 ? 'bygningsdel' : 'bygningsdeler'} er gjenopprettet.
+                  {/* To ulike ting: rortEtterpaa = linjer noen har endret etter
+                      oppdateringen (bevisst spart), hoppet = rader vi ikke fikk
+                      lest eller skrevet. Blandes de, forstår ingen tallene. */}
+                  {angreSvar.rortEtterpaa > 0
+                    ? ` ${angreSvar.rortEtterpaa} ${angreSvar.rortEtterpaa === 1 ? 'linje ble' : 'linjer ble'} hoppet over — ${angreSvar.rortEtterpaa === 1 ? 'den er' : 'de er'} endret etter oppdateringen, og det arbeidet skal ikke overskrives.`
+                    : ''}
+                  {angreSvar.hoppet > 0
+                    ? ` ${angreSvar.hoppet} ${angreSvar.hoppet === 1 ? 'bygningsdel' : 'bygningsdeler'} kunne ikke settes tilbake — sjekk at du har skrivetilgang.`
+                    : ''}
+                </>
+              )}
+            </div>
+          )}
+
+          <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#374151', lineHeight:1.6 }}>
+            <strong>{r.oppdatert || 0} av {r.linjerTotalt || 0} materiallinjer</strong> i biblioteket fikk ny pris.
+            {r.utgatt > 0 ? ` ${r.utgatt} ${r.utgatt === 1 ? 'vare er' : 'varer er'} utgått og står med gammel pris.` : ''}
+            {r.utenPris > 0 ? ` ${r.utenPris} ${r.utenPris === 1 ? 'vare finnes' : 'varer finnes'} i prislisten uten pris — de er ikke rørt.` : ''}
+            {r.ukoblet > 0 ? ` ${r.ukoblet} ${r.ukoblet === 1 ? 'linje mangler' : 'linjer mangler'} kobling.` : ''}
+          </p>
+
+          {/* Varer som finnes i prislisten men mangler pris er nesten alltid et
+              tegn på at filen ble importert med feil kolonne. Si det, i stedet for
+              å la tallet stå der og bety ingenting. */}
+          {r.utenPris > 0 && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+              <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>🔍</span>
+              <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.6 }}>
+                <strong>{r.utenPris} {r.utenPris === 1 ? 'vare har' : 'varer har'} ingen pris i prislisten.</strong> Varenummeret finnes,
+                men prisfeltet er tomt eller null. Det skjer oftest når prisfilen er importert med feil
+                kolonne — sjekk prislisten under Prisbok. Prisene i biblioteket er ikke rørt.
+              </div>
+            </div>
+          )}
+
+          <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'14px' }}>
+            {tall(r.oppdatert || 0, 'fikk ny pris', { bg:'#f0fdf4', kant:'#bbf7d0', tekst:'#15803d' })}
+            {tall(r.uendret || 0, 'uendret pris', { bg:'#f8fafc', kant:'#e2e8f0', tekst:'#475569' })}
+            {tall(r.utgatt || 0, 'utgått — står med gammel pris', { bg:'#fff7ed', kant:'#fed7aa', tekst:'#c2410c' })}
+            {r.utenPris > 0 && tall(r.utenPris, 'finnes i prislisten uten pris', { bg:'#fef2f2', kant:'#fecaca', tekst:'#991b1b' })}
+            {tall(r.ukoblet || 0, 'mangler NOBB-kobling', { bg:'#fffbeb', kant:'#fde68a', tekst:'#a16207' })}
+          </div>
+
+          <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6, background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+            Kalkylene dine er <strong>ikke</strong> rørt. En kalkyle er et konkret tilbud, og noen er sendt til kunde —
+            der bruker du «🔄 Oppdater priser» når du selv vil.
+          </div>
+
+          {(r.detaljer || []).length > 0 && (
+            <>
+              <button onClick={() => setVisDetaljer(v => !v)}
+                style={{ display:'flex', alignItems:'center', gap:'7px', width:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', fontSize:'13px', color:'#374151', cursor:'pointer', textAlign:'left', fontWeight:'600' }}>
+                <span style={{ color:'#94a3b8' }}>{visDetaljer ? '▼' : '▶'}</span>
+                Se detaljene ({(r.detaljer || []).filter(dd => dd.endret > 0 || (dd.linjer || []).some(l => l.type === 'utenPris')).length} bygningsdeler)
+              </button>
+              {visDetaljer && (
+                <div style={{ marginTop:'8px' }}>
+                  {(r.detaljer || []).filter(dd => dd.endret > 0 || (dd.linjer || []).some(l => l.type === 'utenPris')).map(dd => (
+                    <div key={dd.radId} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', marginBottom:'7px' }}>
+                      <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{dd.navn}</div>
+                      <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'6px' }}>
+                        {dd.kategori || 'uten kategori'} · {dd.endret} {dd.endret === 1 ? 'linje' : 'linjer'} endret
+                        {(() => { const n = (dd.linjer || []).filter(l => l.type === 'utenPris').length; return n > 0 ? ` · ${n} uten pris` : '' })()}
+                      </div>
+                      {dd.linjer.filter(l => l.type === 'utenPris').map((l, i) => (
+                        <div key={'u'+i} style={{ fontSize:'12px', color:'#991b1b', padding:'2px 0' }}>
+                          {l.navn} <span style={{ fontFamily:'monospace', fontSize:'11px' }}>· NOBB {l.nobb}</span> — ingen pris i prislisten, står med {fmtKr2(l.pris)}
+                        </div>
+                      ))}
+                      {dd.linjer.filter(l => l.type === 'oppdatert').map((l, i) => (
+                        <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'2px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
+                          <span style={{ minWidth:0 }}>{l.navn}</span>
+                          <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(l.gammelPris)}</span>
+                          <span style={{ color:'#94a3b8' }}>→</span>
+                          <strong>{fmtKr2(l.nyPris)}</strong>
+                          <span style={{ fontSize:'11px', fontWeight:'700', color: l.diff > 0 ? '#c2410c' : '#15803d' }}>
+                            {l.diff > 0 ? '+' : ''}{fmtKr2(l.diff)}
+                            {l.diffProsent !== null ? ` · ${l.diffProsent > 0 ? '+' : ''}${l.diffProsent.toFixed(1)} %` : ''}
+                          </span>
+                          {l.omregnet && <span style={{ fontSize:'10px', color:'#1d4ed8', fontWeight:'700' }}>↩ omregnet</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {r.loggId && !angreSvar && (
+            <button onClick={angre} disabled={angrer}
+              title="Setter alle prisene i biblioteket tilbake til slik de var før oppdateringen"
+              style={{ flex:'1 1 170px', background:'white', color:'#b91c1c', border:'1px solid #fecaca', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: angrer ? 'default' : 'pointer' }}>
+              {angrer ? 'Setter tilbake …' : '↩️ Angre alt'}
+            </button>
+          )}
+          <button onClick={onClose} disabled={angrer} style={{ flex:'1 1 150px', background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: angrer ? 'default' : 'pointer' }}>
+            {angreSvar ? 'Lukk' : 'Greit'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── NY REVISJON — DIALOG (Del B) ────────────────────────────────────────────
+// Brukes fra to steder: «🔄 Ny revisjon» i Mer-menyen, og fra «Oppdater priser»
+// når kalkylen er sendt til kunde. `prisendringer` er satt i det andre tilfellet,
+// og viser hva revisjonen kommer til å inneholde av nye priser.
+function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
+  const [note, setNote] = useState('')
+  const [jobber, setJobber] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+  const nyEtikett = kalkRevLabel((k?.revision_number || 1) + 1)
+  const nyttNr = `${k?.kalk_number || ''} ${nyEtikett}`.trim()
+  const antall = (prisendringer || []).length
+
+  const opprett = async () => {
+    if (jobber) return
+    setJobber(true)
+    try { await onOpprett(note) } finally { setJobber(false) }
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:165, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !jobber) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '580px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 Ny revisjon</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
+              {k?.title || 'Kalkyle'} · {kalkNrMedRev(k)} i dag
+            </p>
+          </div>
+          <button onClick={onClose} disabled={jobber} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: jobber ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          <div style={{ background:'white', border:'2px solid #bbf7d0', borderRadius:'12px', padding:'13px 15px', marginBottom:'14px' }}>
+            <div style={{ fontSize:'10px', fontWeight:'700', color:'#059669', letterSpacing:'0.04em', marginBottom:'4px' }}>DETTE OPPRETTES</div>
+            <div style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{k?.title} {nyttNr}</div>
+            <div style={{ fontSize:'12px', color:'#64748b', marginTop:'5px', lineHeight:1.55 }}>
+              {kalkNrMedRev(k)} settes til «Erstattet» og står urørt med prisene kunden faktisk fikk.
+              Du finner den under revisjonshistorikken i den nye versjonen.
+            </div>
+          </div>
+
+          {antall > 0 && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'8px' }}>
+                REVISJONEN FÅR {antall} {antall === 1 ? 'NY PRIS' : 'NYE PRISER'}
+              </div>
+              {(prisendringer || []).slice(0, 8).map((p, i) => (
+                <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'3px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
+                  <span style={{ minWidth:0 }}>{p.nyttVarenavn || p.varenavn}</span>
+                  <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(p.gammelPris)}</span>
+                  <span style={{ color:'#94a3b8' }}>→</span>
+                  <strong>{fmtKr2(p.nyPris)}</strong>
+                  <span style={{ fontSize:'11px', fontWeight:'700', color: p.diff > 0 ? '#c2410c' : '#15803d' }}>
+                    {p.diff > 0 ? '+' : ''}{fmtKr2(p.diff)}
+                  </span>
+                </div>
+              ))}
+              {antall > 8 && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'5px' }}>… og {antall - 8} til</div>}
+            </div>
+          )}
+
+          {/* Løs ende brukeren MÅ vite om: et allerede sendt tilbud peker på
+              originalen, og følger ikke revisjonen. Uten dette ender noen med å
+              tro at kunden har fått de nye prisene. */}
+          <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+            <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>📄</span>
+            <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.6 }}>
+              <strong>Tilbudet kunden har, følger ikke med.</strong> Er det laget et tilbud fra denne
+              kalkylen, peker det fortsatt på {kalkNrMedRev(k)} og viser de gamle prisene.
+              Skal kunden ha de nye, må du generere et nytt tilbud fra revisjonen etterpå.
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>
+              HVA ENDRET SEG? <span style={{ fontWeight:'400', color:'#cbd5e1' }}>(valgfritt, men nyttig om et halvt år)</span>
+            </label>
+            <textarea value={note} onChange={e => setNote(e.target.value)} rows={3}
+              placeholder={antall > 0 ? 'F.eks. «Nye materialpriser fra Optimera, februar 2027»' : 'F.eks. «Kunden ba om tilbygget i to etasjer i stedet for én»'}
+              style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', borderRadius:'10px', border:'1px solid #e2e8f0', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white', resize:'vertical' }} />
+          </div>
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          <button onClick={onClose} disabled={jobber} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: jobber ? 'default' : 'pointer' }}>Avbryt</button>
+          <button onClick={opprett} disabled={jobber}
+            style={{ flex:'1 1 190px', background: jobber ? '#a7f3d0' : '#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: jobber ? 'default' : 'pointer' }}>
+            {jobber ? 'Oppretter …' : `🔄 Opprett ${nyEtikett}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // ─── BIBLIOTEK-SIDE ──────────────────────────────────────────────────────────
 
-function KalkBibliotekPage({ onBack }) {
-  const { user } = useAuth()
-  const [egneBd, setEgneBd] = useState([])
-  const [loadingEgne, setLoadingEgne] = useState(true)
-  const [activeFag, setActiveFag] = useState('tomrer')
-  const [expandedKat, setExpandedKat] = useState(null)
-  const [expandedBd, setExpandedBd] = useState(null)
-  // Patch 20: Filter på prosjekt-type
-  const [filterProsjektType, setFilterProsjektType] = useState('alle')
+// Bygningsdel-biblioteket. Viser ETT bibliotek: de innebygde minus de bedriften
+// har erstattet, pluss bedriftens egne — alle i sin riktige kategori. Siden leste
+// før fra tabellen bygningsdel_bibliotek, som ingenting noensinne skrev til; det
+// er derfor brukerens egne bygningsdeler ikke fantes her.
+//
+// Koblingsstatusen per bygningsdel er poenget med siden: den gjør biblioteket til
+// arbeidslisten for NOBB-koblingen.
+// ─── SAMMENLIGN TO VERSJONER — DIALOG ────────────────────────────────────────
+// Viser de to versjonene SIDE VED SIDE på materiallinjenivå, med totalen øverst
+// og hva hver gruppe endringer gjør med den. Åpnes både fra revisjonshistorikken
+// og fra mellomlagringene — samme dialog, samme svar.
+//
+// Dette er en PC-funksjon. På 375 px stables de to sidene under hverandre med
+// etiketten foran, så den er lesbar uten å være behagelig.
+function KalkyleDiffModal({ diff, onClose }) {
+  const [bareEndringer, setBareEndringer] = useState(true)
+  const isMobD = typeof window !== 'undefined' && window.innerWidth < 768
+  if (!diff) return null
 
-  useEffect(() => {
-    supabase.from('bygningsdel_bibliotek').select('*').order('created_at', { ascending: false })
-      .then(({ data }) => { setEgneBd(data || []); setLoadingEgne(false) })
-      .catch(() => setLoadingEgne(false))
-  }, [])
+  const STATUSFARGE = {
+    'ny pris':            { bg:'#fffbeb', color:'#b45309', border:'#fde68a', tekst:'ny pris' },
+    'ny pris og mengde':  { bg:'#fffbeb', color:'#b45309', border:'#fde68a', tekst:'ny pris + mengde' },
+    'endret mengde':      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', tekst:'endret mengde' },
+    'lagt til':           { bg:'#f0fdf4', color:'#047857', border:'#bbf7d0', tekst:'lagt til' },
+    'fjernet':            { bg:'#fef2f2', color:'#b91c1c', border:'#fecaca', tekst:'fjernet' },
+    'lik':                { bg:'#f8fafc', color:'#94a3b8', border:'#e2e8f0', tekst:'uendret' },
+  }
+  const diffFarge = (n) => n > 0 ? '#c2410c' : n < 0 ? '#15803d' : '#64748b'
+  const medFortegn = (n) => (n > 0 ? '+' : '') + fmtKr2(n)
 
-  const standardBibliotek = getBibliotekByFag()
-  const egneBdGrouped = {}
-  egneBd.forEach(bd => {
-    if (!egneBdGrouped[bd.fag]) egneBdGrouped[bd.fag] = {}
-    if (!egneBdGrouped[bd.fag][bd.kategori || 'Egne']) egneBdGrouped[bd.fag][bd.kategori || 'Egne'] = []
-    egneBdGrouped[bd.fag][bd.kategori || 'Egne'].push(bd)
-  })
+  // Faggruppene som skal vises, med bygningsdelene filtrert etter valget.
+  const fagVist = (diff.fag || []).map(f => ({
+    ...f,
+    bygningsdeler: (f.bygningsdeler || []).filter(bd => !bareEndringer || bdHarEndring(bd)),
+  })).filter(f => f.bygningsdeler.length > 0 || !bareEndringer)
 
-  const handleDelete = async (id) => {
-    await supabase.from('bygningsdel_bibliotek').delete().eq('id', id)
-    setEgneBd(e => e.filter(b => b.id !== id))
+  const ingenEndringer = (diff.antall.nyPris + diff.antall.endretMengde + diff.antall.lagtTil + diff.antall.fjernet) === 0
+    && Math.abs(diff.totalDiff) < 0.5
+
+  const telleBoks = (antall, tekst, farge) => (
+    <div style={{ background: farge.bg, border:`1px solid ${farge.border}`, borderRadius:'9px', padding:'6px 10px', textAlign:'center', minWidth:'74px' }}>
+      <div style={{ fontSize:'15px', fontWeight:'800', color: farge.color }}>{antall}</div>
+      <div style={{ fontSize:'10px', color: farge.color, fontWeight:'600' }}>{tekst}</div>
+    </div>
+  )
+
+  // Én materiallinje: navn + status over, og de to sidene under.
+  const linjeRad = (l, i) => {
+    if (bareEndringer && l.status === 'lik') return null
+    const f = STATUSFARGE[l.status] || STATUSFARGE['lik']
+    // På PC står etikett, regnestykke og sum på ÉN linje — det er der bredden
+    // gjør nytte. På telefon stables de tre under hverandre.
+    const side = (data, etikett, dempet) => (
+      <div style={{ background: data ? (dempet ? '#f8fafc' : 'white') : '#fafafa', border:`1px solid ${data ? '#e2e8f0' : '#f1f5f9'}`,
+        borderRadius:'8px', padding:'7px 11px', minWidth:0, display:'flex', flexDirection: isMobD ? 'column' : 'row',
+        alignItems: isMobD ? 'flex-start' : 'baseline', gap: isMobD ? '1px' : '10px' }}>
+        <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', flexShrink:0, minWidth: isMobD ? 0 : '70px' }}>{etikett}</div>
+        {data ? (
+          <>
+            <div style={{ fontSize:'13px', color:'#475569', whiteSpace:'nowrap' }}>{fmtTall(data.mengde)} {data.enhet} × {fmtKr2(data.pris)}</div>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginLeft: isMobD ? 0 : 'auto', whiteSpace:'nowrap' }}>{fmtKr2(data.sum)}</div>
+          </>
+        ) : <div style={{ fontSize:'12px', color:'#cbd5e1', fontStyle:'italic' }}>ikke med</div>}
+      </div>
+    )
+    return (
+      <div key={i} style={{ borderTop:'1px solid #f1f5f9', padding:'8px 0' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'7px', flexWrap:'wrap', marginBottom:'6px' }}>
+          <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{l.navn}</span>
+          {l.nobb && <span style={{ fontSize:'10px', color:'#94a3b8', fontFamily:'monospace' }}>NOBB {l.nobb}</span>}
+          <span style={{ background:f.bg, color:f.color, border:`1px solid ${f.border}`, fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{f.tekst}</span>
+          {l.prisDiff != null && Math.abs(l.prisDiff) >= 0.005 && (
+            <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color: diffFarge(l.prisDiff), whiteSpace:'nowrap' }}>
+              {medFortegn(l.prisDiff)} pr. {l.h?.enhet || l.v?.enhet || 'enhet'}
+            </span>
+          )}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns: isMobD ? '1fr' : '1fr 1fr', gap: isMobD ? '7px' : '14px' }}>
+          {side(l.v, diff.labelV, true)}
+          {side(l.h, diff.labelH, false)}
+        </div>
+      </div>
+    )
   }
 
-  const fagData = { ...(standardBibliotek[activeFag] || {}), ...(egneBdGrouped[activeFag] || {}) }
-  const fag = getFaggruppe(activeFag)
-
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding:'24px 32px' }}>
-        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
-          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
-        </div>
-        <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📚 Bygningsdel-bibliotek</h1>
-        <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Ferdige bygningsdeler med arbeidsarter og materialer. Velg faggruppe for å se tilgjengelige konstruksjoner.</p>
-      </div>
+    <>
+      <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:150 }} onMouseDown={e => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius: isMobD ? '16px' : '20px',
+        width: isMobD ? 'calc(100vw - 20px)' : 'min(1400px, calc(100vw - 48px))', maxHeight:'90vh', display:'flex', flexDirection:'column',
+        zIndex:151, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
 
-      <div style={{ display:'flex', minHeight:'calc(100vh - 200px)' }}>
-        {/* Fag sidebar */}
-        <div style={{ width:'200px', borderRight:'1px solid #f1f5f9', padding:'16px 8px', background:'#f8fafc' }}>
-          {FAGGRUPPER.filter(f => f.id !== 'ue').map(f => (
-            <button key={f.id} onClick={() => { setActiveFag(f.id); setExpandedKat(null); setExpandedBd(null) }}
-              style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 12px', borderRadius:'10px', border:'none', cursor:'pointer', background: activeFag === f.id ? '#ecfdf5' : 'transparent', color: activeFag === f.id ? '#059669' : '#475569', fontWeight: activeFag === f.id ? '600' : '400', fontSize:'13px', marginBottom:'2px', textAlign:'left' }}>
-              <span>{f.emoji}</span> {f.name}
-              {(standardBibliotek[f.id] || egneBdGrouped[f.id]) && <span style={{ marginLeft:'auto', fontSize:'11px', color:'#94a3b8' }}>{Object.values(standardBibliotek[f.id] || {}).flat().length + Object.values(egneBdGrouped[f.id] || {}).flat().length}</span>}
-            </button>
+        {/* Topp: hvem mot hvem, og hva det gjør med totalen */}
+        <div style={{ padding: isMobD ? '14px' : '18px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px' }}>
+            <div style={{ minWidth:0 }}>
+              <h2 style={{ margin:0, fontSize: isMobD ? '15px' : '17px', fontWeight:'700', color:'#0f172a' }}>⇄ Sammenlign versjoner</h2>
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'3px' }}>{diff.labelV} mot {diff.labelH}</div>
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', lineHeight:1, flexShrink:0 }}>×</button>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns: isMobD ? '1fr' : '1fr auto 1fr', gap:'8px', alignItems:'center', marginTop:'12px' }}>
+            <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 12px' }}>
+              <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700' }}>{diff.labelV}</div>
+              <div style={{ fontSize:'17px', fontWeight:'800', color:'#475569' }}>{fmtI(diff.totalV)}</div>
+            </div>
+            <div style={{ fontSize:'13px', fontWeight:'800', color: diffFarge(diff.totalDiff), textAlign:'center', whiteSpace:'nowrap' }}>
+              {isMobD ? '↓' : '→'} {diff.totalDiff > 0 ? '+' : ''}{fmtI(diff.totalDiff)}
+            </div>
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'9px 12px' }}>
+              <div style={{ fontSize:'10px', color:'#059669', fontWeight:'700' }}>{diff.labelH}</div>
+              <div style={{ fontSize:'17px', fontWeight:'800', color:'#065f46' }}>{fmtI(diff.totalH)}</div>
+            </div>
+          </div>
+
+          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', marginTop:'10px' }}>
+            {telleBoks(diff.antall.nyPris, 'ny pris', STATUSFARGE['ny pris'])}
+            {telleBoks(diff.antall.endretMengde, 'ny mengde', STATUSFARGE['endret mengde'])}
+            {telleBoks(diff.antall.lagtTil, 'lagt til', STATUSFARGE['lagt til'])}
+            {telleBoks(diff.antall.fjernet, 'fjernet', STATUSFARGE['fjernet'])}
+            {telleBoks(diff.antall.lik, 'uendret', STATUSFARGE['lik'])}
+            <label style={{ marginLeft: isMobD ? 0 : 'auto', display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#475569', cursor:'pointer', fontWeight:'600' }}>
+              <input type="checkbox" checked={bareEndringer} onChange={e => setBareEndringer(e.target.checked)} style={{ width:'15px', height:'15px', accentColor:'#059669', cursor:'pointer' }} />
+              Bare endringene
+            </label>
+          </div>
+          {Math.abs(diff.timerDiff) >= 0.05 && (
+            <div style={{ fontSize:'11px', color:'#64748b', marginTop:'8px' }}>
+              Arbeidstid: {fmtTall(diff.timerV)} t → {fmtTall(diff.timerH)} t ({diff.timerDiff > 0 ? '+' : ''}{fmtTall(diff.timerDiff)} t)
+            </div>
+          )}
+        </div>
+
+        {/* Selve sammenligningen */}
+        <div style={{ padding: isMobD ? '12px' : '16px 22px', overflowY:'auto', flex:1 }}>
+          {ingenEndringer ? (
+            <div style={{ textAlign:'center', padding:'34px 10px', color:'#94a3b8' }}>
+              <div style={{ fontSize:'34px', marginBottom:'10px' }}>🟢</div>
+              <div style={{ fontSize:'14px', fontWeight:'600', color:'#475569' }}>Ingen forskjeller mellom de to versjonene</div>
+              <div style={{ fontSize:'12px', marginTop:'4px' }}>Verken priser, mengder eller linjer er endret.</div>
+            </div>
+          ) : fagVist.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'30px 10px', color:'#94a3b8', fontSize:'13px' }}>
+              Endringene ligger utenfor materiallinjene — se totalen og arbeidstiden øverst.
+            </div>
+          ) : fagVist.map(f => (
+            <div key={f.fagId} style={{ marginBottom:'14px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 11px' }}>
+                <span style={{ fontSize:'15px' }}>{f.emoji}</span>
+                <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{f.navn}</span>
+                {f.status !== 'endret' && (
+                  <span style={{ background: f.status === 'lagt til' ? '#f0fdf4' : '#fef2f2', color: f.status === 'lagt til' ? '#047857' : '#b91c1c',
+                    fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{f.status}</span>
+                )}
+                <span style={{ marginLeft:'auto', fontSize:'12px', color:'#64748b', whiteSpace:'nowrap' }}>
+                  {fmtI(f.sumV)} → <strong style={{ color:'#0f172a' }}>{fmtI(f.sumH)}</strong>
+                </span>
+              </div>
+              {f.bygningsdeler.map((bd, bi) => (
+                <div key={bi} style={{ border:'1px solid #f1f5f9', borderRadius:'10px', padding: isMobD ? '9px 10px' : '10px 13px', margin:'7px 0 0' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'7px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>🧱 {bd.navn}</span>
+                    {bd.status !== 'endret' && (
+                      <span style={{ background: bd.status === 'lagt til' ? '#f0fdf4' : '#fef2f2', color: bd.status === 'lagt til' ? '#047857' : '#b91c1c',
+                        fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{bd.status}</span>
+                    )}
+                    {bd.mengdeV != null && bd.mengdeH != null && !_diffTallLik(bd.mengdeV, bd.mengdeH) && (
+                      <span style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>
+                        mengde {fmtTall(bd.mengdeV)} → {fmtTall(bd.mengdeH)} {bd.enhet}
+                      </span>
+                    )}
+                    <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color: diffFarge(bd.sumH - bd.sumV), whiteSpace:'nowrap' }}>
+                      {fmtI(bd.sumV)} → {fmtI(bd.sumH)}
+                    </span>
+                  </div>
+                  {(bd.arbeidEndret || bd.ueEndret) && (
+                    <div style={{ fontSize:'11px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'8px', padding:'5px 8px', marginTop:'6px' }}>
+                      ⚠️ {bd.arbeidEndret && bd.ueEndret ? 'Arbeidsarter og underleverandører er også endret' : bd.arbeidEndret ? 'Arbeidsartene er også endret' : 'Underleverandørene er også endret'} — se bygningsdelen i kalkylen for detaljene.
+                    </div>
+                  )}
+                  {bd.linjer.some(l => !bareEndringer || l.status !== 'lik')
+                    ? bd.linjer.map(linjeRad)
+                    : <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>Ingen endringer på materiallinjene.</div>}
+                </div>
+              ))}
+              {f.bygningsdeler.length === 0 && (
+                <div style={{ fontSize:'12px', color:'#94a3b8', padding:'8px 2px' }}>Ingen endringer i denne faggruppen.</div>
+              )}
+            </div>
           ))}
         </div>
 
-        {/* Content */}
-        <div style={{ flex:1, padding:'20px 28px' }}>
-          <h2 style={{ fontSize:'18px', fontWeight:'700', color:'#0f172a', margin:'0 0 16px' }}>{fag.emoji} {fag.name}</h2>
+        <div style={{ padding: isMobD ? '10px 12px' : '12px 22px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <span style={{ fontSize:'11px', color:'#94a3b8', lineHeight:1.4 }}>
+            Tallene er hentet fra kalkylens egne beregninger, inkludert påslag.
+          </span>
+          <button onClick={onClose} style={{ padding:'9px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700', flexShrink:0 }}>Lukk</button>
+        </div>
+      </div>
+    </>
+  )
+}
 
-          {/* Patch 20: Filter på prosjekt-type */}
-          <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
-            {[
-              { val: 'alle', label: 'Alle', ikon: '' },
-              { val: 'nybygg', label: 'Nybygg', ikon: '🏗️' },
-              { val: 'rehab', label: 'Rehab', ikon: '🔨' },
-            ].map(opt => (
-              <button key={opt.val} onClick={() => setFilterProsjektType(opt.val)}
-                style={{
-                  background: filterProsjektType === opt.val
-                    ? (opt.val === 'rehab' ? '#fffbeb' : opt.val === 'nybygg' ? '#f0f9ff' : '#f1f5f9')
-                    : 'white',
-                  border: '1px solid ' + (filterProsjektType === opt.val
-                    ? (opt.val === 'rehab' ? '#fbbf24' : opt.val === 'nybygg' ? '#38bdf8' : '#cbd5e1')
-                    : '#e2e8f0'),
-                  color: filterProsjektType === opt.val
-                    ? (opt.val === 'rehab' ? '#92400e' : opt.val === 'nybygg' ? '#0c4a6e' : '#0f172a')
-                    : '#64748b',
-                  borderRadius: '8px', padding: '6px 12px', fontSize: '12px',
-                  fontWeight: filterProsjektType === opt.val ? '700' : '500',
-                  cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '5px',
-                }}>
-                {opt.ikon && <span>{opt.ikon}</span>}<span>{opt.label}</span>
+function KalkBibliotekPage({ onBack }) {
+  const confirm = useConfirm()
+  const { user, kanStyrePrisgrunnlag } = useAuth()
+  const [activeFag, setActiveFag] = useState('tomrer')
+  const [expandedKat, setExpandedKat] = useState(null)
+  const [expandedBd, setExpandedBd] = useState(null)
+  const [filterProsjektType, setFilterProsjektType] = useState('alle')
+  const [visKunEgne, setVisKunEgne] = useState(false)
+  const [visKunUkoblede, setVisKunUkoblede] = useState(false)
+  // «Oppdater priser» for én bygningsdel: bygningsdelen som er åpen i dialogen.
+  const [prisBd, setPrisBd] = useState(null)
+  // Koblingsassistenten for én linje i biblioteket: { bd, kunMatId }.
+  const [assistent, setAssistent] = useState(null)
+  // Kategoriendring: { bdId, verdi, egen } mens brukeren holder på.
+  const [endrerKat, setEndrerKat] = useState(null)
+  const [lagrerKat, setLagrerKat] = useState(false)
+  const { rader, perFag, laster, last } = useBedriftsbibliotek()
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 768
+
+  // Sletter bedriftens egen bygningsdel. Var den en erstatning, kommer den
+  // innebygde tilbake — den har ligget i koden hele tiden.
+  const slettEgen = async (bd) => {
+    // Å slette en ERSTATNING gir hele bedriften den innebygde tilbake. Det er
+    // samme type handling som å lage erstatningen, og hører under samme rolle.
+    // Egne varianter kan alle slette.
+    if (bd._erstatterId && !kanStyrePrisgrunnlag) {
+      await confirm({
+        message: 'Krever admin eller leder',
+        subMessage: `«${bd.name}» er bedriftens versjon av en innebygd bygningsdel. Sletter du den, får hele bedriften den innebygde tilbake — derfor er det forbeholdt admin og leder.`,
+        alertOnly: true, kind: 'info',
+      })
+      return
+    }
+    const ok = await confirm({
+      message: `Slette «${bd.name}»?`,
+      subMessage: bd._erstatterId
+        ? `Den innebygde bygningsdelen «${bd._erstatterNavn || bd.name}» kommer tilbake i biblioteket.`
+        : 'Bygningsdelen fjernes fra bedriftens bibliotek. Kalkyler som alt bruker den beholder innholdet sitt.',
+      danger: true,
+      confirmLabel: 'Slett',
+    })
+    if (!ok) return
+    await supabase.from('bruker_bibliotek').delete().eq('id', bd.id)
+    if (expandedBd === bd.id) setExpandedBd(null)
+    await last()
+  }
+
+  const fagData = perFag[activeFag] || {}
+  const fag = getFaggruppe(activeFag)
+
+  // Materiallinjene i én bygningsdel, med index som peker tilbake.
+  const prisPoster = (bd) => (bd.materialer || []).map((m, i) => ({ sti: { index: i }, linje: m }))
+
+  // Skriver prisendringene tilbake på bibliotekraden.
+  const skrivPriserPaaBd = async (bd, valgte) => {
+    const rad = rader.find(r => String(r.id) === String(bd.id))
+    if (!rad) return { antall: 0 }
+    const map = new Map(valgte.map(p => [p.sti.index, p]))
+    const gamle = bd.materialer || []
+    const nye = gamle.map((m, i) => { const p = map.get(i); return p ? { ...m, ...prisforslagTilFelter(p) } : m })
+    const sum = (liste) => liste.reduce((s, m) => s + (parseFloat(m.mengde) || 0) * (parseFloat(m.enhetspris) || 0), 0)
+    const totalFor = sum(gamle), totalEtter = sum(nye)
+    const { data: endret, error } = await supabase.from('bruker_bibliotek')
+      .update({ data: { ...(rad.data || {}), materialer: nye } })
+      .eq('id', bd.id).select('id')
+    if (error) throw error
+    if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
+    await last()
+    return { antall: valgte.length, totalFor, totalEtter, totalLabel: `Materialkostnad per ${bd.enhet || 'enhet'}` }
+  }
+
+  // Kobler ÉN materiallinje i en bibliotek-bygningsdel til en vare. Går gjennom
+  // den delte beregnVareFelter, så rull→m²-spørsmålet er det samme her som i
+  // kalkylen.
+  const koblLinjeIBd = async (bd, matId, produkt) => {
+    const rad = rader.find(r => String(r.id) === String(bd.id))
+    if (!rad || !produkt) return
+    const linje = (bd.materialer || []).find(m => String(m.id) === String(matId))
+    const felter = await beregnVareFelter(confirm, produkt, linje)
+    const nye = (bd.materialer || []).map(m => String(m.id) === String(matId) ? { ...m, ...felter } : m)
+    try {
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ data: { ...(rad.data || {}), materialer: nye } })
+        .eq('id', bd.id).select('id')
+      if (error) throw error
+      if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
+      await last()
+    } catch (e) {
+      await confirm({ message: 'Kunne ikke lagre koblingen', subMessage: (e && e.message) || 'ukjent feil', alertOnly: true, kind: 'error' })
+    }
+  }
+
+  // Flytter en egen bygningsdel til en annen kategori. Bygningsdelen kan ha
+  // havnet feil — enten fordi den ble lagret før kategoriene fantes, eller fordi
+  // «Oppdater i biblioteket» hopper forbi dialogen der kategorien velges.
+  const lagreKategori = async (bd, nyKategori) => {
+    const kat = String(nyKategori || '').trim()
+    if (!kat || lagrerKat) return
+    setLagrerKat(true)
+    try {
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ kategori: kat }).eq('id', bd.id).select('id')
+      if (error) throw error
+      if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
+      setEndrerKat(null)
+      await last()
+    } catch (e) {
+      await confirm({ message: 'Kunne ikke flytte bygningsdelen', subMessage: (e && e.message) || 'ukjent feil', alertOnly: true, kind: 'error' })
+    } finally { setLagrerKat(false) }
+  }
+
+  // Tellinger per fag til fane-raden
+  const fagAntall = (fagId) => Object.values(perFag[fagId] || {}).flat().length
+
+  // Totalstatus for valgt fag — hvor langt bedriften er kommet med NOBB-koblingen
+  const fagStatus = React.useMemo(() => {
+    const alle = Object.values(fagData).flat()
+    let linjer = 0, koblede = 0, egne = 0, heltKoblede = 0
+    alle.forEach(bd => {
+      const kob = bdKoblingsStatus(bd)
+      linjer += kob.total; koblede += kob.koblet
+      if (bd._egen) egne += 1
+      if (kob.total > 0 && kob.ukoblet === 0) heltKoblede += 1
+    })
+    return { antall: alle.length, linjer, koblede, egne, heltKoblede }
+  }, [fagData])
+
+  const synligeIKat = (allItems) => {
+    let items = filterMalerEtterProsjektType(allItems, filterProsjektType)
+    if (visKunEgne) items = items.filter(b => b._egen)
+    if (visKunUkoblede) items = items.filter(b => bdKoblingsStatus(b).ukoblet > 0)
+    return items
+  }
+
+  const filterKnapp = (noekkel, aktiv, onClick, tekst, farger) => (
+    <button key={noekkel} onClick={onClick}
+      style={{ background: aktiv ? farger.bg : 'white', border: `1px solid ${aktiv ? farger.kant : '#e2e8f0'}`, color: aktiv ? farger.tekst : '#64748b',
+        borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight: aktiv ? '700' : '500', cursor:'pointer', whiteSpace:'nowrap', minHeight:'32px' }}>
+      {tekst}
+    </button>
+  )
+
+  return (
+    <div style={{ fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMob ? '14px 16px' : '24px 32px' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'12px', marginBottom:'8px' }}>
+          <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding:'8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
+        </div>
+        <h1 style={{ fontSize: isMob ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>📚 Bygningsdel-bibliotek</h1>
+        <p style={{ color:'#64748b', marginTop:'4px', fontSize: isMob ? '13px' : '14px', marginBottom:0 }}>
+          Bedriftens bibliotek. Bygningsdeler du har lagret selv står merket, og telleren viser hvor mange materiallinjer som henter pris fra prislisten din.
+        </p>
+      </div>
+
+      {/* Faggrupper: sidestolpe på PC, vannrett fane-rad på telefon */}
+      <div style={{ display:'flex', flexDirection: isMob ? 'column' : 'row', minHeight: isMob ? 'auto' : 'calc(100vh - 200px)' }}>
+        {isMob ? (
+          <div style={{ display:'flex', gap:'6px', overflowX:'auto', WebkitOverflowScrolling:'touch', padding:'12px 16px', background:'#f8fafc', borderBottom:'1px solid #e2e8f0' }}>
+            {FAGGRUPPER.filter(f => f.id !== 'ue').map(f => (
+              <button key={f.id} onClick={() => { setActiveFag(f.id); setExpandedKat(null); setExpandedBd(null) }}
+                style={{ display:'flex', alignItems:'center', gap:'5px', padding:'8px 12px', borderRadius:'999px', border: activeFag === f.id ? '1px solid #059669' : '1px solid #e2e8f0', cursor:'pointer', background: activeFag === f.id ? '#ecfdf5' : 'white', color: activeFag === f.id ? '#059669' : '#475569', fontWeight: activeFag === f.id ? '700' : '500', fontSize:'13px', whiteSpace:'nowrap', flexShrink:0, minHeight:'36px' }}>
+                <span>{f.emoji}</span> {f.name}
+                <span style={{ fontSize:'11px', color:'#94a3b8' }}>{fagAntall(f.id)}</span>
               </button>
             ))}
           </div>
+        ) : (
+          <div style={{ width:'200px', borderRight:'1px solid #f1f5f9', padding:'16px 8px', background:'#f8fafc', flexShrink:0 }}>
+            {FAGGRUPPER.filter(f => f.id !== 'ue').map(f => (
+              <button key={f.id} onClick={() => { setActiveFag(f.id); setExpandedKat(null); setExpandedBd(null) }}
+                style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 12px', borderRadius:'10px', border:'none', cursor:'pointer', background: activeFag === f.id ? '#ecfdf5' : 'transparent', color: activeFag === f.id ? '#059669' : '#475569', fontWeight: activeFag === f.id ? '600' : '400', fontSize:'13px', marginBottom:'2px', textAlign:'left' }}>
+                <span>{f.emoji}</span> {f.name}
+                <span style={{ marginLeft:'auto', fontSize:'11px', color:'#94a3b8' }}>{fagAntall(f.id)}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-          {Object.keys(fagData).length === 0 ? (
+        {/* Innhold */}
+        <div style={{ flex:1, padding: isMob ? '16px' : '20px 28px', minWidth:0 }}>
+          <h2 style={{ fontSize: isMob ? '16px' : '18px', fontWeight:'700', color:'#0f172a', margin:'0 0 6px' }}>{fag.emoji} {fag.name}</h2>
+
+          {/* Status for faggruppen — hvor langt NOBB-koblingen er kommet */}
+          {!laster && fagStatus.antall > 0 && (
+            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'14px', fontSize:'12px' }}>
+              <span style={{ background:'#f1f5f9', color:'#475569', padding:'4px 10px', borderRadius:'999px' }}>
+                {fagStatus.antall} bygningsdeler
+              </span>
+              {fagStatus.egne > 0 && (
+                <span style={{ background:'#fefce8', color:'#a16207', border:'1px solid #fde68a', padding:'4px 10px', borderRadius:'999px', fontWeight:'600' }}>
+                  {fagStatus.egne} er bedriftens egne
+                </span>
+              )}
+              <span style={{ background: fagStatus.linjer > 0 && fagStatus.koblede === fagStatus.linjer ? '#f0fdf4' : '#fffbeb',
+                color: fagStatus.linjer > 0 && fagStatus.koblede === fagStatus.linjer ? '#15803d' : '#a16207',
+                border: `1px solid ${fagStatus.linjer > 0 && fagStatus.koblede === fagStatus.linjer ? '#bbf7d0' : '#fde68a'}`,
+                padding:'4px 10px', borderRadius:'999px', fontWeight:'600' }}>
+                🔗 {fagStatus.koblede} av {fagStatus.linjer} materiallinjer koblet
+              </span>
+            </div>
+          )}
+
+          {/* Filtre */}
+          <div style={{ display:'flex', gap:'6px', marginBottom:'16px', flexWrap:'wrap' }}>
+            {[
+              { val: 'alle', label: 'Alle' },
+              { val: 'nybygg', label: '🏗️ Nybygg' },
+              { val: 'rehab', label: '🔨 Rehab' },
+            ].map(opt => filterKnapp(opt.val, filterProsjektType === opt.val, () => setFilterProsjektType(opt.val), opt.label,
+              { bg:'#f1f5f9', kant:'#cbd5e1', tekst:'#0f172a' }))}
+            {filterKnapp('egne', visKunEgne, () => setVisKunEgne(v => !v), '⭐ Bare egne', { bg:'#fefce8', kant:'#fde68a', tekst:'#a16207' })}
+            {filterKnapp('ukoblede', visKunUkoblede, () => setVisKunUkoblede(v => !v), '⚠ Mangler kobling', { bg:'#fff7ed', kant:'#fed7aa', tekst:'#c2410c' })}
+          </div>
+
+          {laster ? (
+            <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8', fontSize:'13px' }}>Laster biblioteket …</div>
+          ) : Object.keys(fagData).length === 0 ? (
             <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
               <div style={{ fontSize:'36px', marginBottom:'8px' }}>📦</div>
               <p>Ingen bygningsdeler i biblioteket for {fag.name} ennå.</p>
             </div>
           ) : (
             Object.entries(fagData).map(([kat, allItems]) => {
-              const items = filterMalerEtterProsjektType(allItems, filterProsjektType)
+              const items = synligeIKat(allItems)
               if (items.length === 0) return null
+              const egneIKat = items.filter(b => b._egen).length
               return (
               <div key={kat} style={{ marginBottom:'12px' }}>
                 <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
                   style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'12px 16px', borderRadius:'12px', border:'1px solid #f1f5f9', background: expandedKat === kat ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>
-                  <span style={{ color:'#059669' }}>{expandedKat === kat ? '▼' : '▶'}</span>
-                  {kat}
-                  <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400' }}>{items.length} bygningsdel{items.length !== 1 ? 'er' : ''}</span>
+                  <span style={{ color:'#059669', flexShrink:0 }}>{expandedKat === kat ? '▼' : '▶'}</span>
+                  <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis' }}>{kat}</span>
+                  {egneIKat > 0 && <span style={{ fontSize:'10px', background:'#fefce8', color:'#a16207', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'700' }}>{egneIKat} egne</span>}
+                  <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400', flexShrink:0 }}>{items.length}</span>
                 </button>
 
                 {expandedKat === kat && (
-                  <div style={{ paddingLeft:'16px', marginTop:'6px' }}>
+                  <div style={{ paddingLeft: isMob ? '8px' : '16px', marginTop:'6px' }}>
                     {items.map(bd => {
                       const bdInd = getProsjektTypeIndikator(bd.prosjektType || bd.prosjekt_type)
+                      const kob = bdKoblingsStatus(bd)
+                      const alleKoblet = kob.total > 0 && kob.ukoblet === 0
                       return (
                       <div key={bd.id} style={{
-                        background: bdInd?.bg || 'white',
+                        background: bd._egen ? '#fffef7' : (bdInd?.bg || 'white'),
                         borderRadius:'10px',
-                        border: '1px solid ' + (bdInd?.kantlinje || '#f1f5f9'),
+                        border: '1px solid ' + (bd._egen ? '#fef9c3' : (bdInd?.kantlinje || '#f1f5f9')),
                         marginBottom:'6px', overflow:'hidden',
                       }}>
                         <button onClick={() => setExpandedBd(expandedBd === bd.id ? null : bd.id)}
-                          style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
-                          <span style={{ color:'#64748b' }}>{expandedBd === bd.id ? '▼' : '▶'}</span>
-                          <span style={{ fontWeight:'600', color:'#0f172a' }}>{bd.name}</span>
+                          style={{ display:'flex', alignItems:'flex-start', gap:'8px', width:'100%', padding:'10px 14px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', flexWrap:'wrap' }}>
+                          <span style={{ color:'#64748b', flexShrink:0 }}>{expandedBd === bd.id ? '▼' : '▶'}</span>
+                          <span style={{ fontWeight:'600', color:'#0f172a', wordBreak:'break-word', flex:'1 1 auto', minWidth:0 }}>{bd.name}</span>
+                          {bd._egen && (
+                            <span title={bd._erstatterId ? `Bedriftens versjon — erstatter den innebygde «${bd._erstatterNavn || bd.name}»` : 'Bedriftens egen bygningsdel'}
+                              style={{ background:'#fefce8', color:'#a16207', border:'1px solid #fde68a', fontSize:'9px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', letterSpacing:'0.3px', flexShrink:0 }}>
+                              {bd._erstatterId ? '⭐ DIN VERSJON' : '⭐ EGEN'}
+                            </span>
+                          )}
+                          {/* Kategorien er ikke satt av brukeren — vi har plassert den. */}
+                          {(bd._kategoriGjettet || bd._kategoriUsikker) && (
+                            <span title={bd._kategoriUsikker
+                              ? 'Kategorien er ikke satt på denne bygningsdelen. Vi har plassert den her — åpne den og flytt den dit den hører.'
+                              : 'Kategorien er gjettet ut fra navnet. Åpne bygningsdelen og flytt den hvis den står feil.'}
+                              style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', fontSize:'9px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', flexShrink:0 }}>
+                              {bd._kategoriUsikker ? '📍 IKKE PLASSERT' : '📍 GJETTET'}
+                            </span>
+                          )}
                           {bdInd && (
-                            <span style={{
-                              background: bdInd.kantlinje, color: bdInd.tekst,
-                              fontSize:'9px', fontWeight:'700', padding:'2px 6px',
-                              borderRadius:'4px', letterSpacing:'0.4px',
-                            }}>
+                            <span style={{ background: bdInd.kantlinje, color: bdInd.tekst, fontSize:'9px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', letterSpacing:'0.4px', flexShrink:0 }}>
                               {bdInd.ikon} {bdInd.navn}
                             </span>
                           )}
-                          {bd.source_user && <span style={{ background:'#fefce8', color:'#ca8a04', fontSize:'10px', fontWeight:'600', padding:'1px 6px', borderRadius:'4px' }}>Egen</span>}
-                          <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8' }}>per {bd.enhet || 'stk'}</span>
+                          {kob.total > 0 && (
+                            <span title={`${kob.koblet} av ${kob.total} materiallinjer henter pris fra prislisten din`}
+                              style={{ background: alleKoblet ? '#f0fdf4' : '#fffbeb', color: alleKoblet ? '#15803d' : '#a16207',
+                                border: `1px solid ${alleKoblet ? '#bbf7d0' : '#fde68a'}`, fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', flexShrink:0, whiteSpace:'nowrap' }}>
+                              {alleKoblet ? '🔗' : '⚠'} {kob.koblet} av {kob.total} koblet
+                            </span>
+                          )}
+                          <span style={{ fontSize:'12px', color:'#94a3b8', flexShrink:0 }}>per {bd.enhet || 'stk'}</span>
                         </button>
 
                         {expandedBd === bd.id && (
@@ -70862,13 +73298,68 @@ function KalkBibliotekPage({ onBack }) {
                             {(bd.materialer||[]).length > 0 && (
                               <div style={{ marginBottom:'8px' }}>
                                 <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'4px' }}>MATERIALER</div>
-                                {bd.materialer.map((m, i) => (
-                                  <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'2px 0' }}>📦 {m.varenavn} — {m.mengde} {m.enhet} × {m.enhetspris} kr</div>
-                                ))}
+                                {bd.materialer.map((m, i) => {
+                                  const koblet = matErKoblet(m)
+                                  return (
+                                    <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'3px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
+                                      <span>📦 {m.varenavn}</span>
+                                      <span style={{ color:'#94a3b8' }}>{m.mengde} {m.enhet} × {fmtKr2(m.enhetspris)}</span>
+                                      {!koblet && (
+                                        <span title="Ingen NOBB-kobling — prisen er en veiledende standardverdi"
+                                          style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', background:'#fffbeb', border:'1px solid #fde68a', padding:'1px 5px', borderRadius:'4px' }}>≈ veiledende</span>
+                                      )}
+                                    </div>
+                                  )
+                                })}
                               </div>
                             )}
-                            {bd.source_user && (
-                              <button onClick={() => handleDelete(bd.id)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', cursor:'pointer', marginTop:'4px' }}>🗑️ Slett</button>
+                            {bd._egen && (
+                              <>
+                                {/* Kategorien kan rettes her. «Oppdater i biblioteket» i
+                                    kalkylen hopper forbi lagre-dialogen, så uten dette
+                                    sitter en feilplassert bygningsdel fast. */}
+                                {endrerKat && endrerKat.bdId === bd.id ? (
+                                  <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', marginBottom:'8px' }}>
+                                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>FLYTT TIL KATEGORI</div>
+                                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+                                      <select value={endrerKat.verdi} onChange={e => setEndrerKat(s => ({ ...s, verdi: e.target.value }))}
+                                        style={{ flex:'1 1 180px', padding:'9px 11px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif', minWidth:0 }}>
+                                        {kategorierForFag(bd.fag, rader).map(kat => <option key={kat} value={kat}>{kat}</option>)}
+                                      </select>
+                                      <button onClick={() => lagreKategori(bd, endrerKat.verdi)} disabled={lagrerKat}
+                                        style={{ background: lagrerKat ? '#a7f3d0' : '#059669', color:'white', border:'none', borderRadius:'8px', padding:'9px 16px', fontSize:'12px', fontWeight:'700', cursor: lagrerKat ? 'default' : 'pointer', minHeight:'34px' }}>
+                                        {lagrerKat ? 'Flytter …' : 'Flytt'}
+                                      </button>
+                                      <button onClick={() => setEndrerKat(null)} disabled={lagrerKat}
+                                        style={{ background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'9px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', minHeight:'34px' }}>Avbryt</button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'4px' }}>
+                                  {kob.koblet > 0 && (
+                                    <button onClick={() => setPrisBd(bd)}
+                                      title="Hent gjeldende priser fra den aktive prislisten. Du får se hva som endres før noe skrives."
+                                      style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', fontWeight:'600', minHeight:'34px' }}>
+                                      🔄 Oppdater priser
+                                    </button>
+                                  )}
+                                  {(!endrerKat || endrerKat.bdId !== bd.id) && (
+                                    <button onClick={() => setEndrerKat({ bdId: bd.id, verdi: bd.kategori })}
+                                      title="Flytt bygningsdelen til en annen kategori"
+                                      style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', fontWeight:'600', minHeight:'34px' }}>
+                                      📍 Flytt til annen kategori
+                                    </button>
+                                  )}
+                                  <button onClick={() => slettEgen(bd)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', fontWeight:'600', minHeight:'34px' }}>
+                                    🗑️ {bd._erstatterId ? 'Slett min versjon (får den innebygde tilbake)' : 'Slett fra biblioteket'}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                            {!bd._egen && (
+                              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px', lineHeight:1.5 }}>
+                                Dette er en innebygd bygningsdel. Prisene hentes fra prislisten din når du legger den inn i en kalkyle. Vil du styre den selv, rediger den i en kalkyle og velg «Erstatt min standard».
+                              </div>
                             )}
                           </div>
                         )}
@@ -70882,121 +73373,315 @@ function KalkBibliotekPage({ onBack }) {
           )}
         </div>
       </div>
+
+      {/* Oppdater priser for én bygningsdel i biblioteket */}
+      {prisBd && (
+        <OppdaterPriserModal
+          tittel="Oppdater priser"
+          undertittel={prisBd.name}
+          poster={prisPoster(prisBd)}
+          userId={user?.id}
+          onSkriv={(valgte) => skrivPriserPaaBd(prisBd, valgte)}
+          onFinnErstatning={(p) => {
+            const linje = (prisBd.materialer || [])[p.sti.index]
+            if (!linje) return
+            setAssistent({ bd: prisBd, kunMatId: linje.id })
+            setPrisBd(null)
+          }}
+          onClose={() => setPrisBd(null)}
+        />
+      )}
+
+      {/* Koblingsassistenten for én linje — brukeren velger erstatningsvaren */}
+      {assistent && (() => {
+        const linjer = (assistent.bd.materialer || []).filter(m => String(m.id) === String(assistent.kunMatId))
+        if (linjer.length === 0) return null
+        return (
+          <KoblingsassistentModal
+            key={`${assistent.bd.id}:${assistent.kunMatId}`}
+            linjer={linjer}
+            bdNavn={`${assistent.bd.name} · finn erstatning`}
+            prisLabel="nå"
+            onKoble={(matId, produkt) => koblLinjeIBd(assistent.bd, matId, produkt)}
+            onClose={() => setAssistent(null)}
+          />
+        )
+      })()}
+    </div>
+  )
+}
+
+// ─── LAGRE BYGNINGSDEL TIL BIBLIOTEKET (Oppgave 4, del 1) ────────────────────
+// Kommer bygningsdelen fra en innebygd, må brukeren velge hva lagringen betyr:
+// erstatte sin standard, eller legge til en variant ved siden av. Ved «erstatt»
+// sier dialogen rett ut at fremtidige forbedringer av den innebygde ikke når
+// hans versjon — det er riktig oppførsel, men han skal vite det på forhånd.
+//
+// Dialogen henter også kategori, fordi alt skal ligge i kategoritreet og ikke i
+// en flat «Egne maler»-liste.
+//
+// `kanErstatte` styrer om «Erstatt min standard» er tilgjengelig. Å erstatte en
+// innebygd bygningsdel endrer hva HELE bedriften ser, og faller derfor under
+// samme regel som prislister: admin og leder. Ansatt kan lage varianter.
+function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, kanErstatte, onLagre, onClose }) {
+  const startNavn = String(bd?.name || '').trim() || 'Uten navn'
+  const kanErstatteNaa = !!innebygd && kanErstatte !== false
+  const [modus, setModus] = useState(kanErstatteNaa ? 'erstatt' : 'ny')
+  const [navn, setNavn] = useState(startNavn)
+  const [kategori, setKategori] = useState(innebygd?.kategori || (kategorier && kategorier[0]) || '')
+  const [egenKategori, setEgenKategori] = useState('')
+  const [brukEgenKategori, setBrukEgenKategori] = useState(!innebygd && (!kategorier || kategorier.length === 0))
+  const [lagrer, setLagrer] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  // Ved bytte til variant foreslår vi et navn som faktisk skiller de to.
+  useEffect(() => {
+    if (modus === 'ny' && innebygd && navn === startNavn) setNavn(`${startNavn} — variant`)
+    if (modus === 'erstatt' && innebygd) setNavn(startNavn)
+  }, [modus])
+
+  // Mangler brukeren rettigheten, skal han aldri stå i erstatt-modus — heller
+  // ikke hvis komponenten rendres om.
+  useEffect(() => {
+    if (!kanErstatteNaa && modus === 'erstatt') setModus('ny')
+  }, [kanErstatteNaa, modus])
+
+  const endeligKategori = (brukEgenKategori ? egenKategori : kategori).trim()
+  const kanLagre = navn.trim().length > 0 && endeligKategori.length > 0 && !lagrer
+
+  const lagre = async () => {
+    if (!kanLagre) return
+    setLagrer(true)
+    try {
+      await onLagre({
+        modus,
+        navn: navn.trim(),
+        kategori: endeligKategori,
+        erstatterId: modus === 'erstatt' && innebygd ? innebygd.id : null,
+      })
+    } finally { setLagrer(false) }
+  }
+
+  const valgkort = (verdi, tittel, forklaring) => {
+    const valgt = modus === verdi
+    return (
+      <button onClick={() => setModus(verdi)}
+        style={{ display:'block', width:'100%', textAlign:'left', padding:'13px 15px', marginBottom:'8px', borderRadius:'12px', cursor:'pointer', boxSizing:'border-box',
+          border: valgt ? '2px solid #059669' : '1px solid #e2e8f0', background: valgt ? '#f0fdf4' : 'white' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
+          <span style={{ width:'16px', height:'16px', borderRadius:'50%', flexShrink:0, border: valgt ? '5px solid #059669' : '2px solid #cbd5e1', background:'white', boxSizing:'border-box' }} />
+          <span style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>{tittel}</span>
+        </div>
+        <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.5, paddingLeft:'24px' }}>{forklaring}</div>
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:140, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '520px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>💾 Lagre i biblioteket</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>{startNavn}</p>
+          </div>
+          <button onClick={onClose} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor:'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {innebygd ? (
+            <>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>HVA SKAL SKJE?</div>
+              {kanErstatteNaa ? valgkort('erstatt', 'Erstatt min standard',
+                <>Din versjon overtar plassen til «{innebygd.name}». Den innebygde vises ikke lenger for din bedrift.</>) : (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'8px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+                  <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>🔒</span>
+                  <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.55 }}>
+                    <strong>«Erstatt min standard» krever admin eller leder.</strong> Å erstatte «{innebygd.name}» endrer hva hele bedriften ser. Du kan lagre din versjon som en variant i stedet.
+                  </div>
+                </div>
+              )}
+              {valgkort('ny', 'Lagre som ny variant',
+                <>Begge ligger i biblioteket. Gi varianten et navn som skiller den, f.eks. «{innebygd.name} — uten dampsperre».</>)}
+
+              {modus === 'erstatt' && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginTop:'4px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+                  <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>⚠️</span>
+                  <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.55 }}>
+                    <strong>Da står du for vedlikeholdet av denne.</strong> Blir den innebygde «{innebygd.name}» forbedret senere — nye normtider, nye materialer, oppdaterte NOBB-koblinger — når det ikke din versjon. Du kan alltid slette din versjon i biblioteket for å få den innebygde tilbake.
+                  </div>
+                </div>
+              )}
+            </>
+          ) : (
+            <div style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'12px', color:'#1e40af', lineHeight:1.55 }}>
+              Denne bygningsdelen er ikke laget fra en innebygd mal, så den lagres som en ny bygningsdel i biblioteket ditt. Velg hvilken kategori den hører til.
+            </div>
+          )}
+
+          <div style={{ marginTop:'16px' }}>
+            <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>NAVN</label>
+            <input value={navn} onChange={e => setNavn(e.target.value)}
+              readOnly={modus === 'erstatt' && !!innebygd}
+              title={modus === 'erstatt' && innebygd ? 'Ved «erstatt» beholder bygningsdelen navnet til den den erstatter.' : undefined}
+              style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', borderRadius:'10px', border:'1px solid #e2e8f0', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif',
+                background: (modus === 'erstatt' && innebygd) ? '#f1f5f9' : 'white', color: (modus === 'erstatt' && innebygd) ? '#64748b' : '#0f172a' }} />
+          </div>
+
+          <div style={{ marginTop:'14px' }}>
+            <label style={{ display:'block', fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>KATEGORI</label>
+            {!brukEgenKategori ? (
+              <select value={kategori} onChange={e => setKategori(e.target.value)}
+                style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', borderRadius:'10px', border:'1px solid #e2e8f0', fontSize:'14px', outline:'none', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }}>
+                {(kategorier || []).map(kat => <option key={kat} value={kat}>{kat}</option>)}
+              </select>
+            ) : (
+              <input value={egenKategori} onChange={e => setEgenKategori(e.target.value)} placeholder="F.eks. Yttervegg"
+                style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', borderRadius:'10px', border:'1px solid #e2e8f0', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
+            )}
+            <button onClick={() => setBrukEgenKategori(v => !v)}
+              style={{ background:'none', border:'none', padding:'6px 0 0', fontSize:'12px', color:'#059669', cursor:'pointer', fontWeight:'600' }}>
+              {brukEgenKategori ? '← Velg blant kategoriene' : '+ Ny kategori'}
+            </button>
+          </div>
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          <button onClick={onClose} style={{ flex:'1 1 120px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Avbryt</button>
+          <button onClick={lagre} disabled={!kanLagre}
+            style={{ flex:'1 1 160px', background: kanLagre ? '#059669' : '#a7f3d0', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: kanLagre ? 'pointer' : 'default' }}>
+            {lagrer ? 'Lagrer …' : (modus === 'erstatt' ? 'Erstatt min standard' : 'Lagre variant')}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
 
 // ─── BIBLIOTEK PICKER MODAL (brukes inne i KalkProsjektEditor) ───────────────
 
+// Velgeren viser ETT bibliotek: de innebygde bygningsdelene minus de bedriften
+// har erstattet, pluss bedriftens egne — alle i sin riktige kategori. Den flate
+// «Egne maler»-seksjonen er borte; det var nettopp den som gjorde at hundre egne
+// bygningsdeler lå i én haug på tvers av yttervegg, gulv og himling.
 function BibliotekPickerModal({ fagId, onSelect, onClose }) {
-  const { user } = useAuth()
+  const confirm = useConfirm()
+  const { kanStyrePrisgrunnlag } = useAuth()
   const [mengde, setMengde] = useState(1)
   const [selectedBd, setSelectedBd] = useState(null)
   const [expandedKat, setExpandedKat] = useState(null)
-  const [brukerMaler, setBrukerMaler] = useState([])
-  const [loadingMaler, setLoadingMaler] = useState(true)
+  const { perFag, laster, last } = useBedriftsbibliotek()
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
 
-  // Load user's saved templates for this fag
-  useEffect(() => {
-    const loadMaler = async () => {
-      try {
-        const { data } = await supabase.from('bruker_bibliotek').select('*').eq('user_id', user?.id).eq('fag', fagId).order('created_at', { ascending: false })
-        // Samme reparasjon som for kalkyler — malene bærer den samme JSONB-en.
-        setBrukerMaler((data || []).map(mal => ({ ...mal, data: { ...(mal.data || {}), ...medReparerteBibliotekRader(mal.data) } })))
-      } catch(e) {}
-      setLoadingMaler(false)
-    }
-    loadMaler()
-  }, [fagId])
-
-  // Delete user template
-  const deleteMal = async (id, e) => {
+  // Slett bedriftens egen bygningsdel. Sletter den en ERSTATNING, kommer den
+  // innebygde tilbake av seg selv — den har ligget i koden hele tiden.
+  const slettEgen = async (bd, e) => {
     e.stopPropagation()
-    await supabase.from('bruker_bibliotek').delete().eq('id', id)
-    setBrukerMaler(prev => prev.filter(m => m.id !== id))
-    if (selectedBd?.id === id) setSelectedBd(null)
+    const erErstatning = !!bd._erstatterId
+    // Samme regel som på Bibliotek-siden: sletter man en erstatning, får hele
+    // bedriften den innebygde tilbake. Det er admin/leder.
+    if (erErstatning && !kanStyrePrisgrunnlag) {
+      await confirm({
+        message: 'Krever admin eller leder',
+        subMessage: `«${bd.name}» er bedriftens versjon av en innebygd bygningsdel. Sletter du den, får hele bedriften den innebygde tilbake.`,
+        alertOnly: true, kind: 'info',
+      })
+      return
+    }
+    const ok = await confirm({
+      message: `Slette «${bd.name}»?`,
+      subMessage: erErstatning
+        ? `Den innebygde bygningsdelen «${bd._erstatterNavn || bd.name}» kommer tilbake i biblioteket.`
+        : 'Bygningsdelen fjernes fra bedriftens bibliotek. Kalkyler som alt bruker den beholder innholdet sitt.',
+      danger: true,
+      confirmLabel: 'Slett',
+    })
+    if (!ok) return
+    await supabase.from('bruker_bibliotek').delete().eq('id', bd.id)
+    if (selectedBd?.id === bd.id) setSelectedBd(null)
+    await last()
   }
 
-  // Convert user template to bibliotek format
-  const brukerMalToBd = (mal) => ({
-    id: mal.id,
-    name: mal.name,
-    fag: mal.fag,
-    kategori: mal.kategori,
-    beskrivelse: 'Egen mal',
-    arbeidsarter: mal.data?.arbeidsarter || [],
-    materialer: mal.data?.materialer || [],
-    underleverandorer: mal.data?.underleverandorer || [],
-    enhet: mal.data?.enhet || 'stk',
-    _isBrukerMal: true,
-  })
-
-  const bibliotek = getBibliotekByFag()
-  const fagBibliotek = bibliotek[fagId] || {}
+  const fagBibliotek = perFag[fagId] || {}
   const fag = getFaggruppe(fagId)
+  const antallEgne = Object.values(fagBibliotek).flat().filter(b => b._egen).length
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.4)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'700px', maxHeight:'80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div>
-            <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700' }}>📚 Velg bygningsdel fra bibliotek</h3>
-            <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{fag.emoji} {fag.name}</p>
+      <div style={{ position:'relative', background:'white', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '700px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
+        <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'10px' }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700' }}>📚 Velg bygningsdel</h3>
+            <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>
+              {fag.emoji} {fag.name}
+              {antallEgne > 0 && <span style={{ color:'#ca8a04' }}> · {antallEgne} egne</span>}
+            </p>
           </div>
-          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8', flexShrink:0 }}>×</button>
         </div>
 
-        <div style={{ overflowY:'auto', flex:1, padding:'16px 24px' }}>
-          {/* Brukerens egne maler */}
-          {brukerMaler.length > 0 && (
-            <div style={{ marginBottom:'12px' }}>
-              <button onClick={() => setExpandedKat(expandedKat === '_egne' ? null : '_egne')}
-                style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #fef08a', background: expandedKat === '_egne' ? '#fefce8' : '#fffef5', cursor:'pointer', textAlign:'left', fontSize:'13px', fontWeight:'600', color:'#92400e' }}>
-                <span style={{ color:'#ca8a04' }}>{expandedKat === '_egne' ? '▼' : '▶'}</span> ⭐ Egne maler
-                <span style={{ marginLeft:'auto', fontSize:'12px', color:'#ca8a04', fontWeight:'400' }}>{brukerMaler.length}</span>
-              </button>
-              {expandedKat === '_egne' && brukerMaler.map(mal => {
-                const bd = brukerMalToBd(mal)
-                return (
-                  <div key={mal.id} onClick={() => setSelectedBd(selectedBd?.id === mal.id ? null : bd)}
-                    style={{ margin:'4px 0 4px 16px', padding:'10px 14px', borderRadius:'10px', border: selectedBd?.id === mal.id ? '2px solid #ca8a04' : '1px solid #fef9c3', background: selectedBd?.id === mal.id ? '#fefce8' : 'white', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px' }}>⭐ {mal.name}</div>
-                      <div style={{ fontSize:'11px', color:'#94a3b8' }}>{(mal.data?.arbeidsarter||[]).length} arbeidsarter · {(mal.data?.materialer||[]).length} materialer · per {mal.data?.enhet || 'stk'}</div>
+        <div style={{ overflowY:'auto', flex:1, padding:'16px 24px', WebkitOverflowScrolling:'touch' }}>
+          {laster && <p style={{ textAlign:'center', color:'#94a3b8', padding:'20px', fontSize:'13px' }}>Laster biblioteket …</p>}
+          {!laster && Object.entries(fagBibliotek).map(([kat, items]) => {
+            const egneIKat = items.filter(b => b._egen).length
+            return (
+              <div key={kat} style={{ marginBottom:'8px' }}>
+                <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
+                  style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background: expandedKat === kat ? '#f0fdf4' : '#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>
+                  <span style={{ color:'#059669' }}>{expandedKat === kat ? '▼' : '▶'}</span>
+                  <span style={{ minWidth:0, overflow:'hidden', textOverflow:'ellipsis' }}>{kat}</span>
+                  {egneIKat > 0 && <span style={{ fontSize:'10px', background:'#fefce8', color:'#ca8a04', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'700' }}>{egneIKat} egne</span>}
+                  <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400', flexShrink:0 }}>{items.length}</span>
+                </button>
+                {expandedKat === kat && items.map(bd => {
+                  const valgt = selectedBd?.id === bd.id
+                  const kob = bdKoblingsStatus(bd)
+                  return (
+                    <div key={bd.id} onClick={() => setSelectedBd(valgt ? null : bd)}
+                      style={{ margin:'4px 0 4px 16px', padding:'10px 14px', borderRadius:'10px', cursor:'pointer',
+                        border: valgt ? '2px solid #059669' : `1px solid ${bd._egen ? '#fef9c3' : '#f1f5f9'}`,
+                        background: valgt ? '#f0fdf4' : (bd._egen ? '#fffef7' : 'white'),
+                        display:'flex', alignItems:'flex-start', gap:'8px' }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px', display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
+                          <span style={{ wordBreak:'break-word' }}>{bd.name}</span>
+                          {bd._egen && (
+                            <span title={bd._erstatterId ? 'Bedriftens versjon — erstatter den innebygde' : 'Bedriftens egen bygningsdel'}
+                              style={{ fontSize:'9px', fontWeight:'700', background:'#fefce8', color:'#a16207', border:'1px solid #fde68a', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>
+                              {bd._erstatterId ? 'DIN VERSJON' : 'EGEN'}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize:'12px', color:'#64748b' }}>{bd.beskrivelse}</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>
+                          {(bd.arbeidsarter||[]).length} arbeidsarter · {kob.total} materialer · per {bd.enhet}
+                          {kob.total > 0 && (
+                            <span style={{ color: kob.ukoblet === 0 ? '#15803d' : '#a16207', fontWeight:'600' }}>
+                              {' · '}{kob.koblet} av {kob.total} koblet
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {bd._egen && (
+                        <button onClick={(e) => slettEgen(bd, e)} title="Slett fra bedriftens bibliotek"
+                          style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'15px', padding:'2px 4px', flexShrink:0 }}>×</button>
+                      )}
                     </div>
-                    <button onClick={(e) => deleteMal(mal.id, e)} title="Slett mal" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'4px', flexShrink:0 }}>×</button>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Standard bibliotek */}
-          {Object.entries(fagBibliotek).map(([kat, items]) => (
-            <div key={kat} style={{ marginBottom:'8px' }}>
-              <button onClick={() => setExpandedKat(expandedKat === kat ? null : kat)}
-                style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 14px', borderRadius:'10px', border:'1px solid #f1f5f9', background: expandedKat === kat ? '#f0fdf4' : '#f8fafc', cursor:'pointer', textAlign:'left', fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>
-                <span style={{ color:'#059669' }}>{expandedKat === kat ? '▼' : '▶'}</span> {kat}
-                <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400' }}>{items.length}</span>
-              </button>
-              {expandedKat === kat && items.map(bd => (
-                <div key={bd.id} onClick={() => setSelectedBd(selectedBd?.id === bd.id ? null : bd)}
-                  style={{ margin:'4px 0 4px 16px', padding:'10px 14px', borderRadius:'10px', border: selectedBd?.id === bd.id ? '2px solid #059669' : '1px solid #f1f5f9', background: selectedBd?.id === bd.id ? '#f0fdf4' : 'white', cursor:'pointer' }}>
-                  <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px' }}>{bd.name}</div>
-                  <div style={{ fontSize:'12px', color:'#64748b' }}>{bd.beskrivelse}</div>
-                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>{bd.arbeidsarter.length} arbeidsarter · {bd.materialer.length} materialer · per {bd.enhet}</div>
-                </div>
-              ))}
-            </div>
-          ))}
-          {Object.keys(fagBibliotek).length === 0 && brukerMaler.length === 0 && (
+                  )
+                })}
+              </div>
+            )
+          })}
+          {!laster && Object.keys(fagBibliotek).length === 0 && (
             <p style={{ textAlign:'center', color:'#94a3b8', padding:'20px' }}>Ingen bygningsdeler i biblioteket for {fag.name}.</p>
           )}
         </div>
 
         {selectedBd && (
-          <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0 }}>
+          <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(14px + env(safe-area-inset-bottom))' : '14px' }}>
             <span style={{ fontSize:'13px', color:'#374151', fontWeight:'600' }}>Mengde ({selectedBd.enhet}):</span>
             <input type="number" value={mengde} onChange={e => setMengde(e.target.value)} min="0.1" step="0.1" style={{ ...qInp, width:'100px', textAlign:'right' }} />
             <button onClick={async () => {
@@ -71018,7 +73703,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
               }
               onSelect(bd); onClose()
             }}
-              style={{ marginLeft:'auto', background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
+              style={{ marginLeft: isMob ? 0 : 'auto', flex: isMob ? '1 1 100%' : '0 0 auto', background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
               Legg til bygningsdel →
             </button>
           </div>
@@ -71028,10 +73713,210 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   )
 }
 
+// ─── KOBLINGSASSISTENT (Oppgave 2, del 2) ────────────────────────────────────
+// Går gjennom materiallinjene UTEN NOBB, én om gangen, og foreslår 3–5
+// kandidater fra brukerens aktive prisliste. Forslagene er dimensjonsstyrte:
+// en kandidat med feil dimensjon eller feil materialklasse vises ikke i det
+// hele tatt. Finner vi ingenting, sier vi det — og «Hopp over» er et fullgodt
+// svar. Ingen linje tvinges til å velge.
+//
+// Layout er bygget for 375 px: full skjerm på mobil, ett kort per forslag med
+// trykkflate over 56 px, og ingen sideveis scroll.
+function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose }) {
+  const { sok: prisbokSok } = usePrisbokSoek()
+  const [idx, setIdx] = useState(0)
+  const [kandidater, setKandidater] = useState([])
+  const [laster, setLaster] = useState(false)
+  const [egetSok, setEgetSok] = useState('')
+  const [sokTreff, setSokTreff] = useState([])
+  const [sokLaster, setSokLaster] = useState(false)
+  const [koblet, setKoblet] = useState(0)
+  const [hoppet, setHoppet] = useState(0)
+  const [jobber, setJobber] = useState(false)
+  const kjoringRef = React.useRef(0)
+  const sokRef = React.useRef(0)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  // Køen fryses ved åpning. Kobler brukeren linje 1, forsvinner den fra
+  // parentens `linjer` — uten frysing ville listen krympe under føttene på oss
+  // og indeksen hoppe over neste linje.
+  const koeRef = React.useRef(Array.isArray(linjer) ? linjer.slice() : [])
+  const koe = koeRef.current
+  const aktiv = koe[idx] || null
+
+  // Hent forslag for gjeldende linje
+  useEffect(() => {
+    if (!aktiv) { setKandidater([]); return }
+    const kjoring = ++kjoringRef.current
+    setLaster(true)
+    setKandidater([])
+    setEgetSok('')
+    setSokTreff([])
+    finnKoblingsKandidater(prisbokSok, aktiv, 5)
+      .then(res => { if (kjoringRef.current === kjoring) { setKandidater(res); setLaster(false) } })
+      .catch(() => { if (kjoringRef.current === kjoring) { setKandidater([]); setLaster(false) } })
+  }, [idx, aktiv && aktiv.id])
+
+  // Fritekstsøk (brukeren søker selv)
+  useEffect(() => {
+    const term = egetSok.trim()
+    if (term.length < 2) { setSokTreff([]); setSokLaster(false); return }
+    const kjoring = ++sokRef.current
+    setSokLaster(true)
+    const t = setTimeout(() => {
+      prisbokSok(term, { maxResultater: 15 })
+        .then(res => { if (sokRef.current === kjoring) { setSokTreff(res || []); setSokLaster(false) } })
+        .catch(() => { if (sokRef.current === kjoring) { setSokTreff([]); setSokLaster(false) } })
+    }, 350)
+    return () => clearTimeout(t)
+  }, [egetSok])
+
+  const nesteLinje = () => setIdx(i => i + 1)
+
+  // onKoble kan åpne en bekreftelsesdialog (rull→m²). Vi må vente på svaret før
+  // vi går videre, ellers står brukeren og svarer på et spørsmål om en linje
+  // assistenten allerede har forlatt.
+  const velgProdukt = async (p) => {
+    if (!aktiv || jobber) return
+    setJobber(true)
+    try { await onKoble(aktiv.id, p) } finally { setJobber(false) }
+    setKoblet(c => c + 1)
+    nesteLinje()
+  }
+  const hoppOver = () => { setHoppet(h => h + 1); nesteLinje() }
+
+  const ferdig = !aktiv
+  const totalt = koe.length
+
+  const kort = (p, visBegrunnelse) => {
+    const stil = KOB_TILLIT_STIL[p._kobTillit] || KOB_TILLIT_STIL.lav
+    return (
+      <button key={p.id || p.varenummer} onClick={() => velgProdukt(p)} disabled={jobber}
+        style={{ display:'block', width:'100%', textAlign:'left', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white', padding:'12px 14px', marginBottom:'8px', cursor: jobber ? 'default' : 'pointer', opacity: jobber ? 0.6 : 1, minHeight:'56px', boxSizing:'border-box' }}>
+        <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', justifyContent:'space-between' }}>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', lineHeight:1.35, wordBreak:'break-word' }}>{p.varenavn}</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'3px', fontFamily:'monospace' }}>NOBB {p.varenummer}</div>
+          </div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize:'15px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap' }}>{fmtI(p.pris_per_enhet)}</div>
+            <div style={{ fontSize:'11px', color:'#94a3b8' }}>per {p.enhet || 'stk'}</div>
+          </div>
+        </div>
+        {visBegrunnelse && (
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', marginTop:'8px', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', background:stil.bg, color:stil.color, border:`1px solid ${stil.border}` }}>{stil.tekst}</span>
+            {p._kobBegrunnelse && <span style={{ fontSize:'11px', color:'#94a3b8' }}>{p._kobBegrunnelse}</span>}
+          </div>
+        )}
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '560px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '86vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        {/* Header */}
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px' }}>
+            <div style={{ minWidth:0 }}>
+              <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔗 Koble til prisliste</h3>
+              <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{bdNavn || 'Bygningsdel'}</p>
+            </div>
+            <button onClick={onClose} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor:'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+          </div>
+          {!ferdig && (
+            <>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:'10px', fontSize:'11px', color:'#64748b' }}>
+                <span>Linje {idx + 1} av {totalt}</span>
+                <span>{koblet} koblet{hoppet > 0 ? ` · ${hoppet} hoppet over` : ''}</span>
+              </div>
+              <div style={{ height:'4px', borderRadius:'999px', background:'#f1f5f9', marginTop:'5px', overflow:'hidden' }}>
+                <div style={{ height:'100%', width:`${totalt ? (idx / totalt) * 100 : 0}%`, background:'#059669', transition:'width 0.2s' }} />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Innhold */}
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {ferdig ? (
+            <div style={{ textAlign:'center', padding:'32px 8px' }}>
+              <div style={{ fontSize:'40px', marginBottom:'10px' }}>{koblet > 0 ? '✅' : '👍'}</div>
+              <p style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>Gjennomgangen er ferdig</p>
+              <p style={{ margin:0, fontSize:'13px', color:'#64748b', lineHeight:1.5 }}>
+                {koblet} av {totalt} linjer er koblet til prislisten din.
+                {hoppet > 0 ? ` ${hoppet} ble hoppet over og beholder veiledende pris.` : ''}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Linjen som skal kobles */}
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.03em', marginBottom:'4px' }}>MATERIALLINJE</div>
+                <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{aktiv.varenavn || 'Uten navn'}</div>
+                <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
+                  {aktiv.mengde || 0} {aktiv.enhet || 'stk'} · {prisLabel || 'veiledende'} {fmtI(aktiv.enhetspris)} per {aktiv.enhet || 'stk'}
+                </div>
+              </div>
+
+              {/* Forslag */}
+              {laster && (
+                <div style={{ textAlign:'center', padding:'22px', fontSize:'13px', color:'#2563eb' }}>Leter i prislisten din …</div>
+              )}
+              {!laster && kandidater.length > 0 && (
+                <>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>FORSLAG FRA PRISLISTEN DIN</div>
+                  {kandidater.map(p => kort(p, true))}
+                </>
+              )}
+              {!laster && kandidater.length === 0 && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
+                  <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
+                    Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk gjerne selv under — eller hopp over, så beholder linjen den veiledende prisen.
+                  </div>
+                </div>
+              )}
+
+              {/* Søk selv */}
+              <div style={{ marginTop:'14px' }}>
+                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>SØK SELV</div>
+                <input value={egetSok} onChange={e => setEgetSok(e.target.value)}
+                  placeholder="Varenavn eller NOBB-nummer …"
+                  style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
+                {sokLaster && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker …</div>}
+                {!sokLaster && egetSok.trim().length >= 2 && sokTreff.length === 0 && (
+                  <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Ingen treff for «{egetSok.trim()}».</div>
+                )}
+                {sokTreff.length > 0 && <div style={{ marginTop:'8px' }}>{sokTreff.map(p => kort(p, false))}</div>}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Bunn */}
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {ferdig ? (
+            <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : (
+            <>
+              <button onClick={hoppOver} style={{ flex:1, background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Hopp over</button>
+              <button onClick={onClose} style={{ flex:1, background:'#f1f5f9', color:'#475569', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>Avslutt</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
 
 function PrisbokPage({ onBack }) {
-  const { user } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
   const confirm = useConfirm()
   const [prislister, setPrislister] = useState([])
   const [aktivPrisliste, setAktivPrisliste] = useState(null)
@@ -71047,6 +73932,15 @@ function PrisbokPage({ onBack }) {
   const [is5001, setIs5001] = useState(false)
   const [importProgress, setImportProgress] = useState('')
   const [toast, setToast] = useState(null) // { type: 'success'|'error', message }
+  // Oppsummeringen etter at biblioteket er oppdatert mot en ny aktiv prisliste.
+  const [bibResultat, setBibResultat] = useState(null)   // { resultat, prislisteNavn }
+  const [oppdatererBib, setOppdatererBib] = useState(false)
+  const [bibFremdrift, setBibFremdrift] = useState(null)
+  // Overlayen vises FØRST etter to sekunder. Går jobben unna på 300 ms, skal det
+  // ikke blinke et vindu — men tar den lang tid, skal brukeren se at det jobbes
+  // og ikke tro at siden har hengt seg.
+  const [visFremdrift, setVisFremdrift] = useState(false)
+  const fremdriftTimer = React.useRef(null)
   const fileRef = React.useRef(null)
 
   const loadData = async () => {
@@ -71054,6 +73948,13 @@ function PrisbokPage({ onBack }) {
     setPrislister(pl || [])
     const aktiv = (pl || []).find(p => p.aktiv)
     setAktivPrisliste(aktiv || null)
+    // YTELSE: `order('varenavn').limit(200)` er en sortering av HELE prislisten
+    // med mindre det finnes en indeks på (prisliste_id, varenavn). Uten den målte
+    // vi 75 ms lokalt mot 60 453 rader — og med RLS-sjekk per rad og nett i mellom
+    // ble det de 7–8 sekundene som så ut som at biblioteksoppdateringen hang.
+    // Med indeksen stopper Postgres etter 200 rader: 0,75 ms, flatt uansett
+    // listestørrelse. Indeksen ligger i SQL-blokken; fjernes den, kommer tregheten
+    // tilbake her.
     if (aktiv) {
       const { data: pb } = await supabase.from('prisbok').select('*').eq('prisliste_id', aktiv.id).order('varenavn').limit(200)
       setPrisbok(pb || [])
@@ -71189,7 +74090,47 @@ function PrisbokPage({ onBack }) {
     e.target.value = ''
   }
 
+  // Kjører en jobb og viser fremdriftsoverlayet dersom den tar mer enn to
+  // sekunder. Brukes både av biblioteksoppdateringen og av lastingen av
+  // varelisten — begge kan ta tid mot en prisliste med 300 000 rader, og begge
+  // ser ut som at siden har hengt seg dersom ingenting vises.
+  const medFremdrift = async (startInfo, jobb) => {
+    setBibFremdrift(startInfo || null)
+    setOppdatererBib(true)
+    setVisFremdrift(false)
+    if (fremdriftTimer.current) clearTimeout(fremdriftTimer.current)
+    fremdriftTimer.current = setTimeout(() => setVisFremdrift(true), 2000)
+    try { return await jobb() }
+    finally {
+      if (fremdriftTimer.current) { clearTimeout(fremdriftTimer.current); fremdriftTimer.current = null }
+      setOppdatererBib(false); setVisFremdrift(false); setBibFremdrift(null)
+    }
+  }
+
+  // Kjører den automatiske biblioteksoppdateringen og viser oppsummeringen.
+  // Kalkyler røres IKKE — de er konkrete tilbud, og noen er sendt til kunde.
+  const oppdaterBiblioteketNaa = async (prisliste) => {
+    if (!prisliste?.id) return
+    try {
+      const res = await medFremdrift({ fase: 'bibliotek' }, () => oppdaterBibliotekMotPrisliste({
+        prislisteId: prisliste.id,
+        prislisteNavn: prisliste.navn,
+        companyId: companyId || null,
+        userId: user?.id,
+        onFremdrift: setBibFremdrift,
+      }))
+      // Har bedriften ingen egne bygningsdeler, er det ingenting å fortelle om.
+      if (res && (res.linjerTotalt > 0 || res.feil)) setBibResultat({ resultat: res, prislisteNavn: prisliste.navn })
+    } catch (e) {
+      setToast({ type: 'error', message: 'Biblioteket ble ikke oppdatert: ' + ((e && e.message) || 'ukjent feil') })
+    }
+  }
+
+  // Rydd timeren om siden lukkes midt i en oppdatering.
+  useEffect(() => () => { if (fremdriftTimer.current) clearTimeout(fremdriftTimer.current) }, [])
+
   const doImport = async (items, navn) => {
+    if (!kanStyrePrisgrunnlag) return
     setImporting(true)
     try {
       // Create prisliste entry
@@ -71210,6 +74151,9 @@ function PrisbokPage({ onBack }) {
       setImportProgress('')
       await loadData()
       setToast({ type: 'success', message: `${inserted.toLocaleString('nb-NO')} varer importert som "${navn}"` })
+      // Ble denne listen aktiv (første import), oppdateres biblioteket med én gang.
+      // Ellers skjer det når brukeren setter den aktiv.
+      if (pl.aktiv) await oppdaterBiblioteketNaa(pl)
     } catch(e) { setToast({ type: 'error', message: 'Feil ved import: ' + e.message }) }
     finally { setImporting(false); setImportProgress('') }
   }
@@ -71237,13 +74181,35 @@ function PrisbokPage({ onBack }) {
   }
 
   const toggleAktiv = async (pl) => {
+    if (!kanStyrePrisgrunnlag) return
     // Deactivate all, activate this one
     await supabase.from('prislister').update({ aktiv: false }).eq('user_id', user?.id)
     await supabase.from('prislister').update({ aktiv: true }).eq('id', pl.id)
-    await loadData()
+    // Byttet vises MED ÉN GANG, uten å hente varelisten først.
+    //
+    // Her sto det tidligere `await loadData()`. Den henter de 200 første varene
+    // i den nye listen sortert på varenavn, og det er en sortering av HELE
+    // prislisten — flere sekunder mot 60 000 rader, uten at noe vises på
+    // skjermen. Ventetiden kom altså FØR spørsmålet under, og så ut som at
+    // biblioteksoppdateringen hang. Lastingen skjer nederst, med fremdrift.
+    setPrislister(prev => prev.map(p => ({ ...p, aktiv: p.id === pl.id })))
+    setAktivPrisliste({ ...pl, aktiv: true })
+    // Å bytte aktiv prisliste er å si «dette er prisene våre nå», så biblioteket
+    // skal følge. Vi spør likevel: brukeren kan bytte bare for å søke i en gammel
+    // liste, og da skal ikke biblioteket skrives om.
+    const ok = await confirm({
+      message: 'Oppdatere biblioteket med de nye prisene?',
+      subMessage: `Alle bedriftens egne bygningsdeler får prisene fra «${pl.navn}» på materiallinjer som har NOBB-nummer. Kalkylene dine røres ikke — der bruker du «Oppdater priser» selv.`,
+      confirmLabel: 'Oppdater biblioteket',
+      cancelLabel: 'Bare bytt prisliste',
+    })
+    if (ok) await oppdaterBiblioteketNaa(pl)
+    // Varelisten hentes til slutt, med fremdrift når den tar mer enn to sekunder.
+    await medFremdrift({ fase: 'laster', prislisteNavn: pl.navn, antall: pl.antall_varer }, () => loadData())
   }
 
   const deletePrisliste = async (pl) => {
+    if (!kanStyrePrisgrunnlag) return
     const ok = await confirm({
       message: `Slett prisliste "${pl.navn}"`,
       subMessage: `${pl.antall_varer} varer blir slettet permanent. Dette kan ikke angres.`,
@@ -71301,8 +74267,20 @@ function PrisbokPage({ onBack }) {
             <h1 style={{ fontSize:'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>💰 Prisbok</h1>
             <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Importer prislister fra byggevareleverandører. Velg aktiv prisliste for NOBB-oppslag.</p>
           </div>
-          <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
-          <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFileUpload} style={{ display:'none' }} />
+          {/* Import, «sett aktiv» og sletting skriver om prisgrunnlaget for HELE
+              firmaets tilbud. Derfor admin/leder. Ansatt kan bruke prislisten,
+              lage varianter i biblioteket og oppdatere sine egne kalkyler. */}
+          {kanStyrePrisgrunnlag ? (
+            <>
+              <button onClick={() => fileRef.current?.click()} style={{ background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'11px 20px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>📥 Importer prisliste</button>
+              <input ref={fileRef} type="file" accept=".csv,.txt,.tsv" onChange={handleFileUpload} style={{ display:'none' }} />
+            </>
+          ) : (
+            <span title="Import og bytte av aktiv prisliste er forbeholdt admin og leder, fordi det endrer prisgrunnlaget for hele bedriften"
+              style={{ fontSize:'12px', color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 14px' }}>
+              🔒 Bare admin og leder kan importere prislister
+            </span>
+          )}
         </div>
       </div>
 
@@ -71313,14 +74291,18 @@ function PrisbokPage({ onBack }) {
             <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Mine prislister</div>
             {prislister.map(pl => (
               <div key={pl.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #f8fafc' }}>
-                <input type="radio" checked={pl.aktiv} onChange={() => toggleAktiv(pl)} style={{ accentColor:'#059669' }} />
+                <input type="radio" checked={pl.aktiv} disabled={!kanStyrePrisgrunnlag}
+                  title={kanStyrePrisgrunnlag ? 'Sett denne prislisten aktiv' : 'Bare admin og leder kan bytte aktiv prisliste'}
+                  onChange={() => toggleAktiv(pl)} style={{ accentColor:'#059669', cursor: kanStyrePrisgrunnlag ? 'pointer' : 'not-allowed' }} />
                 <div style={{ flex:1 }}>
                   <span style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a' }}>{pl.navn}</span>
                   <span style={{ fontSize:'12px', color:'#94a3b8', marginLeft:'8px' }}>{(pl.antall_varer || 0).toLocaleString('nb-NO')} varer</span>
                   {pl.aktiv && <span style={{ background:'#f0fdf4', color:'#16a34a', fontSize:'10px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', marginLeft:'8px' }}>AKTIV</span>}
                 </div>
                 <span style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(pl.created_at).toLocaleDateString('nb-NO')}</span>
-                <button onClick={() => deletePrisliste(pl)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+                {kanStyrePrisgrunnlag && (
+                  <button onClick={() => deletePrisliste(pl)} title="Slett prislisten" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>🗑️</button>
+                )}
               </div>
             ))}
           </div>
@@ -71451,6 +74433,54 @@ function PrisbokPage({ onBack }) {
           </div>
         )}
       </div>
+
+      {/* Fremdrift mens det jobbes — kommer først etter to sekunder, og viser hvor
+          jobben står, ikke bare at den går. Dekker både biblioteksoppdateringen og
+          lastingen av varelisten etter et prislistebytte. */}
+      {oppdatererBib && visFremdrift && (() => {
+        const f = bibFremdrift || {}
+        const erLasting = f.fase === 'laster'
+        let steg = 'Leser bedriftens bygningsdeler …'
+        let andel = 0.08
+        let detalj = null
+        if (erLasting) {
+          steg = `Henter varelisten fra «${f.prislisteNavn || 'prislisten'}» …`
+          andel = 0.5
+          detalj = f.antall ? `${Number(f.antall).toLocaleString('nb-NO')} varer i listen` : null
+        } else if (f.fase === 'priser') {
+          steg = 'Henter priser fra prislisten …'
+          andel = 0.1 + 0.6 * (f.antPuljer ? (f.pulje - 1) / f.antPuljer : 0)
+          detalj = `Oppslag ${f.pulje} av ${f.antPuljer} · ${(f.antNummer || 0).toLocaleString('nb-NO')} varenumre`
+        } else if (f.fase === 'lagrer') {
+          steg = 'Lagrer bygningsdelene …'
+          andel = 0.7 + 0.3 * (f.avRader ? f.skrevet / f.avRader : 0)
+          detalj = `${f.skrevet} av ${f.avRader} bygningsdeler`
+        }
+        return (
+          <div style={{ position:'fixed', inset:0, zIndex:155, display:'flex', alignItems:'center', justifyContent:'center', background:'rgba(15,23,42,0.45)', padding:'16px' }}>
+            <div style={{ background:'white', borderRadius:'16px', padding:'22px 24px', maxWidth:'360px', width:'100%', boxSizing:'border-box', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif' }}>
+              <div style={{ fontSize:'28px', marginBottom:'10px', textAlign:'center' }}>{erLasting ? '📋' : '📚'}</div>
+              <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginBottom:'3px', textAlign:'center' }}>{erLasting ? 'Bytter prisliste' : 'Oppdaterer biblioteket'}</div>
+              <div style={{ fontSize:'12px', color:'#374151', marginBottom:'3px', textAlign:'center' }}>{steg}</div>
+              {detalj && <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'10px', textAlign:'center' }}>{detalj}</div>}
+              <div style={{ height:'6px', borderRadius:'999px', background:'#f1f5f9', overflow:'hidden', margin:'10px 0 12px' }}>
+                <div style={{ height:'100%', width:`${Math.round(Math.min(1, andel) * 100)}%`, background:'#059669', transition:'width 0.3s' }} />
+              </div>
+              <div style={{ fontSize:'11px', color:'#64748b', lineHeight:1.5, textAlign:'center' }}>{erLasting ? 'Store prislister tar noen sekunder å hente. Ikke lukk siden.' : 'Kalkylene dine røres ikke. Ikke lukk siden.'}</div>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* Oppsummering, med detaljer og «Angre alt» */}
+      {bibResultat && (
+        <BibliotekPrisResultatModal
+          resultat={bibResultat.resultat}
+          prislisteNavn={bibResultat.prislisteNavn}
+          onAngret={() => setToast({ type: 'success', message: 'Prisene i biblioteket er satt tilbake' })}
+          onClose={() => setBibResultat(null)}
+        />
+      )}
     </div>
   )
 }
@@ -71958,13 +74988,50 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
 function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
-  const { user } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  // Bedriftens egne bygningsdeler. `rader` er de lagrede overstyringene —
+  // finnBibliotekMalId og lagre-knappen leser dem for å vite om bygningsdelen
+  // alt finnes i biblioteket.
+  const { rader: mineMaler, last: lastMineMaler } = useBedriftsbibliotek()
   // Reparér id-kollisjoner FØR første render, slik at ingen skriving kan treffe
   // to rader i en kalkyle som ble lagret med de gamle Date.now()-id-ene.
   const [k, setK] = useState(() => medReparerteKalkyleIder(init))
+  // Speiler siste kalkyle-tilstand. Koblingsassistenten skriver flere linjer
+  // rett etter hverandre, og må lese den NYESTE tilstanden — ikke den React
+  // rakk å rendre. Uten dette kan to raske valg overskrive hverandre.
+  const kRef = React.useRef(k)
+  kRef.current = k
   const [activeKalkId, setActiveKalkId] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
   const [showBibliotekPicker, setShowBibliotekPicker] = useState(null)
+  // Koblingsassistenten: { kalkId, bdId } når den er åpen.
+  const [showKoblingsassistent, setShowKoblingsassistent] = useState(null)
+  // Lagre-til-bibliotek-dialogen: { kalkId, bdId, fag } når den er åpen.
+  const [showLagreBd, setShowLagreBd] = useState(null)
+  // «Oppdater priser»-dialogen. true når den er åpen for hele kalkylen.
+  const [showOppdaterPriser, setShowOppdaterPriser] = useState(false)
+  // Ny revisjon: { prisendringer } når den er åpen. prisendringer er tom når
+  // revisjonen startes fra Mer-menyen uten prisoppdatering.
+  const [showNyRevisjon, setShowNyRevisjon] = useState(null)
+  // Revisjonsfamilien til denne kalkylen, eldste først.
+  const [revisjoner, setRevisjoner] = useState([])
+  const [visRevHistorikk, setVisRevHistorikk] = useState(false)
+  // Id-en til versjonen som hentes akkurat nå, når man klikker seg til en annen.
+  const [apnerRevId, setApnerRevId] = useState(null)
+  // Sammenligningen: den ferdig byggede diffen, eller null når dialogen er lukket.
+  const [diffVisning, setDiffVisning] = useState(null)
+  const [henterDiff, setHenterDiff] = useState(null)   // id-en vi henter for
+  // På telefon vises materiallinjene som en LESEVISNING i stedet for den brede
+  // tabellen: ingen bygger en kalkyle på mobil, men mange åpner en på farta og
+  // skal se hva som er med, hvilke priser som gjelder og hva som er merket.
+  // Den som likevel må rette noe, slår på tabellen med knappen under.
+  const [visMatTabellMobil, setVisMatTabellMobil] = useState(false)
+  // Enheten prislisten priser hver NOBB-vare i: { [varenummer]: { enhet, pris } }
+  // eller null når varen ikke ble funnet. Brukes til å oppdage linjer der
+  // mengden står i m² mens prisen gjelder per rull — feilen som allerede finnes
+  // i lagrede kalkyler, og som ingenting varslet om før.
+  const [prisEnheter, setPrisEnheter] = useState({})
+  const prisEnhetRef = React.useRef({})
   const [showSendModal, setShowSendModal] = useState(false)
   const [showPreviewMenu, setShowPreviewMenu] = useState(false)
   const [showTilbudPopup, setShowTilbudPopup] = useState(null) // null, 'no-module', 'created'
@@ -71986,6 +75053,117 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [init?.id])
+
+  // Revisjonsfamilien — vises som historikk, og trengs for å finne neste
+  // revisjonsnummer når man reviderer en gammel versjon åpnet fra historikken.
+  const lastRevisjoner = React.useCallback(async () => {
+    const liste = await hentKalkyleRevisjoner(k)
+    setRevisjoner(liste)
+  }, [k.id, k.parent_calculation_id])
+  useEffect(() => { lastRevisjoner() }, [lastRevisjoner])
+
+  // Gjeldende versjon i familien: den nyeste som IKKE er erstattet. Trengs for
+  // veien tilbake når man har klikket seg inn på en gammel versjon.
+  const gjeldendeVersjon = React.useMemo(() => {
+    if (revisjoner.length === 0) return null
+    const aktive = revisjoner.filter(r => r.status !== KALK_STATUS_ERSTATTET)
+    const liste = aktive.length > 0 ? aktive : revisjoner
+    return liste.reduce((best, r) => ((r.revision_number || 1) > (best.revision_number || 1) ? r : best), liste[0])
+  }, [revisjoner])
+
+  // Åpner en annen versjon av kalkylen i samme visning.
+  //
+  // Historikken viste før bare totalsummen per versjon, og de gamle versjonene
+  // er skjult i kalkylelisten (status «Erstattet»). Da fantes det ingen vei inn
+  // til dem, og man kunne ikke se HVA som var endret. Samme mønster som
+  // revisjonslisten i Tilbud, der raden alt er klikkbar.
+  const apneRevisjon = async (rev) => {
+    if (!rev?.id || String(rev.id) === String(k.id) || apnerRevId) return
+    setApnerRevId(rev.id)
+    try {
+      const { data, error } = await supabase.from('calculations').select('*').eq('id', rev.id).single()
+      if (error || !data) throw (error || new Error('Fant ikke versjonen.'))
+      const oppdatert = medReparerteKalkyleIder(data)
+      kRef.current = oppdatert
+      setK(oppdatert)
+      // Åpne rader, angre-stakk og snapshot-versjoner hører til den forrige raden.
+      setActiveKalkId(null)
+      setExpandedBd(null)
+      setUndoStack([])
+      window.scrollTo(0, 0)
+    } catch (e) {
+      setToastMsg({ title: 'Kunne ikke åpne versjonen', message: (e && e.message) || 'ukjent feil', type: 'error' })
+    } finally { setApnerRevId(null) }
+  }
+
+  // Sammenligner en annen revisjon med den vi står i. Revisjonsraden i
+  // historikken har bare summene — hele treet må hentes for den siden.
+  // Den ELDSTE av de to står til venstre, uansett hvilken vei man klikker.
+  const sammenlignMedRevisjon = async (rev) => {
+    if (!rev?.id || String(rev.id) === String(k.id) || henterDiff) return
+    setHenterDiff(rev.id)
+    try {
+      const { data, error } = await supabase.from('calculations').select('id, kalk_number, revision_number, kalkyler, faktorer').eq('id', rev.id).single()
+      if (error || !data) throw (error || new Error('Fant ikke versjonen.'))
+      const annen = { label: kalkRevLabel(data.revision_number), kalkyler: data.kalkyler || [], faktorer: data.faktorer || {} }
+      const denne = { label: kalkRevLabel(k.revision_number), kalkyler: kalkyler, faktorer: alleFaktorer }
+      const eldstForst = (data.revision_number || 1) <= (k.revision_number || 1)
+      setDiffVisning(byggKalkyleDiff(eldstForst ? annen : denne, eldstForst ? denne : annen))
+    } catch (e) {
+      setToastMsg({ title: 'Kunne ikke sammenligne', message: (e && e.message) || 'ukjent feil', type: 'error' })
+    } finally { setHenterDiff(null) }
+  }
+
+
+  // Alle NOBB-numre som finnes i kalkylen, som en stabil signatur.
+  const nobbSignatur = React.useMemo(() => {
+    const alle = new Set()
+    ;(k.kalkyler || []).forEach(kl => (kl.bygningsdeler||[]).forEach(bd => (bd.materialer||[]).forEach(m => {
+      const n = m && m.nobb != null ? String(m.nobb).trim() : ''
+      if (n) alle.add(n)
+    })))
+    return [...alle].sort().join(',')
+  }, [k.kalkyler])
+
+  // Henter enheten prislisten priser i, for de NOBB-numrene vi ikke har slått
+  // opp ennå. Ett kall per pulje på 100. Numre som ikke finnes lagres som null,
+  // så vi ikke spør om dem igjen.
+  useEffect(() => {
+    if (!user?.id) return
+    const alle = nobbSignatur ? nobbSignatur.split(',').filter(Boolean) : []
+    const mangler = alle.filter(n => !(n in prisEnhetRef.current))
+    if (mangler.length === 0) return
+    let avbrutt = false
+    ;(async () => {
+      try {
+        const { data: pl } = await supabase.from('prislister').select('id').eq('user_id', user.id).eq('aktiv', true).limit(1).maybeSingle()
+        const funnet = []
+        for (let i = 0; i < mangler.length; i += 100) {
+          let q = supabase.from('prisbok').select('varenummer, enhet, pris_per_enhet').in('varenummer', mangler.slice(i, i + 100))
+          if (pl) q = q.eq('prisliste_id', pl.id)
+          const { data } = await q
+          if (avbrutt) return
+          if (data) funnet.push(...data)
+        }
+        const nytt = { ...prisEnhetRef.current }
+        mangler.forEach(n => { nytt[n] = null })
+        funnet.forEach(r => { nytt[String(r.varenummer)] = { enhet: r.enhet || '', pris: r.pris_per_enhet } })
+        prisEnhetRef.current = nytt
+        setPrisEnheter(nytt)
+      } catch(e) { /* stille: merkingen er en hjelp, ikke en forutsetning */ }
+    })()
+    return () => { avbrutt = true }
+  }, [nobbSignatur, user?.id])
+
+  // Enhetsavviket på én materiallinje, eller null når alt stemmer.
+  // Er linjen bevisst omregnet (bruker bekreftet rull→m²), er det ikke et avvik.
+  const linjeEnhetsAvvik = (m) => {
+    if (!m || !matErKoblet(m)) return null
+    if (m._omregning) return null
+    const oppslag = prisEnheter[String(m.nobb).trim()]
+    if (!oppslag) return null
+    return enhetsAvvik(m.enhet, oppslag.enhet)
+  }
 
   // Check if user has tilbud module + load UE-tilbud
   useEffect(() => {
@@ -72030,12 +75208,27 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
     'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
+    'Erstattet':        { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '🗃️' },
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
+
+  // Er versjonen vi ser på erstattet av en nyere? Da er den historikk, og skal
+  // stå urørt med prisene kunden faktisk fikk. Nå som man kan klikke seg inn på
+  // gamle versjoner, må de også være låst — ellers ville en gammel versjon kunne
+  // endres i etterkant, og hele poenget med en revisjon faller bort.
+  const erHistoriskVersjon = k.status === KALK_STATUS_ERSTATTET
 
   // Auto-save helper with debounce
   const saveTimerRef = React.useRef(null)
   const saveProject = (updated) => {
+    if (erHistoriskVersjon) {
+      appAlert({
+        message: 'Denne versjonen er låst',
+        subMessage: `${kalkNrMedRev(k)} er erstattet av en nyere versjon og står som historikk. Skal du endre noe, åpne gjeldende versjon — eller lag en ny revisjon fra denne.`,
+        kind: 'warn',
+      })
+      return
+    }
     setK(updated)
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
     saveTimerRef.current = setTimeout(async () => {
@@ -72071,6 +75264,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const newBd = JSON.parse(JSON.stringify(bd))
     newBd.id = nyRadId()
     newBd.name = bd.name + ' (kopi)'
+    // Kopien er en NY bygningsdel. Den skal ikke peke på — og dermed overskrive —
+    // bibliotekraden originalen ble hentet fra.
+    newBd.source_bruker_mal_id = null
     // Reset all sub-IDs — kopien må ikke dele id med originalen, ellers treffer
     // en skriving begge bygningsdelene.
     newBd.arbeidsarter = (newBd.arbeidsarter||[]).map((a) => ({ ...a, id: nyRadId() }))
@@ -72094,20 +75290,258 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     setShowMoveBdModal(null)
   }
 
-  // Save bygningsdel to user library
+  // Hvilken rad i bedriftens bibliotek hører bygningsdelen til?
+  //   1) source_bruker_mal_id — satt når bygningsdelen ble hentet fra biblioteket,
+  //      eller sist lagret dit. Dette er den sikre koblingen.
+  //   2) erstatter_id — bedriften har allerede en egen versjon av den innebygde
+  //      bygningsdelen denne kom fra. Da er det den raden som skal oppdateres.
+  //   3) Fallback for bygningsdeler laget FØR koblingen fantes: eksakt navnetreff
+  //      innen samme faggruppe. Radene er sortert nyest først, så nyeste vinner
+  //      hvis brukeren allerede har rukket å lage duplikater.
+  // Returnerer null når bygningsdelen ikke finnes i biblioteket ennå — da skal
+  // brukeren få velge hva lagringen betyr (erstatt standard / ny variant).
+  const finnBibliotekMalId = (bd, fag) => {
+    const direkte = bd && bd.source_bruker_mal_id
+    if (direkte && mineMaler.some(r => String(r.id) === String(direkte))) return direkte
+    const kilde = bd && bd.source_bibliotek_id
+    if (kilde) {
+      const viaErstatning = mineMaler.find(r => r.erstatter_id && String(r.erstatter_id) === String(kilde))
+      if (viaErstatning) return viaErstatning.id
+    }
+    const navn = String((bd && bd.name) || '').trim().toLowerCase()
+    if (!navn) return null
+    const treff = mineMaler.find(r => r.fag === fag && String(r.name || '').trim().toLowerCase() === navn)
+    return treff ? treff.id : null
+  }
+
+  // Sier om «Lagre til bibliotek» oppdaterer en rad bedriften alt har, eller om
+  // den kommer til å spørre. Brukes i knappeteksten, før brukeren trykker.
+  const bibliotekLagreModus = (bd, fag) => (finnBibliotekMalId(bd, fag) ? 'oppdater' : 'ny')
+
+  // Skriver bibliotek-koblingen tilbake på bygningsdelen. Dette er bokføring,
+  // ikke en brukerendring, så den skal ikke havne på angre-stabelen.
+  // Leser fra kRef: kallet skjer ETTER en await mot Supabase, og render-closuren
+  // kan da være foreldet — uten dette ville endringer gjort i mellomtiden bli borte.
+  const merkBdBibliotekId = (kalId, bdId, malId) => {
+    const naa = kRef.current
+    if (!naa) return
+    const oppdatert = { ...naa, kalkyler: (naa.kalkyler || []).map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, source_bruker_mal_id: malId } : b) } : kl) }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
+  }
+
+  const bdTilBibliotekData = (bd) => ({
+    arbeidsarter: bd.arbeidsarter,
+    materialer: bd.materialer,
+    underleverandorer: bd.underleverandorer,
+    enhet: bd.enhet,
+  })
+
+  // Oppdaterer raden bedriften allerede har. Ingen dialog — dette er den samme
+  // bygningsdelen han redigerte, og den skal ikke bli en ny rad.
+  const oppdaterBibliotekRad = async (kalId, bd, malId) => {
+    const navn = String(bd.name || '').trim() || 'Uten navn'
+    try {
+      // .select() er ikke pynt: uten en UPDATE-policy på raden returnerer
+      // Supabase 0 rader UTEN feil, og brukeren ville fått «oppdatert» i
+      // munnen mens ingenting ble lagret.
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ name: navn, data: bdTilBibliotekData(bd) })
+        .eq('id', malId)
+        .select('id')
+      if (error) throw error
+      if (!endret || endret.length === 0) throw new Error('Fikk ikke oppdatert bygningsdelen i biblioteket (ingen rad ble endret)')
+      merkBdBibliotekId(kalId, bd.id, malId)
+      await lastMineMaler()
+      setToastMsg({ title: 'Bygningsdel oppdatert', message: `"${navn}" er oppdatert i bedriftens bibliotek`, type: 'success' })
+    } catch(e) {
+      setToastMsg({ title: 'Feil', message: 'Kunne ikke lagre: ' + ((e && e.message) || 'ukjent feil'), type: 'error' })
+    }
+  }
+
+  // «💾 Lagre til bibliotek». Eier bedriften raden alt, oppdateres den rett.
+  // Ellers åpnes dialogen der brukeren velger erstatt standard / ny variant,
+  // og hvilken kategori bygningsdelen hører til.
   const saveBdToLibrary = async (kalId, bd) => {
     const kl = kalkyler.find(k => k.id === kalId)
     if (!kl || !bd) return
+    const malId = finnBibliotekMalId(bd, kl.fag)
+    if (malId) { await oppdaterBibliotekRad(kalId, bd, malId); return }
+    setShowLagreBd({ kalkId: kalId, bdId: bd.id, fag: kl.fag })
+  }
+
+  // Fullfører lagringen etter at brukeren har svart i dialogen.
+  // Skriver ALLTID til bedriftens eget bibliotek (bruker_bibliotek med
+  // company_id) — aldri til det felles biblioteket, som ligger i koden.
+  const fullforLagreBd = async ({ modus, navn, kategori, erstatterId }) => {
+    const ctx = showLagreBd
+    if (!ctx) return
+    // Vakt i skrivingen, ikke bare i knappen: en erstatning endrer hva hele
+    // bedriften ser, og skal ikke kunne komme gjennom en annen vei.
+    if (erstatterId && !kanStyrePrisgrunnlag) {
+      setToastMsg({ title: 'Krever admin eller leder', message: 'Bare admin og leder kan erstatte en innebygd bygningsdel. Lagre den som variant i stedet.', type: 'error' })
+      return
+    }
+    const kl = (kRef.current?.kalkyler || []).find(x => x.id === ctx.kalkId)
+    const bd = kl && (kl.bygningsdeler || []).find(b => b.id === ctx.bdId)
+    if (!bd) { setShowLagreBd(null); return }
     try {
-      await supabase.from('bruker_bibliotek').insert({
-        user_id: user?.id,
-        fag: kl.fag,
-        kategori: 'Egne maler',
-        name: bd.name,
-        data: { arbeidsarter: bd.arbeidsarter, materialer: bd.materialer, underleverandorer: bd.underleverandorer, enhet: bd.enhet },
+      const { data: nyRad, error } = await supabase.from('bruker_bibliotek')
+        .insert({
+          user_id: user?.id,
+          company_id: companyId || null,
+          fag: kl.fag,
+          kategori,
+          name: navn,
+          erstatter_id: erstatterId || null,
+          data: bdTilBibliotekData(bd),
+        })
+        .select('id').single()
+      if (error) throw error
+      if (nyRad && nyRad.id) merkBdBibliotekId(ctx.kalkId, bd.id, nyRad.id)
+      await lastMineMaler()
+      setShowLagreBd(null)
+      setToastMsg({
+        title: modus === 'erstatt' ? 'Din standard er erstattet' : 'Variant lagret',
+        message: modus === 'erstatt'
+          ? `"${navn}" er nå bedriftens versjon under ${kategori}`
+          : `"${navn}" er lagt til under ${kategori}`,
+        type: 'success',
       })
-      setToastMsg({ title: 'Lagret til bibliotek', message: `"${bd.name}" er lagret under Egne maler`, type: 'success' })
-    } catch(e) { setToastMsg({ title: 'Feil', message: 'Kunne ikke lagre: ' + e.message, type: 'error' }) }
+    } catch(e) {
+      // Unik indeks i basen hindrer to erstatninger av samme innebygde. Treffer
+      // vi den, har en kollega rukket å erstatte den først — si det forståelig
+      // i stedet for å vise databasens egen tekst.
+      const duplikat = e && (e.code === '23505' || String(e.message || '').includes('uq_bruker_bibliotek_erstatning'))
+      setToastMsg({
+        title: duplikat ? 'Allerede erstattet' : 'Feil',
+        message: duplikat
+          ? 'Bedriften har allerede en egen versjon av denne bygningsdelen. Åpne kalkylen på nytt — da oppdaterer lagringen den i stedet for å lage en ny.'
+          : 'Kunne ikke lagre: ' + ((e && e.message) || 'ukjent feil'),
+        type: 'error',
+      })
+    }
+  }
+
+
+  // Finner én materiallinje i den NYESTE kalkyle-tilstanden.
+  const finnMatLinje = (kalkId, bdId, matId) => {
+    const kl = (kRef.current?.kalkyler || []).find(x => x.id === kalkId)
+    const bd = kl && (kl.bygningsdeler || []).find(b => b.id === bdId)
+    return (bd && (bd.materialer || []).find(m => m.id === matId)) || null
+  }
+
+  // Bruker den delte beregnVareFelter, som kan spørre om rull→m²-omregning.
+  const beregnVareFelterLokal = (vare, linje) => beregnVareFelter(confirm, vare, linje)
+
+
+  // Skriver et varevalg inn på én materiallinje. Leser fra kRef fordi kallet
+  // skjer etter en await (nettverk, og noen ganger en bekreftelsesdialog) —
+  // render-closuren kan da være foreldet.
+  const skrivVarePaaLinje = (kalkId, bdId, matId, felter) => {
+    const naa = kRef.current
+    if (!naa || !felter) return
+    const nyeKalkyler = (naa.kalkyler || []).map(kl => kl.id === kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === matId
+      ? { ...mt, ...felter, _ny: false, _varselVist: true }
+      : mt) } : b) } : kl)
+    setUndoStack(prev => [...prev.slice(-9), naa.kalkyler || []])
+    const oppdatert = { ...naa, kalkyler: nyeKalkyler }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
+  }
+
+  // Oppretter revisjonen. `prisendringer` er de avkryssede linjene fra
+  // «Oppdater priser» — er de med, får revisjonen de nye prisene med én gang,
+  // og originalen beholder de gamle.
+  const opprettRevisjon = async (note) => {
+    const ctx = showNyRevisjon
+    const naa = kRef.current
+    if (!naa) return
+    const valgte = (ctx && ctx.prisendringer) || []
+    const faktorer = naa.faktorer || {}
+
+    let nyeKalkyler = naa.kalkyler || []
+    if (valgte.length > 0) {
+      const noekkel = (a, b, c) => `${a}|${b}|${c}`
+      const map = new Map(valgte.map(p => [noekkel(p.sti.kalkId, p.sti.bdId, p.sti.matId), p]))
+      nyeKalkyler = (naa.kalkyler || []).map(kl => ({
+        ...kl,
+        bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
+          ...bd,
+          materialer: (bd.materialer || []).map(m => {
+            const p = map.get(noekkel(kl.id, bd.id, m.id))
+            return p ? { ...m, ...prisforslagTilFelter(p) } : m
+          }),
+        })),
+      }))
+    }
+    const t = beregnProsjektTotal(nyeKalkyler, faktorer)
+    const { data, error } = await opprettKalkyleRevisjon({
+      k: naa, nyeKalkyler, note, userId: user?.id,
+      totals: { total_cost: t.totSelvkost, total_ex_mva: t.totMedFortjeneste, profit_percent: t.fortjenesteProsent },
+    })
+    if (error) {
+      setToastMsg({ title: 'Feil', message: 'Kunne ikke opprette revisjon: ' + ((error && error.message) || 'ukjent feil'), type: 'error' })
+      return
+    }
+    setShowNyRevisjon(null)
+    setShowOppdaterPriser(false)
+    // Bytt til revisjonen. Den er nå den gjeldende versjonen.
+    const oppdatert = medReparerteKalkyleIder(data)
+    kRef.current = oppdatert
+    setK(oppdatert)
+    setUndoStack([])
+    setToastMsg({
+      title: `${kalkRevLabel(data.revision_number)} opprettet`,
+      message: `${kalkNrMedRev(data)} er nå gjeldende. Forrige versjon står som «Erstattet».`,
+      type: 'success',
+    })
+  }
+
+  // Alle materiallinjer i kalkylen, med en peker tilbake til hver av dem.
+  // Leses fra kRef så dialogen alltid ser den nyeste tilstanden.
+  const prisPosterFraKalkyle = () => {
+    const ut = []
+    ;(kRef.current?.kalkyler || []).forEach(kl => (kl.bygningsdeler || []).forEach(bd => (bd.materialer || []).forEach(m => {
+      ut.push({ sti: { kalkId: kl.id, bdId: bd.id, matId: m.id }, linje: m })
+    })))
+    return ut
+  }
+
+  // Skriver de prisendringene brukeren krysset av for, og måler hva
+  // kalkylens totalsum endret seg med.
+  const skrivPrisoppdatering = async (valgte) => {
+    const naa = kRef.current
+    if (!naa) return { antall: 0 }
+    const faktorer = naa.faktorer || {}
+    const totalFor = beregnProsjektTotal(naa.kalkyler || [], faktorer).totMedFortjeneste
+    const noekkel = (a, b, c) => `${a}|${b}|${c}`
+    const map = new Map(valgte.map(p => [noekkel(p.sti.kalkId, p.sti.bdId, p.sti.matId), p]))
+    const nyeKalkyler = (naa.kalkyler || []).map(kl => ({
+      ...kl,
+      bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
+        ...bd,
+        materialer: (bd.materialer || []).map(m => {
+          const p = map.get(noekkel(kl.id, bd.id, m.id))
+          return p ? { ...m, ...prisforslagTilFelter(p) } : m
+        }),
+      })),
+    }))
+    const totalEtter = beregnProsjektTotal(nyeKalkyler, faktorer).totMedFortjeneste
+    setUndoStack(prev => [...prev.slice(-9), naa.kalkyler || []])
+    const oppdatert = { ...naa, kalkyler: nyeKalkyler }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
+    return { antall: valgte.length, totalFor, totalEtter, totalLabel: 'Kalkylens totalsum' }
+  }
+
+  // Koblingsassistenten velger en vare på linjen. Går gjennom samme
+  // omregningsspørsmål som produktsøket og NOBB-feltet.
+  const koblMaterialLinje = async (kalkId, bdId, matId, p) => {
+    if (!p) return
+    const linje = finnMatLinje(kalkId, bdId, matId)
+    const felter = await beregnVareFelterLokal(p, linje)
+    skrivVarePaaLinje(kalkId, bdId, matId, felter)
   }
 
   // Bygningsdel field update (name, mengde, enhet)
@@ -72175,8 +75609,10 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     }) } : b) } : kl))
     if (varselType) setMaterialVarsel({ type: varselType })
   }
+  // Mengde 1, ikke 0. Med 0 blir totalen 0 kr, og linjen ser ut som den ikke
+  // ble lagt til i det hele tatt.
   const addMaterial = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: nyRadId(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: nyRadId(), varenavn: '', mengde: 1, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
   }
   const removeMaterial = (kalId, bdId, mId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : kl))
@@ -72204,97 +75640,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showMoveBdModal, setShowMoveBdModal] = useState(null) // { kalkId, bdId, bdName }
   const [toastMsg, setToastMsg] = useState(null) // { title, message, type: 'success'|'error' }
   const [showImportKalkyle, setShowImportKalkyle] = useState(null) // kalkId to import into
-  const [showVersions, setShowVersions] = useState(false)
-  const [versions, setVersions] = useState([])
-  const [loadingVersions, setLoadingVersions] = useState(false)
-  const [compareVersion, setCompareVersion] = useState(null)
   const [showPlanlegg, setShowPlanlegg] = useState(false)
 
-  // ── Versjonering — snapshot-basert ──
-  const loadVersions = async () => {
-    setLoadingVersions(true)
-    try {
-      const { data } = await supabase.from('calculation_versions').select('*').eq('calculation_id', k.id).order('version_number', { ascending: false })
-      setVersions(data || [])
-    } catch(e) { console.error(e) }
-    finally { setLoadingVersions(false) }
-  }
-
-  const saveVersion = async (label) => {
-    if (!label?.trim()) return
-    try {
-      const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
-      const newTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
-      await supabase.from('calculation_versions').insert({
-        calculation_id: k.id,
-        version_number: maxV + 1,
-        label: label.trim(),
-        snapshot_kalkyler: kalkyler,
-        snapshot_faktorer: alleFaktorer,
-        total_ex_mva: newTotals.totMedFortjeneste,
-        total_hours: newTotals.totTimer,
-        fag_count: kalkyler.length,
-        bd_count: kalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0),
-        created_by: user?.id,
-      })
-      await loadVersions()
-      setToastMsg({ title: 'Versjon lagret', message: `v${maxV + 1}: ${label.trim()}`, type: 'success' })
-    } catch(e) { await appAlert({ message: 'Feil ved versjonering', subMessage: e.message, kind: 'error' }) }
-  }
-
-  const restoreVersion = async (version) => {
-    const ok = await confirm({
-      message: `Gjenopprett versjon v${version.version_number}`,
-      subMessage: `"${version.label}" blir aktiv. Nåværende kalkyle lagres automatisk som ny versjon før gjenoppretting.`,
-      confirmLabel: 'Gjenopprett',
-    })
-    if (!ok) return
-    // Lagre nåværende som versjon først
-    const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
-    const curTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
-    await supabase.from('calculation_versions').insert({
-      calculation_id: k.id, version_number: maxV + 1, label: 'Auto-lagret for gjenoppretting',
-      snapshot_kalkyler: kalkyler, snapshot_faktorer: alleFaktorer,
-      total_ex_mva: curTotals.totMedFortjeneste, total_hours: curTotals.totTimer,
-      fag_count: kalkyler.length, bd_count: kalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0),
-      created_by: user?.id,
-    })
-    // Gjenopprett
-    const restored = { ...k, kalkyler: version.snapshot_kalkyler, faktorer: version.snapshot_faktorer }
-    saveProject(restored)
-    await loadVersions()
-    setCompareVersion(null)
-    setToastMsg({ title: 'Versjon gjenopprettet', message: `v${version.version_number}: ${version.label}`, type: 'success' })
-  }
-
-  // Sammenlign to versjoner
-  const buildDiff = (oldV, newV) => {
-    const oldKalkyler = oldV?.snapshot_kalkyler || []
-    const newKalkyler = newV?.snapshot_kalkyler || kalkyler
-    const oldTotals = beregnProsjektTotal(oldKalkyler, oldV?.snapshot_faktorer || {})
-    const newTotals = beregnProsjektTotal(newKalkyler, newV?.snapshot_faktorer || alleFaktorer)
-    const diff = {
-      sumDiff: newTotals.totMedFortjeneste - oldTotals.totMedFortjeneste,
-      timerDiff: newTotals.totTimer - oldTotals.totTimer,
-      fagEndringer: [],
-    }
-    // Per faggruppe
-    const allFag = new Set([...oldKalkyler.map(k => k.fag), ...newKalkyler.map(k => k.fag)])
-    allFag.forEach(fagId => {
-      const oldK = oldKalkyler.find(k => k.fag === fagId)
-      const newK = newKalkyler.find(k => k.fag === fagId)
-      const fag = getFaggruppe(fagId)
-      if (!oldK && newK) { diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'added', bdDiff: (newK.bygningsdeler||[]).length }) }
-      else if (oldK && !newK) { diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'removed', bdDiff: -(oldK.bygningsdeler||[]).length }) }
-      else if (oldK && newK) {
-        const oldBdCount = (oldK.bygningsdeler||[]).length, newBdCount = (newK.bygningsdeler||[]).length
-        if (oldBdCount !== newBdCount || JSON.stringify(oldK.bygningsdeler) !== JSON.stringify(newK.bygningsdeler)) {
-          diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'changed', bdDiff: newBdCount - oldBdCount, oldBd: oldBdCount, newBd: newBdCount })
-        }
-      }
-    })
-    return diff
-  }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!erGyldigEpost(ue.email)) { await appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'UE-en mangler en gyldig e-postadresse.', kind: 'warn' }); return }
@@ -72474,6 +75821,16 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   }
 
   const updateStatus = async (status) => {
+    // En låst versjon skal heller ikke kunne skifte status. Tok den bort fra
+    // «Erstattet», ville to versjoner stått som gjeldende samtidig.
+    if (erHistoriskVersjon) {
+      await appAlert({
+        message: 'Denne versjonen er låst',
+        subMessage: `${kalkNrMedRev(k)} er erstattet av en nyere versjon. Statusen endres på gjeldende versjon.`,
+        kind: 'warn',
+      })
+      return
+    }
     const now = new Date().toISOString()
     const updates = { status, updated_at: now }
     // Sett sent_at første gang kalkylen får status 'Tilbud sendt' eller
@@ -72829,10 +76186,104 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKV ? '14px' : '20px 32px' }}>
         <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '8px' : '12px', marginBottom:'12px', flexWrap:'wrap' }}>
           <button onClick={onBack} style={{ background:'#f1f5f9', border:'none', borderRadius:'10px', padding: isMobKV ? '6px 10px' : '8px 14px', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>← Tilbake</button>
-          {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{k.kalk_number}</span>}
+          {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{kalkNrMedRev(k)}</span>}
           <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
+          {(k.revision_number || 1) > 1 && (
+            <span style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700' }}>
+              {kalkRevLabel(k.revision_number)}
+            </span>
+          )}
+          {revisjoner.length > 1 && (
+            <button onClick={() => setVisRevHistorikk(v => !v)}
+              title="Se alle versjoner av denne kalkylen"
+              style={{ background:'white', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'999px', padding: isMobKV ? '3px 9px' : '3px 11px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600', cursor:'pointer' }}>
+              📜 {revisjoner.length} versjoner
+            </button>
+          )}
+          {k.status === KALK_STATUS_ERSTATTET && (
+            <span title="Denne versjonen er erstattet av en nyere revisjon. Den står urørt med prisene kunden fikk."
+              style={{ fontSize: isMobKV ? '10px' : '11px', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', padding:'3px 9px', borderRadius:'999px', fontWeight:'600' }}>
+              🗃️ Erstattet av nyere versjon
+            </span>
+          )}
+          {erHistoriskVersjon && gjeldendeVersjon && String(gjeldendeVersjon.id) !== String(k.id) && (
+            <button onClick={() => apneRevisjon(gjeldendeVersjon)} disabled={!!apnerRevId}
+              style={{ background:'#059669', color:'white', border:'none', borderRadius:'999px', padding: isMobKV ? '4px 10px' : '4px 12px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700', cursor: apnerRevId ? 'default' : 'pointer' }}>
+              {apnerRevId ? 'Åpner …' : `→ Åpne ${kalkRevLabel(gjeldendeVersjon.revision_number)}`}
+            </button>
+          )}
           {saving && <span style={{ fontSize:'12px', color:'#94a3b8' }}>Lagrer...</span>}
         </div>
+
+        {/* Åpner man en gammel versjon, skal det ikke være tvil om hva man ser på
+            — eller om hvorfor ingenting kan endres. */}
+        {erHistoriskVersjon && (
+          <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'10px 12px', marginBottom:'12px', display:'flex', alignItems:'flex-start', gap:'9px' }}>
+            <span style={{ fontSize:'16px', lineHeight:1.2 }}>🔒</span>
+            <div style={{ fontSize: isMobKV ? '11px' : '12px', color:'#065f46', lineHeight:1.55 }}>
+              <strong>Du ser på en tidligere versjon ({kalkRevLabel(k.revision_number)}).</strong> Den er låst, slik at tallene
+              kunden faktisk fikk står urørt. Skal du endre noe, åpne gjeldende versjon — eller lag en ny revisjon fra denne.
+            </div>
+          </div>
+        )}
+
+        {/* Revisjonshistorikk — alle versjoner av denne kalkylen, eldste først.
+            Samme prinsipp som revisjonslisten i Tilbud. Versjonen du ser på er
+            markert, notatet forteller hva som endret seg, og raden er klikkbar
+            slik at man kommer inn i de gamle versjonene. */}
+        {visRevHistorikk && revisjoner.length > 1 && (
+          <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'12px 14px', marginBottom:'12px' }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'8px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'11px', fontWeight:'700', color:'#059669', letterSpacing:'0.03em' }}>VERSJONER AV DENNE KALKYLEN</span>
+              <button onClick={() => setVisRevHistorikk(false)} style={{ background:'none', border:'none', fontSize:'12px', color:'#059669', cursor:'pointer', fontWeight:'600' }}>Skjul</button>
+            </div>
+            {revisjoner.map((rev, i) => {
+              const erApen = String(rev.id) === String(k.id)
+              const apner = String(apnerRevId || '') === String(rev.id)
+              const forrige = i > 0 ? revisjoner[i - 1] : null
+              const diff = forrige ? (parseFloat(rev.total_ex_mva) || 0) - (parseFloat(forrige.total_ex_mva) || 0) : null
+              return (
+                <div key={rev.id}
+                  onClick={() => { if (!erApen) apneRevisjon(rev) }}
+                  title={erApen ? 'Dette er versjonen du ser på' : 'Åpne denne versjonen'}
+                  style={{ background: erApen ? 'white' : 'transparent', border: erApen ? '1px solid #bbf7d0' : '1px solid transparent', borderRadius:'10px', padding:'9px 11px', marginBottom:'4px', cursor: erApen ? 'default' : 'pointer', opacity: apner ? 0.6 : 1 }}
+                  onMouseEnter={e => { if (!erApen) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#bbf7d0' } }}
+                  onMouseLeave={e => { if (!erApen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' } }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
+                    <span style={{ background: erApen ? '#059669' : '#e2e8f0', color: erApen ? 'white' : '#64748b', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', flexShrink:0 }}>
+                      {kalkRevLabel(rev.revision_number)}
+                    </span>
+                    <span style={{ fontSize:'12px', color:'#64748b', fontFamily:'monospace' }}>{kalkNrMedRev(rev)}</span>
+                    {erApen && <span style={{ fontSize:'10px', fontWeight:'700', color:'#059669' }}>← du ser på denne</span>}
+                    {!erApen && <span style={{ fontSize:'10px', fontWeight:'700', color:'#059669' }}>{apner ? 'Åpner …' : 'Åpne →'}</span>}
+                    {rev.status === KALK_STATUS_ERSTATTET && !erApen && <span style={{ fontSize:'10px', color:'#94a3b8' }}>erstattet</span>}
+                    {!erApen && (
+                      <button onClick={e => { e.stopPropagation(); sammenlignMedRevisjon(rev) }} disabled={!!henterDiff}
+                        title={`Se hva som skiller ${kalkRevLabel(rev.revision_number)} fra ${kalkRevLabel(k.revision_number)}`}
+                        style={{ background:'white', border:'1px solid #bbf7d0', color:'#047857', borderRadius:'999px', padding:'2px 9px', fontSize:'10px', fontWeight:'700', cursor: henterDiff ? 'default' : 'pointer' }}>
+                        {String(henterDiff || '') === String(rev.id) ? 'Henter …' : '⇄ Sammenlign'}
+                      </button>
+                    )}
+                    <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(rev.total_ex_mva)}</span>
+                    {diff !== null && Math.abs(diff) >= 1 && (
+                      <span style={{ fontSize:'11px', fontWeight:'700', color: diff > 0 ? '#c2410c' : '#15803d', whiteSpace:'nowrap' }}>
+                        {diff > 0 ? '+' : ''}{fmt(diff)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'3px' }}>
+                    {rev.created_at ? new Date(rev.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' }) : ''}
+                    {rev.revision_note ? ` · ${rev.revision_note}` : ''}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ fontSize:'11px', color:'#059669', marginTop:'6px', lineHeight:1.5 }}>
+              Tilbud som alt er sendt peker på den versjonen de ble laget fra, og følger ikke revisjonene.
+            </div>
+          </div>
+        )}
+
         <div style={{ display:'flex', alignItems: isMobKV ? 'flex-start' : 'center', justifyContent:'space-between', flexDirection: isMobKV ? 'column' : 'row', gap: isMobKV ? '10px' : '0' }}>
           <div>
             <h1 style={{ fontSize: isMobKV ? '17px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>🧮 {k.title}</h1>
@@ -72842,7 +76293,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             </div>
           </div>
           <div style={{ display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap', width: isMobKV ? '100%' : 'auto' }}>
-            <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>
+            {!erHistoriskVersjon && <button onClick={() => onEdit(k)} style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'600' }}>{isMobKV ? '✏️' : '✏️ Rediger prosjektinfo'}</button>}
             <button onClick={() => setShowPlanlegg(true)} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKV ? '7px 10px' : '9px 16px', cursor:'pointer', fontSize: isMobKV ? '12px' : '13px', fontWeight:'700' }}>{isMobKV ? '📅' : '📅 Planlegg prosjekt'}</button>
 
             {/* Mer-dropdown for sekundære handlinger */}
@@ -72864,23 +76315,20 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   )}
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
                   <button onClick={() => { setShowSaveTemplate(true); setTemplateName(k.title); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🗂️ Lagre som mal</button>
-                  <button onClick={async () => {
-                    const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
-                    if (count > 0) { updateKalkyler(updated); setToastMsg({ title: 'Priser oppdatert', message: `${count} materialpriser oppdatert fra aktiv prisliste`, type: 'success' }) }
-                    else { setToastMsg({ title: 'Ingen endringer', message: 'Ingen materialer med NOBB-nummer funnet, eller ingen aktiv prisliste', type: 'error' }) }
-                    setShowMoreMenu(false)
-                  }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
+                  {/* Åpner dialogen i stedet for å skrive stille. Kalkylen kan være
+                      sendt til kunde — brukeren skal se hva som endres. */}
+                  <button onClick={() => { setShowOppdaterPriser(true); setShowMoreMenu(false) }}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
+                  {/* Man reviderer av flere grunner enn nye priser — kunden vil ha
+                      to etasjer i stedet for én, mengdene er justert. Derfor egen
+                      inngang, ikke bare via «Oppdater priser». */}
+                  <button onClick={() => { setShowNyRevisjon({ prisendringer: [] }); setShowMoreMenu(false) }}
+                    title="Lager en ny versjon av kalkylen. Denne står urørt som «Erstattet»."
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#059669', fontWeight:'600' }}>🔄 Ny revisjon</button>
                   <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
                   <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📦 Last ned materialliste</button>
-                  <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
-                  <button onClick={() => {
-                    const label = prompt('Gi denne versjonen et navn (f.eks. «Etter kundejustering» eller «Revidert etter befaring»):')
-                    if (label) { saveVersion(label); setShowMoreMenu(false) }
-                  }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>💾 Lagre versjon</button>
-                  <button onClick={() => { loadVersions(); setShowVersions(true); setShowMoreMenu(false) }}
-                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📜 Versjonshistorikk</button>
                   <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
                   <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
@@ -73050,16 +76498,24 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                               {!isExpanded && bd.mengde > 0 && <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0 }}>{bd.mengde} {bd.enhet || 'stk'}</span>}
                               {!isExpanded && (bd.flatetillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#faf5ff', color:'#7c3aed', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>📐 {(bd.flatetillegg||[]).length}</span>}
                               {!isExpanded && (bd.apningstillegg||[]).length > 0 && <span style={{ fontSize:'10px', background:'#fef2f2', color:'#dc2626', padding:'1px 6px', borderRadius:'4px', flexShrink:0 }}>🚪 {(bd.apningstillegg||[]).length}</span>}
+                              {/* Hvor mange materiallinjer henter pris fra brukerens egen prisliste */}
+                              {!isExpanded && (() => {
+                                const kob = tellKobledeLinjer(bd.materialer)
+                                if (kob.total === 0) return null
+                                const alle = kob.ukoblet === 0
+                                return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste`} style={{ fontSize:'10px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>{alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}</span>
+                              })()}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '6px' : '10px', flexShrink:0 }}>
                               <span style={{ fontSize:'12px', color:'#64748b' }}>{bdT.totalTimer.toFixed(1)}t</span>
                               {!isMobKV && <span style={{ fontSize:'11px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', background: bdT.dbProsent >= 25 ? '#f0fdf4' : bdT.dbProsent >= 15 ? '#fefce8' : '#fef2f2', color: bdT.dbProsent >= 25 ? '#16a34a' : bdT.dbProsent >= 15 ? '#ca8a04' : '#dc2626' }} title={`Dekningsbidrag: ${fmt(bdT.dekningsbidrag)} (selvkost: ${fmt(bdT.selvkost)})`}>{bdT.dbProsent.toFixed(1)}% DB</span>}
                               <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmt(bdT.totalMedFortjeneste)}</span>
                               <div onClick={e => e.stopPropagation()} style={{ display:'flex', gap:'2px' }}>
-                                {!isMobKV && <button onClick={() => copyBd(kalk.id, bd)} title="Kopier bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>📋</button>}
-                                {!isMobKV && kalkyler.length > 1 && <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })} title="Flytt til annen faggruppe" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>↗️</button>}
-                                {!isMobKV && <button onClick={() => saveBdToLibrary(kalk.id, bd)} title="Lagre til bibliotek" style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'13px', padding:'2px' }}>💾</button>}
-                                <button onClick={() => removeBd(kalk.id, bd.id)} title="Slett" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
+                                {/* Kopier / flytt / lagre lå her som tre ikoner uten tekst og gjorde
+                                    helt ulike ting. De står nå som tekstknapper i den utvidede
+                                    visningen — der er det plass til å si hva de gjør, og de er
+                                    tilgjengelige på mobil også. */}
+                                <button onClick={() => removeBd(kalk.id, bd.id)} title="Slett bygningsdel" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', padding:'2px' }}>×</button>
                               </div>
                             </div>
                           </div>
@@ -73088,6 +76544,32 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                     <option value="rs">rs</option>
                                   </select>
                                 </div>
+                              </div>
+                              {/* Handlinger på bygningsdelen — med synlig tekst, ikke bare ikoner.
+                                  «Lagre» sier om den oppdaterer en eksisterende bygningsdel i
+                                  biblioteket eller oppretter en ny. */}
+                              <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginBottom:'12px' }}>
+                                <button onClick={() => copyBd(kalk.id, bd)}
+                                  title="Lager en ny kopi av bygningsdelen i denne faggruppen"
+                                  style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'600', color:'#374151', cursor:'pointer', minHeight:'34px' }}>📋 Kopier bygningsdel</button>
+                                {kalkyler.length > 1 && (
+                                  <button onClick={() => setShowMoveBdModal({ kalkId: kalk.id, bdId: bd.id, bdName: bd.name })}
+                                    title="Flytt bygningsdelen til en annen faggruppe i denne kalkylen"
+                                    style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'600', color:'#374151', cursor:'pointer', minHeight:'34px' }}>↗️ Flytt til annen faggruppe</button>
+                                )}
+                                {(() => {
+                                  const modus = bibliotekLagreModus(bd, kalk.fag)
+                                  const oppdaterer = modus === 'oppdater'
+                                  return (
+                                    <button onClick={() => saveBdToLibrary(kalk.id, bd)}
+                                      title={oppdaterer
+                                        ? `Oppdaterer «${bd.name || 'Uten navn'}» i biblioteket ditt — ingen ny kopi opprettes`
+                                        : `Lagrer «${bd.name || 'Uten navn'}» som en ny bygningsdel i biblioteket ditt`}
+                                      style={{ background: oppdaterer ? '#eff6ff' : '#f0fdf4', border: `1px solid ${oppdaterer ? '#bfdbfe' : '#bbf7d0'}`, borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'600', color: oppdaterer ? '#1d4ed8' : '#15803d', cursor:'pointer', minHeight:'34px' }}>
+                                      💾 {oppdaterer ? 'Oppdater i biblioteket' : 'Lagre som ny i biblioteket'}
+                                    </button>
+                                  )
+                                })()}
                               </div>
                               <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'12px', marginTop:'-8px', paddingLeft:'12px' }}>Postene nedenfor viser verdier per {bd.enhet || 'enhet'}. Totalen beregnes automatisk: per enhet × {bd.mengde ?? 1} {bd.enhet || ''}</div>
                               {/* Arbeidsarter - editable */}
@@ -73278,7 +76760,38 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
 
                               {/* Materialer - editable */}
                               <div style={{ marginBottom:'12px' }}>
-                                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>📦 MATERIALER</div>
+                                {/* Teller + inngang til koblingsassistenten. En linje uten
+                                    NOBB-nummer henter ikke pris fra brukerens prisliste — den
+                                    har en veiledende standardpris. Det skal stå der. */}
+                                {(() => {
+                                  const kob = tellKobledeLinjer(bd.materialer)
+                                  const alle = kob.total > 0 && kob.ukoblet === 0
+                                  // Uten denne telleren må brukeren åpne hver rad for å finne
+                                  // linjen der enheten ikke stemmer.
+                                  const avvikAntall = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
+                                  return (
+                                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
+                                      <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>📦 MATERIALER</span>
+                                      {kob.total > 0 && (
+                                        <span style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', border: `1px solid ${alle ? '#bbf7d0' : '#fde68a'}` }}>
+                                          {alle ? '🔗' : '⚠️'} {kob.koblet} av {kob.total} linjer koblet til din prisliste
+                                        </span>
+                                      )}
+                                      {avvikAntall > 0 && (
+                                        <span title="Prisen på disse linjene gjelder en annen enhet enn linjen regnes i. Velg varen på nytt med 🔍 for å rette det." style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa' }}>
+                                          ⚠ {avvikAntall} {avvikAntall === 1 ? 'linje' : 'linjer'} med feil enhet
+                                        </span>
+                                      )}
+                                      {kob.ukoblet > 0 && (
+                                        <button onClick={() => setShowKoblingsassistent({ kalkId: kalk.id, bdId: bd.id })}
+                                          title="Gå gjennom linjene uten NOBB-nummer og koble dem til varer i prislisten din"
+                                          style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'11px', fontWeight:'700', cursor:'pointer', minHeight:'32px' }}>
+                                          🔗 Koble {kob.ukoblet} {kob.ukoblet === 1 ? 'linje' : 'linjer'}
+                                        </button>
+                                      )}
+                                    </div>
+                                  )
+                                })()}
                                 {bdT.totalApningsareal > 0 && (
                                   <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'8px', padding:'6px 10px', background: bd.fradrag_apninger !== false ? '#eff6ff' : '#f8fafc', borderRadius:'8px', fontSize:'11px', flexWrap:'wrap' }}>
                                     {bd.fradrag_apninger !== false ? (
@@ -73295,7 +76808,41 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                     </label>
                                   </div>
                                 )}
-                                {(bd.materialer||[]).length > 0 && (
+                                {/* LESEVISNING på telefon — samme tall som tabellen, men uten
+                                    sideveis scroll. Merkene («≈ veiledende», enhetsavvik,
+                                    omregning) er de samme, så en kalkyle kan kontrolleres
+                                    på farta. */}
+                                {(bd.materialer||[]).length > 0 && isMobKV && !visMatTabellMobil && (
+                                  <div style={{ display:'flex', flexDirection:'column', gap:'6px' }}>
+                                    {(bd.materialer||[]).map(m => {
+                                      const r = beregnMaterialkostnad(m, fakt)
+                                      const bdM = parseFloat(bd.mengde) || 1
+                                      const effM = bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? bdT.materialMengde : bdM
+                                      const koblet = matErKoblet(m)
+                                      const avvik = linjeEnhetsAvvik(m)
+                                      return (
+                                        <div key={m.id} style={{ border:'1px solid ' + (avvik ? '#fed7aa' : koblet ? '#f1f5f9' : '#fde68a'), background: avvik ? '#fff7ed' : (koblet ? 'white' : '#fffdf3'), borderRadius:'10px', padding:'9px 11px' }}>
+                                          <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', alignItems:'baseline' }}>
+                                            <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word', minWidth:0 }}>{m.varenavn || 'Uten navn'}</span>
+                                            <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap', flexShrink:0 }}>{fmt(r.medFortjeneste * effM)}</span>
+                                          </div>
+                                          <div style={{ fontSize:'11px', color:'#64748b', marginTop:'3px' }}>
+                                            {m.mengde} {m.enhet} × {fmtKr2(m.enhetspris)}
+                                            {m.nobb ? <span style={{ color:'#94a3b8', fontFamily:'monospace' }}>{'  ·  NOBB ' + m.nobb}</span> : null}
+                                          </div>
+                                          {(!koblet || avvik || m._omregning) && (
+                                            <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'6px' }}>
+                                              {!koblet && <span style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', background:'#fffbeb', border:'1px solid #fde68a', padding:'2px 6px', borderRadius:'4px' }}>≈ veiledende</span>}
+                                              {avvik && <span style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', border:'1px solid #fed7aa', padding:'2px 6px', borderRadius:'4px' }}>⚠ {avvik.kort}</span>}
+                                              {m._omregning && <span style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', background:'#eff6ff', border:'1px solid #bfdbfe', padding:'2px 6px', borderRadius:'4px' }}>↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}</span>}
+                                            </div>
+                                          )}
+                                        </div>
+                                      )
+                                    })}
+                                  </div>
+                                )}
+                                {(bd.materialer||[]).length > 0 && (!isMobKV || visMatTabellMobil) && (
                                   <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
                                   <div style={{ minWidth: isMobKV ? '640px' : 'auto' }}>
                                   <table style={{ width:'100%', borderCollapse:'collapse', tableLayout:'fixed' }}>
@@ -73327,8 +76874,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         const bdMengde = parseFloat(bd.mengde) || 1
                                         // Bruk materialMengde fra motoren når åpningsfradrag er aktivt, ellers full bdMengde
                                         const effektivMengde = bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? bdT.materialMengde : bdMengde
+                                        const koblet = matErKoblet(m)
+                                        const avvik = linjeEnhetsAvvik(m)
                                         return (
-                                          <tr key={m.id}>
+                                          <tr key={m.id} style={{ background: avvik ? '#fff7ed' : (koblet ? 'transparent' : '#fffdf3') }}>
                                             <td style={{ padding:'3px 2px' }}>
                                               <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
                                                 <input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
@@ -73342,7 +76891,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                     if (data) {
                                                       const haddeNavn = !!(m.varenavn && String(m.varenavn).trim())
                                                       const vType = (m._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
-                                                      updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb, _ny: false, _varselVist: true } : mt) } : b) } : kl))
+                                                      // Samme vei som produktsøket og koblingsassistenten: rull→m²
+                                                      // tilbys hvis dimensjonen kan leses ut av varenavnet.
+                                                      const felter = await beregnVareFelterLokal({ ...data, varenummer: nobb }, finnMatLinje(kalk.id, bd.id, m.id) || m)
+                                                      skrivVarePaaLinje(kalk.id, bd.id, m.id, felter)
                                                       if (!m._varselVist) setMaterialVarsel({ type: vType })
                                                     }
                                                   } catch(err) {}
@@ -73355,8 +76907,42 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                             </td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            {/* Har linjen NOBB, eier prislisten enheten. Feltet vises, men er
+                                                låst — enheten endres ved å velge en annen vare, ikke ved å skrive
+                                                over den. Uten NOBB er det fritekst som før («rs», «sekk», «bunt»).
+                                                Bevisst ingen nedtrekksliste: den ville antydet at mengden regnes
+                                                om når man går fra lm til m², og det gjør systemet ikke. */}
+                                            <td style={{ padding:'3px 2px' }}>
+                                              {koblet ? (
+                                                <input value={m.enhet || ''} readOnly tabIndex={-1}
+                                                  title="Enheten kommer fra prislisten din. Vil du endre den, velg en annen vare med 🔍."
+                                                  style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px', background:'#f1f5f9', color:'#64748b', cursor:'default' }} />
+                                              ) : (
+                                                <input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} />
+                                              )}
+                                            </td>
+                                            <td style={{ padding:'3px 2px' }}>
+                                              <input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
+                                              {/* Uten NOBB-nummer er prisen en standardverdi, ikke brukerens
+                                                  egen innkjøpspris. Vi fjerner den ikke — vi merker den. */}
+                                              {!koblet && (
+                                                <div title="Veiledende standardpris — linjen er ikke koblet til din prisliste" style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', marginTop:'2px', whiteSpace:'nowrap', textAlign:'right' }}>≈ veiledende</div>
+                                              )}
+                                              {/* Prisen gjelder en annen enhet enn linjen regnes i. Samme
+                                                  visuelle språk som «≈ veiledende», men teksten sier hva som
+                                                  er galt — det er denne feilen som gjorde 407,40 kr/rull til
+                                                  407,40 kr/m². */}
+                                              {avvik && (
+                                                <div title={avvik.lang} style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>⚠ {avvik.kort}</div>
+                                              )}
+                                              {/* Bevisst omregnet fra leveranseenhet — vis hva som ligger bak tallet. */}
+                                              {koblet && m._omregning && (
+                                                <div title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ${fmtTall(m._omregning.areal)} m²`}
+                                                  style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>
+                                                  ↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}
+                                                </div>
+                                              )}
+                                            </td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.medFortjeneste)}</td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(r.medFortjeneste * effektivMengde)}</td>
@@ -73369,7 +76955,16 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                   </div>
                                   </div>
                                 )}
-                                <button onClick={() => addMaterial(kalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'4px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', marginTop:'4px' }}>+ Material</button>
+                                <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginTop:'4px', alignItems:'center' }}>
+                                  <button onClick={() => addMaterial(kalk.id, bd.id)} style={{ background:'#eff6ff', color:'#2563eb', border:'none', borderRadius:'6px', padding:'6px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', minHeight:'30px' }}>+ Material</button>
+                                  {isMobKV && (bd.materialer||[]).length > 0 && (
+                                    <button onClick={() => setVisMatTabellMobil(v => !v)}
+                                      title={visMatTabellMobil ? 'Tilbake til lesevisning' : 'Åpne tabellen for å rette linjene (den er bred og må dras sidelengs)'}
+                                      style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'6px 10px', fontSize:'11px', fontWeight:'600', cursor:'pointer', minHeight:'30px' }}>
+                                      {visMatTabellMobil ? '👁 Lesevisning' : '✏️ Rediger linjene'}
+                                    </button>
+                                  )}
+                                </div>
                               </div>
 
                               {/* Underleverandører - editable with send functionality */}
@@ -75493,123 +79088,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         </>
       )}
 
-      {/* Versjonshistorikk-modal */}
-      {showVersions && (
-        <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowVersions(false); setCompareVersion(null) }}} />
-          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(700px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-              <div>
-                <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>📜 Versjonshistorikk</h2>
-                <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{versions.length} lagrede versjoner · Sammenlign og gjenopprett</p>
-              </div>
-              <div style={{ display:'flex', gap:'8px' }}>
-                <button onClick={() => {
-                  const label = prompt('Navn på ny versjon:')
-                  if (label) saveVersion(label)
-                }} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>💾 Lagre nåværende</button>
-                <button onClick={() => { setShowVersions(false); setCompareVersion(null) }} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-              </div>
-            </div>
-            <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
-              {loadingVersions ? (
-                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster versjoner...</div>
-              ) : versions.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
-                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>📜</div>
-                  <p style={{ fontSize:'14px' }}>Ingen versjoner lagret ennå. Klikk «Lagre nåværende» for å opprette første versjon.</p>
-                </div>
-              ) : (
-                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                  {/* Nåværende (ulagret) */}
-                  <div style={{ background:'#ecfdf5', borderRadius:'12px', border:'1px solid #a7f3d0', padding:'14px 16px' }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                      <div>
-                        <span style={{ fontWeight:'700', fontSize:'14px', color:'#059669' }}>Nåværende versjon (ulagret)</span>
-                        <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
-                          {kalkyler.length} faggrupper · {kalkyler.reduce((s,kl) => s + (kl.bygningsdeler||[]).length, 0)} bygningsdeler · {fmt(totals.totMedFortjeneste)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Lagrede versjoner */}
-                  {versions.map((v, i) => {
-                    const isComparing = compareVersion?.id === v.id
-                    const diff = isComparing ? buildDiff(v, null) : null
-                    return (
-                      <div key={v.id} style={{ background: isComparing ? '#eff6ff' : 'white', borderRadius:'12px', border:`1px solid ${isComparing ? '#bfdbfe' : '#f1f5f9'}`, padding:'14px 16px', transition:'all 0.15s' }}>
-                        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-                          <div style={{ flex:1 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                              <span style={{ background:'#f1f5f9', color:'#475569', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>v{v.version_number}</span>
-                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{v.label}</span>
-                            </div>
-                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#94a3b8', flexWrap:'wrap' }}>
-                              <span>{new Date(v.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
-                              <span>👷 {v.fag_count} fag</span>
-                              <span>🧱 {v.bd_count} bygn.deler</span>
-                              <span>💰 {fmt(v.total_ex_mva)}</span>
-                              <span>⏱️ {(v.total_hours||0).toFixed(0)}t</span>
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-                            <button onClick={() => setCompareVersion(isComparing ? null : v)}
-                              style={{ padding:'6px 10px', border:`1px solid ${isComparing ? '#2563eb' : '#e2e8f0'}`, borderRadius:'8px', background: isComparing ? '#2563eb' : 'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color: isComparing ? 'white' : '#475569' }}>
-                              {isComparing ? '✕ Lukk' : '🔍 Sammenlign'}
-                            </button>
-                            <button onClick={() => restoreVersion(v)}
-                              style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>
-                              ↩️ Gjenopprett
-                            </button>
-                          </div>
-                        </div>
+      {/* Sammenligning av to versjoner — samme dialog for revisjoner og
+          mellomlagringer. */}
+      {diffVisning && <KalkyleDiffModal diff={diffVisning} onClose={() => setDiffVisning(null)} />}
 
-                        {/* Sammenligning */}
-                        {isComparing && diff && (
-                          <div style={{ marginTop:'12px', background:'white', borderRadius:'10px', padding:'14px', border:'1px solid #e2e8f0' }}>
-                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', marginBottom:'10px' }}>Endringer fra v{v.version_number} til nåværende:</div>
-                            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
-                              <div style={{ background: diff.sumDiff > 0 ? '#fef2f2' : diff.sumDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
-                                <div style={{ fontSize:'14px', fontWeight:'800', color: diff.sumDiff > 0 ? '#dc2626' : diff.sumDiff < 0 ? '#059669' : '#64748b' }}>
-                                  {diff.sumDiff > 0 ? '+' : ''}{fmt(diff.sumDiff)}
-                                </div>
-                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>prisendring</div>
-                              </div>
-                              <div style={{ background: diff.timerDiff > 0 ? '#fffbeb' : diff.timerDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
-                                <div style={{ fontSize:'14px', fontWeight:'800', color: diff.timerDiff > 0 ? '#d97706' : diff.timerDiff < 0 ? '#059669' : '#64748b' }}>
-                                  {diff.timerDiff > 0 ? '+' : ''}{diff.timerDiff.toFixed(1)}t
-                                </div>
-                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>timediff</div>
-                              </div>
-                            </div>
-                            {diff.fagEndringer.length > 0 ? (
-                              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                                {diff.fagEndringer.map((fe, fi) => (
-                                  <div key={fi} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', padding:'4px 8px', borderRadius:'6px',
-                                    background: fe.type === 'added' ? '#ecfdf5' : fe.type === 'removed' ? '#fef2f2' : '#fffbeb' }}>
-                                    <span>{fe.emoji}</span>
-                                    <span style={{ fontWeight:'600', color:'#0f172a' }}>{fe.fag}</span>
-                                    <span style={{ color: fe.type === 'added' ? '#059669' : fe.type === 'removed' ? '#dc2626' : '#d97706' }}>
-                                      {fe.type === 'added' ? '+ Lagt til' : fe.type === 'removed' ? '− Fjernet' : `${fe.bdDiff > 0 ? '+' : ''}${fe.bdDiff} bygn.deler (${fe.oldBd}→${fe.newBd})`}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>Ingen strukturelle endringer i faggrupper (mulig kun prisendringer)</p>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Generell suksess/feil popup */}
       {toastMsg && (
@@ -75637,6 +79120,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const [hasSearched, setHasSearched] = useState(false)
           const [activeKat, setActiveKat] = useState(null)
           const [plId, setPlId] = useState(null)
+          const [velger, setVelger] = useState(false)
           const searchRef = React.useRef(0)
           const { sok: prisbokSok } = usePrisbokSoek()
 
@@ -75714,15 +79198,19 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             return () => clearTimeout(timer)
           }, [q, activeKat])
 
-          const selectProduct = (p) => {
-            let vType = null
-            updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => {
-              if (mt.id !== ctx.matId) return mt
-              const haddeNavn = !!(mt.varenavn && String(mt.varenavn).trim())
-              if (!mt._varselVist) vType = (mt._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
-              return { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet, _ny: false, _varselVist: true }
-            }) } : b) } : kl))
-            if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
+          // Velger varen på linjen. Går gjennom beregnVareFelter, som kan spørre
+          // om rull→m²-omregning før noe skrives.
+          const selectProduct = async (p) => {
+            if (velger) return
+            setVelger(true)
+            try {
+              const linje = finnMatLinje(ctx.kalkId, ctx.bdId, ctx.matId)
+              const haddeNavn = !!(linje?.varenavn && String(linje.varenavn).trim())
+              const vType = linje && !linje._varselVist ? ((linje._ny || !haddeNavn) ? 'lagt_til' : 'byttet') : null
+              const felter = await beregnVareFelterLokal(p, linje)
+              skrivVarePaaLinje(ctx.kalkId, ctx.bdId, ctx.matId, felter)
+              if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
+            } finally { setVelger(false) }
             onClose()
           }
 
@@ -75786,6 +79274,80 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           )
         }
         return <PS ctx={showProduktSok} onClose={() => setShowProduktSok(null)} />
+      })()}
+
+      {/* Oppdater priser fra aktiv prisliste — viser hva som endres før skriving */}
+      {showOppdaterPriser && (
+        <OppdaterPriserModal
+          tittel="Oppdater priser"
+          undertittel={`${k.kalk_number ? k.kalk_number + ' · ' : ''}${k.title || 'Kalkyle'}`}
+          poster={prisPosterFraKalkyle()}
+          userId={user?.id}
+          sendtStatus={KALK_SENDT_STATUS.has(k.status) ? k.status : null}
+          onSkriv={skrivPrisoppdatering}
+          onFinnErstatning={(p) => {
+            // Lukker prisdialogen og åpner assistenten for nettopp denne linjen.
+            // Erstatningen VELGES av brukeren — ingenting kobles automatisk.
+            setShowOppdaterPriser(false)
+            setShowKoblingsassistent({ kalkId: p.sti.kalkId, bdId: p.sti.bdId, kunMatId: p.sti.matId })
+          }}
+          onLagRevisjon={KALK_SENDT_STATUS.has(k.status) ? ((valgte) => setShowNyRevisjon({ prisendringer: valgte })) : undefined}
+          onClose={() => setShowOppdaterPriser(false)}
+        />
+      )}
+
+      {/* Ny revisjon — fra Mer-menyen, eller som anbefalt vei fra «Oppdater priser» */}
+      {showNyRevisjon && (
+        <NyKalkyleRevisjonModal
+          k={k}
+          prisendringer={showNyRevisjon.prisendringer}
+          onOpprett={opprettRevisjon}
+          onClose={() => setShowNyRevisjon(null)}
+        />
+      )}
+
+      {/* Lagre bygningsdel i biblioteket — erstatt min standard, eller ny variant */}
+      {showLagreBd && (() => {
+        const kalk = kalkyler.find(kl => kl.id === showLagreBd.kalkId)
+        const bd = kalk && (kalk.bygningsdeler||[]).find(b => b.id === showLagreBd.bdId)
+        if (!bd) return null
+        return (
+          <LagreBygningsdelModal
+            bd={bd}
+            fagId={showLagreBd.fag}
+            innebygd={innebygdBygningsdel(bd.source_bibliotek_id)}
+            kategorier={kategorierForFag(showLagreBd.fag, mineMaler)}
+            kanErstatte={kanStyrePrisgrunnlag}
+            onLagre={fullforLagreBd}
+            onClose={() => setShowLagreBd(null)}
+          />
+        )
+      })()}
+
+      {/* Koblingsassistent — går gjennom materiallinjene uten NOBB, én om gangen */}
+      {showKoblingsassistent && (() => {
+        const ctx = showKoblingsassistent
+        const kalk = kalkyler.find(kl => kl.id === ctx.kalkId)
+        const bd = kalk && (kalk.bygningsdeler||[]).find(b => b.id === ctx.bdId)
+        if (!bd) return null
+        // kunMatId settes når assistenten åpnes for ÉN bestemt linje — typisk en
+        // utgått vare som skal erstattes. Da skal køen være nettopp den linjen,
+        // selv om den har et NOBB-nummer fra før.
+        // Ellers: alle ukoblede linjer. Køen låses ved åpning, så linjer som
+        // kobles underveis ikke forsvinner mens brukeren står i den.
+        const koe = ctx.kunMatId
+          ? (bd.materialer||[]).filter(m => String(m.id) === String(ctx.kunMatId))
+          : (bd.materialer||[]).filter(m => !matErKoblet(m))
+        return (
+          <KoblingsassistentModal
+            key={`${ctx.kalkId}:${ctx.bdId}:${ctx.kunMatId || 'alle'}`}
+            linjer={koe}
+            bdNavn={ctx.kunMatId ? `${bd.name} · finn erstatning` : bd.name}
+            prisLabel={ctx.kunMatId ? 'nå' : 'veiledende'}
+            onKoble={(matId, produkt) => koblMaterialLinje(ctx.kalkId, ctx.bdId, matId, produkt)}
+            onClose={() => setShowKoblingsassistent(null)}
+          />
+        )
       })()}
 
       {/* Materialvarsel: sentrert popup ved bytte/tillegg av materiale.
