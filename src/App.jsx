@@ -1884,7 +1884,10 @@ function AuthProvider({ children }) {
   const kanSlette = rolleKanSlette(role)       // kun admin/leder
   const kanStyreProsjekt = rolleKanStyreProsjekt(role) // opprette/slette prosjekt: admin/leder
   const kanStyrePrisgrunnlag = rolleKanStyrePrisgrunnlag(role) // prislister + erstatte standarder
-  const kanSePriser = rolleKanSePriser(role)   // innkjøpspriser er økonomidata
+  // Plattformeier er med av samme grunn som i policyen: støtteinnlogging hos en
+  // kunde skal kunne se prisboken, ellers står vi uten verktøy nettopp når vi
+  // hjelper. Policyen sier auth_role() IN (...) OR is_platform_owner().
+  const kanSePriser = rolleKanSePriser(role) || isPlatformOwner
 
   // Marker en opplæringstur som sett — DB er fasit, localStorage er cache.
   const markTourSeen = async (tourKey) => {
@@ -52359,9 +52362,11 @@ function rolleKanStyrePrisgrunnlag(role) { return role === 'admin' || role === '
 // Kan denne rollen SE innkjøpsprisene i prisboken?
 //
 // Speiler RLS-policyen rbac_okonomi_sel på prisbok og prislister, som er
-// RESTRICTIVE: auth_role() in ('admin','leder','les'). «ansatt» står bevisst
-// utenfor — innkjøpspriser er økonomidata. Endres policyen, må denne endres i
-// samme runde, ellers lyver grensesnittet om hva brukeren får se.
+// RESTRICTIVE: auth_role() in ('admin','leder','les') OR is_platform_owner().
+// «ansatt» står bevisst utenfor — innkjøpspriser er økonomidata. Plattformeier
+// legges til av KALLEREN (useAuth), som er den som vet det; denne funksjonen
+// dekker rolledelen. Endres policyen, må begge endres i samme runde, ellers
+// lyver grensesnittet om hva brukeren får se.
 //
 // Prisene som ALT står på materiallinjene i en kalkyle er ikke berørt: de er
 // lagret på raden, og vises som før for alle.
