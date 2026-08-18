@@ -68578,7 +68578,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
     'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
-    'Erstattet':        { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', emoji: '🗃️' },
+    'Erstattet':        { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '🗃️' },
   }
 
   const isMobK = typeof window !== 'undefined' && window.innerWidth < 768
@@ -68988,7 +68988,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
                       {!isMobK && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{kalkNrMedRev(k)}</span>}
                       {(k.revision_number || 1) > 1 && (
                         <span title={`Revisjon ${(k.revision_number || 1) - 1} av denne kalkylen`}
-                          style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', fontSize:'11px', fontWeight:'700', padding:'2px 7px', borderRadius:'4px' }}>
+                          style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', fontSize:'11px', fontWeight:'700', padding:'2px 7px', borderRadius:'4px' }}>
                           {kalkRevLabel(k.revision_number)}
                         </span>
                       )}
@@ -71966,6 +71966,177 @@ async function hentKalkyleRevisjoner(k) {
   } catch (e) { return [] }
 }
 
+// ─── SAMMENLIGNING AV TO VERSJONER (materiallinjenivå) ───────────────────────
+//
+// ÉN motor for begge historikkene i Kalkulasjon: revisjonene (egne rader i
+// calculations) og de navngitte mellomlagringene (calculation_versions). Begge
+// bærer det SAMME treet — kalkyler → bygningsdeler → materialer — så det er
+// bare kilden som skiller dem. To sammenligninger som svarer ulikt på samme
+// spørsmål er verre enn én som dekker begge.
+//
+// Den gamle buildDiff() gikk bare til faggruppe og TALTE bygningsdeler
+// («+2 bygn.deler»). Den kunne ikke svare på det man faktisk spør om: hvilke
+// materiallinjer fikk ny pris, og hva gjorde det med totalen.
+//
+// Hver side er { label, kalkyler, faktorer }. Tallene hentes fra appens egne
+// beregninger (beregnKalkyle / beregnBygningsdel / beregnProsjektTotal), ikke
+// fra en egen formel — ellers ville sammenligningen kunne vise andre kroner
+// enn kalkylen selv.
+
+// Navn normalisert for sammenligning: små bokstaver, ett mellomrom, uten
+// ikke-brytende mellomrom. Brukes bare som SISTE utvei når verken rad-id eller
+// NOBB finnes på begge sider.
+function _diffNavn(s) {
+  return String(s == null ? '' : s)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+// Nøklene en rad kan matches på, i prioritert rekkefølge.
+function _diffNokler(rad, prefiks) {
+  const ut = []
+  if (rad && rad.id != null && String(rad.id) !== '') ut.push('id:' + String(rad.id))
+  if (rad && rad.nobb != null && String(rad.nobb).trim() !== '') ut.push('nobb:' + String(rad.nobb).trim())
+  const n = _diffNavn(rad && (rad.varenavn || rad.name || rad.navn))
+  if (n) ut.push('navn:' + prefiks + ':' + n)
+  return ut
+}
+
+// Parer rader fra to lister. Returnerer [{ v, h }] der v eller h kan være null.
+// Én rad kan bare brukes én gang — derfor plukkes den ut av kartet ved treff.
+function _parRader(vRader, hRader, prefiks) {
+  // Én nøkkel kan peke på FLERE rader — to «Sparkel»-linjer uten NOBB i samme
+  // bygningsdel er helt vanlig. Da tar vi den første som ikke alt er brukt,
+  // ellers ville den andre blitt rapportert som fjernet + lagt til.
+  const kart = new Map()
+  ;(vRader || []).forEach((r, i) => {
+    _diffNokler(r, prefiks).forEach(n => {
+      if (!kart.has(n)) kart.set(n, [])
+      kart.get(n).push(i)
+    })
+  })
+  const brukt = new Set()
+  const par = []
+  ;(hRader || []).forEach(h => {
+    let treff = -1
+    for (const n of _diffNokler(h, prefiks)) {
+      const kandidater = kart.get(n) || []
+      const ledig = kandidater.find(i => !brukt.has(i))
+      if (ledig != null) { treff = ledig; break }
+    }
+    if (treff >= 0) { brukt.add(treff); par.push({ v: vRader[treff], h }) }
+    else par.push({ v: null, h })
+  })
+  ;(vRader || []).forEach((v, i) => { if (!brukt.has(i)) par.push({ v, h: null }) })
+  return par
+}
+
+// Er to mengder like? Samme toleranse som prisene: ørene/desimalene teller,
+// flyttallsstøy gjør det ikke.
+function _diffTallLik(a, b) {
+  return Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 0.005
+}
+
+function _diffLinje(m) {
+  if (!m) return null
+  const mengde = parseFloat(m.mengde) || 0
+  const pris = parseFloat(m.enhetspris) || 0
+  return { navn: m.varenavn || 'Uten navn', nobb: m.nobb != null ? String(m.nobb).trim() : '',
+           mengde, enhet: m.enhet || '', pris, sum: mengde * pris }
+}
+
+// Sammenligner to versjoner. Returnerer et tre klart til visning.
+function byggKalkyleDiff(venstre, hoyre) {
+  const vKalk = (venstre && venstre.kalkyler) || []
+  const hKalk = (hoyre && hoyre.kalkyler) || []
+  const vFakt = (venstre && venstre.faktorer) || {}
+  const hFakt = (hoyre && hoyre.faktorer) || {}
+  const vTot = beregnProsjektTotal(vKalk, vFakt)
+  const hTot = beregnProsjektTotal(hKalk, hFakt)
+
+  const antall = { nyPris: 0, endretMengde: 0, lagtTil: 0, fjernet: 0, lik: 0 }
+  const fagListe = []
+
+  // Faggruppene pares på fag-id.
+  const fagIder = []
+  ;[...vKalk, ...hKalk].forEach(kl => { if (kl && !fagIder.includes(kl.fag)) fagIder.push(kl.fag) })
+
+  fagIder.forEach(fagId => {
+    const vk = vKalk.find(x => x.fag === fagId) || null
+    const hk = hKalk.find(x => x.fag === fagId) || null
+    const fag = getFaggruppe(fagId)
+    const vf = vFakt[fagId] || getDefaultFaktorer(fagId)
+    const hf = hFakt[fagId] || getDefaultFaktorer(fagId)
+    const sumV = vk ? beregnKalkyle(vk, vf).totMedFortjeneste : 0
+    const sumH = hk ? beregnKalkyle(hk, hf).totMedFortjeneste : 0
+
+    const bdListe = []
+    _parRader(vk ? vk.bygningsdeler : [], hk ? hk.bygningsdeler : [], 'bd').forEach(({ v: vbd, h: hbd }) => {
+      const linjer = []
+      _parRader(vbd ? vbd.materialer : [], hbd ? hbd.materialer : [], 'mat').forEach(({ v, h }) => {
+        const lv = _diffLinje(v), lh = _diffLinje(h)
+        let status = 'lik'
+        if (!lv) { status = 'lagt til'; antall.lagtTil += 1 }
+        else if (!lh) { status = 'fjernet'; antall.fjernet += 1 }
+        else {
+          const prisLik = _diffTallLik(lv.pris, lh.pris)
+          const mengdeLik = _diffTallLik(lv.mengde, lh.mengde)
+          if (!prisLik && !mengdeLik) { status = 'ny pris og mengde'; antall.nyPris += 1; antall.endretMengde += 1 }
+          else if (!prisLik) { status = 'ny pris'; antall.nyPris += 1 }
+          else if (!mengdeLik) { status = 'endret mengde'; antall.endretMengde += 1 }
+          else antall.lik += 1
+        }
+        linjer.push({
+          navn: (lh || lv).navn, nobb: (lh || lv).nobb, status, v: lv, h: lh,
+          prisDiff: (lv && lh) ? Math.round((lh.pris - lv.pris) * 100) / 100 : null,
+          sumDiff: (lv && lh) ? Math.round((lh.sum - lv.sum) * 100) / 100 : null,
+        })
+      })
+      // Arbeid og UE sammenlignes ikke linje for linje her, men endringer der
+      // flytter totalen. Uten et varsel ville brukeren se en total som beveget
+      // seg «uten grunn».
+      const jsonLik = (a, b) => JSON.stringify(a || []) === JSON.stringify(b || [])
+      bdListe.push({
+        navn: (hbd || vbd).name || 'Uten navn',
+        status: !vbd ? 'lagt til' : !hbd ? 'fjernet' : 'endret',
+        mengdeV: vbd ? (parseFloat(vbd.mengde) || 0) : null,
+        mengdeH: hbd ? (parseFloat(hbd.mengde) || 0) : null,
+        enhet: (hbd || vbd).enhet || '',
+        sumV: vbd ? beregnBygningsdel(vbd, vf).totalMedFortjeneste : 0,
+        sumH: hbd ? beregnBygningsdel(hbd, hf).totalMedFortjeneste : 0,
+        arbeidEndret: !!(vbd && hbd) && !jsonLik(vbd.arbeidsarter, hbd.arbeidsarter),
+        ueEndret: !!(vbd && hbd) && !jsonLik(vbd.underleverandorer, hbd.underleverandorer),
+        linjer,
+      })
+    })
+
+    fagListe.push({
+      fagId, navn: fag.name, emoji: fag.emoji,
+      status: !vk ? 'lagt til' : !hk ? 'fjernet' : 'endret',
+      sumV, sumH, bygningsdeler: bdListe,
+    })
+  })
+
+  return {
+    labelV: (venstre && venstre.label) || 'Før',
+    labelH: (hoyre && hoyre.label) || 'Nå',
+    totalV: vTot.totMedFortjeneste, totalH: hTot.totMedFortjeneste,
+    totalDiff: hTot.totMedFortjeneste - vTot.totMedFortjeneste,
+    timerV: vTot.totTimer, timerH: hTot.totTimer,
+    timerDiff: hTot.totTimer - vTot.totTimer,
+    antall, fag: fagListe,
+  }
+}
+
+// Har bygningsdelen noe å vise når man ber om «bare endringer»?
+function bdHarEndring(bd) {
+  if (!bd) return false
+  if (bd.status !== 'endret') return true
+  if (bd.arbeidEndret || bd.ueEndret) return true
+  if (!_diffTallLik(bd.mengdeV, bd.mengdeH)) return true
+  return bd.linjer.some(l => l.status !== 'lik')
+}
+
 // Kalkylestatuser der kunden ALT har fått tallene. Oppdaterer man prisene da,
 // stemmer ikke kalkylen med tilbudet kunden sitter med — og en godkjenning kan
 // være signert på de gamle prisene.
@@ -72119,10 +72290,10 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, sendtStatus,
               </div>
 
               <button onClick={() => onLagRevisjon(valgtePoster())}
-                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'2px solid #7c3aed', borderRadius:'12px', padding:'14px 16px', marginBottom:'10px', cursor:'pointer', boxSizing:'border-box' }}>
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'2px solid #059669', borderRadius:'12px', padding:'14px 16px', marginBottom:'10px', cursor:'pointer', boxSizing:'border-box' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'5px', flexWrap:'wrap' }}>
                   <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 Lag en revisjon</span>
-                  <span style={{ fontSize:'10px', fontWeight:'700', background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', padding:'2px 7px', borderRadius:'999px' }}>ANBEFALT</span>
+                  <span style={{ fontSize:'10px', fontWeight:'700', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', padding:'2px 7px', borderRadius:'999px' }}>ANBEFALT</span>
                 </div>
                 <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
                   De nye prisene går i en ny versjon. Denne kalkylen står urørt med prisene kunden
@@ -72560,8 +72731,8 @@ function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
         </div>
 
         <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
-          <div style={{ background:'white', border:'2px solid #ddd6fe', borderRadius:'12px', padding:'13px 15px', marginBottom:'14px' }}>
-            <div style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed', letterSpacing:'0.04em', marginBottom:'4px' }}>DETTE OPPRETTES</div>
+          <div style={{ background:'white', border:'2px solid #bbf7d0', borderRadius:'12px', padding:'13px 15px', marginBottom:'14px' }}>
+            <div style={{ fontSize:'10px', fontWeight:'700', color:'#059669', letterSpacing:'0.04em', marginBottom:'4px' }}>DETTE OPPRETTES</div>
             <div style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{k?.title} {nyttNr}</div>
             <div style={{ fontSize:'12px', color:'#64748b', marginTop:'5px', lineHeight:1.55 }}>
               {kalkNrMedRev(k)} settes til «Erstattet» og står urørt med prisene kunden faktisk fikk.
@@ -72614,7 +72785,7 @@ function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
         <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
           <button onClick={onClose} disabled={jobber} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: jobber ? 'default' : 'pointer' }}>Avbryt</button>
           <button onClick={opprett} disabled={jobber}
-            style={{ flex:'1 1 190px', background: jobber ? '#c4b5fd' : '#7c3aed', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: jobber ? 'default' : 'pointer' }}>
+            style={{ flex:'1 1 190px', background: jobber ? '#a7f3d0' : '#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: jobber ? 'default' : 'pointer' }}>
             {jobber ? 'Oppretter …' : `🔄 Opprett ${nyEtikett}`}
           </button>
         </div>
@@ -72632,6 +72803,200 @@ function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
 //
 // Koblingsstatusen per bygningsdel er poenget med siden: den gjør biblioteket til
 // arbeidslisten for NOBB-koblingen.
+// ─── SAMMENLIGN TO VERSJONER — DIALOG ────────────────────────────────────────
+// Viser de to versjonene SIDE VED SIDE på materiallinjenivå, med totalen øverst
+// og hva hver gruppe endringer gjør med den. Åpnes både fra revisjonshistorikken
+// og fra mellomlagringene — samme dialog, samme svar.
+//
+// Dette er en PC-funksjon. På 375 px stables de to sidene under hverandre med
+// etiketten foran, så den er lesbar uten å være behagelig.
+function KalkyleDiffModal({ diff, onClose }) {
+  const [bareEndringer, setBareEndringer] = useState(true)
+  const isMobD = typeof window !== 'undefined' && window.innerWidth < 768
+  if (!diff) return null
+
+  const STATUSFARGE = {
+    'ny pris':            { bg:'#fffbeb', color:'#b45309', border:'#fde68a', tekst:'ny pris' },
+    'ny pris og mengde':  { bg:'#fffbeb', color:'#b45309', border:'#fde68a', tekst:'ny pris + mengde' },
+    'endret mengde':      { bg:'#eff6ff', color:'#1d4ed8', border:'#bfdbfe', tekst:'endret mengde' },
+    'lagt til':           { bg:'#f0fdf4', color:'#047857', border:'#bbf7d0', tekst:'lagt til' },
+    'fjernet':            { bg:'#fef2f2', color:'#b91c1c', border:'#fecaca', tekst:'fjernet' },
+    'lik':                { bg:'#f8fafc', color:'#94a3b8', border:'#e2e8f0', tekst:'uendret' },
+  }
+  const diffFarge = (n) => n > 0 ? '#c2410c' : n < 0 ? '#15803d' : '#64748b'
+  const medFortegn = (n) => (n > 0 ? '+' : '') + fmtKr2(n)
+
+  // Faggruppene som skal vises, med bygningsdelene filtrert etter valget.
+  const fagVist = (diff.fag || []).map(f => ({
+    ...f,
+    bygningsdeler: (f.bygningsdeler || []).filter(bd => !bareEndringer || bdHarEndring(bd)),
+  })).filter(f => f.bygningsdeler.length > 0 || !bareEndringer)
+
+  const ingenEndringer = (diff.antall.nyPris + diff.antall.endretMengde + diff.antall.lagtTil + diff.antall.fjernet) === 0
+    && Math.abs(diff.totalDiff) < 0.5
+
+  const telleBoks = (antall, tekst, farge) => (
+    <div style={{ background: farge.bg, border:`1px solid ${farge.border}`, borderRadius:'9px', padding:'6px 10px', textAlign:'center', minWidth:'74px' }}>
+      <div style={{ fontSize:'15px', fontWeight:'800', color: farge.color }}>{antall}</div>
+      <div style={{ fontSize:'10px', color: farge.color, fontWeight:'600' }}>{tekst}</div>
+    </div>
+  )
+
+  // Én materiallinje: navn + status over, og de to sidene under.
+  const linjeRad = (l, i) => {
+    if (bareEndringer && l.status === 'lik') return null
+    const f = STATUSFARGE[l.status] || STATUSFARGE['lik']
+    const side = (data, etikett, dempet) => (
+      <div style={{ background: data ? (dempet ? '#f8fafc' : 'white') : '#fafafa', border:`1px solid ${data ? '#e2e8f0' : '#f1f5f9'}`,
+        borderRadius:'8px', padding:'7px 9px', minWidth:0 }}>
+        <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', marginBottom:'2px' }}>{etikett}</div>
+        {data ? (
+          <>
+            <div style={{ fontSize:'12px', color:'#475569' }}>{fmtTall(data.mengde)} {data.enhet} × {fmtKr2(data.pris)}</div>
+            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{fmtKr2(data.sum)}</div>
+          </>
+        ) : <div style={{ fontSize:'12px', color:'#cbd5e1', fontStyle:'italic' }}>ikke med</div>}
+      </div>
+    )
+    return (
+      <div key={i} style={{ borderTop:'1px solid #f1f5f9', padding:'8px 0' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:'7px', flexWrap:'wrap', marginBottom:'6px' }}>
+          <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{l.navn}</span>
+          {l.nobb && <span style={{ fontSize:'10px', color:'#94a3b8', fontFamily:'monospace' }}>NOBB {l.nobb}</span>}
+          <span style={{ background:f.bg, color:f.color, border:`1px solid ${f.border}`, fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{f.tekst}</span>
+          {l.prisDiff != null && Math.abs(l.prisDiff) >= 0.005 && (
+            <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color: diffFarge(l.prisDiff), whiteSpace:'nowrap' }}>
+              {medFortegn(l.prisDiff)} pr. {l.h?.enhet || l.v?.enhet || 'enhet'}
+            </span>
+          )}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns: isMobD ? '1fr' : '1fr 1fr', gap:'7px' }}>
+          {side(l.v, diff.labelV, true)}
+          {side(l.h, diff.labelH, false)}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:150 }} onMouseDown={e => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius: isMobD ? '16px' : '20px',
+        width: isMobD ? 'calc(100vw - 20px)' : 'min(920px, calc(100vw - 40px))', maxHeight:'88vh', display:'flex', flexDirection:'column',
+        zIndex:151, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        {/* Topp: hvem mot hvem, og hva det gjør med totalen */}
+        <div style={{ padding: isMobD ? '14px' : '18px 22px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px' }}>
+            <div style={{ minWidth:0 }}>
+              <h2 style={{ margin:0, fontSize: isMobD ? '15px' : '17px', fontWeight:'700', color:'#0f172a' }}>⇄ Sammenlign versjoner</h2>
+              <div style={{ fontSize:'12px', color:'#64748b', marginTop:'3px' }}>{diff.labelV} mot {diff.labelH}</div>
+            </div>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'24px', cursor:'pointer', color:'#94a3b8', lineHeight:1, flexShrink:0 }}>×</button>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns: isMobD ? '1fr' : '1fr auto 1fr', gap:'8px', alignItems:'center', marginTop:'12px' }}>
+            <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'9px 12px' }}>
+              <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700' }}>{diff.labelV}</div>
+              <div style={{ fontSize:'17px', fontWeight:'800', color:'#475569' }}>{fmtI(diff.totalV)}</div>
+            </div>
+            <div style={{ fontSize:'13px', fontWeight:'800', color: diffFarge(diff.totalDiff), textAlign:'center', whiteSpace:'nowrap' }}>
+              {isMobD ? '↓' : '→'} {diff.totalDiff > 0 ? '+' : ''}{fmtI(diff.totalDiff)}
+            </div>
+            <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'9px 12px' }}>
+              <div style={{ fontSize:'10px', color:'#059669', fontWeight:'700' }}>{diff.labelH}</div>
+              <div style={{ fontSize:'17px', fontWeight:'800', color:'#065f46' }}>{fmtI(diff.totalH)}</div>
+            </div>
+          </div>
+
+          <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', alignItems:'center', marginTop:'10px' }}>
+            {telleBoks(diff.antall.nyPris, 'ny pris', STATUSFARGE['ny pris'])}
+            {telleBoks(diff.antall.endretMengde, 'ny mengde', STATUSFARGE['endret mengde'])}
+            {telleBoks(diff.antall.lagtTil, 'lagt til', STATUSFARGE['lagt til'])}
+            {telleBoks(diff.antall.fjernet, 'fjernet', STATUSFARGE['fjernet'])}
+            {telleBoks(diff.antall.lik, 'uendret', STATUSFARGE['lik'])}
+            <label style={{ marginLeft: isMobD ? 0 : 'auto', display:'flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#475569', cursor:'pointer', fontWeight:'600' }}>
+              <input type="checkbox" checked={bareEndringer} onChange={e => setBareEndringer(e.target.checked)} style={{ width:'15px', height:'15px', accentColor:'#059669', cursor:'pointer' }} />
+              Bare endringene
+            </label>
+          </div>
+          {Math.abs(diff.timerDiff) >= 0.05 && (
+            <div style={{ fontSize:'11px', color:'#64748b', marginTop:'8px' }}>
+              Arbeidstid: {fmtTall(diff.timerV)} t → {fmtTall(diff.timerH)} t ({diff.timerDiff > 0 ? '+' : ''}{fmtTall(diff.timerDiff)} t)
+            </div>
+          )}
+        </div>
+
+        {/* Selve sammenligningen */}
+        <div style={{ padding: isMobD ? '12px' : '16px 22px', overflowY:'auto', flex:1 }}>
+          {ingenEndringer ? (
+            <div style={{ textAlign:'center', padding:'34px 10px', color:'#94a3b8' }}>
+              <div style={{ fontSize:'34px', marginBottom:'10px' }}>🟢</div>
+              <div style={{ fontSize:'14px', fontWeight:'600', color:'#475569' }}>Ingen forskjeller mellom de to versjonene</div>
+              <div style={{ fontSize:'12px', marginTop:'4px' }}>Verken priser, mengder eller linjer er endret.</div>
+            </div>
+          ) : fagVist.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'30px 10px', color:'#94a3b8', fontSize:'13px' }}>
+              Endringene ligger utenfor materiallinjene — se totalen og arbeidstiden øverst.
+            </div>
+          ) : fagVist.map(f => (
+            <div key={f.fagId} style={{ marginBottom:'14px' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 11px' }}>
+                <span style={{ fontSize:'15px' }}>{f.emoji}</span>
+                <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{f.navn}</span>
+                {f.status !== 'endret' && (
+                  <span style={{ background: f.status === 'lagt til' ? '#f0fdf4' : '#fef2f2', color: f.status === 'lagt til' ? '#047857' : '#b91c1c',
+                    fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{f.status}</span>
+                )}
+                <span style={{ marginLeft:'auto', fontSize:'12px', color:'#64748b', whiteSpace:'nowrap' }}>
+                  {fmtI(f.sumV)} → <strong style={{ color:'#0f172a' }}>{fmtI(f.sumH)}</strong>
+                </span>
+              </div>
+              {f.bygningsdeler.map((bd, bi) => (
+                <div key={bi} style={{ border:'1px solid #f1f5f9', borderRadius:'10px', padding: isMobD ? '9px 10px' : '10px 13px', margin:'7px 0 0' }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'7px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>🧱 {bd.navn}</span>
+                    {bd.status !== 'endret' && (
+                      <span style={{ background: bd.status === 'lagt til' ? '#f0fdf4' : '#fef2f2', color: bd.status === 'lagt til' ? '#047857' : '#b91c1c',
+                        fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>{bd.status}</span>
+                    )}
+                    {bd.mengdeV != null && bd.mengdeH != null && !_diffTallLik(bd.mengdeV, bd.mengdeH) && (
+                      <span style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', fontSize:'10px', fontWeight:'700', padding:'1px 7px', borderRadius:'999px' }}>
+                        mengde {fmtTall(bd.mengdeV)} → {fmtTall(bd.mengdeH)} {bd.enhet}
+                      </span>
+                    )}
+                    <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color: diffFarge(bd.sumH - bd.sumV), whiteSpace:'nowrap' }}>
+                      {fmtI(bd.sumV)} → {fmtI(bd.sumH)}
+                    </span>
+                  </div>
+                  {(bd.arbeidEndret || bd.ueEndret) && (
+                    <div style={{ fontSize:'11px', color:'#b45309', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'8px', padding:'5px 8px', marginTop:'6px' }}>
+                      ⚠️ {bd.arbeidEndret && bd.ueEndret ? 'Arbeidsarter og underleverandører er også endret' : bd.arbeidEndret ? 'Arbeidsartene er også endret' : 'Underleverandørene er også endret'} — se bygningsdelen i kalkylen for detaljene.
+                    </div>
+                  )}
+                  {bd.linjer.some(l => !bareEndringer || l.status !== 'lik')
+                    ? bd.linjer.map(linjeRad)
+                    : <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'6px' }}>Ingen endringer på materiallinjene.</div>}
+                </div>
+              ))}
+              {f.bygningsdeler.length === 0 && (
+                <div style={{ fontSize:'12px', color:'#94a3b8', padding:'8px 2px' }}>Ingen endringer i denne faggruppen.</div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div style={{ padding: isMobD ? '10px 12px' : '12px 22px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', gap:'10px', flexShrink:0 }}>
+          <span style={{ fontSize:'11px', color:'#94a3b8', lineHeight:1.4 }}>
+            Tallene er hentet fra kalkylens egne beregninger, inkludert påslag.
+          </span>
+          <button onClick={onClose} style={{ padding:'9px 20px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700', flexShrink:0 }}>Lukk</button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function KalkBibliotekPage({ onBack }) {
   const confirm = useConfirm()
   const { user, kanStyrePrisgrunnlag } = useAuth()
@@ -74649,6 +75014,13 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [visRevHistorikk, setVisRevHistorikk] = useState(false)
   // Id-en til versjonen som hentes akkurat nå, når man klikker seg til en annen.
   const [apnerRevId, setApnerRevId] = useState(null)
+  // Sammenligningen: den ferdig byggede diffen, eller null når dialogen er lukket.
+  const [diffVisning, setDiffVisning] = useState(null)
+  const [henterDiff, setHenterDiff] = useState(null)   // id-en vi henter for
+  // Navn på ny mellomlagring. null = dialogen er lukket, '' = åpen og tom.
+  // Erstatter et native prompt() — vi bruker aldri nettleserens egne dialoger.
+  const [lagreVersjonNavn, setLagreVersjonNavn] = useState(null)
+  const [lagrerVersjon, setLagrerVersjon] = useState(false)
   // På telefon vises materiallinjene som en LESEVISNING i stedet for den brede
   // tabellen: ingen bygger en kalkyle på mobil, men mange åpner en på farta og
   // skal se hva som er med, hvilke priser som gjelder og hva som er merket.
@@ -74702,7 +75074,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // Åpner en annen versjon av kalkylen i samme visning.
   //
   // Historikken viste før bare totalsummen per versjon, og de gamle versjonene
-  // er skjult i kalkylelisten (status «Erstattet»). Da fanst det ingen vei inn
+  // er skjult i kalkylelisten (status «Erstattet»). Da fantes det ingen vei inn
   // til dem, og man kunne ikke se HVA som var endret. Samme mønster som
   // revisjonslisten i Tilbud, der raden alt er klikkbar.
   const apneRevisjon = async (rev) => {
@@ -74719,11 +75091,38 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       setExpandedBd(null)
       setUndoStack([])
       setVersions([])
-      setCompareVersion(null)
       window.scrollTo(0, 0)
     } catch (e) {
       setToastMsg({ title: 'Kunne ikke åpne versjonen', message: (e && e.message) || 'ukjent feil', type: 'error' })
     } finally { setApnerRevId(null) }
+  }
+
+  // Sammenligner en annen revisjon med den vi står i. Revisjonsraden i
+  // historikken har bare summene — hele treet må hentes for den siden.
+  // Den ELDSTE av de to står til venstre, uansett hvilken vei man klikker.
+  const sammenlignMedRevisjon = async (rev) => {
+    if (!rev?.id || String(rev.id) === String(k.id) || henterDiff) return
+    setHenterDiff(rev.id)
+    try {
+      const { data, error } = await supabase.from('calculations').select('id, kalk_number, revision_number, kalkyler, faktorer').eq('id', rev.id).single()
+      if (error || !data) throw (error || new Error('Fant ikke versjonen.'))
+      const annen = { label: kalkRevLabel(data.revision_number), kalkyler: data.kalkyler || [], faktorer: data.faktorer || {} }
+      const denne = { label: kalkRevLabel(k.revision_number), kalkyler: kalkyler, faktorer: alleFaktorer }
+      const eldstForst = (data.revision_number || 1) <= (k.revision_number || 1)
+      setDiffVisning(byggKalkyleDiff(eldstForst ? annen : denne, eldstForst ? denne : annen))
+    } catch (e) {
+      setToastMsg({ title: 'Kunne ikke sammenligne', message: (e && e.message) || 'ukjent feil', type: 'error' })
+    } finally { setHenterDiff(null) }
+  }
+
+  // Sammenligner en mellomlagring med kalkylen slik den står nå. Samme dialog —
+  // snapshotet bærer det samme treet, bare fra en annen tabell.
+  const sammenlignMedMellomlagring = (v) => {
+    if (!v) return
+    setDiffVisning(byggKalkyleDiff(
+      { label: `v${v.version_number}${v.label ? ' · ' + v.label : ''}`, kalkyler: v.snapshot_kalkyler || [], faktorer: v.snapshot_faktorer || {} },
+      { label: 'Nå', kalkyler: kalkyler, faktorer: alleFaktorer },
+    ))
   }
 
   // Alle NOBB-numre som finnes i kalkylen, som en stabil signatur.
@@ -74819,7 +75218,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     'Tilbud sendt':     { bg: '#fefce8', color: '#ca8a04', border: '#fef08a', emoji: '📤' },
     'Tilbud godkjent':  { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0', emoji: '✅' },
     'Avslått':          { bg: '#fef2f2', color: '#dc2626', border: '#fecaca', emoji: '❌' },
-    'Erstattet':        { bg: '#f5f3ff', color: '#7c3aed', border: '#ddd6fe', emoji: '🗃️' },
+    'Erstattet':        { bg: '#f8fafc', color: '#64748b', border: '#e2e8f0', emoji: '🗃️' },
   }
   const cfg = KALK_STATUS_CFG[k.status] || KALK_STATUS_CFG['Utkast']
 
@@ -75254,7 +75653,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showVersions, setShowVersions] = useState(false)
   const [versions, setVersions] = useState([])
   const [loadingVersions, setLoadingVersions] = useState(false)
-  const [compareVersion, setCompareVersion] = useState(null)
   const [showPlanlegg, setShowPlanlegg] = useState(false)
 
   // ── Versjonering — snapshot-basert ──
@@ -75289,6 +75687,15 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     } catch(e) { await appAlert({ message: 'Feil ved versjonering', subMessage: e.message, kind: 'error' }) }
   }
 
+  // Lagrer mellomlagringen fra navnedialogen.
+  const lagreMellomlagring = async () => {
+    const navn = (lagreVersjonNavn || '').trim()
+    if (!navn) return
+    setLagrerVersjon(true)
+    try { await saveVersion(navn); setLagreVersjonNavn(null) }
+    finally { setLagrerVersjon(false) }
+  }
+
   const restoreVersion = async (version) => {
     const ok = await confirm({
       message: `Gjenopprett versjon v${version.version_number}`,
@@ -75310,37 +75717,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const restored = { ...k, kalkyler: version.snapshot_kalkyler, faktorer: version.snapshot_faktorer }
     saveProject(restored)
     await loadVersions()
-    setCompareVersion(null)
     setToastMsg({ title: 'Versjon gjenopprettet', message: `v${version.version_number}: ${version.label}`, type: 'success' })
-  }
-
-  // Sammenlign to versjoner
-  const buildDiff = (oldV, newV) => {
-    const oldKalkyler = oldV?.snapshot_kalkyler || []
-    const newKalkyler = newV?.snapshot_kalkyler || kalkyler
-    const oldTotals = beregnProsjektTotal(oldKalkyler, oldV?.snapshot_faktorer || {})
-    const newTotals = beregnProsjektTotal(newKalkyler, newV?.snapshot_faktorer || alleFaktorer)
-    const diff = {
-      sumDiff: newTotals.totMedFortjeneste - oldTotals.totMedFortjeneste,
-      timerDiff: newTotals.totTimer - oldTotals.totTimer,
-      fagEndringer: [],
-    }
-    // Per faggruppe
-    const allFag = new Set([...oldKalkyler.map(k => k.fag), ...newKalkyler.map(k => k.fag)])
-    allFag.forEach(fagId => {
-      const oldK = oldKalkyler.find(k => k.fag === fagId)
-      const newK = newKalkyler.find(k => k.fag === fagId)
-      const fag = getFaggruppe(fagId)
-      if (!oldK && newK) { diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'added', bdDiff: (newK.bygningsdeler||[]).length }) }
-      else if (oldK && !newK) { diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'removed', bdDiff: -(oldK.bygningsdeler||[]).length }) }
-      else if (oldK && newK) {
-        const oldBdCount = (oldK.bygningsdeler||[]).length, newBdCount = (newK.bygningsdeler||[]).length
-        if (oldBdCount !== newBdCount || JSON.stringify(oldK.bygningsdeler) !== JSON.stringify(newK.bygningsdeler)) {
-          diff.fagEndringer.push({ fag: fag.name, emoji: fag.emoji, type: 'changed', bdDiff: newBdCount - oldBdCount, oldBd: oldBdCount, newBd: newBdCount })
-        }
-      }
-    })
-    return diff
   }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
@@ -75889,26 +76266,26 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           {!isMobKV && <span style={{ fontSize:'12px', color:'#94a3b8', fontFamily:'monospace' }}>{kalkNrMedRev(k)}</span>}
           <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600' }}>{cfg.emoji} {k.status}</span>
           {(k.revision_number || 1) > 1 && (
-            <span style={{ background:'#f5f3ff', color:'#7c3aed', border:'1px solid #ddd6fe', padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700' }}>
+            <span style={{ background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', padding:'3px 10px', borderRadius:'999px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700' }}>
               {kalkRevLabel(k.revision_number)}
             </span>
           )}
           {revisjoner.length > 1 && (
             <button onClick={() => setVisRevHistorikk(v => !v)}
               title="Se alle versjoner av denne kalkylen"
-              style={{ background:'white', border:'1px solid #ddd6fe', color:'#7c3aed', borderRadius:'999px', padding: isMobKV ? '3px 9px' : '3px 11px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600', cursor:'pointer' }}>
+              style={{ background:'white', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'999px', padding: isMobKV ? '3px 9px' : '3px 11px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'600', cursor:'pointer' }}>
               📜 {revisjoner.length} versjoner
             </button>
           )}
           {k.status === KALK_STATUS_ERSTATTET && (
             <span title="Denne versjonen er erstattet av en nyere revisjon. Den står urørt med prisene kunden fikk."
-              style={{ fontSize: isMobKV ? '10px' : '11px', color:'#7c3aed', background:'#f5f3ff', border:'1px solid #ddd6fe', padding:'3px 9px', borderRadius:'999px', fontWeight:'600' }}>
+              style={{ fontSize: isMobKV ? '10px' : '11px', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', padding:'3px 9px', borderRadius:'999px', fontWeight:'600' }}>
               🗃️ Erstattet av nyere versjon
             </span>
           )}
           {erHistoriskVersjon && gjeldendeVersjon && String(gjeldendeVersjon.id) !== String(k.id) && (
             <button onClick={() => apneRevisjon(gjeldendeVersjon)} disabled={!!apnerRevId}
-              style={{ background:'#7c3aed', color:'white', border:'none', borderRadius:'999px', padding: isMobKV ? '4px 10px' : '4px 12px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700', cursor: apnerRevId ? 'default' : 'pointer' }}>
+              style={{ background:'#059669', color:'white', border:'none', borderRadius:'999px', padding: isMobKV ? '4px 10px' : '4px 12px', fontSize: isMobKV ? '10px' : '12px', fontWeight:'700', cursor: apnerRevId ? 'default' : 'pointer' }}>
               {apnerRevId ? 'Åpner …' : `→ Åpne ${kalkRevLabel(gjeldendeVersjon.revision_number)}`}
             </button>
           )}
@@ -75918,9 +76295,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         {/* Åpner man en gammel versjon, skal det ikke være tvil om hva man ser på
             — eller om hvorfor ingenting kan endres. */}
         {erHistoriskVersjon && (
-          <div style={{ background:'#f5f3ff', border:'1px solid #ddd6fe', borderRadius:'12px', padding:'10px 12px', marginBottom:'12px', display:'flex', alignItems:'flex-start', gap:'9px' }}>
+          <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'10px 12px', marginBottom:'12px', display:'flex', alignItems:'flex-start', gap:'9px' }}>
             <span style={{ fontSize:'16px', lineHeight:1.2 }}>🔒</span>
-            <div style={{ fontSize: isMobKV ? '11px' : '12px', color:'#5b21b6', lineHeight:1.55 }}>
+            <div style={{ fontSize: isMobKV ? '11px' : '12px', color:'#065f46', lineHeight:1.55 }}>
               <strong>Du ser på en tidligere versjon ({kalkRevLabel(k.revision_number)}).</strong> Den er låst, slik at tallene
               kunden faktisk fikk står urørt. Skal du endre noe, åpne gjeldende versjon — eller lag en ny revisjon fra denne.
             </div>
@@ -75932,10 +76309,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             markert, notatet forteller hva som endret seg, og raden er klikkbar
             slik at man kommer inn i de gamle versjonene. */}
         {visRevHistorikk && revisjoner.length > 1 && (
-          <div style={{ background:'#faf9ff', border:'1px solid #ddd6fe', borderRadius:'12px', padding:'12px 14px', marginBottom:'12px' }}>
+          <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'12px 14px', marginBottom:'12px' }}>
             <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', marginBottom:'8px', flexWrap:'wrap' }}>
-              <span style={{ fontSize:'11px', fontWeight:'700', color:'#7c3aed', letterSpacing:'0.03em' }}>VERSJONER AV DENNE KALKYLEN</span>
-              <button onClick={() => setVisRevHistorikk(false)} style={{ background:'none', border:'none', fontSize:'12px', color:'#7c3aed', cursor:'pointer', fontWeight:'600' }}>Skjul</button>
+              <span style={{ fontSize:'11px', fontWeight:'700', color:'#059669', letterSpacing:'0.03em' }}>VERSJONER AV DENNE KALKYLEN</span>
+              <button onClick={() => setVisRevHistorikk(false)} style={{ background:'none', border:'none', fontSize:'12px', color:'#059669', cursor:'pointer', fontWeight:'600' }}>Skjul</button>
             </div>
             {revisjoner.map((rev, i) => {
               const erApen = String(rev.id) === String(k.id)
@@ -75946,17 +76323,24 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 <div key={rev.id}
                   onClick={() => { if (!erApen) apneRevisjon(rev) }}
                   title={erApen ? 'Dette er versjonen du ser på' : 'Åpne denne versjonen'}
-                  style={{ background: erApen ? 'white' : 'transparent', border: erApen ? '1px solid #ddd6fe' : '1px solid transparent', borderRadius:'10px', padding:'9px 11px', marginBottom:'4px', cursor: erApen ? 'default' : 'pointer', opacity: apner ? 0.6 : 1 }}
-                  onMouseEnter={e => { if (!erApen) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#ddd6fe' } }}
+                  style={{ background: erApen ? 'white' : 'transparent', border: erApen ? '1px solid #bbf7d0' : '1px solid transparent', borderRadius:'10px', padding:'9px 11px', marginBottom:'4px', cursor: erApen ? 'default' : 'pointer', opacity: apner ? 0.6 : 1 }}
+                  onMouseEnter={e => { if (!erApen) { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#bbf7d0' } }}
                   onMouseLeave={e => { if (!erApen) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent' } }}>
                   <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap' }}>
-                    <span style={{ background: erApen ? '#7c3aed' : '#e2e8f0', color: erApen ? 'white' : '#64748b', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', flexShrink:0 }}>
+                    <span style={{ background: erApen ? '#059669' : '#e2e8f0', color: erApen ? 'white' : '#64748b', fontSize:'10px', fontWeight:'700', padding:'2px 8px', borderRadius:'4px', flexShrink:0 }}>
                       {kalkRevLabel(rev.revision_number)}
                     </span>
                     <span style={{ fontSize:'12px', color:'#64748b', fontFamily:'monospace' }}>{kalkNrMedRev(rev)}</span>
-                    {erApen && <span style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed' }}>← du ser på denne</span>}
-                    {!erApen && <span style={{ fontSize:'10px', fontWeight:'700', color:'#7c3aed' }}>{apner ? 'Åpner …' : 'Åpne →'}</span>}
+                    {erApen && <span style={{ fontSize:'10px', fontWeight:'700', color:'#059669' }}>← du ser på denne</span>}
+                    {!erApen && <span style={{ fontSize:'10px', fontWeight:'700', color:'#059669' }}>{apner ? 'Åpner …' : 'Åpne →'}</span>}
                     {rev.status === KALK_STATUS_ERSTATTET && !erApen && <span style={{ fontSize:'10px', color:'#94a3b8' }}>erstattet</span>}
+                    {!erApen && (
+                      <button onClick={e => { e.stopPropagation(); sammenlignMedRevisjon(rev) }} disabled={!!henterDiff}
+                        title={`Se hva som skiller ${kalkRevLabel(rev.revision_number)} fra ${kalkRevLabel(k.revision_number)}`}
+                        style={{ background:'white', border:'1px solid #bbf7d0', color:'#047857', borderRadius:'999px', padding:'2px 9px', fontSize:'10px', fontWeight:'700', cursor: henterDiff ? 'default' : 'pointer' }}>
+                        {String(henterDiff || '') === String(rev.id) ? 'Henter …' : '⇄ Sammenlign'}
+                      </button>
+                    )}
                     <span style={{ marginLeft:'auto', fontSize:'12px', fontWeight:'700', color:'#0f172a', whiteSpace:'nowrap' }}>{fmt(rev.total_ex_mva)}</span>
                     {diff !== null && Math.abs(diff) >= 1 && (
                       <span style={{ fontSize:'11px', fontWeight:'700', color: diff > 0 ? '#c2410c' : '#15803d', whiteSpace:'nowrap' }}>
@@ -75971,7 +76355,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 </div>
               )
             })}
-            <div style={{ fontSize:'11px', color:'#7c3aed', marginTop:'6px', lineHeight:1.5 }}>
+            <div style={{ fontSize:'11px', color:'#059669', marginTop:'6px', lineHeight:1.5 }}>
               Tilbud som alt er sendt peker på den versjonen de ble laget fra, og følger ikke revisjonene.
             </div>
           </div>
@@ -76017,18 +76401,17 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       inngang, ikke bare via «Oppdater priser». */}
                   <button onClick={() => { setShowNyRevisjon({ prisendringer: [] }); setShowMoreMenu(false) }}
                     title="Lager en ny versjon av kalkylen. Denne står urørt som «Erstattet»."
-                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#7c3aed', fontWeight:'600' }}>🔄 Ny revisjon</button>
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#059669', fontWeight:'600' }}>🔄 Ny revisjon</button>
                   <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
                   <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📦 Last ned materialliste</button>
                   <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
-                  <button onClick={() => {
-                    const label = prompt('Gi denne versjonen et navn (f.eks. «Etter kundejustering» eller «Revidert etter befaring»):')
-                    if (label) { saveVersion(label); setShowMoreMenu(false) }
-                  }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>💾 Lagre versjon</button>
+                  <button onClick={() => { setLagreVersjonNavn(''); setShowMoreMenu(false) }}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>💾 Lagre mellomlagring</button>
                   <button onClick={() => { loadVersions(); setShowVersions(true); setShowMoreMenu(false) }}
-                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📜 Versjonshistorikk</button>
+                    title="Egne mellomlagringer du kan sammenligne mot og gjenopprette. Versjonene kunden ser er revisjonene."
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#64748b' }}>💾 Mellomlagringer</button>
                   <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
                   <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
@@ -78791,19 +79174,17 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
       {/* Versjonshistorikk-modal */}
       {showVersions && (
         <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onMouseDown={(e) => { if (e.target === e.currentTarget) { setShowVersions(false); setCompareVersion(null) }}} />
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowVersions(false) }} />
           <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(700px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
             <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
               <div>
-                <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>📜 Versjonshistorikk</h2>
-                <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{versions.length} lagrede versjoner · Sammenlign og gjenopprett</p>
+                <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>💾 Mellomlagringer</h2>
+                <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{versions.length} lagret · dine egne punkter å sammenligne mot. Versjonene kunden ser, er revisjonene.</p>
               </div>
               <div style={{ display:'flex', gap:'8px' }}>
-                <button onClick={() => {
-                  const label = prompt('Navn på ny versjon:')
-                  if (label) saveVersion(label)
-                }} style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>💾 Lagre nåværende</button>
-                <button onClick={() => { setShowVersions(false); setCompareVersion(null) }} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+                <button onClick={() => setLagreVersjonNavn('')}
+                  style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>💾 Lagre nåværende</button>
+                <button onClick={() => setShowVersions(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
               </div>
             </div>
             <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
@@ -78812,7 +79193,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               ) : versions.length === 0 ? (
                 <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
                   <div style={{ fontSize:'40px', marginBottom:'12px' }}>📜</div>
-                  <p style={{ fontSize:'14px' }}>Ingen versjoner lagret ennå. Klikk «Lagre nåværende» for å opprette første versjon.</p>
+                  <p style={{ fontSize:'14px' }}>Ingen mellomlagringer ennå. Klikk «Lagre nåværende» for å lage den første.</p>
                 </div>
               ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
@@ -78830,10 +79211,8 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
 
                   {/* Lagrede versjoner */}
                   {versions.map((v, i) => {
-                    const isComparing = compareVersion?.id === v.id
-                    const diff = isComparing ? buildDiff(v, null) : null
                     return (
-                      <div key={v.id} style={{ background: isComparing ? '#eff6ff' : 'white', borderRadius:'12px', border:`1px solid ${isComparing ? '#bfdbfe' : '#f1f5f9'}`, padding:'14px 16px', transition:'all 0.15s' }}>
+                      <div key={v.id} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 16px' }}>
                         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
                           <div style={{ flex:1 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
@@ -78849,9 +79228,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-                            <button onClick={() => setCompareVersion(isComparing ? null : v)}
-                              style={{ padding:'6px 10px', border:`1px solid ${isComparing ? '#2563eb' : '#e2e8f0'}`, borderRadius:'8px', background: isComparing ? '#2563eb' : 'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color: isComparing ? 'white' : '#475569' }}>
-                              {isComparing ? '✕ Lukk' : '🔍 Sammenlign'}
+                            <button onClick={() => sammenlignMedMellomlagring(v)}
+                              title="Se forskjellene på materiallinjenivå"
+                              style={{ padding:'6px 10px', border:'1px solid #bbf7d0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#047857' }}>
+                              ⇄ Sammenlign
                             </button>
                             <button onClick={() => restoreVersion(v)}
                               style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>
@@ -78860,47 +79240,41 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                           </div>
                         </div>
 
-                        {/* Sammenligning */}
-                        {isComparing && diff && (
-                          <div style={{ marginTop:'12px', background:'white', borderRadius:'10px', padding:'14px', border:'1px solid #e2e8f0' }}>
-                            <div style={{ fontSize:'12px', fontWeight:'700', color:'#2563eb', marginBottom:'10px' }}>Endringer fra v{v.version_number} til nåværende:</div>
-                            <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'8px', marginBottom:'10px' }}>
-                              <div style={{ background: diff.sumDiff > 0 ? '#fef2f2' : diff.sumDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
-                                <div style={{ fontSize:'14px', fontWeight:'800', color: diff.sumDiff > 0 ? '#dc2626' : diff.sumDiff < 0 ? '#059669' : '#64748b' }}>
-                                  {diff.sumDiff > 0 ? '+' : ''}{fmt(diff.sumDiff)}
-                                </div>
-                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>prisendring</div>
-                              </div>
-                              <div style={{ background: diff.timerDiff > 0 ? '#fffbeb' : diff.timerDiff < 0 ? '#ecfdf5' : '#f8fafc', borderRadius:'8px', padding:'8px 12px', textAlign:'center' }}>
-                                <div style={{ fontSize:'14px', fontWeight:'800', color: diff.timerDiff > 0 ? '#d97706' : diff.timerDiff < 0 ? '#059669' : '#64748b' }}>
-                                  {diff.timerDiff > 0 ? '+' : ''}{diff.timerDiff.toFixed(1)}t
-                                </div>
-                                <div style={{ fontSize:'10px', color:'#94a3b8' }}>timediff</div>
-                              </div>
-                            </div>
-                            {diff.fagEndringer.length > 0 ? (
-                              <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                                {diff.fagEndringer.map((fe, fi) => (
-                                  <div key={fi} style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'12px', padding:'4px 8px', borderRadius:'6px',
-                                    background: fe.type === 'added' ? '#ecfdf5' : fe.type === 'removed' ? '#fef2f2' : '#fffbeb' }}>
-                                    <span>{fe.emoji}</span>
-                                    <span style={{ fontWeight:'600', color:'#0f172a' }}>{fe.fag}</span>
-                                    <span style={{ color: fe.type === 'added' ? '#059669' : fe.type === 'removed' ? '#dc2626' : '#d97706' }}>
-                                      {fe.type === 'added' ? '+ Lagt til' : fe.type === 'removed' ? '− Fjernet' : `${fe.bdDiff > 0 ? '+' : ''}${fe.bdDiff} bygn.deler (${fe.oldBd}→${fe.newBd})`}
-                                    </span>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p style={{ margin:0, fontSize:'12px', color:'#94a3b8' }}>Ingen strukturelle endringer i faggrupper (mulig kun prisendringer)</p>
-                            )}
-                          </div>
-                        )}
                       </div>
                     )
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Sammenligning av to versjoner — samme dialog for revisjoner og
+          mellomlagringer. */}
+      {diffVisning && <KalkyleDiffModal diff={diffVisning} onClose={() => setDiffVisning(null)} />}
+
+      {/* Navn på mellomlagring (erstatter native prompt) */}
+      {lagreVersjonNavn !== null && (
+        <>
+          <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:160 }} onMouseDown={e => { if (e.target === e.currentTarget) setLagreVersjonNavn(null) }} />
+          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'18px', width:'min(460px, calc(100vw - 28px))',
+            zIndex:161, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', padding:'20px 22px', boxSizing:'border-box' }}>
+            <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>💾 Lagre mellomlagring</h3>
+            <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+              Et navngitt punkt du kan sammenligne mot og gjenopprette. Skal kunden se en ny versjon, bruk «Ny revisjon» i stedet.
+            </p>
+            <input autoFocus value={lagreVersjonNavn} onChange={e => setLagreVersjonNavn(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && lagreVersjonNavn.trim() && !lagrerVersjon) lagreMellomlagring() }}
+              placeholder="F.eks. «Etter kundejustering» eller «Revidert etter befaring»"
+              style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', fontFamily:'inherit' }} />
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:'8px', marginTop:'16px' }}>
+              <button onClick={() => setLagreVersjonNavn(null)} disabled={lagrerVersjon}
+                style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
+              <button onClick={lagreMellomlagring} disabled={!lagreVersjonNavn.trim() || lagrerVersjon}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', background: (lagreVersjonNavn.trim() && !lagrerVersjon) ? '#059669' : '#a7f3d0', color:'white', cursor: (lagreVersjonNavn.trim() && !lagrerVersjon) ? 'pointer' : 'default', fontSize:'13px', fontWeight:'700' }}>
+                {lagrerVersjon ? 'Lagrer …' : '💾 Lagre'}
+              </button>
             </div>
           </div>
         </>
