@@ -60090,6 +60090,14 @@ const RULL_MIN_BREDDE = 0.3,  RULL_MAKS_BREDDE = 6
 const RULL_MIN_LENGDE = 0.8,  RULL_MAKS_LENGDE = 250
 const RULL_MIN_AREAL  = 0.5,  RULL_MAKS_AREAL  = 500
 
+// Flest plater vi godtar i én pakke. Grensen skal fange TASTEFEIL, ikke
+// beskrive virkeligheten: skriver noen 120 i stedet for 12, må systemet stoppe.
+// En grense som slipper gjennom en tifeil er en ny variant av nettopp den feilen
+// vi holder på å fjerne. Den står to steder — i dialogen, som sperrer knappen,
+// OG i koden som leser svaret. Dialogen er en hjelp for brukeren; sperren i
+// koden er den som faktisk holder.
+const PAKN_MAKS_PLATER = 100
+
 // Millimeter og centimeter til meter. Enheten leses PER TALL, ikke for hele
 // uttrykket: «25m x 50mm» er 25 meter ganger 50 millimeter, og leser vi begge
 // som samme enhet blir arealet 1000 ganger feil.
@@ -72165,10 +72173,10 @@ async function sporOmPakning(confirm, felter, ctx) {
         ] }],
         notes: [lagres],
       },
-      input: { label: 'Antall plater i pakken', enhet: 'plater', plassholder: 'f.eks. 12', min: 1, max: 500, hjelp },
+      input: { label: 'Antall plater i pakken', enhet: 'plater', plassholder: 'f.eks. 12', min: 1, max: PAKN_MAKS_PLATER, hjelp },
     })
     const antall = parseFloat(svar)
-    if (!isFinite(antall) || antall <= 0) return felter
+    if (!isFinite(antall) || antall < 1 || antall > PAKN_MAKS_PLATER) return felter
     const areal = Math.round(plate.areal * antall * 1000) / 1000
     if (!_arealOk(areal)) return felter
     lagrePakningsstorrelse(vare, antall, 'stk')
@@ -72192,7 +72200,7 @@ async function sporOmPakning(confirm, felter, ctx) {
       input: { label: `Lengde per ${enhOrd}`, enhet: 'm', plassholder: 'f.eks. 25', min: RULL_MIN_LENGDE, max: RULL_MAKS_LENGDE, hjelp },
     })
     const lengde = parseFloat(svar)
-    if (!isFinite(lengde) || lengde <= 0) return felter
+    if (!isFinite(lengde) || lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) return felter
     const areal = Math.round(bredde * lengde * 1000) / 1000
     if (!_arealOk(areal)) return felter
     lagrePakningsstorrelse(vare, lengde, 'm')
