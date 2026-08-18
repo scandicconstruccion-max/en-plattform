@@ -71968,15 +71968,16 @@ async function hentKalkyleRevisjoner(k) {
 
 // ─── SAMMENLIGNING AV TO VERSJONER (materiallinjenivå) ───────────────────────
 //
-// ÉN motor for begge historikkene i Kalkulasjon: revisjonene (egne rader i
-// calculations) og de navngitte mellomlagringene (calculation_versions). Begge
-// bærer det SAMME treet — kalkyler → bygningsdeler → materialer — så det er
-// bare kilden som skiller dem. To sammenligninger som svarer ulikt på samme
-// spørsmål er verre enn én som dekker begge.
+// Sidene er { label, kalkyler, faktorer } — kalkyler → bygningsdeler →
+// materialer. Motoren er uavhengig av hvor treet kom fra.
 //
-// Den gamle buildDiff() gikk bare til faggruppe og TALTE bygningsdeler
-// («+2 bygn.deler»). Den kunne ikke svare på det man faktisk spør om: hvilke
-// materiallinjer fikk ny pris, og hva gjorde det med totalen.
+// Kalkulasjon hadde to overlappende historikker: revisjonene (egne rader i
+// calculations) og navngitte snapshot i calculation_versions. Snapshotene er
+// fjernet — de var i praksis ubrukte (2 rader på 2 kalkyler, alle i
+// testbedriften), og to historikker som svarte ulikt på samme spørsmål var
+// verre enn én. Den gamle buildDiff() gikk dessuten bare til faggruppe og TALTE
+// bygningsdeler («+2 bygn.deler»); den kunne ikke svare på det man faktisk spør
+// om: hvilke materiallinjer fikk ny pris, og hva det gjorde med totalen.
 //
 // Hver side er { label, kalkyler, faktorer }. Tallene hentes fra appens egne
 // beregninger (beregnKalkyle / beregnBygningsdel / beregnProsjektTotal), ikke
@@ -72846,14 +72847,17 @@ function KalkyleDiffModal({ diff, onClose }) {
   const linjeRad = (l, i) => {
     if (bareEndringer && l.status === 'lik') return null
     const f = STATUSFARGE[l.status] || STATUSFARGE['lik']
+    // På PC står etikett, regnestykke og sum på ÉN linje — det er der bredden
+    // gjør nytte. På telefon stables de tre under hverandre.
     const side = (data, etikett, dempet) => (
       <div style={{ background: data ? (dempet ? '#f8fafc' : 'white') : '#fafafa', border:`1px solid ${data ? '#e2e8f0' : '#f1f5f9'}`,
-        borderRadius:'8px', padding:'7px 9px', minWidth:0 }}>
-        <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', marginBottom:'2px' }}>{etikett}</div>
+        borderRadius:'8px', padding:'7px 11px', minWidth:0, display:'flex', flexDirection: isMobD ? 'column' : 'row',
+        alignItems: isMobD ? 'flex-start' : 'baseline', gap: isMobD ? '1px' : '10px' }}>
+        <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', flexShrink:0, minWidth: isMobD ? 0 : '70px' }}>{etikett}</div>
         {data ? (
           <>
-            <div style={{ fontSize:'12px', color:'#475569' }}>{fmtTall(data.mengde)} {data.enhet} × {fmtKr2(data.pris)}</div>
-            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{fmtKr2(data.sum)}</div>
+            <div style={{ fontSize:'13px', color:'#475569', whiteSpace:'nowrap' }}>{fmtTall(data.mengde)} {data.enhet} × {fmtKr2(data.pris)}</div>
+            <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginLeft: isMobD ? 0 : 'auto', whiteSpace:'nowrap' }}>{fmtKr2(data.sum)}</div>
           </>
         ) : <div style={{ fontSize:'12px', color:'#cbd5e1', fontStyle:'italic' }}>ikke med</div>}
       </div>
@@ -72870,7 +72874,7 @@ function KalkyleDiffModal({ diff, onClose }) {
             </span>
           )}
         </div>
-        <div style={{ display:'grid', gridTemplateColumns: isMobD ? '1fr' : '1fr 1fr', gap:'7px' }}>
+        <div style={{ display:'grid', gridTemplateColumns: isMobD ? '1fr' : '1fr 1fr', gap: isMobD ? '7px' : '14px' }}>
           {side(l.v, diff.labelV, true)}
           {side(l.h, diff.labelH, false)}
         </div>
@@ -72882,7 +72886,7 @@ function KalkyleDiffModal({ diff, onClose }) {
     <>
       <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:150 }} onMouseDown={e => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius: isMobD ? '16px' : '20px',
-        width: isMobD ? 'calc(100vw - 20px)' : 'min(920px, calc(100vw - 40px))', maxHeight:'88vh', display:'flex', flexDirection:'column',
+        width: isMobD ? 'calc(100vw - 20px)' : 'min(1400px, calc(100vw - 48px))', maxHeight:'90vh', display:'flex', flexDirection:'column',
         zIndex:151, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
 
         {/* Topp: hvem mot hvem, og hva det gjør med totalen */}
@@ -75017,10 +75021,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // Sammenligningen: den ferdig byggede diffen, eller null når dialogen er lukket.
   const [diffVisning, setDiffVisning] = useState(null)
   const [henterDiff, setHenterDiff] = useState(null)   // id-en vi henter for
-  // Navn på ny mellomlagring. null = dialogen er lukket, '' = åpen og tom.
-  // Erstatter et native prompt() — vi bruker aldri nettleserens egne dialoger.
-  const [lagreVersjonNavn, setLagreVersjonNavn] = useState(null)
-  const [lagrerVersjon, setLagrerVersjon] = useState(false)
   // På telefon vises materiallinjene som en LESEVISNING i stedet for den brede
   // tabellen: ingen bygger en kalkyle på mobil, men mange åpner en på farta og
   // skal se hva som er med, hvilke priser som gjelder og hva som er merket.
@@ -75090,7 +75090,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       setActiveKalkId(null)
       setExpandedBd(null)
       setUndoStack([])
-      setVersions([])
       window.scrollTo(0, 0)
     } catch (e) {
       setToastMsg({ title: 'Kunne ikke åpne versjonen', message: (e && e.message) || 'ukjent feil', type: 'error' })
@@ -75115,15 +75114,6 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     } finally { setHenterDiff(null) }
   }
 
-  // Sammenligner en mellomlagring med kalkylen slik den står nå. Samme dialog —
-  // snapshotet bærer det samme treet, bare fra en annen tabell.
-  const sammenlignMedMellomlagring = (v) => {
-    if (!v) return
-    setDiffVisning(byggKalkyleDiff(
-      { label: `v${v.version_number}${v.label ? ' · ' + v.label : ''}`, kalkyler: v.snapshot_kalkyler || [], faktorer: v.snapshot_faktorer || {} },
-      { label: 'Nå', kalkyler: kalkyler, faktorer: alleFaktorer },
-    ))
-  }
 
   // Alle NOBB-numre som finnes i kalkylen, som en stabil signatur.
   const nobbSignatur = React.useMemo(() => {
@@ -75650,75 +75640,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showMoveBdModal, setShowMoveBdModal] = useState(null) // { kalkId, bdId, bdName }
   const [toastMsg, setToastMsg] = useState(null) // { title, message, type: 'success'|'error' }
   const [showImportKalkyle, setShowImportKalkyle] = useState(null) // kalkId to import into
-  const [showVersions, setShowVersions] = useState(false)
-  const [versions, setVersions] = useState([])
-  const [loadingVersions, setLoadingVersions] = useState(false)
   const [showPlanlegg, setShowPlanlegg] = useState(false)
 
-  // ── Versjonering — snapshot-basert ──
-  const loadVersions = async () => {
-    setLoadingVersions(true)
-    try {
-      const { data } = await supabase.from('calculation_versions').select('*').eq('calculation_id', k.id).order('version_number', { ascending: false })
-      setVersions(data || [])
-    } catch(e) { console.error(e) }
-    finally { setLoadingVersions(false) }
-  }
-
-  const saveVersion = async (label) => {
-    if (!label?.trim()) return
-    try {
-      const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
-      const newTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
-      await supabase.from('calculation_versions').insert({
-        calculation_id: k.id,
-        version_number: maxV + 1,
-        label: label.trim(),
-        snapshot_kalkyler: kalkyler,
-        snapshot_faktorer: alleFaktorer,
-        total_ex_mva: newTotals.totMedFortjeneste,
-        total_hours: newTotals.totTimer,
-        fag_count: kalkyler.length,
-        bd_count: kalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0),
-        created_by: user?.id,
-      })
-      await loadVersions()
-      setToastMsg({ title: 'Versjon lagret', message: `v${maxV + 1}: ${label.trim()}`, type: 'success' })
-    } catch(e) { await appAlert({ message: 'Feil ved versjonering', subMessage: e.message, kind: 'error' }) }
-  }
-
-  // Lagrer mellomlagringen fra navnedialogen.
-  const lagreMellomlagring = async () => {
-    const navn = (lagreVersjonNavn || '').trim()
-    if (!navn) return
-    setLagrerVersjon(true)
-    try { await saveVersion(navn); setLagreVersjonNavn(null) }
-    finally { setLagrerVersjon(false) }
-  }
-
-  const restoreVersion = async (version) => {
-    const ok = await confirm({
-      message: `Gjenopprett versjon v${version.version_number}`,
-      subMessage: `"${version.label}" blir aktiv. Nåværende kalkyle lagres automatisk som ny versjon før gjenoppretting.`,
-      confirmLabel: 'Gjenopprett',
-    })
-    if (!ok) return
-    // Lagre nåværende som versjon først
-    const maxV = versions.length > 0 ? Math.max(...versions.map(v => v.version_number || 0)) : 0
-    const curTotals = beregnProsjektTotal(kalkyler, alleFaktorer)
-    await supabase.from('calculation_versions').insert({
-      calculation_id: k.id, version_number: maxV + 1, label: 'Auto-lagret for gjenoppretting',
-      snapshot_kalkyler: kalkyler, snapshot_faktorer: alleFaktorer,
-      total_ex_mva: curTotals.totMedFortjeneste, total_hours: curTotals.totTimer,
-      fag_count: kalkyler.length, bd_count: kalkyler.reduce((s, kl) => s + (kl.bygningsdeler || []).length, 0),
-      created_by: user?.id,
-    })
-    // Gjenopprett
-    const restored = { ...k, kalkyler: version.snapshot_kalkyler, faktorer: version.snapshot_faktorer }
-    saveProject(restored)
-    await loadVersions()
-    setToastMsg({ title: 'Versjon gjenopprettet', message: `v${version.version_number}: ${version.label}`, type: 'success' })
-  }
 
   const sendUEForesporsel = async (kalId, bdId, ue) => {
     if (!erGyldigEpost(ue.email)) { await appAlert({ message: 'Ugyldig e-postadresse', subMessage: 'UE-en mangler en gyldig e-postadresse.', kind: 'warn' }); return }
@@ -76406,12 +76329,6 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
                   <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📦 Last ned materialliste</button>
-                  <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
-                  <button onClick={() => { setLagreVersjonNavn(''); setShowMoreMenu(false) }}
-                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>💾 Lagre mellomlagring</button>
-                  <button onClick={() => { loadVersions(); setShowVersions(true); setShowMoreMenu(false) }}
-                    title="Egne mellomlagringer du kan sammenligne mot og gjenopprette. Versjonene kunden ser er revisjonene."
-                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#64748b' }}>💾 Mellomlagringer</button>
                   <div style={{ height:'1px', background:'#f1f5f9', margin:'4px 0' }} />
                   <button onClick={() => { setShowMiniSummary(!showMiniSummary); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>{showMiniSummary ? '🔽 Skjul hurtigoversikt' : '🔼 Vis hurtigoversikt'}</button>
@@ -79171,114 +79088,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         </>
       )}
 
-      {/* Versjonshistorikk-modal */}
-      {showVersions && (
-        <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} onMouseDown={(e) => { if (e.target === e.currentTarget) setShowVersions(false) }} />
-          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'20px', width:'min(700px, calc(100vw - 32px))', maxHeight:'85vh', display:'flex', flexDirection:'column', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
-            <div style={{ padding:'20px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
-              <div>
-                <h2 style={{ margin:0, fontSize:'17px', fontWeight:'700', color:'#0f172a' }}>💾 Mellomlagringer</h2>
-                <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>{versions.length} lagret · dine egne punkter å sammenligne mot. Versjonene kunden ser, er revisjonene.</p>
-              </div>
-              <div style={{ display:'flex', gap:'8px' }}>
-                <button onClick={() => setLagreVersjonNavn('')}
-                  style={{ padding:'8px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'600' }}>💾 Lagre nåværende</button>
-                <button onClick={() => setShowVersions(false)} style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-              </div>
-            </div>
-            <div style={{ padding:'20px 24px', overflowY:'auto', flex:1 }}>
-              {loadingVersions ? (
-                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>Laster versjoner...</div>
-              ) : versions.length === 0 ? (
-                <div style={{ textAlign:'center', padding:'40px', color:'#94a3b8' }}>
-                  <div style={{ fontSize:'40px', marginBottom:'12px' }}>📜</div>
-                  <p style={{ fontSize:'14px' }}>Ingen mellomlagringer ennå. Klikk «Lagre nåværende» for å lage den første.</p>
-                </div>
-              ) : (
-                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                  {/* Nåværende (ulagret) */}
-                  <div style={{ background:'#ecfdf5', borderRadius:'12px', border:'1px solid #a7f3d0', padding:'14px 16px' }}>
-                    <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-                      <div>
-                        <span style={{ fontWeight:'700', fontSize:'14px', color:'#059669' }}>Nåværende versjon (ulagret)</span>
-                        <div style={{ fontSize:'12px', color:'#64748b', marginTop:'2px' }}>
-                          {kalkyler.length} faggrupper · {kalkyler.reduce((s,kl) => s + (kl.bygningsdeler||[]).length, 0)} bygningsdeler · {fmt(totals.totMedFortjeneste)}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Lagrede versjoner */}
-                  {versions.map((v, i) => {
-                    return (
-                      <div key={v.id} style={{ background:'white', borderRadius:'12px', border:'1px solid #f1f5f9', padding:'14px 16px' }}>
-                        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-                          <div style={{ flex:1 }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'4px' }}>
-                              <span style={{ background:'#f1f5f9', color:'#475569', padding:'2px 8px', borderRadius:'6px', fontSize:'11px', fontWeight:'700' }}>v{v.version_number}</span>
-                              <span style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a' }}>{v.label}</span>
-                            </div>
-                            <div style={{ display:'flex', gap:'12px', fontSize:'12px', color:'#94a3b8', flexWrap:'wrap' }}>
-                              <span>{new Date(v.created_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}</span>
-                              <span>👷 {v.fag_count} fag</span>
-                              <span>🧱 {v.bd_count} bygn.deler</span>
-                              <span>💰 {fmt(v.total_ex_mva)}</span>
-                              <span>⏱️ {(v.total_hours||0).toFixed(0)}t</span>
-                            </div>
-                          </div>
-                          <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-                            <button onClick={() => sammenlignMedMellomlagring(v)}
-                              title="Se forskjellene på materiallinjenivå"
-                              style={{ padding:'6px 10px', border:'1px solid #bbf7d0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#047857' }}>
-                              ⇄ Sammenlign
-                            </button>
-                            <button onClick={() => restoreVersion(v)}
-                              style={{ padding:'6px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#475569' }}>
-                              ↩️ Gjenopprett
-                            </button>
-                          </div>
-                        </div>
-
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Sammenligning av to versjoner — samme dialog for revisjoner og
           mellomlagringer. */}
       {diffVisning && <KalkyleDiffModal diff={diffVisning} onClose={() => setDiffVisning(null)} />}
 
-      {/* Navn på mellomlagring (erstatter native prompt) */}
-      {lagreVersjonNavn !== null && (
-        <>
-          <div style={{ position:'fixed', inset:0, background:'rgba(15,23,42,0.5)', zIndex:160 }} onMouseDown={e => { if (e.target === e.currentTarget) setLagreVersjonNavn(null) }} />
-          <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white', borderRadius:'18px', width:'min(460px, calc(100vw - 28px))',
-            zIndex:161, boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', padding:'20px 22px', boxSizing:'border-box' }}>
-            <h3 style={{ margin:'0 0 4px', fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>💾 Lagre mellomlagring</h3>
-            <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
-              Et navngitt punkt du kan sammenligne mot og gjenopprette. Skal kunden se en ny versjon, bruk «Ny revisjon» i stedet.
-            </p>
-            <input autoFocus value={lagreVersjonNavn} onChange={e => setLagreVersjonNavn(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && lagreVersjonNavn.trim() && !lagrerVersjon) lagreMellomlagring() }}
-              placeholder="F.eks. «Etter kundejustering» eller «Revidert etter befaring»"
-              style={{ width:'100%', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', boxSizing:'border-box', fontFamily:'inherit' }} />
-            <div style={{ display:'flex', justifyContent:'flex-end', gap:'8px', marginTop:'16px' }}>
-              <button onClick={() => setLagreVersjonNavn(null)} disabled={lagrerVersjon}
-                style={{ padding:'10px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', fontWeight:'600', color:'#374151' }}>Avbryt</button>
-              <button onClick={lagreMellomlagring} disabled={!lagreVersjonNavn.trim() || lagrerVersjon}
-                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', background: (lagreVersjonNavn.trim() && !lagrerVersjon) ? '#059669' : '#a7f3d0', color:'white', cursor: (lagreVersjonNavn.trim() && !lagrerVersjon) ? 'pointer' : 'default', fontSize:'13px', fontWeight:'700' }}>
-                {lagrerVersjon ? 'Lagrer …' : '💾 Lagre'}
-              </button>
-            </div>
-          </div>
-        </>
-      )}
 
       {/* Generell suksess/feil popup */}
       {toastMsg && (
