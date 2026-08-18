@@ -13882,7 +13882,10 @@ const ConfirmContext = React.createContext(null)
 function ConfirmProvider({ children }) {
   // Keep ALL state in a single ref to avoid stale closure issues
   const [dialog, setDialog] = React.useState(null)
-  // dialog = { message, subMessage, confirmLabel, danger, alertOnly, kind } | null
+  // dialog = { message, subMessage, confirmLabel, cancelLabel, danger, alertOnly, kind } | null
+  //   cancelLabel: egen tekst på avbryt-knappen. Noen valg er ikke «gjør / ikke gjør»
+  //     men to reelle alternativ («Ja, regn om» / «Nei, behold prisen per rull») —
+  //     da må begge knappene si hva de gjør. Faller tilbake til 'Avbryt'.
   //   alertOnly: true  → vis kun OK-knapp (ingen Avbryt), for "info"/"obs"-meldinger
   //   kind: 'info' | 'warn' | 'success' | 'error' — styrer ikon og farge på toppen
   const cbRef = React.useRef(null) // holds { resolve }
@@ -13981,11 +13984,14 @@ function ConfirmProvider({ children }) {
                 </div>
               )}
             </div>
-            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end', flexShrink:0, borderTop: dialog.details ? '1px solid #f1f5f9' : 'none' }}>
+            {/* flexWrap: en egendefinert cancelLabel kan være lang («Nei, behold
+                407,40 per rull»). På 375 px legger knappene seg da under hverandre
+                i stedet for å presses ut av dialogen. */}
+            <div style={{ display:'flex', gap:'10px', padding:'20px 24px 24px', justifyContent:'flex-end', flexShrink:0, flexWrap:'wrap', borderTop: dialog.details ? '1px solid #f1f5f9' : 'none' }}>
               {!dialog.alertOnly && (
                 <button onClick={() => respond(false)}
-                  style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>
-                  Avbryt
+                  style={{ padding:'10px 22px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151', flex:'0 1 auto', minWidth:0 }}>
+                  {dialog.cancelLabel || 'Avbryt'}
                 </button>
               )}
               <button onClick={() => respond(true)}
@@ -59697,6 +59703,127 @@ const KOB_TILLIT_STIL = {
   lav:     { bg:'#f8fafc', color:'#64748b', border:'#e2e8f0', tekst:'Usikker' },
 }
 
+// ─── ENHETER OG MENGDER PÅ MATERIALLINJER (Oppgave 3) ────────────────────────
+// Prisboken selger i LEVERANSEENHETER (rull, stykk, pakke), mens kalkylen regner
+// i BYGGEENHETER (m², lm). Verifisert i staging: «Solid dampsperre 2,6x15m» koster
+// 407,40 kr per rull. Lagt inn på en m²-linje sto den som 407,40 kr/m² — rullen
+// dekker 39 m², så riktig tall er 10,45. Nesten førti ganger feil, uten varsel.
+//
+// To ting skjer her: vi TILBYR omregning når vi kan lese dimensjonen ut av
+// varenavnet (aldri stille — brukeren bekrefter regnestykket), og vi MERKER
+// linjen når enheten på linjen ikke er den prislisten priser i.
+
+// Enhetsnormalisering. 5001-filene skriver «M2», «RUL», «STK», «LM»; kalkylen
+// skriver «m²», «lm», «stk». Uten en felles nøkkel kan vi ikke se om to enheter
+// er den samme, og vi ville varslet om avvik som ikke finnes.
+const ENHET_SYNONYMER = {
+  m2:   ['m2','m²','kvm','kvadratmeter','sqm'],
+  lm:   ['lm','m','meter','løpemeter','lopemeter','lm.','rm'],
+  stk:  ['stk','st','stk.','pcs','styk'],
+  rul:  ['rul','rull','rl','rull.','rulle'],
+  pk:   ['pk','pak','pakke','pk.','pack','esk','eske','krt','kartong'],
+  m3:   ['m3','m³','kubikk','kubikkmeter'],
+  kg:   ['kg','kilo','kilogram'],
+  tonn: ['tonn','t'],
+  l:    ['l','ltr','liter','lit'],
+  sekk: ['sekk','sk','sack'],
+  sett: ['sett','set'],
+  rs:   ['rs','rundsum','sum'],
+  tim:  ['tim','time','timer','t.'],
+}
+const _ENHET_OPPSLAG = (() => {
+  const m = {}
+  for (const [kanonisk, ord] of Object.entries(ENHET_SYNONYMER)) {
+    for (const o of ord) m[o] = kanonisk
+  }
+  return m
+})()
+
+// Returnerer den kanoniske enhetsnøkkelen, eller '' når enheten er tom, og
+// den nedskrevne teksten når vi ikke kjenner den igjen (fritekst som «bunt»).
+function normaliserEnhet(e) {
+  const s = String(e == null ? '' : e)
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .trim().toLowerCase()
+    .replace(/\s+/g, '')
+  if (!s) return ''
+  return _ENHET_OPPSLAG[s] || s
+}
+function erKjentEnhet(kanonisk) {
+  return !!kanonisk && Object.prototype.hasOwnProperty.call(ENHET_SYNONYMER, kanonisk)
+}
+// Hvordan enheten skrives i en setning til brukeren.
+const ENHET_NAVN = {
+  m2:'m²', lm:'løpemeter', stk:'stk', rul:'rull', pk:'pakke', m3:'m³',
+  kg:'kg', tonn:'tonn', l:'liter', sekk:'sekk', sett:'sett', rs:'rundsum', tim:'time',
+}
+function enhetTekst(kanonisk) { return ENHET_NAVN[kanonisk] || kanonisk }
+
+// Enheter der prisen gjelder en hel leveranse, ikke et areal. Bare disse er
+// kandidater for rull→m²-omregning.
+const LEVERANSE_ENHETER = new Set(['rul', 'stk', 'pk'])
+
+// Rimelighetsgrenser for en rull byggduk. De er der for å stoppe mønsteret fra
+// å treffe noe som ikke er en rull: «Grunnmur tykk 0,125x8m» ville gitt 1 m²,
+// men 0,125 m er en TYKKELSE, ikke en rullbredde.
+const RULL_MIN_BREDDE = 0.5,  RULL_MAKS_BREDDE = 5
+const RULL_MIN_LENGDE = 5,    RULL_MAKS_LENGDE = 250
+const RULL_MIN_AREAL  = 5
+
+// «bredde x lengde m» i varenavnet. Krever «m» rett etter lengden, og at det
+// ikke er starten på et annet ord — ellers ville «200my» og «2400mm» treffe.
+const _RULL_RE = /(\d{1,3}(?:\.\d{1,3})?)\s*x\s*(\d{1,4}(?:\.\d{1,3})?)\s*m(?![a-zæøå0-9])/g
+
+// Hvor mange m² dekker én rull/pakke av denne varen?
+// Returnerer null når vi ikke kan lese det trygt ut av navnet — og da skal
+// ingen omregning tilbys. Mønsteret treffer dampsperre, vindsperre og
+// underlagsduk; det finner ingenting på tape, bånd og pakninger, og det avviser
+// «Grunnmur tykk 0,125x8m».
+function rullDekning(varenavn) {
+  const s = normaliserVaretekst(varenavn)
+  if (!s) return null
+  _RULL_RE.lastIndex = 0
+  let m
+  while ((m = _RULL_RE.exec(s)) !== null) {
+    const bredde = parseFloat(m[1])
+    const lengde = parseFloat(m[2])
+    if (!isFinite(bredde) || !isFinite(lengde)) continue
+    if (bredde < RULL_MIN_BREDDE || bredde > RULL_MAKS_BREDDE) continue
+    if (lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) continue
+    const areal = bredde * lengde
+    if (areal < RULL_MIN_AREAL) continue
+    return { bredde, lengde, areal: Math.round(areal * 1000) / 1000 }
+  }
+  return null
+}
+
+// Kroner med to desimaler — omregnede enhetspriser er små tall der ørene betyr
+// noe (10,45 kr/m²), så fmtI()s avrunding til hele kroner duger ikke her.
+function fmtKr2(n) {
+  const v = Math.round((parseFloat(n) || 0) * 100) / 100
+  return v.toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' kr'
+}
+// Tall med inntil to desimaler, uten kr (til «2,6 m × 15 m» og «39 m²»).
+function fmtTall(n) {
+  const v = Math.round((parseFloat(n) || 0) * 100) / 100
+  return v.toLocaleString('nb-NO', { maximumFractionDigits: 2 })
+}
+
+// Er linjens enhet en annen enn den prislisten priser varen i?
+// Returnerer null når det ikke er noe å melde: like enheter, tomme enheter,
+// eller enheter vi ikke kjenner igjen (fritekst som «bunt» skal ikke gi varsel).
+function enhetsAvvik(linjeEnhet, vareEnhet) {
+  const linje = normaliserEnhet(linjeEnhet)
+  const vare = normaliserEnhet(vareEnhet)
+  if (!linje || !vare || linje === vare) return null
+  if (!erKjentEnhet(linje) || !erKjentEnhet(vare)) return null
+  return {
+    linje, vare,
+    kort: `pris per ${enhetTekst(vare)}, ikke ${enhetTekst(linje)}`,
+    lang: `Prislisten priser denne varen per ${enhetTekst(vare)}, men linjen står i ${enhetTekst(linje)}. Mengden og prisen regnes derfor i ulike enheter. Velg varen på nytt med 🔍 for å rette det.`,
+  }
+}
+
 // ─── PRISBOK-SØKEFELT (Patch 13 Sesjon C.2.B, refaktorert i Patch 13.B.5) ─────
 // Gjenbrukbart søkefelt mot prisbok-tabellen i Supabase.
 // Brukt i BimNyKonstruksjonDialog for å fylle ut materialer raskt.
@@ -71368,6 +71495,7 @@ function KoblingsassistentModal({ linjer, bdNavn, onKoble, onClose }) {
   const [sokLaster, setSokLaster] = useState(false)
   const [koblet, setKoblet] = useState(0)
   const [hoppet, setHoppet] = useState(0)
+  const [jobber, setJobber] = useState(false)
   const kjoringRef = React.useRef(0)
   const sokRef = React.useRef(0)
   const isMob = typeof window !== 'undefined' && window.innerWidth < 640
@@ -71408,9 +71536,13 @@ function KoblingsassistentModal({ linjer, bdNavn, onKoble, onClose }) {
 
   const nesteLinje = () => setIdx(i => i + 1)
 
-  const velgProdukt = (p) => {
-    if (!aktiv) return
-    onKoble(aktiv.id, p)
+  // onKoble kan åpne en bekreftelsesdialog (rull→m²). Vi må vente på svaret før
+  // vi går videre, ellers står brukeren og svarer på et spørsmål om en linje
+  // assistenten allerede har forlatt.
+  const velgProdukt = async (p) => {
+    if (!aktiv || jobber) return
+    setJobber(true)
+    try { await onKoble(aktiv.id, p) } finally { setJobber(false) }
     setKoblet(c => c + 1)
     nesteLinje()
   }
@@ -71422,8 +71554,8 @@ function KoblingsassistentModal({ linjer, bdNavn, onKoble, onClose }) {
   const kort = (p, visBegrunnelse) => {
     const stil = KOB_TILLIT_STIL[p._kobTillit] || KOB_TILLIT_STIL.lav
     return (
-      <button key={p.id || p.varenummer} onClick={() => velgProdukt(p)}
-        style={{ display:'block', width:'100%', textAlign:'left', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white', padding:'12px 14px', marginBottom:'8px', cursor:'pointer', minHeight:'56px', boxSizing:'border-box' }}>
+      <button key={p.id || p.varenummer} onClick={() => velgProdukt(p)} disabled={jobber}
+        style={{ display:'block', width:'100%', textAlign:'left', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white', padding:'12px 14px', marginBottom:'8px', cursor: jobber ? 'default' : 'pointer', opacity: jobber ? 0.6 : 1, minHeight:'56px', boxSizing:'border-box' }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', justifyContent:'space-between' }}>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', lineHeight:1.35, wordBreak:'break-word' }}>{p.varenavn}</div>
@@ -72492,6 +72624,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // oppdaterer en eksisterende rad eller oppretter en ny — og lar knappen si det
   // før brukeren trykker.
   const [mineMaler, setMineMaler] = useState([])
+  // Enheten prislisten priser hver NOBB-vare i: { [varenummer]: { enhet, pris } }
+  // eller null når varen ikke ble funnet. Brukes til å oppdage linjer der
+  // mengden står i m² mens prisen gjelder per rull — feilen som allerede finnes
+  // i lagrede kalkyler, og som ingenting varslet om før.
+  const [prisEnheter, setPrisEnheter] = useState({})
+  const prisEnhetRef = React.useRef({})
   const [showSendModal, setShowSendModal] = useState(false)
   const [showPreviewMenu, setShowPreviewMenu] = useState(false)
   const [showTilbudPopup, setShowTilbudPopup] = useState(null) // null, 'no-module', 'created'
@@ -72513,6 +72651,56 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   useEffect(() => {
     window.scrollTo(0, 0)
   }, [init?.id])
+
+  // Alle NOBB-numre som finnes i kalkylen, som en stabil signatur.
+  const nobbSignatur = React.useMemo(() => {
+    const alle = new Set()
+    ;(k.kalkyler || []).forEach(kl => (kl.bygningsdeler||[]).forEach(bd => (bd.materialer||[]).forEach(m => {
+      const n = m && m.nobb != null ? String(m.nobb).trim() : ''
+      if (n) alle.add(n)
+    })))
+    return [...alle].sort().join(',')
+  }, [k.kalkyler])
+
+  // Henter enheten prislisten priser i, for de NOBB-numrene vi ikke har slått
+  // opp ennå. Ett kall per pulje på 100. Numre som ikke finnes lagres som null,
+  // så vi ikke spør om dem igjen.
+  useEffect(() => {
+    if (!user?.id) return
+    const alle = nobbSignatur ? nobbSignatur.split(',').filter(Boolean) : []
+    const mangler = alle.filter(n => !(n in prisEnhetRef.current))
+    if (mangler.length === 0) return
+    let avbrutt = false
+    ;(async () => {
+      try {
+        const { data: pl } = await supabase.from('prislister').select('id').eq('user_id', user.id).eq('aktiv', true).limit(1).maybeSingle()
+        const funnet = []
+        for (let i = 0; i < mangler.length; i += 100) {
+          let q = supabase.from('prisbok').select('varenummer, enhet, pris_per_enhet').in('varenummer', mangler.slice(i, i + 100))
+          if (pl) q = q.eq('prisliste_id', pl.id)
+          const { data } = await q
+          if (avbrutt) return
+          if (data) funnet.push(...data)
+        }
+        const nytt = { ...prisEnhetRef.current }
+        mangler.forEach(n => { nytt[n] = null })
+        funnet.forEach(r => { nytt[String(r.varenummer)] = { enhet: r.enhet || '', pris: r.pris_per_enhet } })
+        prisEnhetRef.current = nytt
+        setPrisEnheter(nytt)
+      } catch(e) { /* stille: merkingen er en hjelp, ikke en forutsetning */ }
+    })()
+    return () => { avbrutt = true }
+  }, [nobbSignatur, user?.id])
+
+  // Enhetsavviket på én materiallinje, eller null når alt stemmer.
+  // Er linjen bevisst omregnet (bruker bekreftet rull→m²), er det ikke et avvik.
+  const linjeEnhetsAvvik = (m) => {
+    if (!m || !matErKoblet(m)) return null
+    if (m._omregning) return null
+    const oppslag = prisEnheter[String(m.nobb).trim()]
+    if (!oppslag) return null
+    return enhetsAvvik(m.enhet, oppslag.enhet)
+  }
 
   // Brukerens egne bygningsdeler i biblioteket. Lett spørring (kun id/navn/fag) —
   // brukes til å avgjøre lagre-modus, ikke til å vise innhold.
@@ -72715,18 +72903,89 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     }
   }
 
-  // Koblingsassistenten skriver NOBB, varenavn, enhet og pris inn på linjen.
-  // Leser fra kRef, ikke fra render-closuren, så to raske valg ikke kolliderer.
-  const koblMaterialLinje = (kalkId, bdId, matId, p) => {
+  // Finner én materiallinje i den NYESTE kalkyle-tilstanden.
+  const finnMatLinje = (kalkId, bdId, matId) => {
+    const kl = (kRef.current?.kalkyler || []).find(x => x.id === kalkId)
+    const bd = kl && (kl.bygningsdeler || []).find(b => b.id === bdId)
+    return (bd && (bd.materialer || []).find(m => m.id === matId)) || null
+  }
+
+  // Regner ut hva som skal skrives på materiallinjen når en vare velges.
+  //
+  // Kjernen i Oppgave 3: står linjen i m² og prislisten priser varen per rull,
+  // stykk eller pakke, forsøker vi å lese «bredde x lengde m» ut av varenavnet.
+  // Klarer vi det, VISER vi regnestykket og lar brukeren bekrefte. Vi regner
+  // ALDRI om stille — mønsteret treffer riktig på dampsperre, vindsperre og
+  // underlagsduk, men gir tull på «Grunnmur tykk 0,125x8m» og finner ingenting
+  // på tape og pakninger. En feil omregning som ser riktig ut er verre enn
+  // ingen omregning.
+  //
+  // Finner vi ingen dimensjon, spør vi ikke: prisen og enheten settes som før,
+  // og et eventuelt enhetsavvik merkes på linjen i stedet (del 4).
+  const beregnVareFelter = async (vare, linje) => {
+    const pris = parseFloat(vare?.pris_per_enhet) || 0
+    const vareEnhet = vare?.enhet || ''
+    const felter = {
+      nobb: String(vare?.varenummer ?? '').trim(),
+      varenavn: vare?.varenavn || linje?.varenavn || '',
+      enhetspris: pris,
+      enhet: vareEnhet || linje?.enhet || '',
+      _omregning: null,
+    }
+    const linjeEnhet = normaliserEnhet(linje?.enhet)
+    if (linjeEnhet !== 'm2') return felter
+    if (!LEVERANSE_ENHETER.has(normaliserEnhet(vareEnhet))) return felter
+    const rull = rullDekning(vare?.varenavn)
+    if (!rull || pris <= 0) return felter
+
+    const perM2 = Math.round((pris / rull.areal) * 100) / 100
+    const enhNavn = enhetTekst(normaliserEnhet(vareEnhet))
+    const ok = await confirm({
+      message: vare.varenavn,
+      subMessage: `Prislisten priser denne per ${enhNavn}. Linjen står i m². Vil du bruke m²-prisen?`,
+      details: {
+        stats: [{ title: 'Regnestykke', subtitle: 'lest ut av varenavnet', items: [
+          { label: 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` },
+          { label: `Én ${enhNavn} dekker`, value: `${fmtTall(rull.areal)} m²` },
+          { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+          { label: 'Pris per m²', value: fmtKr2(perM2), highlight: true },
+        ] }],
+        notes: [{ icon: 'ℹ️', kind: 'info', text: 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.' }],
+      },
+      confirmLabel: 'Ja, regn om',
+      cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
+    })
+    if (!ok) return felter
+    return {
+      ...felter,
+      enhet: linje?.enhet || 'm²',
+      enhetspris: perM2,
+      _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
+    }
+  }
+
+  // Skriver et varevalg inn på én materiallinje. Leser fra kRef fordi kallet
+  // skjer etter en await (nettverk, og noen ganger en bekreftelsesdialog) —
+  // render-closuren kan da være foreldet.
+  const skrivVarePaaLinje = (kalkId, bdId, matId, felter) => {
     const naa = kRef.current
-    if (!naa || !p) return
+    if (!naa || !felter) return
     const nyeKalkyler = (naa.kalkyler || []).map(kl => kl.id === kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === matId
-      ? { ...mt, nobb: p.varenummer, varenavn: p.varenavn || mt.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet, _ny: false, _varselVist: true }
+      ? { ...mt, ...felter, _ny: false, _varselVist: true }
       : mt) } : b) } : kl)
     setUndoStack(prev => [...prev.slice(-9), naa.kalkyler || []])
     const oppdatert = { ...naa, kalkyler: nyeKalkyler }
     kRef.current = oppdatert
     saveProject(oppdatert)
+  }
+
+  // Koblingsassistenten velger en vare på linjen. Går gjennom samme
+  // omregningsspørsmål som produktsøket og NOBB-feltet.
+  const koblMaterialLinje = async (kalkId, bdId, matId, p) => {
+    if (!p) return
+    const linje = finnMatLinje(kalkId, bdId, matId)
+    const felter = await beregnVareFelter(p, linje)
+    skrivVarePaaLinje(kalkId, bdId, matId, felter)
   }
 
   // Bygningsdel field update (name, mengde, enhet)
@@ -72794,8 +73053,10 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     }) } : b) } : kl))
     if (varselType) setMaterialVarsel({ type: varselType })
   }
+  // Mengde 1, ikke 0. Med 0 blir totalen 0 kr, og linjen ser ut som den ikke
+  // ble lagt til i det hele tatt.
   const addMaterial = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: nyRadId(), varenavn: '', mengde: 0, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: [...(b.materialer||[]), { id: nyRadId(), varenavn: '', mengde: 1, enhet: 'stk', enhetspris: 0, _ny: true }] } : b) } : kl))
   }
   const removeMaterial = (kalId, bdId, mId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, materialer: (b.materialer||[]).filter(m => m.id !== mId) } : b) } : kl))
@@ -73937,12 +74198,20 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                 {(() => {
                                   const kob = tellKobledeLinjer(bd.materialer)
                                   const alle = kob.total > 0 && kob.ukoblet === 0
+                                  // Uten denne telleren må brukeren åpne hver rad for å finne
+                                  // linjen der enheten ikke stemmer.
+                                  const avvikAntall = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
                                   return (
                                     <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
                                       <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>📦 MATERIALER</span>
                                       {kob.total > 0 && (
                                         <span style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', border: `1px solid ${alle ? '#bbf7d0' : '#fde68a'}` }}>
                                           {alle ? '🔗' : '⚠️'} {kob.koblet} av {kob.total} linjer koblet til din prisliste
+                                        </span>
+                                      )}
+                                      {avvikAntall > 0 && (
+                                        <span title="Prisen på disse linjene gjelder en annen enhet enn linjen regnes i. Velg varen på nytt med 🔍 for å rette det." style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa' }}>
+                                          ⚠ {avvikAntall} {avvikAntall === 1 ? 'linje' : 'linjer'} med feil enhet
                                         </span>
                                       )}
                                       {kob.ukoblet > 0 && (
@@ -74004,8 +74273,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         // Bruk materialMengde fra motoren når åpningsfradrag er aktivt, ellers full bdMengde
                                         const effektivMengde = bdT.totalApningsareal > 0 && bd.fradrag_apninger !== false ? bdT.materialMengde : bdMengde
                                         const koblet = matErKoblet(m)
+                                        const avvik = linjeEnhetsAvvik(m)
                                         return (
-                                          <tr key={m.id} style={{ background: koblet ? 'transparent' : '#fffdf3' }}>
+                                          <tr key={m.id} style={{ background: avvik ? '#fff7ed' : (koblet ? 'transparent' : '#fffdf3') }}>
                                             <td style={{ padding:'3px 2px' }}>
                                               <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
                                                 <input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
@@ -74019,7 +74289,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                     if (data) {
                                                       const haddeNavn = !!(m.varenavn && String(m.varenavn).trim())
                                                       const vType = (m._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
-                                                      updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bd.id ? { ...b, materialer: (b.materialer||[]).map(mt => mt.id === m.id ? { ...mt, varenavn: data.varenavn, enhetspris: data.pris_per_enhet, enhet: data.enhet || mt.enhet, nobb: nobb, _ny: false, _varselVist: true } : mt) } : b) } : kl))
+                                                      // Samme vei som produktsøket og koblingsassistenten: rull→m²
+                                                      // tilbys hvis dimensjonen kan leses ut av varenavnet.
+                                                      const felter = await beregnVareFelter({ ...data, varenummer: nobb }, finnMatLinje(kalk.id, bd.id, m.id) || m)
+                                                      skrivVarePaaLinje(kalk.id, bd.id, m.id, felter)
                                                       if (!m._varselVist) setMaterialVarsel({ type: vType })
                                                     }
                                                   } catch(err) {}
@@ -74032,13 +74305,40 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                             </td>
                                             <td style={{ padding:'3px 2px' }}><input value={m.varenavn} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'varenavn',e.target.value)} placeholder="Varenavn" style={{ ...qInp, fontSize:'12px', padding:'6px 8px' }} /></td>
                                             <td style={{ padding:'3px 2px' }}><input type="number" value={m.mengde} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'mengde',e.target.value)} style={{ ...qInp, width:'60px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} /></td>
-                                            <td style={{ padding:'3px 2px' }}><input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} /></td>
+                                            {/* Har linjen NOBB, eier prislisten enheten. Feltet vises, men er
+                                                låst — enheten endres ved å velge en annen vare, ikke ved å skrive
+                                                over den. Uten NOBB er det fritekst som før («rs», «sekk», «bunt»).
+                                                Bevisst ingen nedtrekksliste: den ville antydet at mengden regnes
+                                                om når man går fra lm til m², og det gjør systemet ikke. */}
+                                            <td style={{ padding:'3px 2px' }}>
+                                              {koblet ? (
+                                                <input value={m.enhet || ''} readOnly tabIndex={-1}
+                                                  title="Enheten kommer fra prislisten din. Vil du endre den, velg en annen vare med 🔍."
+                                                  style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px', background:'#f1f5f9', color:'#64748b', cursor:'default' }} />
+                                              ) : (
+                                                <input value={m.enhet} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhet',e.target.value)} style={{ ...qInp, width:'45px', fontSize:'12px', padding:'6px 8px' }} />
+                                              )}
+                                            </td>
                                             <td style={{ padding:'3px 2px' }}>
                                               <input type="number" value={m.enhetspris} onChange={e=>updateMaterial(kalk.id,bd.id,m.id,'enhetspris',e.target.value)} style={{ ...qInp, width:'70px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
                                               {/* Uten NOBB-nummer er prisen en standardverdi, ikke brukerens
                                                   egen innkjøpspris. Vi fjerner den ikke — vi merker den. */}
                                               {!koblet && (
                                                 <div title="Veiledende standardpris — linjen er ikke koblet til din prisliste" style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', marginTop:'2px', whiteSpace:'nowrap', textAlign:'right' }}>≈ veiledende</div>
+                                              )}
+                                              {/* Prisen gjelder en annen enhet enn linjen regnes i. Samme
+                                                  visuelle språk som «≈ veiledende», men teksten sier hva som
+                                                  er galt — det er denne feilen som gjorde 407,40 kr/rull til
+                                                  407,40 kr/m². */}
+                                              {avvik && (
+                                                <div title={avvik.lang} style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>⚠ {avvik.kort}</div>
+                                              )}
+                                              {/* Bevisst omregnet fra leveranseenhet — vis hva som ligger bak tallet. */}
+                                              {koblet && m._omregning && (
+                                                <div title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ${fmtTall(m._omregning.areal)} m²`}
+                                                  style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>
+                                                  ↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}
+                                                </div>
                                               )}
                                             </td>
                                             <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#94a3b8' }}>{fmt(r.kostnad)}</td>
@@ -76321,6 +76621,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const [hasSearched, setHasSearched] = useState(false)
           const [activeKat, setActiveKat] = useState(null)
           const [plId, setPlId] = useState(null)
+          const [velger, setVelger] = useState(false)
           const searchRef = React.useRef(0)
           const { sok: prisbokSok } = usePrisbokSoek()
 
@@ -76398,15 +76699,19 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             return () => clearTimeout(timer)
           }, [q, activeKat])
 
-          const selectProduct = (p) => {
-            let vType = null
-            updateKalkyler(kalkyler.map(kl => kl.id === ctx.kalkId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === ctx.bdId ? { ...b, materialer: (b.materialer||[]).map(mt => {
-              if (mt.id !== ctx.matId) return mt
-              const haddeNavn = !!(mt.varenavn && String(mt.varenavn).trim())
-              if (!mt._varselVist) vType = (mt._ny || !haddeNavn) ? 'lagt_til' : 'byttet'
-              return { ...mt, nobb: p.varenummer, varenavn: p.varenavn, enhetspris: p.pris_per_enhet, enhet: p.enhet || mt.enhet, _ny: false, _varselVist: true }
-            }) } : b) } : kl))
-            if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
+          // Velger varen på linjen. Går gjennom beregnVareFelter, som kan spørre
+          // om rull→m²-omregning før noe skrives.
+          const selectProduct = async (p) => {
+            if (velger) return
+            setVelger(true)
+            try {
+              const linje = finnMatLinje(ctx.kalkId, ctx.bdId, ctx.matId)
+              const haddeNavn = !!(linje?.varenavn && String(linje.varenavn).trim())
+              const vType = linje && !linje._varselVist ? ((linje._ny || !haddeNavn) ? 'lagt_til' : 'byttet') : null
+              const felter = await beregnVareFelter(p, linje)
+              skrivVarePaaLinje(ctx.kalkId, ctx.bdId, ctx.matId, felter)
+              if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
+            } finally { setVelger(false) }
             onClose()
           }
 
