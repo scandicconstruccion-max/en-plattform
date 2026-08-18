@@ -70423,6 +70423,37 @@ function kategorierForFag(fagId, egneRader) {
   return [...sett].sort((a, b) => a.localeCompare(b, 'nb'))
 }
 
+// Gjetter kategori ut fra navnet på bygningsdelen, blant kategoriene som finnes
+// for faggruppen. Kategorinavnene er ordene folk faktisk bruker i navnene sine,
+// så treffraten er høy: «Flatt tak m/membran» → Yttertak for tømrer, Membran for
+// murer. «Innervegg 98mm gips» → Innervegg.
+//
+// Dette er det som gjør at rader lagret FØR Oppgave 4 ikke danner en egen gruppe
+// nederst i treet. Lengste ordtreff vinner, så «innervegg» slår «vegg».
+function gjettKategoriFraNavn(navn, fagId) {
+  const kategorier = kategorierForFag(fagId, [])
+  if (kategorier.length === 0) return null
+  const navnN = normaliserVaretekst(navn)
+  if (!navnN) return null
+  const delOpp = (s) => s.split(/[^a-zæøå0-9]+/).filter(o => o.length >= 3)
+  const navnOrd = delOpp(navnN)
+  let best = null, bestScore = 0
+  for (const kat of kategorier) {
+    const katN = normaliserVaretekst(kat)
+    for (const o of delOpp(katN)) {
+      if (o.length > bestScore && navnN.includes(o)) { best = kat; bestScore = o.length }
+    }
+    for (const o of navnOrd) {
+      if (o.length > bestScore && katN.includes(o)) { best = kat; bestScore = o.length }
+    }
+  }
+  return best
+}
+
+// Kategorinavn som aldri skal vises som en gruppe i treet — de er rester fra
+// tidligere runder, ikke ekte kategorier.
+const BD_IKKE_EKTE_KATEGORIER = new Set(['Egne maler', 'Egne bygningsdeler'])
+
 // Gjør en rad fra bruker_bibliotek om til samme form som en innebygd bygningsdel,
 // slik at velgeren og bibliotek-siden kan behandle dem likt.
 function bibliotekRadTilBygningsdel(rad) {
@@ -70432,10 +70463,21 @@ function bibliotekRadTilBygningsdel(rad) {
   return {
     id: rad.id,
     fag: rad.fag,
-    // Gamle rader ble lagret med kategori «Egne maler». Arver vi kategorien fra
-    // den vi erstatter, havner de riktig i treet uten at noe må migreres.
-    kategori: (rad.kategori && rad.kategori !== 'Egne maler' ? rad.kategori : null)
-      || erstatter?.kategori || 'Egne bygningsdeler',
+    ...(() => {
+      // Kategorien avgjøres i denne rekkefølgen:
+      //   1) radens egen kategori, hvis den er en ekte kategori
+      //   2) kategorien til den innebygde raden erstatter
+      //   3) gjettet fra navnet
+      //   4) første kategori for faget — og da MERKES bygningsdelen, slik at
+      //      brukeren ser at den må plasseres. Ingen egen restgruppe i treet.
+      const egen = rad.kategori && !BD_IKKE_EKTE_KATEGORIER.has(rad.kategori) ? rad.kategori : null
+      if (egen) return { kategori: egen }
+      if (erstatter?.kategori) return { kategori: erstatter.kategori }
+      const gjettet = gjettKategoriFraNavn(rad.name, rad.fag)
+      if (gjettet) return { kategori: gjettet, _kategoriGjettet: true }
+      const forste = kategorierForFag(rad.fag, [])[0]
+      return { kategori: forste || 'Annet', _kategoriUsikker: true }
+    })(),
     name: rad.name,
     beskrivelse: data.beskrivelse || (erstatter ? 'Din versjon' : 'Egen bygningsdel'),
     arbeidsarter: rader.arbeidsarter,
@@ -70464,18 +70506,34 @@ function byggBedriftsbibliotek(egneRader) {
 // Grupper en vilkårlig bygningsdel-liste som { [fag]: { [kategori]: [...] } }.
 // Samme form som getBibliotekByFag(), men på en liste vi har satt sammen selv.
 function grupperBibliotekPerFag(liste) {
-  const ut = {}
+  const raa = {}
   ;(liste || []).forEach(bd => {
     const fag = bd.fag || 'ukjent'
-    const kat = bd.kategori || 'Egne bygningsdeler'
-    if (!ut[fag]) ut[fag] = {}
-    if (!ut[fag][kat]) ut[fag][kat] = []
-    ut[fag][kat].push(bd)
+    const kat = bd.kategori || 'Annet'
+    if (!raa[fag]) raa[fag] = {}
+    if (!raa[fag][kat]) raa[fag][kat] = []
+    raa[fag][kat].push(bd)
   })
-  // Egne først innen hver kategori — det bedriften har bestemt seg for skal øverst.
-  Object.values(ut).forEach(katObj => Object.values(katObj).forEach(arr => {
-    arr.sort((a, b) => (b._egen ? 1 : 0) - (a._egen ? 1 : 0) || String(a.name || '').localeCompare(String(b.name || ''), 'nb'))
-  }))
+
+  const ut = {}
+  for (const [fag, katObj] of Object.entries(raa)) {
+    // Egne først innen hver kategori — det bedriften har bestemt seg for skal øverst.
+    Object.values(katObj).forEach(arr => {
+      arr.sort((a, b) => (b._egen ? 1 : 0) - (a._egen ? 1 : 0) || String(a.name || '').localeCompare(String(b.name || ''), 'nb'))
+    })
+    // Og kategorier som INNEHOLDER noe av bedriftens eget sorteres øverst. Ellers
+    // ligger det bedriften faktisk jobber med nederst, bak en skjermlengde med
+    // innebygde kategorier. JS-objekter beholder innsettingsrekkefølgen, så vi
+    // bygger objektet på nytt i den rekkefølgen vi vil vise det.
+    const noekler = Object.keys(katObj).sort((a, b) => {
+      const egneA = katObj[a].some(x => x._egen) ? 1 : 0
+      const egneB = katObj[b].some(x => x._egen) ? 1 : 0
+      if (egneA !== egneB) return egneB - egneA
+      return a.localeCompare(b, 'nb')
+    })
+    ut[fag] = {}
+    noekler.forEach(kat => { ut[fag][kat] = katObj[kat] })
+  }
   return ut
 }
 
@@ -71301,6 +71359,119 @@ function byggKalkylerFraIfc(mengder, bedriftFaktorer = {}) {
 }
 
 // Oppdater materialpriser fra aktiv prisliste basert på NOBB
+// ─── OPPDATER PRISER FRA AKTIV PRISLISTE (Oppgave 5) ─────────────────────────
+// Nytten av hele koblingsjobben ligger her: når leverandøren sender ny prisfil,
+// skal én knapp oppdatere alt. Men aldri stille — noen kalkyler er sendt til
+// kunde, og brukeren skal se hva som endres før det skrives.
+//
+// Linjene deles i fire:
+//   endret   — ny pris i prislisten, vises med gammel → ny og differanse
+//   uendret  — samme pris, oppsummeres som ett tall (skal ikke fylle listen)
+//   utgatt   — NOBB-nummeret finnes ikke i den aktive prislisten lenger.
+//              Prisen røres IKKE, og linjen står ikke som oppdatert.
+//   ukoblet  — ingen NOBB. Kan ikke oppdateres; dette er arbeidslisten.
+
+// Er to priser like nok til å regnes som uendret? Ører teller, men
+// flyttallsstøy skal ikke gi en «endring» på 0,00 kr.
+function _prisLik(a, b) {
+  return Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) < 0.005
+}
+
+// Klassifiserer materiallinjer mot bedriftens aktive prisliste.
+//   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
+// Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
+async function byggPrisforslag(poster, userId) {
+  const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], ukoblet: [], feil: null }
+  const alle = Array.isArray(poster) ? poster : []
+  if (alle.length === 0) return tomt
+
+  const ukoblet = alle.filter(p => !matErKoblet(p.linje))
+  const koblede = alle.filter(p => matErKoblet(p.linje))
+  if (koblede.length === 0) return { ...tomt, ukoblet }
+
+  let prisliste = null
+  try {
+    const { data } = await supabase.from('prislister')
+      .select('id, navn, created_at').eq('user_id', userId).eq('aktiv', true).limit(1).maybeSingle()
+    prisliste = data || null
+  } catch (e) { /* faller gjennom til feilmeldingen under */ }
+  if (!prisliste) {
+    return { ...tomt, ukoblet, feil: 'Ingen aktiv prisliste. Gå til Prisbok og sett en prisliste som aktiv.' }
+  }
+
+  // Slå opp alle NOBB-numrene i puljer — URL-en tåler ikke hundrevis på én gang.
+  const nummer = [...new Set(koblede.map(p => String(p.linje.nobb).trim()))]
+  const prisMap = {}
+  try {
+    for (let i = 0; i < nummer.length; i += 100) {
+      const { data, error } = await supabase.from('prisbok')
+        .select('varenummer, varenavn, enhet, pris_per_enhet')
+        .eq('prisliste_id', prisliste.id)
+        .in('varenummer', nummer.slice(i, i + 100))
+      if (error) throw error
+      ;(data || []).forEach(r => { prisMap[String(r.varenummer)] = r })
+    }
+  } catch (e) {
+    return { ...tomt, ukoblet, prisliste, feil: 'Kunne ikke lese prislisten: ' + ((e && e.message) || 'ukjent feil') }
+  }
+
+  const endret = [], uendret = [], utgatt = []
+  for (const p of koblede) {
+    const nobb = String(p.linje.nobb).trim()
+    const vare = prisMap[nobb]
+    if (!vare) { utgatt.push({ ...p, nobb }); continue }
+
+    const gammelPris = parseFloat(p.linje.enhetspris) || 0
+    const omr = p.linje._omregning
+    let nyPris, nyEnhet, nyOmregning = null, omregnetFra = null
+
+    if (omr && parseFloat(omr.areal) > 0) {
+      // Linjen er bevisst regnet om fra rull til m². Ny rullpris deles på det
+      // SAMME arealet — omregningen skal overleve en prisoppdatering.
+      const nyLeveransePris = parseFloat(vare.pris_per_enhet) || 0
+      nyPris = Math.round((nyLeveransePris / parseFloat(omr.areal)) * 100) / 100
+      nyEnhet = p.linje.enhet            // beholder m², prisen er per m²
+      nyOmregning = { ...omr, fraPris: nyLeveransePris }
+      omregnetFra = { pris: nyLeveransePris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) }
+    } else {
+      nyPris = parseFloat(vare.pris_per_enhet) || 0
+      nyEnhet = vare.enhet || p.linje.enhet
+    }
+
+    const post = {
+      ...p,
+      nobb,
+      varenavn: p.linje.varenavn || vare.varenavn || '',
+      nyttVarenavn: vare.varenavn || p.linje.varenavn || '',
+      gammelPris, nyPris,
+      diff: Math.round((nyPris - gammelPris) * 100) / 100,
+      diffProsent: gammelPris > 0 ? ((nyPris - gammelPris) / gammelPris) * 100 : null,
+      mengde: parseFloat(p.linje.mengde) || 0,
+      enhet: p.linje.enhet || '',
+      nyEnhet, nyOmregning, omregnetFra,
+      enhetByttes: normaliserEnhet(nyEnhet) !== normaliserEnhet(p.linje.enhet || ''),
+    }
+    if (_prisLik(gammelPris, nyPris)) uendret.push(post)
+    else endret.push(post)
+  }
+
+  // Størst utslag først — det er der brukeren vil se etter.
+  endret.sort((a, b) => Math.abs(b.diff * (b.mengde || 1)) - Math.abs(a.diff * (a.mengde || 1)))
+  return { prisliste, endret, uendret, utgatt, ukoblet, feil: null }
+}
+
+// Feltene som skal skrives på linjen når en prisendring godtas.
+function prisforslagTilFelter(post) {
+  const felter = { enhetspris: post.nyPris, varenavn: post.nyttVarenavn || post.varenavn }
+  if (post.nyOmregning) felter._omregning = post.nyOmregning
+  else if (post.nyEnhet) felter.enhet = post.nyEnhet
+  return felter
+}
+
+// Den gamle stille jobben. Beholdt for BIM-flyten, som henter en bygningsdel fra
+// biblioteket og setter inn dagens priser i samme operasjon — der er det ingen
+// eksisterende pris å sammenligne med, så det er ingen endring å vise.
+// Alt brukeren selv starter går gjennom OppdaterPriserModal.
 async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
   try {
     // Find active prisliste
@@ -71338,6 +71509,225 @@ async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
   } catch(e) { console.error('Prisoppdatering feil:', e); return { kalkyler, count: 0 } }
 }
 
+// ─── OPPDATER PRISER — DIALOG (Oppgave 5, del 1) ─────────────────────────────
+// Viser hva som vil skje FØR noe skrives, med avkryssing per linje. Brukes både
+// på en åpen kalkyle og på en bygningsdel i biblioteket; forskjellen ligger bare
+// i hva kalleren gjør i onSkriv.
+//
+// onSkriv(valgte) skal returnere { antall, totalFor, totalEtter, totalLabel }
+// slik at resultatskjermen kan si hva totalen endret seg med.
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, onSkriv, onClose }) {
+  const [laster, setLaster] = useState(true)
+  const [forslag, setForslag] = useState(null)
+  const [valgt, setValgt] = useState(() => new Set())
+  const [skriver, setSkriver] = useState(false)
+  const [resultat, setResultat] = useState(null)
+  const [visUendret, setVisUendret] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  useEffect(() => {
+    let avbrutt = false
+    byggPrisforslag(poster, userId)
+      .then(res => {
+        if (avbrutt) return
+        setForslag(res)
+        // Alle endringer huket av som standard — men brukeren kan velge bort.
+        setValgt(new Set(res.endret.map((_, i) => i)))
+        setLaster(false)
+      })
+      .catch(() => { if (!avbrutt) { setForslag({ prisliste:null, endret:[], uendret:[], utgatt:[], ukoblet:[], feil:'Kunne ikke lese prislisten.' }); setLaster(false) } })
+    return () => { avbrutt = true }
+  }, [])
+
+  const veksle = (i) => setValgt(s => { const n = new Set(s); n.has(i) ? n.delete(i) : n.add(i); return n })
+  const alleValgt = forslag && forslag.endret.length > 0 && valgt.size === forslag.endret.length
+  const veksleAlle = () => setValgt(alleValgt ? new Set() : new Set((forslag?.endret || []).map((_, i) => i)))
+
+  const skriv = async () => {
+    if (!forslag || valgt.size === 0 || skriver) return
+    setSkriver(true)
+    try {
+      const valgtePoster = forslag.endret.filter((_, i) => valgt.has(i))
+      const res = await onSkriv(valgtePoster)
+      setResultat(res || { antall: valgtePoster.length })
+    } finally { setSkriver(false) }
+  }
+
+  const kr = (n) => (n > 0 ? '+' : '') + fmtKr2(n)
+  const pst = (p) => p === null ? '—' : (p > 0 ? '+' : '') + p.toFixed(1) + ' %'
+
+  const seksjon = (tekst, farge) => (
+    <div style={{ fontSize:'11px', fontWeight:'700', color: farge || '#94a3b8', margin:'14px 0 7px', letterSpacing:'0.02em' }}>{tekst}</div>
+  )
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !skriver) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '720px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 {tittel || 'Oppdater priser'}</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>
+              {undertittel}
+              {forslag?.prisliste?.navn ? ` · prisliste: ${forslag.prisliste.navn}` : ''}
+            </p>
+          </div>
+          <button onClick={onClose} disabled={skriver} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: skriver ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {laster && <div style={{ textAlign:'center', padding:'28px', fontSize:'13px', color:'#2563eb' }}>Slår opp prisene i prislisten din …</div>}
+
+          {!laster && forslag?.feil && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', fontSize:'13px', color:'#991b1b', lineHeight:1.55 }}>{forslag.feil}</div>
+          )}
+
+          {/* Resultatskjerm etter skriving */}
+          {resultat && (
+            <div style={{ background:'white', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'34px', marginBottom:'8px' }}>✅</div>
+              <p style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
+                {resultat.antall} {resultat.antall === 1 ? 'linje' : 'linjer'} oppdatert
+              </p>
+              {typeof resultat.totalFor === 'number' && typeof resultat.totalEtter === 'number' && (
+                <p style={{ margin:0, fontSize:'13px', color:'#64748b', lineHeight:1.6 }}>
+                  {resultat.totalLabel || 'Total'}: {fmtKr2(resultat.totalFor)} → <strong style={{ color:'#0f172a' }}>{fmtKr2(resultat.totalEtter)}</strong>
+                  <br />
+                  <span style={{ fontWeight:'700', color: resultat.totalEtter > resultat.totalFor ? '#c2410c' : '#15803d' }}>
+                    {kr(resultat.totalEtter - resultat.totalFor)}
+                    {resultat.totalFor > 0 ? ` (${pst(((resultat.totalEtter - resultat.totalFor) / resultat.totalFor) * 100)})` : ''}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {!laster && !resultat && forslag && !forslag.feil && (
+            <>
+              {/* Endringer */}
+              {forslag.endret.length > 0 ? (
+                <>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap' }}>
+                    {seksjon(`${forslag.endret.length} ${forslag.endret.length === 1 ? 'LINJE HAR' : 'LINJER HAR'} NY PRIS`, '#0f172a')}
+                    <button onClick={veksleAlle} style={{ background:'none', border:'none', fontSize:'12px', color:'#059669', fontWeight:'600', cursor:'pointer', padding:'4px 0' }}>
+                      {alleValgt ? 'Fjern alle' : 'Velg alle'}
+                    </button>
+                  </div>
+                  {forslag.endret.map((p, i) => {
+                    const på = valgt.has(i)
+                    const opp = p.diff > 0
+                    return (
+                      <label key={i} style={{ display:'flex', gap:'10px', alignItems:'flex-start', background:'white', border:`1px solid ${på ? '#bfdbfe' : '#e2e8f0'}`, borderRadius:'12px', padding:'11px 13px', marginBottom:'7px', cursor:'pointer' }}>
+                        <input type="checkbox" checked={på} onChange={() => veksle(i)} style={{ marginTop:'2px', width:'17px', height:'17px', flexShrink:0, cursor:'pointer' }} />
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word' }}>{p.nyttVarenavn || p.varenavn}</div>
+                          <div style={{ fontSize:'11px', color:'#94a3b8', fontFamily:'monospace', marginTop:'2px' }}>NOBB {p.nobb}</div>
+                          <div style={{ display:'flex', gap:'8px', alignItems:'baseline', flexWrap:'wrap', marginTop:'6px', fontSize:'13px' }}>
+                            <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(p.gammelPris)}</span>
+                            <span style={{ color:'#94a3b8' }}>→</span>
+                            <strong style={{ color:'#0f172a' }}>{fmtKr2(p.nyPris)}</strong>
+                            <span style={{ fontSize:'12px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', background: opp ? '#fff7ed' : '#f0fdf4', color: opp ? '#c2410c' : '#15803d', border:`1px solid ${opp ? '#fed7aa' : '#bbf7d0'}` }}>
+                              {kr(p.diff)} · {pst(p.diffProsent)}
+                            </span>
+                            <span style={{ fontSize:'11px', color:'#94a3b8' }}>per {p.nyEnhet || p.enhet}</span>
+                          </div>
+                          {p.omregnetFra && (
+                            <div style={{ fontSize:'11px', color:'#1d4ed8', marginTop:'5px' }}>
+                              ↩ ny pris per {enhetTekst(normaliserEnhet(p.omregnetFra.enhet))} er {fmtKr2(p.omregnetFra.pris)} — delt på {fmtTall(p.omregnetFra.areal)} m², som før
+                            </div>
+                          )}
+                          {p.enhetByttes && !p.nyOmregning && (
+                            <div style={{ fontSize:'11px', color:'#c2410c', marginTop:'5px' }}>
+                              ⚠ enheten endres fra {p.enhet || '—'} til {p.nyEnhet} — kontroller mengden etterpå
+                            </div>
+                          )}
+                        </div>
+                      </label>
+                    )
+                  })}
+                </>
+              ) : (
+                <div style={{ background:'white', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'14px', fontSize:'13px', color:'#15803d', fontWeight:'600' }}>
+                  ✅ Alle koblede linjer har allerede prisen som står i prislisten.
+                </div>
+              )}
+
+              {/* Uendret — samlet, skal ikke fylle listen */}
+              {forslag.uendret.length > 0 && (
+                <div style={{ marginTop:'12px' }}>
+                  <button onClick={() => setVisUendret(v => !v)}
+                    style={{ display:'flex', alignItems:'center', gap:'7px', width:'100%', background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 13px', fontSize:'12px', color:'#64748b', cursor:'pointer', textAlign:'left' }}>
+                    <span style={{ color:'#94a3b8' }}>{visUendret ? '▼' : '▶'}</span>
+                    {forslag.uendret.length} {forslag.uendret.length === 1 ? 'linje' : 'linjer'} uendret
+                  </button>
+                  {visUendret && (
+                    <div style={{ padding:'8px 13px 0' }}>
+                      {forslag.uendret.map((p, i) => (
+                        <div key={i} style={{ fontSize:'12px', color:'#64748b', padding:'3px 0' }}>
+                          {p.varenavn} <span style={{ color:'#cbd5e1' }}>·</span> {fmtKr2(p.gammelPris)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Utgått */}
+              {forslag.utgatt.length > 0 && (
+                <>
+                  {seksjon(`${forslag.utgatt.length} ${forslag.utgatt.length === 1 ? 'LINJE' : 'LINJER'} — UTGÅTT ELLER IKKE I DENNE LISTEN`, '#c2410c')}
+                  <div style={{ background:'#fff7ed', border:'1px solid #fed7aa', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#9a3412', lineHeight:1.55, marginBottom:'8px' }}>
+                      NOBB-nummeret finnes ikke i den aktive prislisten. Prisen står som før — den er ikke satt til 0, og linjen regnes ikke som oppdatert.
+                    </div>
+                    {forslag.utgatt.map((p, i) => (
+                      <div key={i} style={{ fontSize:'12px', color:'#7c2d12', padding:'3px 0' }}>
+                        {p.linje.varenavn || 'Uten navn'} <span style={{ fontFamily:'monospace', color:'#c2410c' }}>· NOBB {p.nobb}</span> · {fmtKr2(p.linje.enhetspris)}
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {/* Ukoblet — arbeidslisten */}
+              {forslag.ukoblet.length > 0 && (
+                <>
+                  {seksjon(`${forslag.ukoblet.length} ${forslag.ukoblet.length === 1 ? 'LINJE' : 'LINJER'} — IKKE KOBLET, KAN IKKE OPPDATERES`, '#a16207')}
+                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.55, marginBottom:'8px' }}>
+                      Disse har ingen NOBB-kobling, så prislisten vet ikke hva de koster. Bruk «🔗 Koble linjer» på bygningsdelen for å knytte dem til varer.
+                    </div>
+                    {forslag.ukoblet.map((p, i) => (
+                      <div key={i} style={{ fontSize:'12px', color:'#78350f', padding:'3px 0' }}>
+                        {p.linje.varenavn || 'Uten navn'} · {fmtKr2(p.linje.enhetspris)} <span style={{ color:'#a16207' }}>(veiledende)</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {resultat ? (
+            <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : (
+            <>
+              <button onClick={onClose} disabled={skriver} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>Avbryt</button>
+              <button onClick={skriv} disabled={laster || skriver || valgt.size === 0}
+                style={{ flex:'1 1 190px', background: (valgt.size > 0 && !skriver) ? '#059669' : '#a7f3d0', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (valgt.size > 0 && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : `Oppdater ${valgt.size} ${valgt.size === 1 ? 'linje' : 'linjer'}`}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── BIBLIOTEK-SIDE ──────────────────────────────────────────────────────────
 
 // Bygningsdel-biblioteket. Viser ETT bibliotek: de innebygde minus de bedriften
@@ -71349,13 +71739,19 @@ async function oppdaterPriserFraPrisliste(kalkyler, supabase, userId) {
 // arbeidslisten for NOBB-koblingen.
 function KalkBibliotekPage({ onBack }) {
   const confirm = useConfirm()
+  const { user } = useAuth()
   const [activeFag, setActiveFag] = useState('tomrer')
   const [expandedKat, setExpandedKat] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
   const [filterProsjektType, setFilterProsjektType] = useState('alle')
   const [visKunEgne, setVisKunEgne] = useState(false)
   const [visKunUkoblede, setVisKunUkoblede] = useState(false)
-  const { perFag, laster, last } = useBedriftsbibliotek()
+  // «Oppdater priser» for én bygningsdel: bygningsdelen som er åpen i dialogen.
+  const [prisBd, setPrisBd] = useState(null)
+  // Kategoriendring: { bdId, verdi, egen } mens brukeren holder på.
+  const [endrerKat, setEndrerKat] = useState(null)
+  const [lagrerKat, setLagrerKat] = useState(false)
+  const { rader, perFag, laster, last } = useBedriftsbibliotek()
   const isMob = typeof window !== 'undefined' && window.innerWidth < 768
 
   // Sletter bedriftens egen bygningsdel. Var den en erstatning, kommer den
@@ -71377,6 +71773,46 @@ function KalkBibliotekPage({ onBack }) {
 
   const fagData = perFag[activeFag] || {}
   const fag = getFaggruppe(activeFag)
+
+  // Materiallinjene i én bygningsdel, med index som peker tilbake.
+  const prisPoster = (bd) => (bd.materialer || []).map((m, i) => ({ sti: { index: i }, linje: m }))
+
+  // Skriver prisendringene tilbake på bibliotekraden.
+  const skrivPriserPaaBd = async (bd, valgte) => {
+    const rad = rader.find(r => String(r.id) === String(bd.id))
+    if (!rad) return { antall: 0 }
+    const map = new Map(valgte.map(p => [p.sti.index, p]))
+    const gamle = bd.materialer || []
+    const nye = gamle.map((m, i) => { const p = map.get(i); return p ? { ...m, ...prisforslagTilFelter(p) } : m })
+    const sum = (liste) => liste.reduce((s, m) => s + (parseFloat(m.mengde) || 0) * (parseFloat(m.enhetspris) || 0), 0)
+    const totalFor = sum(gamle), totalEtter = sum(nye)
+    const { data: endret, error } = await supabase.from('bruker_bibliotek')
+      .update({ data: { ...(rad.data || {}), materialer: nye } })
+      .eq('id', bd.id).select('id')
+    if (error) throw error
+    if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
+    await last()
+    return { antall: valgte.length, totalFor, totalEtter, totalLabel: `Materialkostnad per ${bd.enhet || 'enhet'}` }
+  }
+
+  // Flytter en egen bygningsdel til en annen kategori. Bygningsdelen kan ha
+  // havnet feil — enten fordi den ble lagret før kategoriene fantes, eller fordi
+  // «Oppdater i biblioteket» hopper forbi dialogen der kategorien velges.
+  const lagreKategori = async (bd, nyKategori) => {
+    const kat = String(nyKategori || '').trim()
+    if (!kat || lagrerKat) return
+    setLagrerKat(true)
+    try {
+      const { data: endret, error } = await supabase.from('bruker_bibliotek')
+        .update({ kategori: kat }).eq('id', bd.id).select('id')
+      if (error) throw error
+      if (!endret || endret.length === 0) throw new Error('Ingen rad ble endret')
+      setEndrerKat(null)
+      await last()
+    } catch (e) {
+      await confirm({ message: 'Kunne ikke flytte bygningsdelen', subMessage: (e && e.message) || 'ukjent feil', alertOnly: true, kind: 'error' })
+    } finally { setLagrerKat(false) }
+  }
 
   // Tellinger per fag til fane-raden
   const fagAntall = (fagId) => Object.values(perFag[fagId] || {}).flat().length
@@ -71526,6 +71962,15 @@ function KalkBibliotekPage({ onBack }) {
                               {bd._erstatterId ? '⭐ DIN VERSJON' : '⭐ EGEN'}
                             </span>
                           )}
+                          {/* Kategorien er ikke satt av brukeren — vi har plassert den. */}
+                          {(bd._kategoriGjettet || bd._kategoriUsikker) && (
+                            <span title={bd._kategoriUsikker
+                              ? 'Kategorien er ikke satt på denne bygningsdelen. Vi har plassert den her — åpne den og flytt den dit den hører.'
+                              : 'Kategorien er gjettet ut fra navnet. Åpne bygningsdelen og flytt den hvis den står feil.'}
+                              style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', fontSize:'9px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', flexShrink:0 }}>
+                              {bd._kategoriUsikker ? '📍 IKKE PLASSERT' : '📍 GJETTET'}
+                            </span>
+                          )}
                           {bdInd && (
                             <span style={{ background: bdInd.kantlinje, color: bdInd.tekst, fontSize:'9px', fontWeight:'700', padding:'2px 6px', borderRadius:'4px', letterSpacing:'0.4px', flexShrink:0 }}>
                               {bdInd.ikon} {bdInd.navn}
@@ -71571,9 +72016,52 @@ function KalkBibliotekPage({ onBack }) {
                               </div>
                             )}
                             {bd._egen && (
-                              <button onClick={() => slettEgen(bd)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', marginTop:'4px', fontWeight:'600', minHeight:'34px' }}>
-                                🗑️ {bd._erstatterId ? 'Slett min versjon (får den innebygde tilbake)' : 'Slett fra biblioteket'}
-                              </button>
+                              <>
+                                {/* Kategorien kan rettes her. «Oppdater i biblioteket» i
+                                    kalkylen hopper forbi lagre-dialogen, så uten dette
+                                    sitter en feilplassert bygningsdel fast. */}
+                                {endrerKat && endrerKat.bdId === bd.id ? (
+                                  <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'11px 13px', marginBottom:'8px' }}>
+                                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'6px' }}>FLYTT TIL KATEGORI</div>
+                                    <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+                                      <select value={endrerKat.verdi} onChange={e => setEndrerKat(s => ({ ...s, verdi: e.target.value }))}
+                                        style={{ flex:'1 1 180px', padding:'9px 11px', borderRadius:'8px', border:'1px solid #e2e8f0', fontSize:'13px', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif', minWidth:0 }}>
+                                        {kategorierForFag(bd.fag, rader).map(kat => <option key={kat} value={kat}>{kat}</option>)}
+                                      </select>
+                                      <button onClick={() => lagreKategori(bd, endrerKat.verdi)} disabled={lagrerKat}
+                                        style={{ background: lagrerKat ? '#a7f3d0' : '#059669', color:'white', border:'none', borderRadius:'8px', padding:'9px 16px', fontSize:'12px', fontWeight:'700', cursor: lagrerKat ? 'default' : 'pointer', minHeight:'34px' }}>
+                                        {lagrerKat ? 'Flytter …' : 'Flytt'}
+                                      </button>
+                                      <button onClick={() => setEndrerKat(null)} disabled={lagrerKat}
+                                        style={{ background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'9px 14px', fontSize:'12px', fontWeight:'600', cursor:'pointer', minHeight:'34px' }}>Avbryt</button>
+                                    </div>
+                                  </div>
+                                ) : null}
+                                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'4px' }}>
+                                  {kob.koblet > 0 && (
+                                    <button onClick={() => setPrisBd(bd)}
+                                      title="Hent gjeldende priser fra den aktive prislisten. Du får se hva som endres før noe skrives."
+                                      style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', fontWeight:'600', minHeight:'34px' }}>
+                                      🔄 Oppdater priser
+                                    </button>
+                                  )}
+                                  {(!endrerKat || endrerKat.bdId !== bd.id) && (
+                                    <button onClick={() => setEndrerKat({ bdId: bd.id, verdi: bd.kategori })}
+                                      title="Flytt bygningsdelen til en annen kategori"
+                                      style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', fontWeight:'600', minHeight:'34px' }}>
+                                      📍 Flytt til annen kategori
+                                    </button>
+                                  )}
+                                  <button onClick={() => slettEgen(bd)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'7px 14px', fontSize:'12px', cursor:'pointer', fontWeight:'600', minHeight:'34px' }}>
+                                    🗑️ {bd._erstatterId ? 'Slett min versjon (får den innebygde tilbake)' : 'Slett fra biblioteket'}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                            {!bd._egen && (
+                              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px', lineHeight:1.5 }}>
+                                Dette er en innebygd bygningsdel. Prisene hentes fra prislisten din når du legger den inn i en kalkyle. Vil du styre den selv, rediger den i en kalkyle og velg «Erstatt min standard».
+                              </div>
                             )}
                           </div>
                         )}
@@ -71587,6 +72075,18 @@ function KalkBibliotekPage({ onBack }) {
           )}
         </div>
       </div>
+
+      {/* Oppdater priser for én bygningsdel i biblioteket */}
+      {prisBd && (
+        <OppdaterPriserModal
+          tittel="Oppdater priser"
+          undertittel={prisBd.name}
+          poster={prisPoster(prisBd)}
+          userId={user?.id}
+          onSkriv={(valgte) => skrivPriserPaaBd(prisBd, valgte)}
+          onClose={() => setPrisBd(null)}
+        />
+      )}
     </div>
   )
 }
@@ -73014,6 +73514,8 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showKoblingsassistent, setShowKoblingsassistent] = useState(null)
   // Lagre-til-bibliotek-dialogen: { kalkId, bdId, fag } når den er åpen.
   const [showLagreBd, setShowLagreBd] = useState(null)
+  // «Oppdater priser»-dialogen. true når den er åpen for hele kalkylen.
+  const [showOppdaterPriser, setShowOppdaterPriser] = useState(false)
   // På telefon vises materiallinjene som en LESEVISNING i stedet for den brede
   // tabellen: ingen bygger en kalkyle på mobil, men mange åpner en på farta og
   // skal se hva som er med, hvilke priser som gjelder og hva som er merket.
@@ -73409,6 +73911,43 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const oppdatert = { ...naa, kalkyler: nyeKalkyler }
     kRef.current = oppdatert
     saveProject(oppdatert)
+  }
+
+  // Alle materiallinjer i kalkylen, med en peker tilbake til hver av dem.
+  // Leses fra kRef så dialogen alltid ser den nyeste tilstanden.
+  const prisPosterFraKalkyle = () => {
+    const ut = []
+    ;(kRef.current?.kalkyler || []).forEach(kl => (kl.bygningsdeler || []).forEach(bd => (bd.materialer || []).forEach(m => {
+      ut.push({ sti: { kalkId: kl.id, bdId: bd.id, matId: m.id }, linje: m })
+    })))
+    return ut
+  }
+
+  // Skriver de prisendringene brukeren krysset av for, og måler hva
+  // kalkylens totalsum endret seg med.
+  const skrivPrisoppdatering = async (valgte) => {
+    const naa = kRef.current
+    if (!naa) return { antall: 0 }
+    const faktorer = naa.faktorer || {}
+    const totalFor = beregnProsjektTotal(naa.kalkyler || [], faktorer).totMedFortjeneste
+    const noekkel = (a, b, c) => `${a}|${b}|${c}`
+    const map = new Map(valgte.map(p => [noekkel(p.sti.kalkId, p.sti.bdId, p.sti.matId), p]))
+    const nyeKalkyler = (naa.kalkyler || []).map(kl => ({
+      ...kl,
+      bygningsdeler: (kl.bygningsdeler || []).map(bd => ({
+        ...bd,
+        materialer: (bd.materialer || []).map(m => {
+          const p = map.get(noekkel(kl.id, bd.id, m.id))
+          return p ? { ...m, ...prisforslagTilFelter(p) } : m
+        }),
+      })),
+    }))
+    const totalEtter = beregnProsjektTotal(nyeKalkyler, faktorer).totMedFortjeneste
+    setUndoStack(prev => [...prev.slice(-9), naa.kalkyler || []])
+    const oppdatert = { ...naa, kalkyler: nyeKalkyler }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
+    return { antall: valgte.length, totalFor, totalEtter, totalLabel: 'Kalkylens totalsum' }
   }
 
   // Koblingsassistenten velger en vare på linjen. Går gjennom samme
@@ -74176,12 +74715,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   )}
                   <button onClick={() => { handleDuplicate(); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>📋 Dupliser kalkyle</button>
                   <button onClick={() => { setShowSaveTemplate(true); setTemplateName(k.title); setShowMoreMenu(false) }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🗂️ Lagre som mal</button>
-                  <button onClick={async () => {
-                    const { kalkyler: updated, count } = await oppdaterPriserFraPrisliste(kalkyler, supabase, user?.id)
-                    if (count > 0) { updateKalkyler(updated); setToastMsg({ title: 'Priser oppdatert', message: `${count} materialpriser oppdatert fra aktiv prisliste`, type: 'success' }) }
-                    else { setToastMsg({ title: 'Ingen endringer', message: 'Ingen materialer med NOBB-nummer funnet, eller ingen aktiv prisliste', type: 'error' }) }
-                    setShowMoreMenu(false)
-                  }} style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
+                  {/* Åpner dialogen i stedet for å skrive stille. Kalkylen kan være
+                      sendt til kunde — brukeren skal se hva som endres. */}
+                  <button onClick={() => { setShowOppdaterPriser(true); setShowMoreMenu(false) }}
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
                   <button onClick={() => { handleUndo(); setShowMoreMenu(false) }} disabled={undoStack.length === 0}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color: undoStack.length > 0 ? '#0f172a' : '#cbd5e1' }}>↩️ Angre siste endring</button>
                   <button onClick={() => { downloadMaterialliste(); setShowMoreMenu(false) }}
@@ -77251,6 +77788,18 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         }
         return <PS ctx={showProduktSok} onClose={() => setShowProduktSok(null)} />
       })()}
+
+      {/* Oppdater priser fra aktiv prisliste — viser hva som endres før skriving */}
+      {showOppdaterPriser && (
+        <OppdaterPriserModal
+          tittel="Oppdater priser"
+          undertittel={k.title || 'Kalkyle'}
+          poster={prisPosterFraKalkyle()}
+          userId={user?.id}
+          onSkriv={skrivPrisoppdatering}
+          onClose={() => setShowOppdaterPriser(false)}
+        />
+      )}
 
       {/* Lagre bygningsdel i biblioteket — erstatt min standard, eller ny variant */}
       {showLagreBd && (() => {
