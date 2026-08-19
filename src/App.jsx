@@ -74397,6 +74397,13 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
   const kjoringRef = React.useRef(0)
   const sokRef = React.useRef(0)
   const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+  // Scrollboksen og kortene i den. Vi måler dem for å kunne si «N treff til
+  // nedenfor» — uten det tallet ser tre kort ut som at listen er slutt, og da
+  // har vi løst at søkefeltet er usynlig ved å gjøre forslagene usynlige.
+  const innholdRef = React.useRef(null)
+  const kortRef = React.useRef([])
+  const rafRef = React.useRef(0)
+  const [antallUnder, setAntallUnder] = useState(0)
 
   // Køen fryses ved åpning. Kobler brukeren linje 1, forsvinner den fra
   // parentens `linjer` — uten frysing ville listen krympe under føttene på oss
@@ -74413,6 +74420,10 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
     setKandidater([])
     setEgetSok('')
     setSokTreff([])
+    // Med et sticky søkefelt ville scrollposisjonen fulgt med til neste linje:
+    // materiallinje-kortet sto da utenfor synsfeltet på en linje brukeren ikke
+    // har sett ennå. Vi ruller til topp for hver ny linje.
+    if (innholdRef.current) innholdRef.current.scrollTop = 0
     finnKoblingsKandidater(prisbokSok, aktiv, 5)
       .then(res => { if (kjoringRef.current === kjoring) { setKandidater(res); setLaster(false) } })
       .catch(() => { if (kjoringRef.current === kjoring) { setKandidater([]); setLaster(false) } })
@@ -74432,6 +74443,32 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
     return () => clearTimeout(t)
   }, [egetSok])
 
+  // ── «N TREFF TIL NEDENFOR» ─────────────────────────────────────────────────
+  // Søkefeltet flyttet til toppen koster plass: antall helt synlige kort går
+  // fra fire til tre. Dette tallet er det som gjør de tre til «det er mer her»
+  // i stedet for «listen er slutt».
+  //
+  // Måler med getBoundingClientRect, ikke offsetTop: scrollboksen er ikke
+  // posisjonert, så offsetTop måles fra modal-boksen og ville vært forskjøvet
+  // med hele headerhøyden.
+  const maalUnder = () => {
+    const boks = innholdRef.current
+    if (!boks) { setAntallUnder(0); return }
+    const kant = boks.getBoundingClientRect().bottom
+    let n = 0
+    for (const el of kortRef.current) {
+      // 4 px slark: et kort som så vidt berører kanten regnes som synlig.
+      if (el && el.getBoundingClientRect().bottom > kant + 4) n++
+    }
+    setAntallUnder(n)
+  }
+  // Treghetsscrolling på iOS fyrer onScroll mange ganger i sekundet, og hver
+  // måling er inntil 15 rect-oppslag. Én måling per frame er nok.
+  const paaScroll = () => {
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; maalUnder() })
+  }
+
   const nesteLinje = () => setIdx(i => i + 1)
 
   // onKoble kan åpne en bekreftelsesdialog (rull→m²). Vi må vente på svaret før
@@ -74449,10 +74486,49 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
   const ferdig = !aktiv
   const totalt = koe.length
 
+  // Én liste, to tilstander. Står det tekst i søkefeltet, viser listen treff;
+  // er feltet tomt, viser den forslagene. Overskriften sier hvilket. Å vise
+  // begge samtidig ville gitt 5 forslag + 15 treff = 20 kort, og
+  // gjeninnført nettopp scrollingen vi fjerner.
+  const term = egetSok.trim()
+  const sokAktiv = term.length > 0
+  const visteKort = sokAktiv ? sokTreff : kandidater
+
+  // Teller under feltet. Den forteller at søket VIRKET selv når treffene
+  // ligger utenfor synsfeltet — og ved ett tegn sier den hva som mangler, slik
+  // at feltet aldri ser dødt ut mens minimumsgrensen holder søket tilbake.
+  const tellerTekst = (() => {
+    if (!sokAktiv) return null
+    if (sokLaster) return 'Søker …'
+    if (term.length < 2) return 'Skriv ett tegn til …'
+    if (sokTreff.length > 0) return `${sokTreff.length} treff — viser de nærmeste først`
+    return null   // null treff håndteres under, med egen forklaring
+  })()
+
+  // Tømmer brukeren feltet, er han tilbake i «vis meg forslagene» — og da skal
+  // han se toppen av dem, ikke bunnen av listen han nettopp forlot. Uten dette
+  // sto materiallinje-kortet utenfor synsfeltet etter et avbrutt søk.
+  useEffect(() => { if (!sokAktiv && innholdRef.current) innholdRef.current.scrollTop = 0 }, [sokAktiv])
+
+  // Måler på nytt når listen endres — ved bytte av linje, ved nytt søk, og når
+  // feltet tømmes og forslagene kommer tilbake. Uten dette står tallet fra
+  // forrige liste og lyver. requestAnimationFrame fordi kortene må være malt
+  // før de kan måles.
+  useEffect(() => {
+    const id = requestAnimationFrame(maalUnder)
+    return () => cancelAnimationFrame(id)
+  }, [visteKort, ferdig])
+  // Rydder en måling som ligger i kø når modalen lukkes.
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
+
+  // Kortene registreres i rekkefølge for målingen. Nullstilles ved hver
+  // rendring, ellers vokser listen med gamle noder som ikke står i DOM-en.
+  kortRef.current = []
+
   const kort = (p, visBegrunnelse) => {
     const stil = KOB_TILLIT_STIL[p._kobTillit] || KOB_TILLIT_STIL.lav
     return (
-      <button key={p.id || p.varenummer} onClick={() => velgProdukt(p)} disabled={jobber}
+      <button key={p.id || p.varenummer} ref={el => { if (el) kortRef.current.push(el) }} onClick={() => velgProdukt(p)} disabled={jobber}
         style={{ display:'block', width:'100%', textAlign:'left', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white', padding:'12px 14px', marginBottom:'8px', cursor: jobber ? 'default' : 'pointer', opacity: jobber ? 0.6 : 1, minHeight:'56px', boxSizing:'border-box' }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', justifyContent:'space-between' }}>
           <div style={{ flex:1, minWidth:0 }}>
@@ -74501,8 +74577,10 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
           )}
         </div>
 
-        {/* Innhold */}
-        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+        {/* Innhold. Wrapperen er posisjonert fordi «N treff til nedenfor» ligger
+            absolutt i bunnen av det SYNLIGE området, ikke i bunnen av listen. */}
+        <div style={{ position:'relative', flex:1, minHeight:0, display:'flex' }}>
+        <div ref={innholdRef} onScroll={paaScroll} style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
           {ferdig ? (
             <div style={{ textAlign:'center', padding:'32px 8px' }}>
               <div style={{ fontSize:'40px', marginBottom:'10px' }}>{koblet > 0 ? '✅' : '👍'}</div>
@@ -74515,7 +74593,7 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
           ) : (
             <>
               {/* Linjen som skal kobles */}
-              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px' }}>
                 <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.03em', marginBottom:'4px' }}>MATERIALLINJE</div>
                 <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{aktiv.varenavn || 'Uten navn'}</div>
                 <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
@@ -74523,46 +74601,94 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
                 </div>
               </div>
 
-              {/* Forslag */}
-              {laster && (
+              {/* Søkefeltet ØVERST, og sticky. Sto det under forslagslisten så
+                  brukeren det aldri: målt lå det 145 px under kanten ved
+                  åpning, på en scrollboks som er 502 px høy. Sticky fordi 15
+                  treff gir ~2 000 px innhold — uten det forsvinner feltet
+                  oppover mens han leter, og et søk kan ikke rettes uten å
+                  scrolle tilbake.
+
+                  top: -14px, negative margins og egen bakgrunn: uten det
+                  ville innholdet vist seg i den 14 px brede stripen mellom
+                  boksens kant og feltets klebepunkt.
+
+                  Telleren er MED i det klebende feltet. Den skal jo bevise at
+                  søket virket mens treffene ligger utenfor synsfeltet — da kan
+                  den ikke være det første som forsvinner. */}
+              <div style={{ position:'sticky', top:'-14px', zIndex:3, background:'#f8fafc', margin:'0 -16px 10px', padding:'14px 16px 8px' }}>
+                <div style={{ position:'relative' }}>
+                  <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'14px', color:'#94a3b8', pointerEvents:'none' }}>🔍</span>
+                  <input value={egetSok} onChange={e => setEgetSok(e.target.value)}
+                    placeholder="Varenavn eller NOBB"
+                    style={{ width:'100%', boxSizing:'border-box', padding:'11px 40px 11px 36px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'16px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
+                  {/* 16 px skriftstørrelse og 32 px trykkflate: under 16 px
+                      zoomer iOS inn på feltet når det får fokus, og da må
+                      brukeren zoome ut igjen manuelt. */}
+                  {egetSok !== '' && (
+                    <button onClick={() => setEgetSok('')} aria-label="Tøm søket"
+                      style={{ position:'absolute', right:'5px', top:'50%', transform:'translateY(-50%)', width:'32px', height:'32px', border:'none', background:'#f1f5f9', color:'#64748b', borderRadius:'8px', fontSize:'17px', lineHeight:1, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>×</button>
+                  )}
+                </div>
+                {tellerTekst && (
+                  <div style={{ fontSize:'11px', color: sokLaster ? '#2563eb' : '#64748b', marginTop:'6px' }}>{tellerTekst}</div>
+                )}
+              </div>
+
+              {/* Forslag eller treff — samme liste, ulik overskrift */}
+              {laster && !sokAktiv && (
                 <div style={{ textAlign:'center', padding:'22px', fontSize:'13px', color:'#2563eb' }}>Leter i prislisten din …</div>
               )}
-              {!laster && kandidater.length > 0 && (
+              {visteKort.length > 0 && (
                 <>
-                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>FORSLAG FRA PRISLISTEN DIN</div>
-                  {kandidater.map(p => kort(p, true))}
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>
+                    {sokAktiv ? 'SØKERESULTAT' : 'FORSLAG FRA PRISLISTEN DIN'}
+                  </div>
+                  {visteKort.map(p => kort(p, !sokAktiv))}
                 </>
               )}
-              {!laster && kandidater.length === 0 && (
+
+              {/* Null treff på et eget søk. NOBB-forslaget gjelder bare roller
+                  som faktisk kan slå opp i prisboken — å sende en ansatt på
+                  jakt etter et nummer han uansett ikke får søke på, er verre
+                  enn å si ingenting. Der vinner tilgangsnotisen alene. */}
+              {sokAktiv && !sokLaster && term.length >= 2 && sokTreff.length === 0 && (
                 kanSePriser ? (
-                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'4px' }}>Ingen treff for «{term}»</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+                      Prøv NOBB-nummeret i stedet — det treffer nøyaktig én vare, og navnet i prislisten er ofte skrevet annerledes enn på tegningen.
+                    </div>
+                  </div>
+                ) : <PrisTilgangNotis kompakt />
+              )}
+
+              {/* Ingen forslag å vise, og brukeren søker ikke selv ennå */}
+              {!laster && !sokAktiv && kandidater.length === 0 && (
+                kanSePriser ? (
+                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px' }}>
                     <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
                     <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
-                      Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk gjerne selv under — eller hopp over, så beholder linjen den veiledende prisen.
+                      Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk selv i feltet over — eller hopp over, så beholder linjen den veiledende prisen.
                     </div>
                   </div>
                 ) : (
                   // «Ingen god kandidat» ville vært feil svar her: det er ikke
                   // dimensjonen som mangler, det er tilgangen.
-                  <div style={{ marginBottom:'14px' }}><PrisTilgangNotis /></div>
+                  <PrisTilgangNotis />
                 )
               )}
-
-              {/* Søk selv */}
-              <div style={{ marginTop:'14px' }}>
-                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>SØK SELV</div>
-                <input value={egetSok} onChange={e => setEgetSok(e.target.value)}
-                  placeholder="Varenavn eller NOBB-nummer …"
-                  style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
-                {sokLaster && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker …</div>}
-                {!sokLaster && egetSok.trim().length >= 2 && sokTreff.length === 0 && (
-                  kanSePriser
-                    ? <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Ingen treff for «{egetSok.trim()}».</div>
-                    : <div style={{ marginTop:'8px' }}><PrisTilgangNotis kompakt /></div>
-                )}
-                {sokTreff.length > 0 && <div style={{ marginTop:'8px' }}>{sokTreff.map(p => kort(p, false))}</div>}
-              </div>
             </>
+          )}
+        </div>
+          {/* «N treff til nedenfor» — ligger i bunnen av det synlige området og
+              forsvinner idet siste kort er framme. pointerEvents: none, slik at
+              den aldri stjeler et trykk fra kortet under seg. */}
+          {antallUnder > 0 && (
+            <div style={{ position:'absolute', left:0, right:0, bottom:0, height:'46px', display:'flex', alignItems:'flex-end', justifyContent:'center', paddingBottom:'7px', pointerEvents:'none', background:'linear-gradient(to bottom, rgba(248,250,252,0) 0%, rgba(248,250,252,0.55) 45%, rgba(248,250,252,0.95) 100%)' }}>
+              <span style={{ fontSize:'11px', fontWeight:'700', color:'white', background:'rgba(15,23,42,0.85)', padding:'5px 13px', borderRadius:'999px', boxShadow:'0 4px 12px rgba(15,23,42,0.25)' }}>
+                ↓ {antallUnder} {sokAktiv ? 'treff' : 'forslag'} til nedenfor
+              </span>
+            </div>
           )}
         </div>
 
