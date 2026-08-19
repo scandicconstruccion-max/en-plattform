@@ -28,7 +28,9 @@ Stack: React + Supabase + Vercel. Hele appen ligger i ÉN fil: src/App.jsx (~75 
   flyttet fra oransje til rødt» er etterprøvbart; «#c2410c 20→16» er det ikke før noen spør.
   Samme farge kan bety flere ting i appen, og en telling per hex skjuler nettopp den
   sammenblandingen som er verdt å oppdage. Gjelder også andre delte verdier: enheter,
-  statusnavn, ikoner.
+  statusnavn, ikoner — men BARE der samme literal bærer flere betydninger («stk», «m²»,
+  statusnavn, hex-koder). En streng som bare finnes ett sted kvalifiserer ikke. Uten den
+  grensen blir rapporten en ordbok, og da leses den ikke.
 
 ## Konvensjoner å kjenne til
 - React hooks må deklareres FØR eventuelle `return` i modal-komponenter.
