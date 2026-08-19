@@ -20,6 +20,15 @@ Stack: React + Supabase + Vercel. Hele appen ligger i ÉN fil: src/App.jsx (~75 
 - Kartlegg først og rapporter funn før du bygger større endringer; vent på godkjenning.
 - Vis alltid en diff av hva som endres.
 - **Sjekk at det fungerer responsivt på mobil** — flertallet av brukerne er på telefon.
+- **Kontroller alltid mot en GIT-REVISJON**, aldri mot en midlertidig kopi du selv har lagd
+  (`/tmp/App.before.jsx` og liknende). En kontroll mot ditt eget øyeblikksbilde er sirkulær —
+  den beviser bare at du gjorde det du trodde du gjorde. Bruk `git show <rev>:src/App.jsx`
+  eller `git diff <rev>`.
+- **Rapporter fargeendringer per BETYDNING, ikke per hex-kode.** «Prisøkning urørt, enhetsavvik
+  flyttet fra oransje til rødt» er etterprøvbart; «#c2410c 20→16» er det ikke før noen spør.
+  Samme farge kan bety flere ting i appen, og en telling per hex skjuler nettopp den
+  sammenblandingen som er verdt å oppdage. Gjelder også andre delte verdier: enheter,
+  statusnavn, ikoner.
 
 ## Konvensjoner å kjenne til
 - React hooks må deklareres FØR eventuelle `return` i modal-komponenter.
