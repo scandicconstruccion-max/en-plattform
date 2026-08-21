@@ -51421,6 +51421,7 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
   const [tokenInput, setTokenInput] = useState('')
   const [bytter, setBytter] = useState(false)
   const [jobber, setJobber] = useState(false)
+  const [visVeiviser, setVisVeiviser] = useState(null)  // null = brukeren har ikke valgt selv ennå
 
   const loadStatus = async () => {
     try {
@@ -51436,6 +51437,9 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
 
   const harToken = !!status?.has_token
   const cs = status?.connection_status || 'not_configured'
+  // Veiviseren står åpen så lenge ingen nøkkel er lagret — det er da den trengs.
+  // Er nøkkelen på plass, er den slått sammen, men fortsatt ett klikk unna.
+  const veiviserApen = visVeiviser === null ? !harToken : visVeiviser
   const fmtTid = (t) => { try { return t ? new Date(t).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' }) : '' } catch (_) { return '' } }
 
   const sv = {
@@ -51479,6 +51483,10 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
   const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }
   const btnPrimar = { background: jobber ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: jobber ? 'default' : 'pointer' }
   const btnSekundar = { background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: jobber ? 'default' : 'pointer' }
+  const veiviserRamme = { border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px', overflow: 'hidden' }
+  const veiviserTopp = { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: isMob ? '12px 14px' : '13px 18px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', boxSizing: 'border-box' }
+  const steg = { marginBottom: '12px' }
+  const advarselBoks = { marginTop: '14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '11px 13px', fontSize: '13px', color: '#78350f', lineHeight: 1.55 }
 
   return (
     <div style={kort}>
@@ -51489,6 +51497,60 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
       <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
         Koble bedriften til Tripletex (regnskap) for å synke kunder, prosjekter og godkjente timer. Nøkkelen lagres kryptert og kan aldri leses tilbake.
       </p>
+
+      {/* ── TILKOBLINGSVEIVISER ──────────────────────────────────────────────────
+          Fire steg fra «har ikke Tripletex ennå» til «nøkkelen er limt inn». Ordlyden
+          sier gjennomgående «du eller regnskapsføreren din»: i små byggebedrifter er
+          det oftest en ekstern regnskapsfører som administrerer Tripletex-kontoen, og
+          da er det bare den personen som faktisk kan aktivere API-modulen og lage
+          nøkkelen. Rekkefølgen er ikke tilfeldig — steg 2 må gjøres før steg 3, ellers
+          finnes ikke menypunktet nøkkelen lages fra. */}
+      <div style={veiviserRamme}>
+        <button type="button" onClick={() => setVisVeiviser(!veiviserApen)} aria-expanded={veiviserApen} style={veiviserTopp}>
+          <span style={{ fontWeight: '700', fontSize: isMob ? '14px' : '15px', color: '#0f172a' }}>Slik lager du nøkkelen</span>
+          <span style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', flexShrink: 0 }}>{veiviserApen ? 'Skjul ▲' : 'Vis ▼'}</span>
+        </button>
+
+        {veiviserApen && (
+          <div style={{ padding: isMob ? '0 14px 14px' : '0 18px 18px' }}>
+            <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>
+              <li style={steg}>
+                <strong>Bedriften må ha sitt eget Tripletex-abonnement.</strong><br />
+                En Plattform kan ikke opprette en Tripletex-konto for deg. Har ikke bedriften
+                Tripletex fra før, må du eller regnskapsføreren din skaffe det først — direkte
+                hos Tripletex, eller gjennom regnskapsføreren som allerede fører regnskapet.
+              </li>
+              <li style={steg}>
+                <strong>En administrator må aktivere API-modulen i Tripletex først.</strong><br />
+                Dette må gjøres før du går videre til steg 3. Er ikke API-modulen aktivert,
+                finnes ikke menypunktet «API-tilgang» i Tripletex i det hele tatt — da er det
+                ingenting å lete etter. Du eller regnskapsføreren din må være administrator i
+                Tripletex-bedriften for å aktivere modulen.
+              </li>
+              <li style={steg}>
+                <strong>Lag nøkkelen i Tripletex.</strong><br />
+                Når API-modulen er aktivert, går du eller regnskapsføreren din til
+                <strong> Min profil</strong> → <strong>API-tilgang</strong> → <strong>Ny nøkkel</strong>.
+                Skriv <strong>En Plattform</strong> som applikasjonsnavn. Nøkkelen vises bare
+                én gang — kopier den med det samme.
+              </li>
+              <li style={{ ...steg, marginBottom: 0 }}>
+                <strong>Lim nøkkelen inn i feltet under</strong> og trykk «Lagre og test tilkobling».
+                Vi tester mot Tripletex med en gang, så du ser om den virker før du går videre.
+              </li>
+            </ol>
+
+            <div style={advarselBoks}>
+              <div style={{ fontWeight: '700', marginBottom: '3px' }}>Viktig om rettigheter</div>
+              Nøkkelen arver rettighetene til den som lager den. Lager du eller regnskapsføreren
+              din nøkkelen med en bruker som har begrenset tilgang i Tripletex, vil tilkoblingen
+              se ut til å virke nå, men synkingen kan feile uforklarlig senere — på akkurat de
+              kundene, prosjektene eller timene den brukeren ikke får se. Bruk en bruker som har
+              tilgang til det som skal synkes.
+            </div>
+          </div>
+        )}
+      </div>
 
       {laster ? (
         <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Laster status…</div>
@@ -51531,11 +51593,16 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
 
 function MinBedriftPage() {
   const { user, companyId, role, isPlatformOwner } = useAuth()
-  const kanIntegrasjon = isPlatformOwner || role === 'admin' || role === 'superadmin'
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const [tab, setTab] = useState('info')
   const [settings, setSettings] = useState(null)
+  // Fanen «Integrasjoner» er SKJULT som standard og slås på per bedrift med
+  // company_settings.tripletex_integrasjon_synlig = true. Mangler kolonnen (SQL-en er
+  // ikke kjørt ennå) blir verdien undefined; mangler raden er settings null. Begge
+  // veier gir skjult fane, ikke krasj. Rollekravet gjelder i TILLEGG, ikke i stedet.
+  const integrasjonSynlig = settings?.tripletex_integrasjon_synlig === true
+  const kanIntegrasjon = integrasjonSynlig && (isPlatformOwner || role === 'admin' || role === 'superadmin')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
