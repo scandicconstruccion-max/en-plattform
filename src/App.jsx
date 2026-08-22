@@ -30579,6 +30579,10 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
             </div>
           )}
 
+          {/* Send godkjente timer til regnskapssystemet. Skjuler seg selv når
+              ingen kobling finnes, eller når ingen godkjente timer står klare. */}
+          <SendGodkjenteTimer entries={gruppe.entries} isMob={isMobG} onFerdig={onRefresh} />
+
           {/* Entries per day */}
           {weekDates.map((date,i)=>{
             const dayEntries = gruppe.entries.filter(e => e.date === date)
@@ -30654,6 +30658,10 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
                           </div>
                         </div>
                       )}
+
+                        {/* Synkstatus for GODKJENTE timer: sendt, stoppet med årsak,
+                            eller klar til sending. Skjult for alt annet enn godkjent. */}
+                        <TimeSynkRad entry={e} isMob={isMobG} onFerdig={onRefresh} />
                     </div>
                   )
                 })}
@@ -51777,6 +51785,180 @@ function SynkFeil({ synk, ekstra }) {
               {synk.feil.detalj}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TIMER TIL REGNSKAPSSYSTEMET (DEL 5) ────────────────────────────────────
+// Hva brukeren skal gjøre når en time stoppes. Edge-funksjonen svarer med en
+// forståelig norsk melding OG en «reason»; meldingen forklarer HVA som er galt,
+// dette forklarer HVOR det rettes. Særlig employee_not_linked er viktig: det er
+// det første en ny kunde møter, siden ingen ansatte er koblet fra start.
+// {system} erstattes med navnet på det tilkoblede systemet ved visning, så teksten
+// aldri nevner Tripletex direkte.
+const TIME_STOPP_HJELP = {
+  employee_not_linked:      'Koble den ansatte under Min bedrift → Integrasjoner → Oppsett for synk. Ingen ansatte er koblet fra start, og koblingen må gjøres manuelt for hver enkelt — vi gjetter aldri på navn.',
+  missing_default_activity: 'Velg standardaktivitet under Min bedrift → Integrasjoner → Oppsett for synk.',
+  project_sync_required:    'Åpne prosjektet og trykk «Synk til {system}» der først.',
+  before_project_start:     'Rett prosjektets startdato, eller før timen på nytt med en dato innenfor prosjektperioden.',
+  not_approved:             'Få timen godkjent først. Bare godkjente timer kan sendes.',
+  overtime_not_supported:   'Overtid støttes ikke ennå. Timen må føres som normaltid, eller registreres direkte i regnskapssystemet.',
+  absence_not_supported:    'Fravær synkes ikke ennå. Registrer det direkte i regnskapssystemet.',
+  changed_after_sync:       'Timen er endret etter sending. Rett den i regnskapssystemet, eller kontakt regnskap.',
+  missing_project:          'Før timen på et prosjekt.',
+}
+
+function timeStoppHjelp(reason, navn) {
+  const t = TIME_STOPP_HJELP[reason]
+  return t ? t.replace(/\{system\}/g, navn || 'regnskapssystemet') : ''
+}
+
+// Sender ÉN godkjent time. Brukes både av per-rad-knappen og av samlesendingen,
+// så oppførselen er nøyaktig den samme uansett hvor man trykker.
+async function sendEnTime(provider, companyId, entryId) {
+  try {
+    const { data, error } = await supabase.functions.invoke(`${provider}-hours-sync`, { body: { companyId, entryId } })
+    if (error || (data && data.error)) {
+      const f = await lesIntegrasjonsfeil(error, data)
+      return { ok: false, ...f }
+    }
+    return { ok: true, action: (data && data.action) || 'created', eksternId: (data && data.tripletexEntryId) || null }
+  } catch (e) {
+    return { ok: false, melding: (e && e.message) || String(e), detalj: '', reason: '' }
+  }
+}
+
+// Status på én timerad: sendt / feilet / klar til sending. Vises kun for
+// GODKJENTE timer, og bare når et regnskapssystem er tilkoblet.
+function TimeSynkRad({ entry, isMob, onFerdig }) {
+  const { companyId } = useAuth()
+  const { tilkoblet, provider, navn } = useRegnskapssystem()
+  const [jobber, setJobber] = useState(false)
+  const [feil, setFeil] = useState(null)
+  const [sendtId, setSendtId] = useState(entry?.tripletex_entry_id || null)
+  useEffect(() => { setSendtId(entry?.tripletex_entry_id || null) }, [entry?.tripletex_entry_id])
+
+  const godkjent = (entry?.status || '') === 'Godkjent'
+  if (!tilkoblet || !godkjent) return null
+
+  const send = async () => {
+    setFeil(null); setJobber(true)
+    const r = await sendEnTime(provider, companyId, entry.id)
+    setJobber(false)
+    if (r.ok) { setSendtId(r.eksternId || true); if (onFerdig) onFerdig() }
+    else setFeil(r)
+  }
+
+  const lagretFeil = !sendtId && !feil && entry?.tripletex_sync_error ? { melding: entry.tripletex_sync_error, detalj: '', reason: '' } : null
+  const vist = feil || lagretFeil
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {sendtId ? (
+          <span style={{ background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '3px 10px' }}>
+            ✓ Sendt til {navn}
+          </span>
+        ) : (
+          <>
+            {vist && (
+              <span style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '3px 10px' }}>
+                Stoppet
+              </span>
+            )}
+            <button onClick={send} disabled={jobber} style={{ padding: isMob ? '9px 12px' : '7px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: jobber ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', color: jobber ? '#94a3b8' : 'inherit' }}>
+              {jobber ? 'Sender…' : vist ? `Prøv igjen` : `↗ Send til ${navn}`}
+            </button>
+          </>
+        )}
+      </div>
+
+      {vist && (
+        <div style={{ marginTop: '7px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '9px', padding: '9px 11px', fontSize: '12px', color: '#991b1b', lineHeight: 1.5 }}>
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{vist.melding}</div>
+          {timeStoppHjelp(vist.reason, navn) && (
+            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #fecaca', fontWeight: '600' }}>
+              {timeStoppHjelp(vist.reason, navn)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Samlesending for én ukes godkjente timer. Sender én om gangen — regnskapssystemet
+// kobler hver time til prosjekt og aktivitet hver for seg, og en feil på én time
+// skal ikke stoppe de andre.
+function SendGodkjenteTimer({ entries, isMob, onFerdig }) {
+  const { companyId } = useAuth()
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const { tilkoblet, provider, navn } = useRegnskapssystem()
+  const [jobber, setJobber] = useState(false)
+  const [fremdrift, setFremdrift] = useState(null)   // { gjort, av }
+  const [resultat, setResultat] = useState(null)     // { sendt, stoppet: [{ tekst, melding, reason }] }
+
+  // Kun godkjente timer som ikke alt er sendt. Overtid og fravær filtreres bort
+  // her også, så tellingen stemmer med det som faktisk kan sendes.
+  const kandidater = (entries || []).filter(e =>
+    (e.status || '') === 'Godkjent' &&
+    !e.tripletex_entry_id &&
+    !e.absence_type &&
+    (Number(e.overtime_50) || 0) === 0 &&
+    (Number(e.overtime_100) || 0) === 0 &&
+    (Number(e.normal_hours) || 0) > 0
+  )
+
+  if (!tilkoblet || kandidater.length === 0) return null
+
+  const send = async () => {
+    const ok = await confirm({
+      message: `Send ${kandidater.length} godkjente ${kandidater.length === 1 ? 'time' : 'timer'} til ${navn}?`,
+      subMessage: `Bare godkjente normaltimer sendes. Overtid og fravær holdes utenfor. Timer som allerede er sendt, hoppes over.`,
+      confirmLabel: 'Send',
+    })
+    if (!ok) return
+
+    setJobber(true); setResultat(null)
+    const stoppet = []
+    let sendt = 0
+    for (let i = 0; i < kandidater.length; i++) {
+      const e = kandidater[i]
+      setFremdrift({ gjort: i, av: kandidater.length })
+      const r = await sendEnTime(provider, companyId, e.id)
+      if (r.ok) sendt++
+      else stoppet.push({ tekst: `${String(e.date).slice(0, 10)} · ${fmtHours(e.normal_hours)}t`, melding: r.melding, reason: r.reason })
+    }
+    setFremdrift(null); setJobber(false); setResultat({ sendt, stoppet })
+    if (stoppet.length === 0) appAlert({ message: `${sendt} ${sendt === 1 ? 'time' : 'timer'} sendt til ${navn}`, kind: 'success' })
+    if (onFerdig) onFerdig()
+  }
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <button onClick={send} disabled={jobber} style={{ width: '100%', padding: isMob ? '14px' : '12px', background: 'white', color: jobber ? '#94a3b8' : '#0369a1', border: '1px solid #bae6fd', borderRadius: '10px', cursor: jobber ? 'default' : 'pointer', fontSize: isMob ? '14px' : '14px', fontWeight: '700' }}>
+        {jobber
+          ? `Sender… ${fremdrift ? `${fremdrift.gjort + 1} av ${fremdrift.av}` : ''}`
+          : `↗ Send ${kandidater.length} godkjente ${kandidater.length === 1 ? 'time' : 'timer'} til ${navn}`}
+      </button>
+
+      {resultat && (
+        <div style={{ marginTop: '10px', background: resultat.stoppet.length ? '#fef2f2' : '#f0fdf4', border: `1px solid ${resultat.stoppet.length ? '#fecaca' : '#bbf7d0'}`, borderRadius: '10px', padding: '11px 13px', fontSize: '13px', color: resultat.stoppet.length ? '#991b1b' : '#166534', lineHeight: 1.5 }}>
+          <div style={{ fontWeight: '700', marginBottom: resultat.stoppet.length ? '6px' : 0 }}>
+            {resultat.sendt} sendt{resultat.stoppet.length ? `, ${resultat.stoppet.length} stoppet` : ''}
+          </div>
+          {resultat.stoppet.map((f, i) => (
+            <div key={i} style={{ marginTop: '7px', paddingTop: '7px', borderTop: '1px solid #fecaca' }}>
+              <div style={{ fontWeight: '700', fontSize: '12px' }}>{f.tekst}</div>
+              <div style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{f.melding}</div>
+              {timeStoppHjelp(f.reason, navn) && (
+                <div style={{ fontSize: '12px', fontWeight: '600', marginTop: '3px' }}>{timeStoppHjelp(f.reason, navn)}</div>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
