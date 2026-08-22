@@ -639,7 +639,15 @@ function erGyldigEpost(e) {
 // ville derfor ikke skilt «meg i min bedrift» fra «meg i kundens bedrift» — og
 // det er nøyaktig det skillet som betyr noe.
 let _aktivBedriftId = null
-function settAktivBedrift(id) { _aktivBedriftId = id || null }
+function settAktivBedrift(id) {
+  const ny = id || null
+  const forrige = _aktivBedriftId
+  _aktivBedriftId = ny
+  // Rydd KUN ved et faktisk bytte fra en tidligere bedrift. Første lasting går fra
+  // null til en verdi, og da finnes ingen gamle data å rydde bort — å rydde der
+  // ville kostet to spørringer ved hver eneste sidelast.
+  if (forrige !== null && forrige !== ny) tomBedriftsCacher(ny)
+}
 
 // NØKLET PÅ BEDRIFT. Merkevaren — firmanavn, adresse, org.nr og logo — havner på
 // faktura, tilbud og ordre som kunden sender videre til SIN kunde. Uten nøkkelen
@@ -3581,7 +3589,10 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 
 // ── Ansattvelger som setter navn/epost/telefon fra valgt ansatt ──
 // Global cache av ansatte — hentes én gang per sesjon for å unngå N fetch-er
-const _employeeCache = { data: null, loading: null, subscribers: new Set() }
+// NØKLET PÅ BEDRIFT, av samme grunn som _brandCache: EmployeeNameSelect brukes 19
+// steder, og prosjektleder og timegodkjenner lagres som id. Velges en ansatt fra
+// forrige bedrifts liste, skrives en id som ikke finnes for denne bedriften.
+const _employeeCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 // Returnerer visningsnavn uansett om ansatt har first_name+last_name eller kombinert name-felt
 function getEmployeeName(emp) {
@@ -3592,12 +3603,19 @@ function getEmployeeName(emp) {
 }
 
 function getCachedEmployees() {
-  if (_employeeCache.data) return Promise.resolve(_employeeCache.data)
-  if (_employeeCache.loading) return _employeeCache.loading
+  const nokkel = _aktivBedriftId
+  if (_employeeCache.data && _employeeCache.nokkel === nokkel) return Promise.resolve(_employeeCache.data)
+  if (_employeeCache.loading && _employeeCache.nokkel === nokkel) return _employeeCache.loading
+  // Ny bedrift: forkast forrige liste FØR hentingen starter.
+  _employeeCache.nokkel = nokkel
+  _employeeCache.data = null
+  const min = nokkel
   _employeeCache.loading = supabase.from('employees')
     .select('*')
     .order('last_name', { nullsFirst: false })
     .then(({ data, error }) => {
+      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
+      if (_employeeCache.nokkel !== min) return _employeeCache.data || []
       if (error) {
         console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
         _employeeCache.data = []
@@ -3624,6 +3642,7 @@ function getCachedEmployees() {
 }
 
 function invalidateEmployeeCache() {
+  _employeeCache.nokkel = null
   _employeeCache.data = null
   _employeeCache.loading = null
 }
@@ -3909,7 +3928,11 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
 // Følger samme mønster som EmployeeNameSelect.
 // ─────────────────────────────────────────────────────────────────────────
 
-const _customerCache = { data: null, loading: null, subscribers: new Set() }
+// NØKLET PÅ BEDRIFT. CustomerSelect leser herfra og brukes i sju skjemaer som
+// lagrer customer_id: prosjekt, tilbud, anbud, ordre, faktura, BIM-veiviser og
+// kalkyle. Velges en kunde fra forrige bedrifts liste, skrives en id som ikke
+// finnes for denne bedriften — feil data i basen, ikke bare på skjermen.
+const _customerCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 // Formaterer kunde til visningstekst: "K-0023 · Ola Nordmann"
 function formatCustomerLabel(c) {
@@ -3969,10 +3992,17 @@ async function hentEgneKunder() {
 }
 
 function getCachedCustomers() {
-  if (_customerCache.data) return Promise.resolve(_customerCache.data)
-  if (_customerCache.loading) return _customerCache.loading
+  const nokkel = _aktivBedriftId
+  if (_customerCache.data && _customerCache.nokkel === nokkel) return Promise.resolve(_customerCache.data)
+  if (_customerCache.loading && _customerCache.nokkel === nokkel) return _customerCache.loading
+  // Ny bedrift: forkast forrige liste FØR hentingen starter.
+  _customerCache.nokkel = nokkel
+  _customerCache.data = null
+  const min = nokkel
   _customerCache.loading = hentEgneKunder()
     .then(rader => {
+      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
+      if (_customerCache.nokkel !== min) return _customerCache.data || []
       _customerCache.data = rader
       _customerCache.loading = null
       _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
@@ -3992,6 +4022,7 @@ function getCachedCustomers() {
 }
 
 function invalidateCustomerCache() {
+  _customerCache.nokkel = null
   _customerCache.data = null
   _customerCache.loading = null
 }
@@ -4010,6 +4041,35 @@ function useCustomers() {
     return () => { mounted = false; _customerCache.subscribers.delete(sub) }
   }, [])
   return customers
+}
+
+// ── SENTRAL RYDDING VED BEDRIFTSBYTTE ────────────────────────────────────
+// Andre forsvarslinje ved siden av nøklene på hver enkelt cache. Kalles fra
+// settAktivBedrift(), altså når companyId faktisk endrer seg i app-tilstanden.
+//
+// Den henger BEVISST på companyId og ikke på onAuthStateChange: en støtteøkt
+// bytter bedrift uten å røre auth i det hele tatt (startSupportSession kaller
+// bare en RPC og window.location.reload()), så en auth-lytter ville aldri fyrt
+// ved det scenariet som betyr mest.
+//
+// IndexedDB røres ikke her. Den er offline-lageret, og å tømme det ved hvert
+// bytte ville ødelagt offline-bruken. Nøklene der må prefikses med bedrift —
+// egen sak.
+function tomBedriftsCacher(nyBedriftId) {
+  try { invalidateCustomerCache() } catch (_) {}
+  try { invalidateEmployeeCache() } catch (_) {}
+  try { invalidateBrandCache() } catch (_) {}
+  try { tomDataCache() } catch (_) {}          // _memCache (ikke IndexedDB)
+  // Varsle monterte velgere med tom liste. Uten dette ville de stått igjen med
+  // forrige bedrifts rader til komponenten tilfeldigvis ble montert på nytt.
+  try { _customerCache.subscribers.forEach(fn => fn([])) } catch (_) {}
+  try { _employeeCache.subscribers.forEach(fn => fn([])) } catch (_) {}
+  // Hent på nytt for den nye bedriften, så velgerne fylles igjen uten at
+  // brukeren må navigere bort og tilbake. Ikke ved utlogging (nyBedriftId null).
+  if (nyBedriftId) {
+    try { getCachedCustomers() } catch (_) {}
+    try { getCachedEmployees() } catch (_) {}
+  }
 }
 
 // CustomerSelect — søkbar kundevelger med duplikatadvarsel for privatkunder
