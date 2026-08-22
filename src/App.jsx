@@ -25014,8 +25014,11 @@ function FeedbackModal({ onClose, kontekst }) {
       // Hent bedriftsnavn
       let companyName = null
       try {
-        const { data: cs } = await supabase.from('company_settings').select('company_name').limit(1).single()
-        companyName = cs?.company_name || null
+        // Kolonnen heter «name», ikke «company_name» — bekreftet mot både prod og
+        // Utvikling. Feilen sto i en tom catch, så feilrapporter har hittil blitt
+        // sendt uten bedriftsnavn uten at noe varslet.
+        const { data: cs } = await supabase.from('company_settings').select('name').limit(1).single()
+        companyName = cs?.name || null
       } catch(e) {}
 
       // Last opp skjermbilde først (hvis aktivt)
@@ -51409,6 +51412,210 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
   )
 }
 
+// ── TRIPLETEX: OPPSETT AV ANSATTE OG STANDARDAKTIVITET (DEL 3) ─────────────
+// Vises kun når integrasjonen er tilkoblet. Henter ansatte og aktiviteter fra
+// Tripletex via Edge Function tripletex-lookup (skrivefri — kun GET mot Tripletex).
+//
+// Koblingen ansatt → Tripletex-ansatt er ALLTID eksplisitt. Vi gjetter aldri på navn:
+// to personer kan hete det samme, og feil kobling gir timer på feil person, altså feil
+// lønn. Ukoblede ansatte vises tydelig i stedet for å bli forsøkt gjettet.
+//
+// Standardaktivitet lagres per bedrift. Tripletex krever en aktivitet på hver time, og
+// vårt eget aktivitetsfelt er fritekst som ikke kan mappes trygt.
+function TripletexOppsett({ companyId, isMob }) {
+  const appAlert = useAppAlert()
+  const [laster, setLaster] = useState(true)
+  const [feil, setFeil] = useState(null)          // { melding, detalj }
+  const [ttAnsatte, setTtAnsatte] = useState([])
+  const [ttAktiviteter, setTtAktiviteter] = useState([])
+  const [notat, setNotat] = useState('')
+  const [ansatte, setAnsatte] = useState([])
+  const [aktivitet, setAktivitet] = useState('')
+  const [lagrerAktivitet, setLagrerAktivitet] = useState(false)
+  const [lagrerAnsatt, setLagrerAnsatt] = useState(null)   // employees.id som lagres nå
+
+  // Henter Tripletex-feilen slik den faktisk lyder. Edge-funksjonen legger Tripletex'
+  // egen tekst i feltet «error»; uten dette ville brukeren bare fått «kunne ikke hente».
+  const lesFeilmelding = async (error, data) => {
+    if (data && data.error) return String(data.error)
+    let d = (error && error.message) || 'Ukjent feil'
+    try { const b = await error.context.json(); if (b && b.error) d = String(b.error) } catch (_) {}
+    return d
+  }
+
+  const last = async () => {
+    setLaster(true); setFeil(null)
+    try {
+      // Egne ansatte: sortert i DATABASEN, ikke i frontend.
+      const { data: egne, error: eErr } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, tripletex_employee_id')
+        .order('first_name', { ascending: true })
+        .order('last_name', { ascending: true })
+        .limit(1000)
+      if (eErr) throw new Error(`Kunne ikke hente ansatte fra En Plattform: ${eErr.message}`)
+      setAnsatte(egne || [])
+
+      // Gjeldende standardaktivitet.
+      try {
+        const { data: akt } = await supabase.rpc('tripletex_get_default_activity')
+        setAktivitet(akt === null || akt === undefined ? '' : String(akt))
+      } catch (_) { setAktivitet('') }
+
+      // Listene fra Tripletex.
+      const { data, error } = await supabase.functions.invoke('tripletex-lookup', { body: { companyId } })
+      if (error || (data && data.error)) {
+        setFeil({ melding: 'Tripletex svarte med en feil', detalj: await lesFeilmelding(error, data) })
+        setTtAnsatte([]); setTtAktiviteter([]); setNotat('')
+        return
+      }
+      setTtAnsatte((data && data.employees) || [])
+      setTtAktiviteter((data && data.activities) || [])
+      setNotat((data && data.note) || '')
+    } catch (e) {
+      setFeil({ melding: 'Kunne ikke hente oppsettet', detalj: (e && e.message) || String(e) })
+    } finally { setLaster(false) }
+  }
+  useEffect(() => { last() }, [])
+
+  const velgAktivitet = async (verdi) => {
+    const forrige = aktivitet
+    setAktivitet(verdi); setLagrerAktivitet(true)
+    try {
+      const { error } = await supabase.rpc('tripletex_set_default_activity', {
+        p_activity_id: verdi === '' ? null : Number(verdi),
+      })
+      if (error) throw new Error(error.message)
+      appAlert({ message: 'Standardaktivitet lagret', kind: 'success' })
+    } catch (e) {
+      setAktivitet(forrige)
+      appAlert({ message: 'Kunne ikke lagre standardaktivitet', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLagrerAktivitet(false) }
+  }
+
+  const koble = async (ansattId, verdi) => {
+    const forrige = ansatte
+    const ny = verdi === '' ? null : Number(verdi)
+    setAnsatte(rader => rader.map(r => (r.id === ansattId ? { ...r, tripletex_employee_id: ny } : r)))
+    setLagrerAnsatt(ansattId)
+    try {
+      const { error } = await supabase.from('employees').update({ tripletex_employee_id: ny }).eq('id', ansattId)
+      if (error) throw new Error(error.message)
+    } catch (e) {
+      setAnsatte(forrige)
+      appAlert({ message: 'Kunne ikke lagre koblingen', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLagrerAnsatt(null) }
+  }
+
+  const navn = (a) => `${a.first_name || ''} ${a.last_name || ''}`.trim() || '(uten navn)'
+  const antallKoblet = ansatte.filter(a => a.tripletex_employee_id).length
+  const antallMangler = ansatte.length - antallKoblet
+
+  const ramme = { marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #e2e8f0' }
+  const overskrift = { margin: '0 0 4px', fontSize: isMob ? '15px' : '16px', fontWeight: '700', color: '#0f172a' }
+  const hjelp = { margin: '0 0 14px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }
+  const merkelapp = { display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }
+  const velger = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', background: 'white', boxSizing: 'border-box', maxWidth: '100%' }
+  const rad = { display: 'flex', flexDirection: isMob ? 'column' : 'row', alignItems: isMob ? 'stretch' : 'center', gap: isMob ? '6px' : '12px', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }
+  const radNavn = { flex: isMob ? 'none' : '0 0 40%', fontSize: '14px', fontWeight: '600', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }
+  const prikk = (koblet) => ({ width: '8px', height: '8px', borderRadius: '999px', background: koblet ? '#16a34a' : '#f59e0b', flexShrink: 0 })
+
+  return (
+    <div style={ramme}>
+      <h3 style={overskrift}>Oppsett for synk</h3>
+      <p style={hjelp}>
+        Før timer kan sendes til Tripletex må hver ansatt kobles til riktig person i Tripletex,
+        og bedriften må velge én standardaktivitet. Listene hentes fra Tripletex.
+      </p>
+
+      {laster ? (
+        <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Henter lister fra Tripletex…</div>
+      ) : feil ? (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', color: '#991b1b' }}>
+          <div style={{ fontWeight: '700', marginBottom: '4px' }}>{feil.melding}</div>
+          <div style={{ marginBottom: '10px' }}>Dette er svaret fra Tripletex, uendret:</div>
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px', background: 'white', border: '1px solid #fecaca', borderRadius: '8px', padding: '9px 11px', marginBottom: '10px' }}>
+            {feil.detalj}
+          </div>
+          <button onClick={last} style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '9px 16px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Prøv igjen</button>
+        </div>
+      ) : (
+        <>
+          {/* ── STANDARDAKTIVITET ── */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={merkelapp} htmlFor="tt-aktivitet">Standardaktivitet for timer</label>
+            <select
+              id="tt-aktivitet"
+              value={aktivitet}
+              disabled={lagrerAktivitet || ttAktiviteter.length === 0}
+              onChange={e => velgAktivitet(e.target.value)}
+              style={velger}
+            >
+              <option value="">{ttAktiviteter.length === 0 ? 'Ingen aktiviteter i Tripletex' : 'Ikke valgt'}</option>
+              {ttAktiviteter.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+            </select>
+            {notat && (
+              <div style={{ marginTop: '8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 12px', fontSize: '13px', color: '#78350f', lineHeight: 1.5 }}>
+                {notat}
+              </div>
+            )}
+          </div>
+
+          {/* ── ANSATTKOBLING ── */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+            <label style={{ ...merkelapp, marginBottom: 0 }}>Koble ansatte til Tripletex</label>
+            {ansatte.length > 0 && (
+              <span style={{ fontSize: '13px', fontWeight: '700', color: antallMangler > 0 ? '#b45309' : '#166534' }}>
+                {antallMangler > 0
+                  ? `${antallMangler} av ${ansatte.length} mangler kobling`
+                  : `Alle ${ansatte.length} er koblet`}
+              </span>
+            )}
+          </div>
+          <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+            Velg selv hvem som er hvem. Vi kobler aldri automatisk på navn — to personer kan
+            hete det samme, og feil kobling gir timer på feil person.
+          </p>
+
+          {ansatte.length === 0 ? (
+            <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Ingen ansatte registrert i En Plattform ennå.</div>
+          ) : (
+            <div>
+              {ansatte.map(a => (
+                <div key={a.id} style={rad}>
+                  <div style={radNavn}>
+                    <span style={prikk(!!a.tripletex_employee_id)} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{navn(a)}</span>
+                    {!a.tripletex_employee_id && (
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '2px 8px', flexShrink: 0 }}>Ikke koblet</span>
+                    )}
+                  </div>
+                  <select
+                    value={a.tripletex_employee_id ? String(a.tripletex_employee_id) : ''}
+                    disabled={lagrerAnsatt === a.id || ttAnsatte.length === 0}
+                    onChange={e => koble(a.id, e.target.value)}
+                    style={{ ...velger, flex: '1 1 auto' }}
+                    aria-label={`Tripletex-ansatt for ${navn(a)}`}
+                  >
+                    <option value="">{ttAnsatte.length === 0 ? 'Ingen ansatte i Tripletex' : 'Ikke koblet'}</option>
+                    {ttAnsatte.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: '14px' }}>
+            <button onClick={last} style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '9px 16px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+              Hent listene på nytt fra Tripletex
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── TRIPLETEX-INTEGRASJON (Innstillinger → Integrasjoner) ──────────────────
 // Lar admin/eier lime inn bedriftens Tripletex employee-token. Tokenet sendes til
 // Edge Function tripletex-session (krypteres server-side) og kan ALDRI leses tilbake
@@ -51585,6 +51792,10 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
               </div>
             </div>
           )}
+
+          {/* Oppsett av ansatte og standardaktivitet — kun når tilkoblingen faktisk
+              virker. Er den ikke det, har vi ingen sesjon å hente listene med. */}
+          {cs === 'connected' && <TripletexOppsett companyId={companyId} isMob={isMob} />}
         </>
       )}
     </div>
