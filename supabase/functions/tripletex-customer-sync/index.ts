@@ -31,8 +31,19 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
 
+// CORS. Uten disse kan funksjonen ikke kalles fra nettleseren i det hele tatt:
+// supabase.functions.invoke() sender authorization, x-client-info, apikey og
+// content-type, og alle fire må stå i Allow-Headers. Samme mønster som
+// supabase/functions/bim-sesjon-rydd/index.ts og tripletex-session.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+  return new Response(JSON.stringify(body), { status, headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' } })
 }
 
 function safeJson(text: string): any {
@@ -95,6 +106,12 @@ async function getSession(companyId: string): Promise<string> {
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  // Preflight. MÅ ligge først — før metode-sjekken lenger nede, ellers avvises
+  // OPTIONS med 405 og nettleseren sender aldri den ekte POST-en.
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
   let logBase: Record<string, unknown> = {}
   const secrets: string[] = []
   const log = (row: Record<string, unknown>) => logSync(row, secrets)

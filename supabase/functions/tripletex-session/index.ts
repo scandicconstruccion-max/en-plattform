@@ -27,14 +27,43 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
 
+// CORS. Uten disse kan funksjonen ikke kalles fra nettleseren i det hele tatt:
+// supabase.functions.invoke() sender authorization, apikey, content-type og
+// x-client-info, og alle fire må stå i Allow-Headers. Samme mønster som
+// supabase/functions/bim-sesjon-rydd/index.ts, som allerede kalles fra App.jsx.
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   })
 }
 
+// Tripletex' svar lagres i last_error via tripletex_mark_failed, og last_error VISES
+// i grensesnittet under «Siste forsøk feilet». Skulle et svar noen gang ekko
+// forespørselen, ville nøkkelen havnet på skjermen. Samme beskyttelse som
+// tripletex-customer-sync, -project-sync og -hours-sync allerede har.
+function maskerHemmeligheter(tekst: string, hemmeligheter: string[]): string {
+  let s = tekst || ''
+  for (const h of hemmeligheter) {
+    if (h && h.length >= 6) s = s.split(h).join('[REDACTED]')
+  }
+  return s.replace(/(consumerToken|employeeToken|sessionToken|token|password)=[^&\s"']+/gi, '$1=[REDACTED]')
+}
+
 Deno.serve(async (req: Request): Promise<Response> => {
+  // Preflight. MÅ ligge før metode-sjekken under — ellers avvises OPTIONS med 405
+  // og nettleseren sender aldri den ekte POST-en.
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: CORS_HEADERS })
+  }
+
   try {
     if (req.method !== 'POST') return json({ error: 'Bruk POST' }, 405)
     if (!CONSUMER_TOKEN || !ENC_KEY) {
@@ -110,14 +139,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000)
     const expDate = tomorrow.toISOString().slice(0, 10) // yyyy-MM-dd
 
-    const url = new URL(`${TRIPLETEX_BASE}/v2/token/session/:create`)
-    url.searchParams.set('consumerToken', CONSUMER_TOKEN)
-    url.searchParams.set('employeeToken', employeeTokenDb)
-    url.searchParams.set('expirationDate', expDate)
-
-    // POST (ikke PUT — PUT-varianten av :create er utfaset i Tripletex' API).
-    const ttRes = await fetch(url.toString(), { method: 'POST' })
-    const ttText = await ttRes.text()
+    // POST med JSON-BODY. Dette er den eneste formen som er verifisert mot Tripletex:
+    // POST /v2/token/session/:create med { employeeToken, consumerToken, expirationDate }
+    // i body gir 201 Created. Historikken bak denne linjen:
+    //   · PUT + query-parametre (dcc29a8)  -> 422 «employee token is invalid or does not
+    //     exist», selv med korrekt token. Endepunktet plukker ikke opp query-parametrene.
+    //   · POST + query-parametre (d054a3d) -> 422 «request body: Kan ikke være null».
+    //     Riktig verb, men kallet manglet body.
+    // Begge tokenene sendes som HELE strengene Tripletex ga ut, uendret. Tripletex
+    // godtar sin egen base64-innpakning — den skal IKKE pakkes ut.
+    const ttRes = await fetch(`${TRIPLETEX_BASE}/v2/token/session/:create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        consumerToken: CONSUMER_TOKEN,
+        employeeToken: employeeTokenDb,
+        expirationDate: expDate,
+      }),
+    })
+    // Masker nøkkelen og consumer-tokenet FØR teksten kan havne i last_error eller i
+    // svaret til UI-et.
+    const ttText = maskerHemmeligheter(await ttRes.text(), [employeeTokenDb, CONSUMER_TOKEN])
 
     if (!ttRes.ok) {
       await admin.rpc('tripletex_mark_failed', {
