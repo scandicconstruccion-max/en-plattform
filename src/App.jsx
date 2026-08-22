@@ -631,7 +631,27 @@ function erGyldigEpost(e) {
 //   pdf.doc.save('filnavn.pdf')
 // ══════════════════════════════════════════════════════════════════════
 
-const _brandCache = { settings: null, logoDataUrl: null, loading: null }
+// Hvilken bedrift ser vi på akkurat nå? Speiles hit fra AuthProvider, så cacher
+// som lever UTENFOR React kan nøkle på riktig bedrift uten et eget oppslag.
+//
+// MÅ være bedriften, ikke auth-brukeren: under en støtteøkt er auth-brukeren
+// fortsatt plattformeieren, mens bedriften er kundens. En nøkkel på bruker-id
+// ville derfor ikke skilt «meg i min bedrift» fra «meg i kundens bedrift» — og
+// det er nøyaktig det skillet som betyr noe.
+let _aktivBedriftId = null
+function settAktivBedrift(id) { _aktivBedriftId = id || null }
+
+// NØKLET PÅ BEDRIFT. Merkevaren — firmanavn, adresse, org.nr og logo — havner på
+// faktura, tilbud og ordre som kunden sender videre til SIN kunde. Uten nøkkelen
+// ble den hentet én gang per sidelast, og en PDF laget etter et bedriftsbytte
+// kunne fått forrige bedrifts avsender. Det er ikke rettbart etter at dokumentet
+// er sendt.
+//
+// Støtteøkten laster i dag siden på nytt i begge retninger (startSupportSession
+// og avsluttSupportOkt kaller begge window.location.reload()), så cachen tømmes
+// uansett. Men det er en tilfeldig redning, ikke et forsvar: fjernes den reloaden
+// for å gjøre byttet raskere, er feilen aktiv igjen med én gang.
+const _brandCache = { nokkel: null, settings: null, logoDataUrl: null, loading: null }
 
 async function _loadJsPdf() {
   if (window.jspdf) return window.jspdf
@@ -796,27 +816,41 @@ async function _excelTilPoster(file) {
 }
 
 async function _fetchBrandData() {
-  if (_brandCache.settings !== null) return _brandCache
-  if (_brandCache.loading) return _brandCache.loading
+  const nokkel = _aktivBedriftId
+  // Cachen gjelder KUN den brukeren den ble hentet for.
+  if (_brandCache.settings !== null && _brandCache.nokkel === nokkel) return _brandCache
+  if (_brandCache.loading && _brandCache.nokkel === nokkel) return _brandCache.loading
+
+  // Ny bruker: forkast forrige bedrifts merkevare FØR vi henter, så en PDF som
+  // startes akkurat nå ikke rekker å plukke opp den gamle logoen.
+  _brandCache.nokkel = nokkel
+  _brandCache.settings = null
+  _brandCache.logoDataUrl = null
+
   _brandCache.loading = (async () => {
+    const min = nokkel   // hvem denne hentingen tilhører
     try {
       const { data } = await supabase.from('company_settings').select('*').limit(1).single()
+      // Rakk en annen bruker å overta mens vi hentet? Da skal ikke vårt svar skrives.
+      if (_brandCache.nokkel !== min) return _brandCache
       _brandCache.settings = data || {}
       // Hent logo som base64 data-URL hvis tilgjengelig (jsPDF kan ikke hente URL direkte)
       if (data?.logo_url) {
         try {
           const resp = await fetch(data.logo_url)
           const blob = await resp.blob()
-          _brandCache.logoDataUrl = await new Promise((res) => {
+          const dataUrl = await new Promise((res) => {
             const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob)
           })
-        } catch (e) { console.error('[brandPdf] Kunne ikke laste logo:', e); _brandCache.logoDataUrl = null }
+          if (_brandCache.nokkel !== min) return _brandCache
+          _brandCache.logoDataUrl = dataUrl
+        } catch (e) { console.error('[brandPdf] Kunne ikke laste logo:', e); if (_brandCache.nokkel === min) _brandCache.logoDataUrl = null }
       }
     } catch (e) {
       console.error('[brandPdf] Kunne ikke laste company_settings:', e)
-      _brandCache.settings = {}
+      if (_brandCache.nokkel === min) _brandCache.settings = {}
     } finally {
-      _brandCache.loading = null
+      if (_brandCache.nokkel === min) _brandCache.loading = null
     }
     return _brandCache
   })()
@@ -825,6 +859,7 @@ async function _fetchBrandData() {
 
 // Invaliderer brand-cache — kalles når bedriftsinfo oppdateres i innstillinger
 function invalidateBrandCache() {
+  _brandCache.nokkel = null
   _brandCache.settings = null
   _brandCache.logoDataUrl = null
   _brandCache.loading = null
@@ -1877,6 +1912,10 @@ function AuthProvider({ children }) {
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
   const isPlatformOwner = profile?.platform_role === 'platform_owner'
   const companyId = profile?.company_id || null
+  // Speiler bedriften til modulnivå. Cacher utenfor React (PDF-merkevaren i dag,
+  // kunde- og ansattlista neste) nøkler på denne. Under en støtteøkt er dette
+  // KUNDENS bedrift, selv om auth-brukeren fortsatt er plattformeieren.
+  React.useEffect(() => { settAktivBedrift(companyId) }, [companyId])
   const role = profile?.role || null
   const moduleAccess = profile?.module_access || []
   const kanRedigere = rolleKanRedigere(role)   // Les-only → false
@@ -5185,9 +5224,13 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
                     placeholder="Søk etter kunde — navn, kundenr, orgnr, e-post..."
                   />
                 </FLabel>
-                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>
-                  Finner du ikke kunden? Opprett den først i Kundeoversikt — så vises den her.
-                </p>
+                <NyKundeInline onOpprettet={c => { set('customer_id', c.id); set('client_name', c.name || '') }} />
+                {!form.customer_id && (
+                  <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#b45309', fontWeight:'600' }}>
+                    Uten en valgt kunde kan prosjektet ikke synkes til Tripletex. Kundenavnet under
+                    er kun tekst til visning.
+                  </p>
+                )}
               </div>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Kundenavn (kan overstyres manuelt)"><FInput value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Navn på kunde" /></FLabel></div>
               <FLabel label="Kontaktperson"><FInput value={form.client_contact} onChange={e => set('client_contact', e.target.value)} placeholder="Navn" /></FLabel>
@@ -5427,6 +5470,10 @@ function ProsjekterPage({ onNavigateDetail }) {
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user, kanStyreProsjekt } = useAuth()
   const appAlert = useAppAlert()
+  // MÅ være her. Uten den binder confirm(...) lenger nede til window.confirm, som er
+  // nettleserens native dialog: den tar en streng, får et objekt, og viser
+  // «[object Object]».
+  const confirm = useConfirm()
   const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
@@ -5534,6 +5581,68 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
+  // Synk-tilstanden deles av merket øverst, knappen i knapperaden og feilboksen
+  // under headeren — tre ulike steder i kortet. Derfor ligger den her, ikke i en
+  // av dem. Pilfunksjonene under leses først ved klikk, så de når
+  // sjekkStartdatoFoerSynk selv om den defineres rett nedenfor.
+  const synk = useIntegrasjonSynk({
+    entitet: 'project',
+    radId: { projectId },
+    alleredeSynket: project?.tripletex_id,
+    forhaandssjekk: () => sjekkStartdatoFoerSynk(),
+    onFerdig: () => load(),
+  })
+
+  // Tripletex setter sin EGEN startdato hvis vi ikke sender en. Timer ført før den
+  // datoen kan da ikke føres på prosjektet i Tripletex. Vi varsler før sending og
+  // foreslår den tidligste datoen det faktisk finnes timer på — hentet og sortert i
+  // databasen, ikke i frontend.
+  const sjekkStartdatoFoerSynk = async () => {
+    if (project?.start_date) return true
+    if (project?.tripletex_id) return true   // allerede opprettet — startdato settes ikke på nytt
+
+    let tidligste = null
+    try {
+      const { data } = await supabase
+        .from('timesheet_entries')
+        .select('date')
+        .eq('project_id', projectId)
+        .not('date', 'is', null)
+        .order('date', { ascending: true })
+        .limit(1)
+      tidligste = data && data[0] ? String(data[0].date).slice(0, 10) : null
+    } catch (_) { /* uten timer får brukeren den generelle advarselen under */ }
+
+    if (tidligste) {
+      const ok = await confirm({
+        message: 'Prosjektet mangler startdato',
+        subMessage: 'Sender vi det uten startdato, setter Tripletex sin egen — og timer ført '
+          + `før den datoen kan ikke føres på prosjektet der. Det finnes registrerte timer helt `
+          + `tilbake til ${tidligste}. Datoen lagres på prosjektet med én gang, også hvis `
+          + 'synken skulle stoppe på noe annet etterpå — den er riktig uansett, siden det er '
+          + 'datoen prosjektet faktisk startet hos oss. Vil du ha en annen dato, avbryt og '
+          + 'sett den i prosjektskjemaet.',
+        confirmLabel: `Lagre ${tidligste} og synk`,
+      })
+      if (!ok) return false
+      const { error } = await supabase.from('projects').update({ start_date: tidligste }).eq('id', projectId)
+      if (error) {
+        appAlert({ message: 'Kunne ikke lagre startdato', subMessage: error.message, kind: 'error' })
+        return false
+      }
+      await load()
+      return true
+    }
+
+    return await confirm({
+      message: 'Prosjektet mangler startdato',
+      subMessage: 'Tripletex setter da sin egen startdato ved opprettelse. Føres det timer med '
+        + 'eldre dato senere, kan de ikke registreres på prosjektet i Tripletex. '
+        + 'Vi fant ingen registrerte timer å foreslå en dato fra. Vil du synke likevel?',
+      confirmLabel: 'Synk likevel',
+    })
+  }
+
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
   if (!project) return <div style={{ ...f, textAlign:'center', padding:'60px' }}><p>Prosjekt ikke funnet</p><button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 16px', cursor:'pointer' }}>← Tilbake</button></div>
 
@@ -5596,6 +5705,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
               <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobH ? '17px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
                 <StatusBadge status={project.status} />
+                <SynkMerke synk={synk} />
               </div>
               {project.project_number && <p style={{ margin:'3px 0 0', fontSize: isMobH ? '11px' : '13px', color:'#94a3b8' }}>#{project.project_number}</p>}
             </div>
@@ -5608,9 +5718,20 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
               <button onClick={() => setShowCreateSub(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500', color:'#059669', flex: isMobH ? 1 : 'none' }}>{isMobH ? '+ Under' : '+ Underprosjekt'}</button>
             )}
             <button onClick={() => setShowEdit(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500' }}>✏️</button>
+            <SynkKnapp synk={synk} isMob={isMobH} />
             {kanStyreProsjekt && <button onClick={() => setShowDelete(true)} style={{ padding: isMobH ? '8px 10px' : '9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '14px' }}>🗑️</button>}
           </div>
         </div>
+
+        {/* Feilboksen i full bredde. Stoppet synken på manglende kunde, får brukeren
+            kundekoblingen rett i boksen — problemet og løsningen på samme sted. */}
+        <SynkFeil
+          synk={synk}
+          ekstra={synk.feil && synk.feil.reason === 'missing_customer'
+            ? <div style={{ marginTop: '10px' }}><KobleKunde project={project} isMob={isMobH} variant="akutt" onFerdig={load} /></div>
+            : null}
+        />
+
         {project.status === 'arkivert' && (
           <div style={{ marginTop:'12px', background:'#f5f3ff', border:'1px solid #e9d5ff', borderRadius:'10px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'10px' }}>
             <span style={{ fontSize:'16px' }}>📦</span>
@@ -5855,6 +5976,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏢 Kunde</h3>
+            {/* Koblingen hører hjemme her, ved kunden — ikke som varselboks i toppen
+                av siden. Et prosjekt uten ekte kunde er som regel ikke en feil, bare
+                ikke koblet. Komponenten skjuler seg selv når prosjektet HAR en kunde,
+                eller når ingen regnskapsintegrasjon er tilkoblet. */}
+            <div style={{ marginBottom:'10px' }}>
+              <KobleKunde project={project} isMob={isMobH} variant="lenke" onFerdig={load} />
+            </div>
             {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><button onClick={visKunde} style={{ margin:0, padding:0, background:'none', border:'none', textAlign:'left', cursor:'pointer', fontWeight:'600', color:'#059669', fontSize: isMobH ? '13px' : '14px', textDecoration:'underline', textUnderlineOffset:'2px' }}>{kundeLaster ? 'Laster …' : project.client_name}</button>{project.client_contact && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}<span style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Trykk på navnet for detaljer</span></div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
           </div>
           {(project.resident_name||project.resident_phone||project.resident_email) && (
@@ -38937,6 +39065,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
+                <SynkMerke synk={synk} />
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
                 {kunde.orgnr && <span>Org.nr: {kunde.orgnr}  </span>}
@@ -38944,11 +39073,18 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               </div>
             </div>
           </div>
-          <button onClick={() => setEditing(true)}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
-            ✏️{!isMobKD && ' Rediger'}
-          </button>
+          {/* Sekundærhandling til venstre for primærknappen, samme mønster som
+              prosjektkortet. Rediger forblir den grønne. */}
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            <SynkKnapp synk={synk} isMob={isMobKD} />
+            <button onClick={() => setEditing(true)}
+              style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
+              ✏️{!isMobKD && ' Rediger'}
+            </button>
+          </div>
         </div>
+
+        <SynkFeil synk={synk} />
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
@@ -51412,6 +51548,400 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
   )
 }
 
+// ── REGNSKAPSINTEGRASJON: FELLES GRUNNLAG ───────────────────────
+// Ingenting her er Tripletex-spesifikt. Fiken, PowerOffice og Visma kommer senere,
+// og da skal UI-et ikke bygges om — kun tabellen under utvides.
+const REGNSKAPSSYSTEM = {
+  tripletex:   { navn: 'Tripletex' },
+  fiken:       { navn: 'Fiken' },
+  poweroffice: { navn: 'PowerOffice' },
+  visma:       { navn: 'Visma' },
+}
+
+// MIDLERTIDIG: den gamle RPC-en tripletex_integration_status() returnerer ikke
+// hvilket system som er koblet til. Til integration_status() er kjørt i begge
+// prosjekter antar vi tripletex når svaret mangler provider.
+// NÅR STATUSEN SVARER MED PROVIDER OVERALT: slett denne ÉNE linjen og
+// «|| REGNSKAP_ANTATT» i useRegnskapssystem under. Ingenting annet.
+const REGNSKAP_ANTATT = 'tripletex'
+
+// Status hentes ÉN gang per sidelast og deles av alle kort. Uten cachen ville hvert
+// kunde- og prosjektkort gjort sitt eget RPC-kall bare for å avgjøre om en knapp vises.
+// Cachen er NØKLET PÅ BEDRIFT. Uten nøkkelen ville statusen fra én bedrift blitt
+// stående når man bytter bedrift uten full sidelast — for eksempel ved
+// støtteinnlogging hos en kunde — og da ville kundens prosjekter vist VÅR
+// tilkobling. Samme mønster som hentAktivPrislisteCached bruker allerede.
+const AV = { tilkoblet: false, provider: null, navn: '' }
+const _regnskapCache = {}          // companyId → { tilkoblet, provider, navn }
+function useRegnskapssystem() {
+  const { companyId } = useAuth()
+  const [info, setInfo] = useState(() => (companyId && _regnskapCache[companyId]) || AV)
+  useEffect(() => {
+    let avbrutt = false
+    // Ingen bedrift ennå (laster, eller utlogget) → vis ingenting.
+    if (!companyId) { setInfo(AV); return }
+    // Vis det vi vet om DENNE bedriften med en gang, aldri en annen bedrifts svar.
+    setInfo(_regnskapCache[companyId] || AV)
+    ;(async () => {
+      if (!_regnskapCache[companyId]) {
+        // Ny funksjon først, gammel som reserve. Da spiller det ingen rolle om
+        // App.jsx lastes opp før eller etter at SQL-en er kjørt.
+        let st = null
+        try { const r = await supabase.rpc('integration_status'); if (!r.error) st = r.data } catch (_) {}
+        if (!st) { try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) st = r.data } catch (_) {} }
+        st = st || { connection_status: 'not_configured' }
+        const provider = st.provider || REGNSKAP_ANTATT
+        _regnskapCache[companyId] = {
+          tilkoblet: st.connection_status === 'connected',
+          provider,
+          navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
+        }
+      }
+      if (!avbrutt) setInfo(_regnskapCache[companyId])
+    })()
+    return () => { avbrutt = true }
+  }, [companyId])
+  return info
+}
+
+// Leser feilen fra en Edge Function slik den faktisk lyder. Funksjonene legger en
+// forståelig norsk tekst i «error» og en teknisk detalj i «detail» — vi viser den
+// første i klartekst og gjemmer den andre bak «Vis teknisk detalj», så brukeren ikke
+// møter rå JSON, men vi ikke mister den heller.
+async function lesIntegrasjonsfeil(error, data) {
+  if (data && data.error) return { melding: String(data.error), detalj: data.detail ? String(data.detail) : '', reason: data.reason || '' }
+  let melding = (error && error.message) || 'Ukjent feil'
+  let detalj = '', reason = ''
+  try {
+    const b = await error.context.json()
+    if (b && b.error) melding = String(b.error)
+    if (b && b.detail) detalj = String(b.detail)
+    if (b && b.reason) reason = String(b.reason)
+  } catch (_) {}
+  return { melding, detalj, reason }
+}
+
+// All synk-logikk samlet i én hook, så knappen kan stå i kortets knapperad mens
+// feilboksen står i full bredde under headeren. En feilboks inne i en flex-rad
+// ville sprengt oppsettet.
+function useIntegrasjonSynk({ entitet, radId, alleredeSynket, forhaandssjekk, onFerdig }) {
+  const { companyId } = useAuth()
+  const appAlert = useAppAlert()
+  const { tilkoblet, provider, navn } = useRegnskapssystem()
+  const [jobber, setJobber] = useState(false)
+  const [feil, setFeil] = useState(null)
+  // Egen tilstand for den eksterne id-en. Prop-en kommer fra forelderens rad-objekt,
+  // og den peker fortsatt på den gamle raden etter en synk.
+  const [synketId, setSynketId] = useState(alleredeSynket || null)
+  useEffect(() => { setSynketId(alleredeSynket || null) }, [alleredeSynket])
+
+  const synk = async () => {
+    setFeil(null)
+    if (forhaandssjekk) { const videre = await forhaandssjekk(); if (!videre) return }
+    setJobber(true)
+    try {
+      // Funksjonsnavnet følger systemet: fiken-customer-sync når provider er fiken.
+      const { data, error } = await supabase.functions.invoke(`${provider}-${entitet}-sync`, { body: { companyId, ...radId } })
+      if (error || (data && data.error)) { setFeil(await lesIntegrasjonsfeil(error, data)); return }
+      const nyId = (data && (data.tripletexCustomerId ?? data.tripletexProjectId ?? data.externalId)) || null
+      if (nyId) setSynketId(nyId)
+      const h = (data && data.action) || 'ok'
+      appAlert({
+        message: h === 'created' ? `Opprettet i ${navn}`
+          : h === 'linked_existing' ? `Koblet til en eksisterende oppføring i ${navn}`
+          : h === 'noop' ? 'Allerede synket — ingenting å gjøre'
+          : `Synket til ${navn}`,
+        kind: 'success',
+      })
+      if (onFerdig) onFerdig()
+    } catch (e) {
+      setFeil({ melding: (e && e.message) || String(e), detalj: '', reason: '' })
+    } finally { setJobber(false) }
+  }
+
+  return { tilkoblet, provider, navn, jobber, feil, synketId, synk }
+}
+
+// Knappen. Samme visuelle vekt som «Rediger»: nøytral grå ramme, hvit bakgrunn,
+// fontWeight 500. Synk er en sjelden handling og skal ikke rope høyere enn naboene.
+function SynkKnapp({ synk, isMob }) {
+  if (!synk.tilkoblet) return null
+  return (
+    <button
+      onClick={synk.synk}
+      disabled={synk.jobber}
+      title={synk.synketId ? `Synk til ${synk.navn} på nytt` : `Synk til ${synk.navn}`}
+      style={{
+        padding: isMob ? '8px 10px' : '9px 16px', border: '1px solid #e2e8f0', borderRadius: '10px',
+        background: 'white', cursor: synk.jobber ? 'default' : 'pointer',
+        fontSize: isMob ? '12px' : '14px', fontWeight: '500',
+        color: synk.jobber ? '#94a3b8' : 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
+      }}
+    >
+      {synk.jobber ? 'Synker…' : isMob ? '↗ Synk' : (synk.synketId ? '↗ Synk på nytt' : `↗ Synk til ${synk.navn}`)}
+    </button>
+  )
+}
+
+// Merket står ved siden av statusmerket øverst, i samme pillestil som naboen, men
+// i dempet blått — det er opplysning, ikke status.
+function SynkMerke({ synk }) {
+  if (!synk.tilkoblet || !synk.synketId) return null
+  return (
+    <span
+      title={`${synk.navn}-id ${synk.synketId}`}
+      style={{ background: '#f0f9ff', color: '#0369a1', borderRadius: '999px', fontSize: '12px', fontWeight: '700', padding: '2px 10px', whiteSpace: 'nowrap' }}
+    >
+      {synk.navn}
+    </span>
+  )
+}
+
+// Feilboksen. Full bredde, under headeren. «ekstra» lar kortet legge inn en handling
+// som løser nettopp denne feilen — prosjektkortet bruker det til kundekoblingen.
+function SynkFeil({ synk, ekstra }) {
+  const [visDetalj, setVisDetalj] = useState(false)
+  if (!synk.tilkoblet || !synk.feil) return null
+  return (
+    <div style={{ marginTop: '12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '11px 13px', fontSize: '13px', color: '#991b1b', lineHeight: 1.5 }}>
+      <div style={{ fontWeight: '700', marginBottom: '3px' }}>Synk til {synk.navn} stoppet</div>
+      <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{synk.feil.melding}</div>
+      {ekstra}
+      {synk.feil.detalj && (
+        <div style={{ marginTop: '8px' }}>
+          <button onClick={() => setVisDetalj(v => !v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#b91c1c', fontSize: '12px', fontWeight: '700', textDecoration: 'underline' }}>
+            {visDetalj ? 'Skjul teknisk detalj' : 'Vis teknisk detalj'}
+          </button>
+          {visDetalj && (
+            <div style={{ marginTop: '6px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '11px', background: 'white', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px 10px' }}>
+              {synk.feil.detalj}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Oppretter en kunde uten å forlate prosjektskjemaet. Bare de to feltene Tripletex
+// faktisk krever: navn og organisasjonsnummer. Resten fylles ut i Kundeoversikt senere.
+// Den nye kunden velges automatisk, så brukeren ikke må lete den opp igjen.
+function NyKundeInline({ onOpprettet }) {
+  const appAlert = useAppAlert()
+  const { user } = useAuth()
+  const [apen, setApen] = useState(false)
+  const [navn, setNavn] = useState('')
+  const [orgnr, setOrgnr] = useState('')
+  const [lagrer, setLagrer] = useState(false)
+
+  const opprett = async () => {
+    const n = navn.trim()
+    const o = orgnr.replace(/\D/g, '')
+    if (!n) { appAlert({ message: 'Kunden må ha et navn', kind: 'warn' }); return }
+    if (o && o.length !== 9) {
+      appAlert({ message: 'Organisasjonsnummer må ha ni siffer', subMessage: `Du skrev ${o.length} siffer.`, kind: 'warn' })
+      return
+    }
+    setLagrer(true)
+    try {
+      // Samme kundenummer-tildeling som Kundeoversikt bruker.
+      const { data: alle } = await supabase.from('customers').select('customer_number')
+      const liste = alle || []
+      let customer_number = nextSequenceNumber(liste, 'K', 'customer_number', { withYear: false })
+      if (liste.some(k => k.customer_number === customer_number)) customer_number = customer_number + 'B'
+
+      const { data: ny, error } = await supabase
+        .from('customers')
+        .insert({ name: n, orgnr: o || null, type: 'bedrift', customer_number, created_by: user?.id, er_kunde: true })
+        .select('id, name, orgnr')
+        .single()
+      if (error) throw new Error(error.message)
+
+      appAlert({ message: `Kunden «${ny.name}» er opprettet og valgt`, kind: 'success' })
+      setApen(false); setNavn(''); setOrgnr('')
+      if (onOpprettet) onOpprettet(ny)
+    } catch (e) {
+      appAlert({ message: 'Kunne ikke opprette kunden', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLagrer(false) }
+  }
+
+  const felt = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '9px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+
+  if (!apen) {
+    return (
+      <button type="button" onClick={() => setApen(true)} style={{ marginTop: '6px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#059669', fontSize: '12px', fontWeight: '700', textDecoration: 'underline' }}>
+        + Ny kunde
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '11px 12px' }}>
+      <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Ny kunde</div>
+      <input value={navn} onChange={e => setNavn(e.target.value)} placeholder="Navn på kunden" style={{ ...felt, marginBottom: '7px' }} aria-label="Navn på ny kunde" />
+      <input value={orgnr} onChange={e => setOrgnr(e.target.value)} placeholder="Organisasjonsnummer (ni siffer)" inputMode="numeric" style={{ ...felt, marginBottom: '4px' }} aria-label="Organisasjonsnummer" />
+      <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '9px' }}>
+        Org.nr kan stå tomt nå, men må fylles ut før kunden kan synkes til Tripletex.
+      </div>
+      <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+        <button type="button" onClick={opprett} disabled={lagrer} style={{ background: lagrer ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '9px', padding: '8px 15px', fontSize: '13px', fontWeight: '600', cursor: lagrer ? 'default' : 'pointer' }}>
+          {lagrer ? 'Oppretter…' : 'Opprett og velg'}
+        </button>
+        <button type="button" onClick={() => setApen(false)} disabled={lagrer} style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '9px', padding: '8px 15px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+          Avbryt
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Gamle prosjekter har kundenavn som fritekst i client_name uten en ekte kobling i
+// customer_id. Tripletex krever en ekte kunde, så disse må kobles. Vi FORESLÅR treff
+// på org.nr eller navn, men kobler aldri av oss selv: feil kunde på et prosjekt gir
+// faktura til feil mottaker.
+// To varianter:
+//   variant="lenke" — dempet lenke i «🏢 Kunde»-kortet, der kunden vises. Ingen gul
+//     ramme: et prosjekt uten kunde er som regel ikke en feil, bare ikke koblet.
+//   variant="akutt" — inni den røde feilboksen når en synk stoppet på manglende
+//     kunde. Da står problemet og løsningen på samme sted.
+function KobleKunde({ project, isMob, variant = 'lenke', onFerdig }) {
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const { tilkoblet, navn } = useRegnskapssystem()
+  const [apen, setApen] = useState(false)
+  const [soek, setSoek] = useState('')
+  const [treff, setTreff] = useState([])
+  const [laster, setLaster] = useState(false)
+  // Debouncet søketekst. Uten den gikk det ett databasekall per tastetrykk.
+  // Samme mønster og størrelsesorden som CRM-lista bruker allerede.
+  const [debSoek, setDebSoek] = useState('')
+
+  // Vises når prosjektet mangler en ekte kunde — enten det står et fritekstnavn der
+  // eller ingenting i det hele tatt. Tidligere krevde vi client_name, og prosjekter
+  // helt uten kundeinformasjon ble stående med feilmeldingen «velg en kunde» og ingen
+  // knapp å gjøre det med.
+  const trengsKobling = !project?.customer_id
+  const fritekstNavn = (project?.client_name || '').trim()
+
+  // Søk i DATABASEN, ikke i en nedlastet liste. Kundetabellen kan være stor, og
+  // PostgREST returnerer maks 1000 rader.
+  const finn = async (tekst) => {
+    const q = (tekst || '').trim()
+    if (q.length < 2) { setTreff([]); return }
+    setLaster(true)
+    try {
+      const siffer = q.replace(/\D/g, '')
+      const betingelser = [`name.ilike.%${q}%`]
+      if (siffer.length >= 9) betingelser.push(`orgnr.eq.${siffer}`)
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name, orgnr, tripletex_customer_id')
+        .eq('er_kunde', true)
+        .or(betingelser.join(','))
+        .order('name', { ascending: true })
+        .limit(10)
+      if (error) throw new Error(error.message)
+      setTreff(data || [])
+    } catch (e) {
+      appAlert({ message: 'Kunne ikke søke etter kunder', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLaster(false) }
+  }
+
+  // Søk kjøres 300 ms etter siste tastetrykk, ikke på hvert.
+  useEffect(() => {
+    if (!apen) return
+    const t = setTimeout(() => { finn(debSoek) }, 300)
+    return () => clearTimeout(t)
+  }, [debSoek, apen])
+
+  const aapne = () => {
+    setApen(true)
+    // Har prosjektet et fritekstnavn, fyller vi det inn og lar effekten over søke.
+    // Har det ingenting, åpner vi et tomt søkefelt i stedet for å la brukeren stå fast.
+    setSoek(fritekstNavn)
+    setDebSoek(fritekstNavn)
+    if (!fritekstNavn) setTreff([])
+  }
+
+  const koble = async (kunde) => {
+    const ok = await confirm({
+      message: `Koble prosjektet til «${kunde.name}»?`,
+      subMessage: [
+        kunde.orgnr
+          ? `Org.nr ${kunde.orgnr}.`
+          : `Kunden mangler org.nr. Den må ha org.nr før prosjektet kan synkes til ${navn}.`,
+        fritekstNavn
+          ? `Prosjektet står i dag med kundenavnet «${fritekstNavn}» som ren tekst.`
+          : 'Prosjektet har ingen kunde registrert i dag.',
+      ].join(' '),
+      confirmLabel: 'Koble til kunde',
+    })
+    if (!ok) return
+    try {
+      const { error } = await supabase.from('projects').update({ customer_id: kunde.id, client_name: kunde.name }).eq('id', project.id)
+      if (error) throw new Error(error.message)
+      appAlert({ message: 'Prosjektet er koblet til kunden', kind: 'success' })
+      setApen(false)
+      if (onFerdig) onFerdig()
+    } catch (e) {
+      appAlert({ message: 'Kunne ikke koble kunden', subMessage: (e && e.message) || String(e), kind: 'error' })
+    }
+  }
+
+  if (!tilkoblet || !trengsKobling) return null
+
+  const akutt = variant === 'akutt'
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+  const lenkestil = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: '600', textDecoration: 'underline', textUnderlineOffset: '2px', textAlign: 'left', color: akutt ? '#b91c1c' : '#059669' }
+
+  return (
+    <div>
+      {akutt && (
+        <div style={{ fontSize: '13px', color: '#991b1b', lineHeight: 1.5, marginBottom: '8px' }}>
+          {fritekstNavn
+            ? <>Kundenavnet «{fritekstNavn}» står som ren tekst.</>
+            : <>Prosjektet har ingen kunde registrert.</>}
+        </div>
+      )}
+
+      {!apen ? (
+        <button onClick={aapne} style={lenkestil}>Koble til kunde</button>
+      ) : (
+        <div>
+          <input
+            value={soek}
+            onChange={e => { setSoek(e.target.value); setDebSoek(e.target.value) }}
+            placeholder="Søk på navn eller organisasjonsnummer"
+            style={{ ...inp, marginBottom: '8px' }}
+            aria-label="Søk etter kunde"
+          />
+          {laster ? (
+            <div style={{ fontSize: '13px', color: '#64748b' }}>Søker…</div>
+          ) : treff.length === 0 ? (
+            <div style={{ fontSize: '13px', color: '#64748b' }}>
+              {soek.trim().length < 2
+                ? 'Søk på kundens navn eller organisasjonsnummer. Minst to tegn.'
+                : 'Ingen treff. Opprett kunden i Kundeoversikt først — så kan du koble den her.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {treff.map(k => (
+                <button key={k.id} onClick={() => koble(k)} style={{ display: 'flex', flexDirection: isMob ? 'column' : 'row', alignItems: isMob ? 'flex-start' : 'center', justifyContent: 'space-between', gap: isMob ? '2px' : '10px', textAlign: 'left', background: 'white', border: '1px solid #e2e8f0', borderRadius: '9px', padding: '9px 11px', cursor: 'pointer', width: '100%' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{k.name}</span>
+                  <span style={{ fontSize: '12px', color: k.orgnr ? '#64748b' : '#b45309', fontWeight: k.orgnr ? '400' : '700' }}>
+                    {k.orgnr ? `Org.nr ${k.orgnr}` : 'Mangler org.nr'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setApen(false)} style={{ ...lenkestil, marginTop: '8px', fontSize: '12px', fontWeight: '700', color: akutt ? '#b91c1c' : '#64748b' }}>Avbryt</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── TRIPLETEX: OPPSETT AV ANSATTE OG STANDARDAKTIVITET (DEL 3) ─────────────
 // Vises kun når integrasjonen er tilkoblet. Henter ansatte og aktiviteter fra
 // Tripletex via Edge Function tripletex-lookup (skrivefri — kun GET mot Tripletex).
@@ -51476,7 +52006,13 @@ function TripletexOppsett({ companyId, isMob }) {
       setFeil({ melding: 'Kunne ikke hente oppsettet', detalj: (e && e.message) || String(e) })
     } finally { setLaster(false) }
   }
-  useEffect(() => { last() }, [])
+  // [companyId], ikke []. Ansattlister, koblinger og standardaktivitet tilhører ÉN
+  // bedrift. Tilstanden tømmes først, så ingenting fra forrige bedrift vises mens
+  // det nye hentes.
+  useEffect(() => {
+    setTtAnsatte([]); setTtAktiviteter([]); setAnsatte([]); setAktivitet(''); setNotat(''); setFeil(null)
+    last()
+  }, [companyId])
 
   const velgAktivitet = async (verdi) => {
     const forrige = aktivitet
@@ -51631,6 +52167,9 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
   const [visVeiviser, setVisVeiviser] = useState(null)  // null = brukeren har ikke valgt selv ennå
 
   const loadStatus = async () => {
+    // setLaster(true) FØRST: uten den ville forrige bedrifts status blitt stående
+    // synlig mens den nye hentes, ved bytte av bedrift uten sidelast.
+    setLaster(true)
     try {
       const { data, error } = await supabase.rpc('tripletex_integration_status')
       if (error) throw error
@@ -51640,7 +52179,12 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
       setStatus({ connection_status: 'not_configured', has_token: false })
     } finally { setLaster(false) }
   }
-  useEffect(() => { loadStatus() }, [])
+  // [companyId], ikke []. Byttes bedrift uten full sidelast — for eksempel ved
+  // støtteinnlogging — skal statusen hentes for den nye bedriften, ikke bli stående.
+  useEffect(() => {
+    setStatus(null); setTokenInput(''); setBytter(false); setVisVeiviser(null)
+    loadStatus()
+  }, [companyId])
 
   const harToken = !!status?.has_token
   const cs = status?.connection_status || 'not_configured'
@@ -51839,7 +52383,10 @@ function MinBedriftPage() {
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  // [companyId], ikke []. Byttes bedrift uten full sidelast, må settings hentes
+  // på nytt — ellers står forrige bedrifts verdier igjen, inkludert flagget
+  // tripletex_integrasjon_synlig som avgjør om Integrasjoner-fanen vises.
+  useEffect(() => { setSettings(null); load() }, [companyId])
 
   // ── Stripe-abonnement ──
   const [starterAbo, setStarterAbo] = useState(false)
