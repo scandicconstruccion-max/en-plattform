@@ -187,7 +187,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // 6) Prosjektet må være synket. Er tripletex_id tomt → synk prosjektet først (gjenbruk).
-    const projRead1 = await admin.from('projects').select('tripletex_id').eq('id', entry.project_id).single()
+    const projRead1 = await admin.from('projects').select('tripletex_id, project_number, name, start_date').eq('id', entry.project_id).single()
     if (projRead1.error) {
       await log({ ...logBase, action: 'failed', error: `Kunne ikke lese prosjektet: ${projRead1.error.message}` })
       return json({ error: `Kunne ikke lese prosjektet: ${projRead1.error.message}` }, 500)
@@ -207,6 +207,23 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (!tripletexProjectId) {
       await log({ ...logBase, action: 'failed', error: 'Prosjektsynk ga ingen Tripletex-prosjekt-id' })
       return json({ error: 'Prosjektet ble ikke synket (ingen Tripletex-prosjekt-id)' }, 502)
+    }
+
+    // 6b) FORHÅNDSSJEKK: er timen datert FØR prosjektets startdato, avviser Tripletex
+    //     den med 422 og en melding som ikke sier hvilken dato som er problemet. Vi
+    //     fanger det her i stedet, og oppgir både timens dato, startdatoen og
+    //     prosjektnummeret — det brukeren trenger for å rette.
+    //     Startdatoen vi sendte til Tripletex ved opprettelse er den samme som
+    //     projects.start_date, så vi kan avgjøre dette uten et ekstra kall til dem.
+    const projStart = projRead1.data?.start_date ? String(projRead1.data.start_date).slice(0, 10) : null
+    const timeDato = String(entry.date).slice(0, 10)
+    if (projStart && timeDato < projStart) {
+      const prosjNr = projRead1.data?.project_number ? `#${projRead1.data.project_number}` : (projRead1.data?.name || 'prosjektet')
+      const melding = `Timen er ført ${timeDato}, men prosjektet ${prosjNr} startet ${projStart} i Tripletex. `
+        + 'Tripletex avviser timer som er eldre enn prosjektets startdato. '
+        + `Enten flyttes prosjektets startdato tilbake til ${timeDato} eller tidligere, eller så må timen føres på nytt med en dato fra ${projStart} og utover.`
+      await log({ ...logBase, action: 'skipped', error: melding })
+      return json({ error: melding, action: 'skipped', reason: 'before_project_start', detail: `Timedato ${timeDato}, prosjektstart ${projStart}` }, 400)
     }
 
     // 7) Sesjon. Registrer tokenet som hemmelighet som ALLTID fjernes fra logging.
