@@ -2124,11 +2124,7 @@ function AuthProvider({ children }) {
   const companyId = stotteBedriftId !== undefined ? stotteBedriftId : (isPlatformOwner ? null : profilBedriftId)
   // Speiler bedriften til modulnivå. Cacher utenfor React (PDF-merkevaren,
   // kunde- og ansattlista, regnskapsstatus) nøkler på denne.
-  React.useEffect(() => {
-    console.log('[DIAG auth] companyId =', companyId, '· profilBedriftId =', profilBedriftId,
-      '· stotteBedriftId =', stotteBedriftId, '· isPlatformOwner =', isPlatformOwner)
-    settAktivBedrift(companyId)
-  }, [companyId])
+  React.useEffect(() => { settAktivBedrift(companyId) }, [companyId])
   const role = profile?.role || null
   const moduleAccess = profile?.module_access || []
   const kanRedigere = rolleKanRedigere(role)   // Les-only → false
@@ -3882,9 +3878,6 @@ function erFrakoblet() {
 // steder. Nå er det én.
 function hentMedDiskFoerst({ cache, noekkel, felt, hentFraNett, navn }) {
   const nokkel = _aktivBedriftId
-  console.log('[DIAG cache]', navn, 'kalt · _aktivBedriftId =', nokkel,
-    '· cache.nokkel =', cache.nokkel, '· cache.data =', cache.data ? cache.data.length : cache.data,
-    '· cache.loading =', !!cache.loading)
   if (cache.data && cache.nokkel === nokkel) return Promise.resolve(cache.data)
   if (cache.loading && cache.nokkel === nokkel) return cache.loading
   // Bedriften er ikke avklart. Ikke cache noe under en tom nøkkel — disklesing
@@ -3918,7 +3911,6 @@ function hentMedDiskFoerst({ cache, noekkel, felt, hentFraNett, navn }) {
     // spør, prøver vi på nytt — uten timer.
     const ut = cache.data || []
     if (!ut.length) cache.data = null
-    console.log('[DIAG cache]', navn, 'svarer med', ut.length, 'rader · fraDisk var', fraDisk.length)
     return ut
   })()
   return cache.loading
@@ -5928,7 +5920,6 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       // sa «Prosjekt ikke funnet» selv om prosjektet lå i cachen. Nå tar hver
       // del sitt eget utfall: prosjektet og lista kommer fra IndexedDB, mens
       // sjekklister og endringsmeldinger står tomme til man er på nett igjen.
-      console.log('[DIAG prosjekt] load() · projectId =', projectId)
       const [projR, allProjR, clRes, emRes, tmplRes] = await Promise.allSettled([
         db.getProject(projectId),
         db.getProjects(),
@@ -5937,7 +5928,6 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         supabase.from('checklist_templates').select('id, category').then(r => r.data || []),
       ])
       const proj = projR.status === 'fulfilled' ? projR.value : null
-      console.log('[DIAG prosjekt] getProject:', projR.status, projR.status === 'fulfilled' ? (proj ? proj.name : 'null') : projR.reason)
       // Fant vi ikke prosjektet i det hele tatt, la forrige verdi stå i stedet
       // for å vise «Prosjekt ikke funnet» over noe som kanskje finnes.
       if (proj) setProject(proj)
@@ -39118,8 +39108,7 @@ function KunderPage() {
     // Regresjon fra da31878, som byttet hentEgneKunder() — uavhengig av
     // bedriftskonteksten, siden RLS scoper den serverside — mot
     // getCachedCustomers() for å få offline-lesing.
-    console.log('[DIAG kunder] load() · companyId =', companyId, '· _aktivBedriftId =', _aktivBedriftId)
-    if (!companyId) { console.log('[DIAG kunder] AVBRYTER — companyId mangler'); return }
+    if (!companyId) return
     setLoading(true)
     try {
       // allSettled + getCachedCustomers. Før sto det hentEgneKunder() rått i en
@@ -39139,7 +39128,6 @@ function KunderPage() {
         supabase.from('quotes').select('id,title,status,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
-      console.log('[DIAG kunder] kunder:', k.status, k.status === 'fulfilled' ? (k.value || []).length + ' rader' : k.reason)
       setKunder(k.status === 'fulfilled' ? (k.value || []) : [])
       setProsjekter(p.status === 'fulfilled' ? (p.value || []) : [])
       setTilbud(q.status === 'fulfilled' ? (q.value || []) : [])
