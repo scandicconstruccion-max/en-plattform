@@ -60,27 +60,98 @@ function idbAapne() {
   })
   return _idbPromise
 }
+// NØKLET PÅ BEDRIFT. Uten prefiks kunne data lest inn hos én bedrift bli servert
+// i en annen: lesMedCache faller tilbake til IndexedDB både offline OG ved enhver
+// spørrefeil, og disken overlever både bedriftsbytte og utlogging.
+//
+// Fail closed: vet vi ikke hvilken bedrift vi står i, verken skriver eller leser
+// vi. Å hente på nytt koster et nettkall; å svare med feil bedrifts data koster
+// tilliten. _aktivBedriftId speiles fra AuthProvider og stammer fra
+// auth_company_id() — samme kilde som RLS og DEFAULT-verdiene i databasen.
+//
+// MERK: _aktivBedriftId deklareres lenger ned i fila. Det går bra fordi disse
+// funksjonene først KALLES etter at modulen er ferdig evaluert. Kalles idbSett
+// eller idbHent noen gang under selve modul-evalueringen, ryker det på TDZ.
+function idbNokkel(noekkel) {
+  if (!noekkel || !_aktivBedriftId) return null
+  return _aktivBedriftId + '|' + noekkel
+}
 async function idbSett(noekkel, data) {
+  const k = idbNokkel(noekkel)
+  if (!k) return                                   // ukjent bedrift → ikke cache
   try {
     const db = await idbAapne()
     await new Promise((res, rej) => {
       const tx = db.transaction(IDB_STORE, 'readwrite')
-      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, noekkel)
+      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, k)
       tx.oncomplete = () => res()
       tx.onerror = () => rej(tx.error)
     })
   } catch (e) { /* svelg — caching skal aldri knekke hovedflyten */ }
 }
 async function idbHent(noekkel) {
+  const k = idbNokkel(noekkel)
+  if (!k) return null                              // ukjent bedrift → ingen fallback
   try {
     const db = await idbAapne()
     return await new Promise((res, rej) => {
       const tx = db.transaction(IDB_STORE, 'readonly')
-      const r = tx.objectStore(IDB_STORE).get(noekkel)
+      const r = tx.objectStore(IDB_STORE).get(k)
       r.onsuccess = () => res(r.result || null)
       r.onerror = () => rej(r.error)
     })
   } catch (e) { return null }
+}
+
+// Siste BEKREFTEDE bedrift for en bruker, i localStorage.
+//
+// Ved en kald start uten nett når vi verken auth_company_id() eller
+// user_profiles — loadProfile setter da profile til null. Uten denne huskelappen
+// ville fail-closed slått av hele offline-lesingen, nøyaktig i situasjonen
+// offline-modus finnes for: appen åpnes på nytt i en kjeller uten dekning.
+//
+// Lagres KUN etter at bedriften er bekreftet mot databasen, og nøkles på
+// bruker-id så neste bruker på samme enhet ikke arver den. Verdien er riktig for
+// dataene som alt ligger i offline-cachen — det er de samme to kildene.
+function husketBedrift(brukerId) {
+  if (!brukerId) return null
+  try { return localStorage.getItem('ep-bedrift:' + brukerId) || null } catch (e) { return null }
+}
+function huskBedrift(brukerId, bedriftId) {
+  if (!brukerId || !bedriftId) return
+  try { localStorage.setItem('ep-bedrift:' + brukerId, bedriftId) } catch (e) { /* svelg */ }
+}
+
+// Engangsopprydding av nøkler skrevet før prefikset fantes. De har ingen bedrift
+// i seg og kan aldri leses igjen — de ville bare ligget og tatt plass.
+//
+// De SLETTES, ikke migreres. Å tilskrive dem en bedrift i ettertid ville vært
+// gjetning, og for en plattformeier som har vært innom flere kunder via
+// støtteøkt er den gjetningen systematisk feil.
+//
+// Idempotent: finnes ingen unøklede nøkler, gjør den ingenting. Rører verken
+// blob-lageret eller skrivekøen, så usynket arbeid kan ikke gå tapt.
+let _ryddetGamleNokler = false
+async function ryddGamleIdbNokler() {
+  if (_ryddetGamleNokler) return
+  _ryddetGamleNokler = true
+  try {
+    const db = await idbAapne()
+    const gamle = await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const r = tx.objectStore(IDB_STORE).getAllKeys()
+      r.onsuccess = () => res((r.result || []).filter(k => typeof k === 'string' && k.indexOf('|') === -1))
+      r.onerror = () => rej(r.error)
+    })
+    if (!gamle.length) return
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      const store = tx.objectStore(IDB_STORE)
+      for (const k of gamle) store.delete(k)
+      tx.oncomplete = () => res()
+      tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg — opprydding skal aldri knekke oppstart */ }
 }
 
 // In-memory cache for momentane modulbytter (stale-while-revalidate).
@@ -284,7 +355,10 @@ function nyId() {
   try { return crypto.randomUUID() } catch (e) { return 'lok-' + Date.now() + '-' + Math.random().toString(36).slice(2) }
 }
 async function koLeggTil(op) {
-  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, ...op }
+  // bedriftId stemples ved KØING. company_id tildeles av auth_company_id() i det
+  // øyeblikket raden faktisk skrives, så uten markøren ville en operasjon laget
+  // hos én bedrift kunne bli replayet inn i en annen. Se hoppet i flushKo.
+  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, bedriftId: _aktivBedriftId || null, ...op }
   try {
     const db = await idbAapne()
     await new Promise((res, rej) => {
@@ -449,6 +523,13 @@ async function flushKo() {
     const ops = await koHentAlle()
     for (const op of ops) {
       if (op.status === 'feilet') continue           // poison – hopp over
+      // Tilhører operasjonen en annen bedrift enn den appen står i nå, skal den
+      // VENTE — ikke kjøres og ikke kastes. Den flushes når vi er tilbake i sin
+      // egen bedrift. continue, ikke break: rekkefølge er bare meningsfull
+      // innenfor én bedrift, og et break ville låst køen for den aktive.
+      // Operasjoner uten bedriftId er fra før feltet fantes; de flushes som før,
+      // siden vi ikke kan tilskrive dem en bedrift i ettertid.
+      if (op.bedriftId && op.bedriftId !== _aktivBedriftId) continue
       try {
         if (op.type === 'insert') {
           // Last opp eventuelle ventende bilde-blober først, og fyll inn resultatet.
@@ -647,6 +728,33 @@ function settAktivBedrift(id) {
   // null til en verdi, og da finnes ingen gamle data å rydde bort — å rydde der
   // ville kostet to spørringer ved hver eneste sidelast.
   if (forrige !== null && forrige !== ny) tomBedriftsCacher(ny)
+  // Første gang vi vet hvilken bedrift vi står i: fjern nøklene fra før
+  // prefikset ble innført. Best-effort, blokkerer ingenting.
+  if (ny) { try { ryddGamleIdbNokler() } catch (_) {} }
+}
+
+// Bedriften en NY rad faktisk havner i. Samme kilde som DEFAULT-verdien
+// auth_company_id() på tabellene og som RLS-policyen tenant_isolation.
+//
+// user_profiles.company_id er IKKE det samme: under en støtteøkt sier den din
+// egen bedrift, mens databasen skriver til kundens. Stempler vi profilens id inn
+// i raden, avviser RLS den — eller, er policyen løsere, blir raden liggende i
+// feil bedrift med kundens project_id.
+//
+// Returnerer null når den ikke kan avgjøres. Kallstedene skal da UTELATE
+// company_id helt, ikke sende null: en eksplisitt null overstyrer DEFAULT.
+async function hentSkrivebedriftId() {
+  try {
+    const { data, error } = await supabase.rpc('auth_company_id')
+    if (error) throw error
+    return data || null
+  } catch (e) { return null }
+}
+
+// Legg company_id på et payload-objekt KUN når vi vet hvilken bedrift det er.
+// Vet vi det ikke, utelates nøkkelen så DEFAULT auth_company_id() tar over.
+function medBedriftId(payload, bedriftId) {
+  return bedriftId ? { ...payload, company_id: bedriftId } : payload
 }
 
 // NØKLET PÅ BEDRIFT. Merkevaren — firmanavn, adresse, org.nr og logo — havner på
@@ -1919,10 +2027,41 @@ function AuthProvider({ children }) {
   // Display name: full_name from profile, fallback to email prefix
   const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
   const isPlatformOwner = profile?.platform_role === 'platform_owner'
-  const companyId = profile?.company_id || null
-  // Speiler bedriften til modulnivå. Cacher utenfor React (PDF-merkevaren i dag,
-  // kunde- og ansattlista neste) nøkler på denne. Under en støtteøkt er dette
-  // KUNDENS bedrift, selv om auth-brukeren fortsatt er plattformeieren.
+  const profilBedriftId = profile?.company_id || null
+  // Bedriften appen FAKTISK jobber i. Databasen avgjør det med auth_company_id():
+  // kundens bedrift ved en åpen støtteøkt, ellers brukerens egen. Den samme
+  // funksjonen er DEFAULT-verdi for company_id på tabellene og styrer RLS-policyen
+  // tenant_isolation. user_profiles.company_id er IKKE det samme — den sier alltid
+  // din egen bedrift, også midt i en støtteøkt. Leser frontend den, viser vi én
+  // bedrift mens vi skriver til en annen.
+  //
+  // Kun plattformeier kan ha en støtteøkt. Alle andre får profilens bedrift med en
+  // gang og merker ingen forskjell. Eier venter på svaret: null er et ærligere
+  // svar enn feil bedrift, og cachene nøkler på denne verdien.
+  const [stotteBedriftId, setStotteBedriftId] = useState(undefined)   // undefined = ikke avklart enda
+  React.useEffect(() => {
+    let levende = true
+    if (!user) { setStotteBedriftId(undefined); return }
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.rpc('auth_company_id')
+        if (error) throw error
+        const bekreftet = data || profilBedriftId
+        huskBedrift(user.id, bekreftet)            // huskelapp for kald start uten nett
+        if (levende) setStotteBedriftId(bekreftet)
+      } catch (e) {
+        // Svarer ikke databasen, faller vi tilbake til profilen. Uten nett er
+        // også den tom (loadProfile setter profile til null), og da er siste
+        // bekreftede bedrift for denne brukeren det beste vi har. Uten den ville
+        // offline-cachen vært utilgjengelig ved en kald start uten dekning.
+        if (levende) setStotteBedriftId(profilBedriftId || husketBedrift(user.id))
+      }
+    })()
+    return () => { levende = false }
+  }, [user, profilBedriftId])
+  const companyId = stotteBedriftId !== undefined ? stotteBedriftId : (isPlatformOwner ? null : profilBedriftId)
+  // Speiler bedriften til modulnivå. Cacher utenfor React (PDF-merkevaren,
+  // kunde- og ansattlista, regnskapsstatus) nøkler på denne.
   React.useEffect(() => { settAktivBedrift(companyId) }, [companyId])
   const role = profile?.role || null
   const moduleAccess = profile?.module_access || []
@@ -17958,10 +18097,10 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   // Månedsforbruk av AI-uttrekk for egen bedrift (til teller)
   const lastAiForbruk = async () => {
     try {
-      const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-      if (!prof?.company_id) return
+      const bedriftId = await hentSkrivebedriftId()
+      if (!bedriftId) return
       const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0)
-      const { count } = await supabase.from('anbud_ai_uttrekk_logg').select('id', { count: 'exact', head: true }).eq('company_id', prof.company_id).gte('created_at', start.toISOString())
+      const { count } = await supabase.from('anbud_ai_uttrekk_logg').select('id', { count: 'exact', head: true }).eq('company_id', bedriftId).gte('created_at', start.toISOString())
       setAiForbruk({ brukt: count || 0, inkludert: ANBUD_AI_INKLUDERT })
     } catch (_) { /* teller er kosmetisk */ }
   }
@@ -18000,8 +18139,8 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
       leggTil(nye); await lastOppKilde(file)
       // Logg forbruk KUN ved treff, og oppdater teller
       try {
-        const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-        if (prof?.company_id) await supabase.from('anbud_ai_uttrekk_logg').insert({ company_id: prof.company_id, user_id: user?.id || null, poster_antall: nye.length })
+        const bedriftId = await hentSkrivebedriftId()
+        if (bedriftId) await supabase.from('anbud_ai_uttrekk_logg').insert({ company_id: bedriftId, user_id: user?.id || null, poster_antall: nye.length })
       } catch (_) { /* logging skal ikke blokkere flyten */ }
       await lastAiForbruk()
       await appAlert({ message: `✓ ${nye.length} poster lest ut og fagfordelt`, subMessage: 'Forslagene er et utgangspunkt — kontroller beskrivelse, mengde og faggruppe før du sender.', kind: 'success' })
@@ -41832,9 +41971,10 @@ function CRMImportModal({ user, onClose, onDone }) {
     const ok = await confirm({ message:`Importere ${toImport.length} nye leads?`, subMessage: counts.duplikat ? `${counts.duplikat} duplikat(er) hoppes over.` : undefined, confirmLabel:'Importer' })
     if (!ok) return
     setImporting(true); setStep(4); setProgress(0); setImportTotal(toImport.length)
-    // company_id fra profilen — settes eksplisitt så RLS/synlighet er garantert
-    let companyId = null
-    try { const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single(); companyId = prof?.company_id || null } catch(_) {}
+    // company_id settes eksplisitt så RLS/synlighet er garantert. Kilden MÅ være
+    // auth_company_id() — under en støtteøkt peker profilens bedrift og den
+    // bedriften databasen skriver til på hver sin kunde.
+    const companyId = await hentSkrivebedriftId()
     let imported = 0
     const errors = []
     const kildeVal = kilde.trim() // settes på alle rader i importen
@@ -41843,12 +41983,12 @@ function CRMImportModal({ user, onClose, onDone }) {
     // titusener av rader du aldri har hatt en jobb for.
     for (let i = 0; i < toImport.length; i += 100) {
       const batch = toImport.slice(i, i + 100)
-      const payloads = batch.map(r => ({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id }))
+      const payloads = batch.map(r => medBedriftId({ ...r.payload, kilde: kildeVal, created_by: user?.id }, companyId))
       const { error } = await supabase.from('customers').insert(payloads)
       if (error) {
         // Én rad i batchen feilet — insert én og én for å isolere, ikke avbryt
         for (const r of batch) {
-          const { error: e2 } = await supabase.from('customers').insert({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id })
+          const { error: e2 } = await supabase.from('customers').insert(medBedriftId({ ...r.payload, kilde: kildeVal, created_by: user?.id }, companyId))
           if (e2) errors.push({ name: r.payload.name, orgnr: r.payload.orgnr, reason: e2.message })
           else imported++
         }
@@ -46594,9 +46734,10 @@ function BildedokPage() {
     if (!files.length) return
     setUploading(true)
     try {
-      // company_id kreves for at RLS skal la brukeren lese raden etterpå — ellers blir bildet "usynlig" ved henting
-      let companyId = null
-      try { const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single(); companyId = prof?.company_id || null } catch(_) {}
+      // company_id kreves for at RLS skal la brukeren lese raden etterpå — ellers blir bildet "usynlig" ved henting.
+      // Kilden MÅ være auth_company_id(): under en støtteøkt gir user_profiles din egen
+      // bedrift, og RLS avviser da raden fordi den peker på kundens prosjekt.
+      const companyId = await hentSkrivebedriftId()
       // Offline (Lag 3): hold bildet lokalt og legg i kø; lastes opp ved synk.
       const lagreEnOffline = async (file) => {
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -46604,7 +46745,7 @@ function BildedokPage() {
         const path = `bildedok/${safeName}`
         const key = 'pending-img:' + nyId()
         await idbBlobSett(key, file)
-        const payload = sanitizeDbPayload({
+        const payload = medBedriftId(sanitizeDbPayload({
           id: nyId(),
           file_url: '',
           file_name: file.name,
@@ -46614,9 +46755,8 @@ function BildedokPage() {
           plassering: plassering || null,
           description: note || null,
           created_by: user?.id || null,
-          company_id: companyId,
           upload_method: 'manuell',
-        })
+        }), companyId)
         await koLeggTil({ tabell: 'photos', type: 'insert', payload, radId: payload.id, bilder: [{ key, path }], bildeForm: 'public-url', bildeFelt: 'file_url' })
       }
 
@@ -46637,7 +46777,7 @@ function BildedokPage() {
           const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
           if (upErr) { console.error('[bildedok] storage upload feilet:', upErr); throw upErr }
           const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
-          const payload = sanitizeDbPayload({
+          const payload = medBedriftId(sanitizeDbPayload({
             file_url: publicUrl,
             file_name: file.name,
             fase: fase || 'under_arbeid',
@@ -46646,9 +46786,8 @@ function BildedokPage() {
             plassering: plassering || null,
             description: note || null,
             created_by: user?.id || null,
-            company_id: companyId,
             upload_method: 'manuell',
-          })
+          }), companyId)
           const { error: dbErr } = await supabase.from('photos').insert(payload)
           if (dbErr) {
             console.error('[bildedok] insert i photos-tabellen feilet:', dbErr, 'payload:', payload)
@@ -47760,14 +47899,11 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
         created_by: user?.id,
       }
       console.log('[FDV-UE] Insert-data:', insertData)
-      // Prøv å hente company_id hvis den finnes (valgfritt)
-      try {
-        const { data: profile } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-        if (profile?.company_id) {
-          insertData.company_id = profile.company_id
-          console.log('[FDV-UE] La til company_id:', profile.company_id)
-        }
-      } catch (e) { console.log('[FDV-UE] company_id ikke funnet (OK):', e?.message) }
+      // company_id fra auth_company_id() — samme kilde som DEFAULT-verdien på
+      // tabellen. user_profiles ville gitt din egen bedrift under en støtteøkt.
+      // Får vi ingen id, utelates feltet så DEFAULT tar over.
+      const fdvBedriftId = await hentSkrivebedriftId()
+      if (fdvBedriftId) insertData.company_id = fdvBedriftId
       const { data, error } = await supabase.from('fdv_ue_requests').insert(insertData).select().single()
       console.log('[FDV-UE] Insert-resultat:', { data, error })
       if (error) throw error
@@ -84247,7 +84383,11 @@ function AppContent() {
   }, [])
   // Offline Lag 2: forhåndslasting — hold cachen fersk mens vi har nett.
   React.useEffect(() => {
-    if (!user) return
+    // MÅ vente på companyId. Cachen nøkles på bedrift, og idbSett forkaster
+    // stille alt som skrives før bedriften er kjent. Uten denne sperra ville de
+    // 21 listene blitt hentet og kastet ved hver innlogging, og cachen stått tom
+    // til neste runde fem minutter senere.
+    if (!user || !companyId) return
     forhandslast({ tving: true })                                   // ved oppstart
     const interval = setInterval(() => forhandslast(), 5 * 60 * 1000) // hver 5. min
     const paaNett = () => forhandslast({ tving: true })             // ved gjenoppkobling
@@ -84259,7 +84399,7 @@ function AppContent() {
       window.removeEventListener('online', paaNett)
       document.removeEventListener('visibilitychange', synlig)
     }
-  }, [user])
+  }, [user, companyId])
   // Offline Lag 3: tøm skrivekøen mot serveren når vi har nett.
   React.useEffect(() => {
     if (!user) return
