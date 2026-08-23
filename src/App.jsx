@@ -39016,7 +39016,7 @@ const KUNDE_TYPE = {
 const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 
 function KunderPage() {
-  const { user } = useAuth()
+  const { user, companyId } = useAuth()
   const confirm = useConfirm()
   const appAlert = useAppAlert()
   const [kunder, setKunder] = useState([])
@@ -39098,6 +39098,17 @@ function KunderPage() {
   }
 
   const load = async () => {
+    // MÅ vente på companyId. getCachedCustomers() nøkler på aktiv bedrift og
+    // svarer med tom liste når den ikke er avklart — den kan ikke cache noe
+    // under en tom nøkkel. Med «useEffect(..., [])» kjørte load() ved
+    // montering, altså FØR bedriften var på plass ved en KALD sidelast, og
+    // spurte aldri igjen: Kundeoversikt sto på «0 kunder». Navigering hit
+    // virket, fordi bedriften da alt var kjent.
+    //
+    // Regresjon fra da31878, som byttet hentEgneKunder() — uavhengig av
+    // bedriftskonteksten, siden RLS scoper den serverside — mot
+    // getCachedCustomers() for å få offline-lesing.
+    if (!companyId) return
     setLoading(true)
     try {
       // allSettled + getCachedCustomers. Før sto det hentEgneKunder() rått i en
@@ -39125,7 +39136,7 @@ function KunderPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [companyId])
 
   const filtered = kunder.filter(k => {
     if (filterType !== 'alle' && k.type !== filterType) return false
