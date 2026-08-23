@@ -31,6 +31,42 @@ const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
 
+// ─── DOBBELTSKRIVING TIL external_links (overgangen) ────────────────────────
+// Vi skriver BÅDE den nye tabellen og den gamle kolonnen mens lesingen fortsatt
+// går mot kolonnene. Da kan app og database ikke komme i utakt underveis:
+// leser appen gammelt, finner den det; leser den nytt, finner den det også.
+// Lesingen flyttes i DEL 2, og kolonnene droppes først etter det.
+//
+// Feiler ALDRI kallet. Er tabellen ikke opprettet ennå — rekkefølgen i
+// utrullingen er funksjon før SQL i verste fall — logges det og synken går
+// videre nøyaktig som før.
+async function skrivEksternKobling(o: {
+  companyId: string
+  entityType: string
+  entityId: string
+  externalId?: string | number | null
+  syncedAt?: string | null
+  syncError?: string | null
+  metadata?: Record<string, unknown> | null
+  provider?: string
+}) {
+  try {
+    await admin.from('external_links').upsert({
+      company_id:  o.companyId,
+      provider:    o.provider ?? 'tripletex',
+      entity_type: o.entityType,
+      entity_id:   o.entityId,
+      external_id: o.externalId === undefined || o.externalId === null ? null : String(o.externalId),
+      synced_at:   o.syncedAt ?? null,
+      sync_error:  o.syncError ?? null,
+      metadata:    o.metadata ?? null,
+      updated_at:  new Date().toISOString(),
+    }, { onConflict: 'company_id,provider,entity_type,entity_id' })
+  } catch (e) {
+    console.error('[external_links] skriving feilet (synken fortsetter):', e)
+  }
+}
+
 // CORS. Uten disse kan funksjonen ikke kalles fra nettleseren i det hele tatt:
 // supabase.functions.invoke() sender authorization, x-client-info, apikey og
 // content-type, og alle fire må stå i Allow-Headers. Samme mønster som
@@ -263,6 +299,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const cText = await cRes.text()
     if (!cRes.ok) {
       await admin.from('timesheet_entries').update({ tripletex_sync_error: `Opprett feilet (${cRes.status})` }).eq('id', entryId)
+      await skrivEksternKobling({ companyId, entityType: 'timesheet_entry', entityId: entryId, syncError: `Opprett feilet (${cRes.status})` })
       await log({ ...logBase, action: 'failed', http_status: cRes.status, request_payload: payload, error: `Opprett feilet: ${cText.slice(0, 400)}` })
       return json({ error: `Tripletex avviste timeføringen (${cRes.status})`, detail: cText.slice(0, 400) }, 502)
     }
@@ -278,6 +315,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
       tripletex_synced_at: new Date().toISOString(),
       tripletex_sync_error: null,
     }).eq('id', entryId)
+    // synced_hours har ingen egen kolonne i external_links — den er ikke
+    // koblingsmetadata, men verdien vi FAKTISK sendte, brukt til å oppdage at
+    // timen er endret hos oss etterpå (se sjekken lenger oppe). Den bor i
+    // metadata, så neste regnskapssystem ikke krever en ny kolonne.
+    await skrivEksternKobling({
+      companyId, entityType: 'timesheet_entry', entityId: entryId,
+      externalId: created.id, syncedAt: new Date().toISOString(), syncError: null,
+      metadata: { synced_hours: hours },
+    })
     await log({ ...logBase, external_id: created.id, action: 'created', http_status: cRes.status, request_payload: payload, response_summary: { hours } })
     return json({ ok: true, action: 'created', tripletexEntryId: created.id })
   } catch (e) {

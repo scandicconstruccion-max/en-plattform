@@ -52521,7 +52521,15 @@ function TripletexOppsett({ companyId, isMob }) {
     setAnsatte(rader => rader.map(r => (r.id === ansattId ? { ...r, tripletex_employee_id: ny } : r)))
     setLagrerAnsatt(ansattId)
     try {
-      const { error } = await supabase.from('employees').update({ tripletex_employee_id: ny }).eq('id', ansattId)
+      // Går via RPC, ikke rett på tabellen. Dette var det ENESTE stedet
+      // nettleseren skrev en integrasjonskobling selv. RPC-en er SECURITY
+      // DEFINER, henter bedriften fra auth_company_id(), sjekker at ansatten
+      // tilhører den, skriver external_links OG speiler til den gamle kolonnen
+      // så lenge dobbeltskrivingen varer.
+      const { error } = await supabase.rpc('sett_ekstern_kobling_ansatt', {
+        p_employee_id: ansattId,
+        p_external_id: ny == null ? null : String(ny),
+      })
       if (error) throw new Error(error.message)
     } catch (e) {
       setAnsatte(forrige)
