@@ -3837,61 +3837,83 @@ function getEmployeeName(emp) {
 }
 
 function getCachedEmployees() {
-  const nokkel = _aktivBedriftId
-  if (_employeeCache.data && _employeeCache.nokkel === nokkel) return Promise.resolve(_employeeCache.data)
-  if (_employeeCache.loading && _employeeCache.nokkel === nokkel) return _employeeCache.loading
-  if (!nokkel) return Promise.resolve([])          // bedrift ikke avklart — se getCachedKoblinger
-  // Ny bedrift: forkast forrige liste FØR hentingen starter.
-  _employeeCache.nokkel = nokkel
-  _employeeCache.data = null
-  const min = nokkel
-  if (erFrakoblet()) { _employeeCache.loading = ansatteFraDisk(min); return _employeeCache.loading }
-  _employeeCache.loading = supabase.from('employees')
-    .select('*')
-    .order('last_name', { nullsFirst: false })
-    .then(({ data, error }) => {
-      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
-      if (_employeeCache.nokkel !== min) return _employeeCache.data || []
-      if (error) {
-        console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
-        return ansatteFraDisk(min)
-      }
-      _employeeCache.data = data || []
-      _employeeCache.loading = null
-      _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
-      // Skriv gjennom til disk, men bare de feltene som får ligge der.
-      idbSett('ansatte:alle', _employeeCache.data.map(r => plukkFelt(r, ANSATT_OFFLINE_FELT)))
-      console.log(`[EmployeeCache] Lastet ${_employeeCache.data.length} ansatte`)
-      return _employeeCache.data
-    })
-    .catch(err => {
-      console.error('[EmployeeCache] Exception:', err)
-      return ansatteFraDisk(min)
-    })
-  return _employeeCache.loading
+  return hentMedDiskFoerst({
+    cache: _employeeCache,
+    noekkel: 'ansatte:alle',
+    felt: ANSATT_OFFLINE_FELT,
+    navn: 'EmployeeCache',
+    hentFraNett: async () => {
+      const { data, error } = await supabase.from('employees')
+        .select('*')
+        .order('last_name', { nullsFirst: false })
+      if (error) throw new Error(error.message)
+      return data || []
+    },
+  })
 }
 
-// Fallback når nettet svikter. Før skrev vi en TOM liste til abonnentene her,
-// og nedtrekkene sa «Ingen ansatte funnet» offline. Nå leser vi siste kjente
-// liste fra disk i stedet. Finnes den ikke, blir svaret tomt som før.
-async function ansatteFraDisk(min) {
-  const liste = await lesListeFraDisk('ansatte:alle')
-  if (_employeeCache.nokkel !== min) return _employeeCache.data || []
-  _employeeCache.data = liste
-  _employeeCache.loading = null
-  _employeeCache.subscribers.forEach(fn => fn(liste))
-  // Ikke lås en tom liste permanent — prøv nettet på nytt neste gang.
-  if (!liste.length && !erFrakoblet()) setTimeout(() => { _employeeCache.data = null }, 5000)
-  return liste
-}
-
-// Uten nett skal vi ikke røre nettverket i det hele tatt. lesMedCache har hatt
-// denne sjekken hele tiden; de tre modul-cachene under gikk rett på Supabase,
-// feilet, og leste disk FØRST etterpå. Offline ga det en konsoll full av
-// «Failed to fetch» — 327 på under to minutter — og et vindu der listene sto
-// tomme før diskversjonen kom.
+// Brukes KUN til å hoppe over et nettkall vi vet vil feile — aldri til å
+// avgjøre om vi skal lese cache. Signalet er upålitelig ved kald start: lastes
+// siden mens maskinen er frakoblet, står navigator.onLine på true. Det er
+// derfor motoren under leser disk uansett hva denne svarer.
 function erFrakoblet() {
   return typeof navigator !== 'undefined' && navigator.onLine === false
+}
+
+// FELLES MOTOR for de tre modul-cachene. Disk først, så nett.
+//
+// navigator.onLine kan IKKE stoles på alene. Lastes siden mens maskinen
+// allerede er frakoblet, initialiseres den til true — tilkoblingsmerket nederst
+// til venstre viste «Tilkoblet» etter F5 med DevTools på Offline, og det er
+// samme signal (useTilkobling leser navigator.onLine). Da tok koden
+// nettverksgrenen selv om det ikke fantes nett.
+//
+// Løsningen er å ikke spørre om vi har nett. Vi leser disk, publiserer det vi
+// fant, og prøver deretter nettet. Svarer det, erstattes dataene og skrives
+// gjennom. Svarer det ikke, beholder vi diskversjonen. Ingen timer, ingen
+// retry-løkke: neste forsøk kommer når noen faktisk spør igjen, eller fra
+// forhandslast ved gjenoppkobling.
+//
+// Tre nesten like kopier av dette var grunnen til at samme feil fantes tre
+// steder. Nå er det én.
+function hentMedDiskFoerst({ cache, noekkel, felt, hentFraNett, navn }) {
+  const nokkel = _aktivBedriftId
+  if (cache.data && cache.nokkel === nokkel) return Promise.resolve(cache.data)
+  if (cache.loading && cache.nokkel === nokkel) return cache.loading
+  // Bedriften er ikke avklart. Ikke cache noe under en tom nøkkel — disklesing
+  // er fail-closed uten bedrift, og en tom liste ville blitt stående.
+  if (!nokkel) return Promise.resolve([])
+  cache.nokkel = nokkel
+  cache.data = null
+  const min = nokkel
+  cache.loading = (async () => {
+    const fraDisk = await lesListeFraDisk(noekkel)
+    // Rakk en annen bedrift å overta mens vi leste? Da skal ikke vårt svar skrives.
+    if (cache.nokkel !== min) return cache.data || []
+    if (fraDisk.length) {
+      cache.data = fraDisk
+      cache.subscribers.forEach(fn => fn(fraDisk))
+    }
+    if (!erFrakoblet()) {
+      try {
+        const ferske = await hentFraNett()
+        if (cache.nokkel !== min) return cache.data || []
+        cache.data = ferske || []
+        cache.subscribers.forEach(fn => fn(cache.data))
+        idbSett(noekkel, cache.data.map(r => plukkFelt(r, felt)))
+      } catch (e) {
+        console.warn(`[${navn}] nettet svarte ikke — beholder diskversjonen:`, (e && e.message) || e)
+      }
+    }
+    if (!cache.data) cache.data = fraDisk
+    cache.loading = null
+    // Fant vi ingenting noe sted, ikke lås den tomme lista. Neste gang noen
+    // spør, prøver vi på nytt — uten timer.
+    const ut = cache.data || []
+    if (!ut.length) cache.data = null
+    return ut
+  })()
+  return cache.loading
 }
 
 // ── EKSTERNE KOBLINGER ─────────────────────────────────────────────────────
@@ -3907,51 +3929,20 @@ const KOBLING_OFFLINE_FELT = ['provider', 'entity_type', 'entity_id', 'external_
 const _koblingCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 function getCachedKoblinger() {
-  const nokkel = _aktivBedriftId
-  if (_koblingCache.data && _koblingCache.nokkel === nokkel) return Promise.resolve(_koblingCache.data)
-  if (_koblingCache.loading && _koblingCache.nokkel === nokkel) return _koblingCache.loading
-  // Bedriften er ikke avklart ennå. Ikke cache noe under en tom nøkkel — da ble
-  // en tom liste stående til nøkkelen endret seg, og disklesingen var uansett
-  // fail-closed. Vi svarer tomt og prøver igjen når bedriften er kjent.
-  if (!nokkel) return Promise.resolve([])
-  _koblingCache.nokkel = nokkel
-  _koblingCache.data = null
-  const min = nokkel
-  if (erFrakoblet()) { _koblingCache.loading = koblingerFraDisk(min); return _koblingCache.loading }
-  // RLS filtrerer på company_id = auth_company_id(), så vi ber ikke om bedrift her.
-  _koblingCache.loading = supabase.from('external_links')
-    .select('provider, entity_type, entity_id, external_id, synced_at, sync_error, metadata')
-    .limit(1000)
-    .then(({ data, error }) => {
-      if (_koblingCache.nokkel !== min) return _koblingCache.data || []
-      if (error) {
-        console.error('[Koblinger] Feil ved henting av external_links:', error)
-        return koblingerFraDisk(min)
-      }
-      _koblingCache.data = data || []
-      _koblingCache.loading = null
-      _koblingCache.subscribers.forEach(fn => fn(_koblingCache.data))
-      idbSett('ekstern:koblinger', _koblingCache.data.map(r => plukkFelt(r, KOBLING_OFFLINE_FELT)))
-      return _koblingCache.data
-    })
-    .catch(err => {
-      console.error('[Koblinger] Exception:', err)
-      return koblingerFraDisk(min)
-    })
-  return _koblingCache.loading
-}
-
-async function koblingerFraDisk(min) {
-  const liste = await lesListeFraDisk('ekstern:koblinger')
-  if (_koblingCache.nokkel !== min) return _koblingCache.data || []
-  _koblingCache.data = liste
-  _koblingCache.loading = null
-  _koblingCache.subscribers.forEach(fn => fn(liste))
-  // Bare legg opp til nytt forsøk når vi FAKTISK har nett. Offline ga denne
-  // timeren en ny runde «Failed to fetch» hvert femte sekund, ganget med
-  // antall monterte komponenter. Gjenoppkobling håndteres av forhandslast.
-  if (!liste.length && !erFrakoblet()) setTimeout(() => { _koblingCache.data = null }, 5000)
-  return liste
+  return hentMedDiskFoerst({
+    cache: _koblingCache,
+    noekkel: 'ekstern:koblinger',
+    felt: KOBLING_OFFLINE_FELT,
+    navn: 'Koblinger',
+    // RLS filtrerer på company_id = auth_company_id(), så vi ber ikke om bedrift her.
+    hentFraNett: async () => {
+      const { data, error } = await supabase.from('external_links')
+        .select('provider, entity_type, entity_id, external_id, synced_at, sync_error, metadata')
+        .limit(1000)
+      if (error) throw new Error(error.message)
+      return data || []
+    },
+  })
 }
 
 function invalidateKoblingCache() {
@@ -4002,13 +3993,13 @@ function useEmployees() {
   const [emps, setEmps] = useState(_employeeCache.data || [])
   useEffect(() => {
     let mounted = true
-    if (_employeeCache.data) {
-      setEmps(_employeeCache.data)
-      return
-    }
-    getCachedEmployees().then(data => { if (mounted) setEmps(data) })
+    // ABONNER FØRST, ALLTID. Her sto en tidlig retur på «if
+    // (_employeeCache.data)» — og en TOM liste er truthy. Traff man den, ble
+    // tom state satt og abonnementet hoppet over, så komponenten hørte aldri
+    // at dataene kom like etterpå. Eldre enn DEL 2.
     const sub = (data) => { if (mounted) setEmps(data) }
     _employeeCache.subscribers.add(sub)
+    getCachedEmployees().then(data => { if (mounted) setEmps(data) })
     return () => { mounted = false; _employeeCache.subscribers.delete(sub) }
   }, [])
   return emps
@@ -4343,43 +4334,13 @@ async function hentEgneKunder() {
 }
 
 function getCachedCustomers() {
-  const nokkel = _aktivBedriftId
-  if (_customerCache.data && _customerCache.nokkel === nokkel) return Promise.resolve(_customerCache.data)
-  if (_customerCache.loading && _customerCache.nokkel === nokkel) return _customerCache.loading
-  if (!nokkel) return Promise.resolve([])          // bedrift ikke avklart — se getCachedKoblinger
-  // Ny bedrift: forkast forrige liste FØR hentingen starter.
-  _customerCache.nokkel = nokkel
-  _customerCache.data = null
-  const min = nokkel
-  if (erFrakoblet()) { _customerCache.loading = kunderFraDisk(min); return _customerCache.loading }
-  _customerCache.loading = hentEgneKunder()
-    .then(rader => {
-      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
-      if (_customerCache.nokkel !== min) return _customerCache.data || []
-      _customerCache.data = rader
-      _customerCache.loading = null
-      _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
-      // Skriv gjennom til disk, men bare de feltene som får ligge der.
-      idbSett('kunder:alle', rader.map(r => plukkFelt(r, KUNDE_OFFLINE_FELT)))
-      console.log(`[CustomerCache] Lastet ${rader.length} kunder (er_kunde=true)`)
-      return _customerCache.data
-    })
-    .catch(err => {
-      console.error('[CustomerCache] Feil ved henting av kunder:', err)
-      return kunderFraDisk(min)
-    })
-  return _customerCache.loading
-}
-
-// Samme som ansatteFraDisk: kundevelgeren var like tom offline.
-async function kunderFraDisk(min) {
-  const liste = await lesListeFraDisk('kunder:alle')
-  if (_customerCache.nokkel !== min) return _customerCache.data || []
-  _customerCache.data = liste
-  _customerCache.loading = null
-  _customerCache.subscribers.forEach(fn => fn(liste))
-  if (!liste.length && !erFrakoblet()) setTimeout(() => { _customerCache.data = null }, 5000)
-  return liste
+  return hentMedDiskFoerst({
+    cache: _customerCache,
+    noekkel: 'kunder:alle',
+    felt: KUNDE_OFFLINE_FELT,
+    navn: 'CustomerCache',
+    hentFraNett: () => hentEgneKunder(),
+  })
 }
 
 function invalidateCustomerCache() {
@@ -4392,13 +4353,10 @@ function useCustomers() {
   const [customers, setCustomers] = useState(_customerCache.data || [])
   useEffect(() => {
     let mounted = true
-    if (_customerCache.data) {
-      setCustomers(_customerCache.data)
-      return
-    }
-    getCachedCustomers().then(data => { if (mounted) setCustomers(data) })
+    // Abonner først, alltid — se useEmployees for hvorfor.
     const sub = (data) => { if (mounted) setCustomers(data) }
     _customerCache.subscribers.add(sub)
+    getCachedCustomers().then(data => { if (mounted) setCustomers(data) })
     return () => { mounted = false; _customerCache.subscribers.delete(sub) }
   }, [])
   return customers
