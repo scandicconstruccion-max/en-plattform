@@ -60,27 +60,79 @@ function idbAapne() {
   })
   return _idbPromise
 }
+// NØKLET PÅ BEDRIFT. Uten prefiks kunne data lest inn hos én bedrift bli servert
+// i en annen: lesMedCache faller tilbake til IndexedDB både offline OG ved enhver
+// spørrefeil, og disken overlever både bedriftsbytte og utlogging.
+//
+// Fail closed: vet vi ikke hvilken bedrift vi står i, verken skriver eller leser
+// vi. Å hente på nytt koster et nettkall; å svare med feil bedrifts data koster
+// tilliten. _aktivBedriftId speiles fra AuthProvider og stammer fra
+// auth_company_id() — samme kilde som RLS og DEFAULT-verdiene i databasen.
+//
+// MERK: _aktivBedriftId deklareres lenger ned i fila. Det går bra fordi disse
+// funksjonene først KALLES etter at modulen er ferdig evaluert. Kalles idbSett
+// eller idbHent noen gang under selve modul-evalueringen, ryker det på TDZ.
+function idbNokkel(noekkel) {
+  if (!noekkel || !_aktivBedriftId) return null
+  return _aktivBedriftId + '|' + noekkel
+}
 async function idbSett(noekkel, data) {
+  const k = idbNokkel(noekkel)
+  if (!k) return                                   // ukjent bedrift → ikke cache
   try {
     const db = await idbAapne()
     await new Promise((res, rej) => {
       const tx = db.transaction(IDB_STORE, 'readwrite')
-      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, noekkel)
+      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, k)
       tx.oncomplete = () => res()
       tx.onerror = () => rej(tx.error)
     })
   } catch (e) { /* svelg — caching skal aldri knekke hovedflyten */ }
 }
 async function idbHent(noekkel) {
+  const k = idbNokkel(noekkel)
+  if (!k) return null                              // ukjent bedrift → ingen fallback
   try {
     const db = await idbAapne()
     return await new Promise((res, rej) => {
       const tx = db.transaction(IDB_STORE, 'readonly')
-      const r = tx.objectStore(IDB_STORE).get(noekkel)
+      const r = tx.objectStore(IDB_STORE).get(k)
       r.onsuccess = () => res(r.result || null)
       r.onerror = () => rej(r.error)
     })
   } catch (e) { return null }
+}
+
+// Engangsopprydding av nøkler skrevet før prefikset fantes. De har ingen bedrift
+// i seg og kan aldri leses igjen — de ville bare ligget og tatt plass.
+//
+// De SLETTES, ikke migreres. Å tilskrive dem en bedrift i ettertid ville vært
+// gjetning, og for en plattformeier som har vært innom flere kunder via
+// støtteøkt er den gjetningen systematisk feil.
+//
+// Idempotent: finnes ingen unøklede nøkler, gjør den ingenting. Rører verken
+// blob-lageret eller skrivekøen, så usynket arbeid kan ikke gå tapt.
+let _ryddetGamleNokler = false
+async function ryddGamleIdbNokler() {
+  if (_ryddetGamleNokler) return
+  _ryddetGamleNokler = true
+  try {
+    const db = await idbAapne()
+    const gamle = await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const r = tx.objectStore(IDB_STORE).getAllKeys()
+      r.onsuccess = () => res((r.result || []).filter(k => typeof k === 'string' && k.indexOf('|') === -1))
+      r.onerror = () => rej(r.error)
+    })
+    if (!gamle.length) return
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      const store = tx.objectStore(IDB_STORE)
+      for (const k of gamle) store.delete(k)
+      tx.oncomplete = () => res()
+      tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg — opprydding skal aldri knekke oppstart */ }
 }
 
 // In-memory cache for momentane modulbytter (stale-while-revalidate).
@@ -284,7 +336,10 @@ function nyId() {
   try { return crypto.randomUUID() } catch (e) { return 'lok-' + Date.now() + '-' + Math.random().toString(36).slice(2) }
 }
 async function koLeggTil(op) {
-  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, ...op }
+  // bedriftId stemples ved KØING. company_id tildeles av auth_company_id() i det
+  // øyeblikket raden faktisk skrives, så uten markøren ville en operasjon laget
+  // hos én bedrift kunne bli replayet inn i en annen. Se hoppet i flushKo.
+  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, bedriftId: _aktivBedriftId || null, ...op }
   try {
     const db = await idbAapne()
     await new Promise((res, rej) => {
@@ -449,6 +504,13 @@ async function flushKo() {
     const ops = await koHentAlle()
     for (const op of ops) {
       if (op.status === 'feilet') continue           // poison – hopp over
+      // Tilhører operasjonen en annen bedrift enn den appen står i nå, skal den
+      // VENTE — ikke kjøres og ikke kastes. Den flushes når vi er tilbake i sin
+      // egen bedrift. continue, ikke break: rekkefølge er bare meningsfull
+      // innenfor én bedrift, og et break ville låst køen for den aktive.
+      // Operasjoner uten bedriftId er fra før feltet fantes; de flushes som før,
+      // siden vi ikke kan tilskrive dem en bedrift i ettertid.
+      if (op.bedriftId && op.bedriftId !== _aktivBedriftId) continue
       try {
         if (op.type === 'insert') {
           // Last opp eventuelle ventende bilde-blober først, og fyll inn resultatet.
@@ -647,6 +709,9 @@ function settAktivBedrift(id) {
   // null til en verdi, og da finnes ingen gamle data å rydde bort — å rydde der
   // ville kostet to spørringer ved hver eneste sidelast.
   if (forrige !== null && forrige !== ny) tomBedriftsCacher(ny)
+  // Første gang vi vet hvilken bedrift vi står i: fjern nøklene fra før
+  // prefikset ble innført. Best-effort, blokkerer ingenting.
+  if (ny) { try { ryddGamleIdbNokler() } catch (_) {} }
 }
 
 // Bedriften en NY rad faktisk havner i. Samme kilde som DEFAULT-verdien
@@ -84295,7 +84360,11 @@ function AppContent() {
   }, [])
   // Offline Lag 2: forhåndslasting — hold cachen fersk mens vi har nett.
   React.useEffect(() => {
-    if (!user) return
+    // MÅ vente på companyId. Cachen nøkles på bedrift, og idbSett forkaster
+    // stille alt som skrives før bedriften er kjent. Uten denne sperra ville de
+    // 21 listene blitt hentet og kastet ved hver innlogging, og cachen stått tom
+    // til neste runde fem minutter senere.
+    if (!user || !companyId) return
     forhandslast({ tving: true })                                   // ved oppstart
     const interval = setInterval(() => forhandslast(), 5 * 60 * 1000) // hver 5. min
     const paaNett = () => forhandslast({ tving: true })             // ved gjenoppkobling
@@ -84307,7 +84376,7 @@ function AppContent() {
       window.removeEventListener('online', paaNett)
       document.removeEventListener('visibilitychange', synlig)
     }
-  }, [user])
+  }, [user, companyId])
   // Offline Lag 3: tøm skrivekøen mot serveren når vi har nett.
   React.useEffect(() => {
     if (!user) return
