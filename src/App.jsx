@@ -39016,7 +39016,7 @@ const KUNDE_TYPE = {
 const kundeInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 
 function KunderPage() {
-  const { user, companyId } = useAuth()
+  const { user } = useAuth()
   const confirm = useConfirm()
   const appAlert = useAppAlert()
   const [kunder, setKunder] = useState([])
@@ -39098,29 +39098,27 @@ function KunderPage() {
   }
 
   const load = async () => {
-    // MÅ vente på companyId. getCachedCustomers() nøkler på aktiv bedrift og
-    // svarer med tom liste når den ikke er avklart — den kan ikke cache noe
-    // under en tom nøkkel. Med «useEffect(..., [])» kjørte load() ved
-    // montering, altså FØR bedriften var på plass ved en KALD sidelast, og
-    // spurte aldri igjen: Kundeoversikt sto på «0 kunder». Navigering hit
-    // virket, fordi bedriften da alt var kjent.
-    //
-    // Regresjon fra da31878, som byttet hentEgneKunder() — uavhengig av
-    // bedriftskonteksten, siden RLS scoper den serverside — mot
-    // getCachedCustomers() for å få offline-lesing.
-    if (!companyId) return
     setLoading(true)
     try {
-      // allSettled + getCachedCustomers. Før sto det hentEgneKunder() rått i en
-      // Promise.all med fire nettkall: offline avvises alle, setKunder kjørte
-      // aldri, og Kundeoversikt viste «0 kunder» selv om kunder:alle lå i
-      // IndexedDB med alle radene. Den skjermen har aldri virket offline.
-      // Merk: offline gir cachen PROJEKSJONEN (id, kundenummer, navn, type,
-      // er_kunde, e-post, telefon) — org.nr og poststed mangler til man er på
-      // nett igjen. Lista, søket og tellerne virker.
+      // hentEgneKunder(), IKKE getCachedCustomers(). Forskjellen er avgjørende:
+      // hentEgneKunder er uavhengig av bedriftskonteksten — RLS scoper den
+      // serverside — mens getCachedCustomers nøkler på _aktivBedriftId.
+      //
+      // da31878 byttet dem for å få offline-lesing, og brøt kald sidelast
+      // online: Kundeoversikt sto på «0 kunder» etter Ctrl+R. Diagnosen viste
+      // hvorfor, og det er verdt å huske: companyId når denne komponenten FØR
+      // AuthProvider sin egen effekt har satt _aktivBedriftId. React kjører
+      // barns effekter før foreldrenes. Å vente på companyId hjelper altså
+      // ikke — de to settes ikke samtidig, og cachen svarte tomt.
+      //
+      // Skal denne skjermen virke offline, må fallbacken ligge INNE i
+      // hentEgneKunder(), ikke i et bytte av kallet her.
+      //
+      // allSettled beholdes: det er en ekte forbedring, og den var ikke
+      // årsaken. Én feilende spørring skal ikke ta med seg kundelista.
       const [k, p, q, inv] = await Promise.allSettled([
         // Kun egne kunder. CRM-leads har er_kunde = false og hører hjemme i CRM.
-        getCachedCustomers(),
+        hentEgneKunder(),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
         // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
@@ -39136,7 +39134,7 @@ function KunderPage() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [companyId])
+  useEffect(() => { load() }, [])
 
   const filtered = kunder.filter(k => {
     if (filterType !== 'alle' && k.type !== filterType) return false
