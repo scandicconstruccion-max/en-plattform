@@ -60,27 +60,126 @@ function idbAapne() {
   })
   return _idbPromise
 }
+// NØKLET PÅ BEDRIFT. Uten prefiks kunne data lest inn hos én bedrift bli servert
+// i en annen: lesMedCache faller tilbake til IndexedDB både offline OG ved enhver
+// spørrefeil, og disken overlever både bedriftsbytte og utlogging.
+//
+// Fail closed: vet vi ikke hvilken bedrift vi står i, verken skriver eller leser
+// vi. Å hente på nytt koster et nettkall; å svare med feil bedrifts data koster
+// tilliten. _aktivBedriftId speiles fra AuthProvider og stammer fra
+// auth_company_id() — samme kilde som RLS og DEFAULT-verdiene i databasen.
+//
+// MERK: _aktivBedriftId deklareres lenger ned i fila. Det går bra fordi disse
+// funksjonene først KALLES etter at modulen er ferdig evaluert. Kalles idbSett
+// eller idbHent noen gang under selve modul-evalueringen, ryker det på TDZ.
+function idbNokkel(noekkel) {
+  if (!noekkel || !_aktivBedriftId) return null
+  return _aktivBedriftId + '|' + noekkel
+}
 async function idbSett(noekkel, data) {
+  const k = idbNokkel(noekkel)
+  if (!k) return                                   // ukjent bedrift → ikke cache
   try {
     const db = await idbAapne()
     await new Promise((res, rej) => {
       const tx = db.transaction(IDB_STORE, 'readwrite')
-      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, noekkel)
+      tx.objectStore(IDB_STORE).put({ data, lagretAt: Date.now() }, k)
       tx.oncomplete = () => res()
       tx.onerror = () => rej(tx.error)
     })
   } catch (e) { /* svelg — caching skal aldri knekke hovedflyten */ }
 }
 async function idbHent(noekkel) {
+  const k = idbNokkel(noekkel)
+  if (!k) return null                              // ukjent bedrift → ingen fallback
   try {
     const db = await idbAapne()
     return await new Promise((res, rej) => {
       const tx = db.transaction(IDB_STORE, 'readonly')
-      const r = tx.objectStore(IDB_STORE).get(noekkel)
+      const r = tx.objectStore(IDB_STORE).get(k)
       r.onsuccess = () => res(r.result || null)
       r.onerror = () => rej(r.error)
     })
   } catch (e) { return null }
+}
+
+// Siste BEKREFTEDE bedrift for en bruker, i localStorage.
+//
+// Ved en kald start uten nett når vi verken auth_company_id() eller
+// user_profiles — loadProfile setter da profile til null. Uten denne huskelappen
+// ville fail-closed slått av hele offline-lesingen, nøyaktig i situasjonen
+// offline-modus finnes for: appen åpnes på nytt i en kjeller uten dekning.
+//
+// Lagres KUN etter at bedriften er bekreftet mot databasen, og nøkles på
+// bruker-id så neste bruker på samme enhet ikke arver den. Verdien er riktig for
+// dataene som alt ligger i offline-cachen — det er de samme to kildene.
+function husketBedrift(brukerId) {
+  if (!brukerId) return null
+  try { return localStorage.getItem('ep-bedrift:' + brukerId) || null } catch (e) { return null }
+}
+function huskBedrift(brukerId, bedriftId) {
+  if (!brukerId || !bedriftId) return
+  try { localStorage.setItem('ep-bedrift:' + brukerId, bedriftId) } catch (e) { /* svelg */ }
+}
+
+// Siste BEKREFTEDE profil for en bruker. Samme mønster og begrunnelse som
+// huskBedrift() over.
+//
+// Uten nett når loadProfile verken user_profiles eller fallback-spørringen, og
+// profile blir null. Da mister vi ikke bare navnet: role, module_access og alle
+// rettighetene utledet av dem forsvinner også — kanSlette, kanStyreProsjekt,
+// erAdmin og kanSePriser blir false selv for en admin.
+//
+// Verst er navnet. displayName falt tilbake på e-postprefikset, og displayName
+// SKRIVES til databasen: completed_by_name på sjekkpunkt, uploaded_by_name på
+// prosjektfil, from_name ved maskinoverlevering, reserved_by_name på
+// reservasjon. Offline går de gjennom skrivekøen og blir replayet. En bruker som
+// logger inn med support@enplattform.no fikk «support» stående i sjekklista.
+//
+// Lagres kun etter at profilen faktisk er hentet fra databasen, og nøkles på
+// bruker-id så neste bruker på samme enhet ikke arver den.
+function husketProfil(brukerId) {
+  if (!brukerId) return null
+  try {
+    const raa = localStorage.getItem('ep-profil:' + brukerId)
+    return raa ? JSON.parse(raa) : null
+  } catch (e) { return null }
+}
+function huskProfil(brukerId, profil) {
+  if (!brukerId || !profil) return
+  try { localStorage.setItem('ep-profil:' + brukerId, JSON.stringify(profil)) } catch (e) { /* svelg */ }
+}
+
+// Engangsopprydding av nøkler skrevet før prefikset fantes. De har ingen bedrift
+// i seg og kan aldri leses igjen — de ville bare ligget og tatt plass.
+//
+// De SLETTES, ikke migreres. Å tilskrive dem en bedrift i ettertid ville vært
+// gjetning, og for en plattformeier som har vært innom flere kunder via
+// støtteøkt er den gjetningen systematisk feil.
+//
+// Idempotent: finnes ingen unøklede nøkler, gjør den ingenting. Rører verken
+// blob-lageret eller skrivekøen, så usynket arbeid kan ikke gå tapt.
+let _ryddetGamleNokler = false
+async function ryddGamleIdbNokler() {
+  if (_ryddetGamleNokler) return
+  _ryddetGamleNokler = true
+  try {
+    const db = await idbAapne()
+    const gamle = await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readonly')
+      const r = tx.objectStore(IDB_STORE).getAllKeys()
+      r.onsuccess = () => res((r.result || []).filter(k => typeof k === 'string' && k.indexOf('|') === -1))
+      r.onerror = () => rej(r.error)
+    })
+    if (!gamle.length) return
+    await new Promise((res, rej) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      const store = tx.objectStore(IDB_STORE)
+      for (const k of gamle) store.delete(k)
+      tx.oncomplete = () => res()
+      tx.onerror = () => rej(tx.error)
+    })
+  } catch (e) { /* svelg — opprydding skal aldri knekke oppstart */ }
 }
 
 // In-memory cache for momentane modulbytter (stale-while-revalidate).
@@ -270,6 +369,11 @@ async function forhandslast({ tving = false } = {}) {
       const gruppe = FORHANDSLAST_LISTER.slice(i, i + 4)
       await Promise.all(gruppe.map(([key, q]) => lesMedCache(key, q)))
     }
+    // Ansatte og kunder ligger IKKE i FORHANDSLAST_LISTER: de går ikke gjennom
+    // lesMedCache, fordi bare et utvalg av feltene får lagres på disk. De varmes
+    // opp her i stedet, ellers er de kalde til noen åpner et skjema.
+    try { await getCachedEmployees() } catch (_) {}
+    try { await getCachedCustomers() } catch (_) {}
     _forhandslastSist = Date.now()
   } catch (e) { /* svelg – forhåndslasting er best-effort */ }
   finally { _forhandslastKjorer = false }
@@ -284,7 +388,10 @@ function nyId() {
   try { return crypto.randomUUID() } catch (e) { return 'lok-' + Date.now() + '-' + Math.random().toString(36).slice(2) }
 }
 async function koLeggTil(op) {
-  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, ...op }
+  // bedriftId stemples ved KØING. company_id tildeles av auth_company_id() i det
+  // øyeblikket raden faktisk skrives, så uten markøren ville en operasjon laget
+  // hos én bedrift kunne bli replayet inn i en annen. Se hoppet i flushKo.
+  const full = { id: nyId(), opprettet: Date.now(), forsok: 0, status: 'venter', sisteFeil: null, bedriftId: _aktivBedriftId || null, ...op }
   try {
     const db = await idbAapne()
     await new Promise((res, rej) => {
@@ -449,6 +556,13 @@ async function flushKo() {
     const ops = await koHentAlle()
     for (const op of ops) {
       if (op.status === 'feilet') continue           // poison – hopp over
+      // Tilhører operasjonen en annen bedrift enn den appen står i nå, skal den
+      // VENTE — ikke kjøres og ikke kastes. Den flushes når vi er tilbake i sin
+      // egen bedrift. continue, ikke break: rekkefølge er bare meningsfull
+      // innenfor én bedrift, og et break ville låst køen for den aktive.
+      // Operasjoner uten bedriftId er fra før feltet fantes; de flushes som før,
+      // siden vi ikke kan tilskrive dem en bedrift i ettertid.
+      if (op.bedriftId && op.bedriftId !== _aktivBedriftId) continue
       try {
         if (op.type === 'insert') {
           // Last opp eventuelle ventende bilde-blober først, og fyll inn resultatet.
@@ -631,7 +745,62 @@ function erGyldigEpost(e) {
 //   pdf.doc.save('filnavn.pdf')
 // ══════════════════════════════════════════════════════════════════════
 
-const _brandCache = { settings: null, logoDataUrl: null, loading: null }
+// Hvilken bedrift ser vi på akkurat nå? Speiles hit fra AuthProvider, så cacher
+// som lever UTENFOR React kan nøkle på riktig bedrift uten et eget oppslag.
+//
+// MÅ være bedriften, ikke auth-brukeren: under en støtteøkt er auth-brukeren
+// fortsatt plattformeieren, mens bedriften er kundens. En nøkkel på bruker-id
+// ville derfor ikke skilt «meg i min bedrift» fra «meg i kundens bedrift» — og
+// det er nøyaktig det skillet som betyr noe.
+let _aktivBedriftId = null
+function settAktivBedrift(id) {
+  const ny = id || null
+  const forrige = _aktivBedriftId
+  _aktivBedriftId = ny
+  // Rydd KUN ved et faktisk bytte fra en tidligere bedrift. Første lasting går fra
+  // null til en verdi, og da finnes ingen gamle data å rydde bort — å rydde der
+  // ville kostet to spørringer ved hver eneste sidelast.
+  if (forrige !== null && forrige !== ny) tomBedriftsCacher(ny)
+  // Første gang vi vet hvilken bedrift vi står i: fjern nøklene fra før
+  // prefikset ble innført. Best-effort, blokkerer ingenting.
+  if (ny) { try { ryddGamleIdbNokler() } catch (_) {} }
+}
+
+// Bedriften en NY rad faktisk havner i. Samme kilde som DEFAULT-verdien
+// auth_company_id() på tabellene og som RLS-policyen tenant_isolation.
+//
+// user_profiles.company_id er IKKE det samme: under en støtteøkt sier den din
+// egen bedrift, mens databasen skriver til kundens. Stempler vi profilens id inn
+// i raden, avviser RLS den — eller, er policyen løsere, blir raden liggende i
+// feil bedrift med kundens project_id.
+//
+// Returnerer null når den ikke kan avgjøres. Kallstedene skal da UTELATE
+// company_id helt, ikke sende null: en eksplisitt null overstyrer DEFAULT.
+async function hentSkrivebedriftId() {
+  try {
+    const { data, error } = await supabase.rpc('auth_company_id')
+    if (error) throw error
+    return data || null
+  } catch (e) { return null }
+}
+
+// Legg company_id på et payload-objekt KUN når vi vet hvilken bedrift det er.
+// Vet vi det ikke, utelates nøkkelen så DEFAULT auth_company_id() tar over.
+function medBedriftId(payload, bedriftId) {
+  return bedriftId ? { ...payload, company_id: bedriftId } : payload
+}
+
+// NØKLET PÅ BEDRIFT. Merkevaren — firmanavn, adresse, org.nr og logo — havner på
+// faktura, tilbud og ordre som kunden sender videre til SIN kunde. Uten nøkkelen
+// ble den hentet én gang per sidelast, og en PDF laget etter et bedriftsbytte
+// kunne fått forrige bedrifts avsender. Det er ikke rettbart etter at dokumentet
+// er sendt.
+//
+// Støtteøkten laster i dag siden på nytt i begge retninger (startSupportSession
+// og avsluttSupportOkt kaller begge window.location.reload()), så cachen tømmes
+// uansett. Men det er en tilfeldig redning, ikke et forsvar: fjernes den reloaden
+// for å gjøre byttet raskere, er feilen aktiv igjen med én gang.
+const _brandCache = { nokkel: null, settings: null, logoDataUrl: null, loading: null }
 
 async function _loadJsPdf() {
   if (window.jspdf) return window.jspdf
@@ -796,27 +965,41 @@ async function _excelTilPoster(file) {
 }
 
 async function _fetchBrandData() {
-  if (_brandCache.settings !== null) return _brandCache
-  if (_brandCache.loading) return _brandCache.loading
+  const nokkel = _aktivBedriftId
+  // Cachen gjelder KUN den brukeren den ble hentet for.
+  if (_brandCache.settings !== null && _brandCache.nokkel === nokkel) return _brandCache
+  if (_brandCache.loading && _brandCache.nokkel === nokkel) return _brandCache.loading
+
+  // Ny bruker: forkast forrige bedrifts merkevare FØR vi henter, så en PDF som
+  // startes akkurat nå ikke rekker å plukke opp den gamle logoen.
+  _brandCache.nokkel = nokkel
+  _brandCache.settings = null
+  _brandCache.logoDataUrl = null
+
   _brandCache.loading = (async () => {
+    const min = nokkel   // hvem denne hentingen tilhører
     try {
       const { data } = await supabase.from('company_settings').select('*').limit(1).single()
+      // Rakk en annen bruker å overta mens vi hentet? Da skal ikke vårt svar skrives.
+      if (_brandCache.nokkel !== min) return _brandCache
       _brandCache.settings = data || {}
       // Hent logo som base64 data-URL hvis tilgjengelig (jsPDF kan ikke hente URL direkte)
       if (data?.logo_url) {
         try {
           const resp = await fetch(data.logo_url)
           const blob = await resp.blob()
-          _brandCache.logoDataUrl = await new Promise((res) => {
+          const dataUrl = await new Promise((res) => {
             const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => res(null); r.readAsDataURL(blob)
           })
-        } catch (e) { console.error('[brandPdf] Kunne ikke laste logo:', e); _brandCache.logoDataUrl = null }
+          if (_brandCache.nokkel !== min) return _brandCache
+          _brandCache.logoDataUrl = dataUrl
+        } catch (e) { console.error('[brandPdf] Kunne ikke laste logo:', e); if (_brandCache.nokkel === min) _brandCache.logoDataUrl = null }
       }
     } catch (e) {
       console.error('[brandPdf] Kunne ikke laste company_settings:', e)
-      _brandCache.settings = {}
+      if (_brandCache.nokkel === min) _brandCache.settings = {}
     } finally {
-      _brandCache.loading = null
+      if (_brandCache.nokkel === min) _brandCache.loading = null
     }
     return _brandCache
   })()
@@ -825,6 +1008,7 @@ async function _fetchBrandData() {
 
 // Invaliderer brand-cache — kalles når bedriftsinfo oppdateres i innstillinger
 function invalidateBrandCache() {
+  _brandCache.nokkel = null
   _brandCache.settings = null
   _brandCache.logoDataUrl = null
   _brandCache.loading = null
@@ -1818,6 +2002,12 @@ function AuthProvider({ children }) {
           }
         } catch (_) {}
       }
+      // Fikk vi en profil, husk den. Fikk vi ingen — typisk uten nett, der begge
+      // spørringene feiler — er siste bekreftede profil det beste vi har. Uten
+      // den mister vi navn, rolle og rettigheter, og displayName faller tilbake
+      // på noe som ikke er et navn og som blir skrevet til databasen.
+      if (prof) huskProfil(authUser.id, prof)
+      else prof = husketProfil(authUser.id)
       setProfile(prof)
 
       // Engangsmigrering av opplæringstur-historikk: har brukeren sett-turer i
@@ -1874,9 +2064,48 @@ function AuthProvider({ children }) {
   }, [])
 
   // Display name: full_name from profile, fallback to email prefix
-  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
+  // E-postprefikset er ALDRI et navn. Det var det som gjorde at
+  // support@enplattform.no dukket opp som «support» — i grensesnittet, og verre,
+  // i databasen via skrivekøen. Har vi ingen profil (heller ikke fra disk), vet
+  // vi ikke hvem dette er, og da skal vi si det i stedet for å gjette.
+  const displayName = profile?.full_name || 'Ikke identifisert'
   const isPlatformOwner = profile?.platform_role === 'platform_owner'
-  const companyId = profile?.company_id || null
+  const profilBedriftId = profile?.company_id || null
+  // Bedriften appen FAKTISK jobber i. Databasen avgjør det med auth_company_id():
+  // kundens bedrift ved en åpen støtteøkt, ellers brukerens egen. Den samme
+  // funksjonen er DEFAULT-verdi for company_id på tabellene og styrer RLS-policyen
+  // tenant_isolation. user_profiles.company_id er IKKE det samme — den sier alltid
+  // din egen bedrift, også midt i en støtteøkt. Leser frontend den, viser vi én
+  // bedrift mens vi skriver til en annen.
+  //
+  // Kun plattformeier kan ha en støtteøkt. Alle andre får profilens bedrift med en
+  // gang og merker ingen forskjell. Eier venter på svaret: null er et ærligere
+  // svar enn feil bedrift, og cachene nøkler på denne verdien.
+  const [stotteBedriftId, setStotteBedriftId] = useState(undefined)   // undefined = ikke avklart enda
+  React.useEffect(() => {
+    let levende = true
+    if (!user) { setStotteBedriftId(undefined); return }
+    ;(async () => {
+      try {
+        const { data, error } = await supabase.rpc('auth_company_id')
+        if (error) throw error
+        const bekreftet = data || profilBedriftId
+        huskBedrift(user.id, bekreftet)            // huskelapp for kald start uten nett
+        if (levende) setStotteBedriftId(bekreftet)
+      } catch (e) {
+        // Svarer ikke databasen, faller vi tilbake til profilen. Uten nett er
+        // også den tom (loadProfile setter profile til null), og da er siste
+        // bekreftede bedrift for denne brukeren det beste vi har. Uten den ville
+        // offline-cachen vært utilgjengelig ved en kald start uten dekning.
+        if (levende) setStotteBedriftId(profilBedriftId || husketBedrift(user.id))
+      }
+    })()
+    return () => { levende = false }
+  }, [user, profilBedriftId])
+  const companyId = stotteBedriftId !== undefined ? stotteBedriftId : (isPlatformOwner ? null : profilBedriftId)
+  // Speiler bedriften til modulnivå. Cacher utenfor React (PDF-merkevaren,
+  // kunde- og ansattlista, regnskapsstatus) nøkler på denne.
+  React.useEffect(() => { settAktivBedrift(companyId) }, [companyId])
   const role = profile?.role || null
   const moduleAccess = profile?.module_access || []
   const kanRedigere = rolleKanRedigere(role)   // Les-only → false
@@ -1884,6 +2113,10 @@ function AuthProvider({ children }) {
   const kanSlette = rolleKanSlette(role)       // kun admin/leder
   const kanStyreProsjekt = rolleKanStyreProsjekt(role) // opprette/slette prosjekt: admin/leder
   const kanStyrePrisgrunnlag = rolleKanStyrePrisgrunnlag(role) // prislister + erstatte standarder
+  // Plattformeier er med av samme grunn som i policyen: støtteinnlogging hos en
+  // kunde skal kunne se prisboken, ellers står vi uten verktøy nettopp når vi
+  // hjelper. Policyen sier auth_role() IN (...) OR is_platform_owner().
+  const kanSePriser = rolleKanSePriser(role) || isPlatformOwner
 
   // Marker en opplæringstur som sett — DB er fasit, localStorage er cache.
   const markTourSeen = async (tourKey) => {
@@ -1893,7 +2126,7 @@ function AuthProvider({ children }) {
     try { await supabase.from('user_profiles').update({ seen_tours: merged }).eq('id', user.id) } catch (_) {}
   }
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, kanSePriser, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -3538,7 +3771,43 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 
 // ── Ansattvelger som setter navn/epost/telefon fra valgt ansatt ──
 // Global cache av ansatte — hentes én gang per sesjon for å unngå N fetch-er
-const _employeeCache = { data: null, loading: null, subscribers: new Set() }
+// NØKLET PÅ BEDRIFT, av samme grunn som _brandCache: EmployeeNameSelect brukes 19
+// steder, og prosjektleder og timegodkjenner lagres som id. Velges en ansatt fra
+// forrige bedrifts liste, skrives en id som ikke finnes for denne bedriften.
+// ── HVA SOM FÅR LIGGE PÅ DISK ──────────────────────────────────────────────
+// Ansatt- og kundelista hentes rett fra Supabase og hadde ingen offline-fallback
+// i det hele tatt: uten nett skrev de en TOM liste til abonnentene, og
+// nedtrekkene sa «Ingen ansatte funnet». Nå lagres de i IndexedDB — men bare
+// disse feltene.
+//
+// employees inneholder også hourly_rate, monthly_salary, birth_date, address,
+// emergency_contact_name/phone/relation og notes. Det er lønn, fødselsdato,
+// hjemmeadresse og kontaktinfo til pårørende — sistnevnte tilhører en person som
+// ikke engang bruker systemet. Det skal ikke ligge ukryptert i IndexedDB på
+// telefonen til hver eneste ansatt.
+//
+// customers.orgnr er utelatt av samme grunn: feltet er merket «Org.nr /
+// Fødselsnr» i tilbudsskjemaet, så det kan inneholde et fødselsnummer.
+// Konsekvensen er at man ikke kan søke opp en kunde på org.nr offline.
+//
+// Online-spørringene er UENDRET (select('*')), så ingenting endrer seg der.
+// Projeksjonen gjelder kun det som skrives til disk.
+const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'tripletex_employee_id']
+const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'phone']
+
+function plukkFelt(rad, felt) {
+  const ut = {}
+  for (const f of felt) if (rad && rad[f] !== undefined) ut[f] = rad[f]
+  return ut
+}
+async function lesListeFraDisk(noekkel) {
+  try {
+    const c = await idbHent(noekkel)
+    return c && Array.isArray(c.data) ? c.data : []
+  } catch (e) { return [] }
+}
+
+const _employeeCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 // Returnerer visningsnavn uansett om ansatt har first_name+last_name eller kombinert name-felt
 function getEmployeeName(emp) {
@@ -3549,38 +3818,54 @@ function getEmployeeName(emp) {
 }
 
 function getCachedEmployees() {
-  if (_employeeCache.data) return Promise.resolve(_employeeCache.data)
-  if (_employeeCache.loading) return _employeeCache.loading
+  const nokkel = _aktivBedriftId
+  if (_employeeCache.data && _employeeCache.nokkel === nokkel) return Promise.resolve(_employeeCache.data)
+  if (_employeeCache.loading && _employeeCache.nokkel === nokkel) return _employeeCache.loading
+  // Ny bedrift: forkast forrige liste FØR hentingen starter.
+  _employeeCache.nokkel = nokkel
+  _employeeCache.data = null
+  const min = nokkel
   _employeeCache.loading = supabase.from('employees')
     .select('*')
     .order('last_name', { nullsFirst: false })
     .then(({ data, error }) => {
+      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
+      if (_employeeCache.nokkel !== min) return _employeeCache.data || []
       if (error) {
         console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
-        _employeeCache.data = []
-        _employeeCache.loading = null
-        _employeeCache.subscribers.forEach(fn => fn([]))
-        // Ikke cache tom liste permanent — prøv på nytt neste gang
-        setTimeout(() => { _employeeCache.data = null }, 5000)
-        return []
+        return ansatteFraDisk(min)
       }
       _employeeCache.data = data || []
       _employeeCache.loading = null
       _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
+      // Skriv gjennom til disk, men bare de feltene som får ligge der.
+      idbSett('ansatte:alle', _employeeCache.data.map(r => plukkFelt(r, ANSATT_OFFLINE_FELT)))
       console.log(`[EmployeeCache] Lastet ${_employeeCache.data.length} ansatte`)
       return _employeeCache.data
     })
     .catch(err => {
       console.error('[EmployeeCache] Exception:', err)
-      _employeeCache.data = []
-      _employeeCache.loading = null
-      setTimeout(() => { _employeeCache.data = null }, 5000)
-      return []
+      return ansatteFraDisk(min)
     })
   return _employeeCache.loading
 }
 
+// Fallback når nettet svikter. Før skrev vi en TOM liste til abonnentene her,
+// og nedtrekkene sa «Ingen ansatte funnet» offline. Nå leser vi siste kjente
+// liste fra disk i stedet. Finnes den ikke, blir svaret tomt som før.
+async function ansatteFraDisk(min) {
+  const liste = await lesListeFraDisk('ansatte:alle')
+  if (_employeeCache.nokkel !== min) return _employeeCache.data || []
+  _employeeCache.data = liste
+  _employeeCache.loading = null
+  _employeeCache.subscribers.forEach(fn => fn(liste))
+  // Ikke lås en tom liste permanent — prøv nettet på nytt neste gang.
+  if (!liste.length) setTimeout(() => { _employeeCache.data = null }, 5000)
+  return liste
+}
+
 function invalidateEmployeeCache() {
+  _employeeCache.nokkel = null
   _employeeCache.data = null
   _employeeCache.loading = null
 }
@@ -3866,7 +4151,11 @@ function EmployeeChipPicker({ values, onChange, placeholder, style }) {
 // Følger samme mønster som EmployeeNameSelect.
 // ─────────────────────────────────────────────────────────────────────────
 
-const _customerCache = { data: null, loading: null, subscribers: new Set() }
+// NØKLET PÅ BEDRIFT. CustomerSelect leser herfra og brukes i sju skjemaer som
+// lagrer customer_id: prosjekt, tilbud, anbud, ordre, faktura, BIM-veiviser og
+// kalkyle. Velges en kunde fra forrige bedrifts liste, skrives en id som ikke
+// finnes for denne bedriften — feil data i basen, ikke bare på skjermen.
+const _customerCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 // Formaterer kunde til visningstekst: "K-0023 · Ola Nordmann"
 function formatCustomerLabel(c) {
@@ -3926,29 +4215,45 @@ async function hentEgneKunder() {
 }
 
 function getCachedCustomers() {
-  if (_customerCache.data) return Promise.resolve(_customerCache.data)
-  if (_customerCache.loading) return _customerCache.loading
+  const nokkel = _aktivBedriftId
+  if (_customerCache.data && _customerCache.nokkel === nokkel) return Promise.resolve(_customerCache.data)
+  if (_customerCache.loading && _customerCache.nokkel === nokkel) return _customerCache.loading
+  // Ny bedrift: forkast forrige liste FØR hentingen starter.
+  _customerCache.nokkel = nokkel
+  _customerCache.data = null
+  const min = nokkel
   _customerCache.loading = hentEgneKunder()
     .then(rader => {
+      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
+      if (_customerCache.nokkel !== min) return _customerCache.data || []
       _customerCache.data = rader
       _customerCache.loading = null
       _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
+      // Skriv gjennom til disk, men bare de feltene som får ligge der.
+      idbSett('kunder:alle', rader.map(r => plukkFelt(r, KUNDE_OFFLINE_FELT)))
       console.log(`[CustomerCache] Lastet ${rader.length} kunder (er_kunde=true)`)
       return _customerCache.data
     })
     .catch(err => {
       console.error('[CustomerCache] Feil ved henting av kunder:', err)
-      _customerCache.data = []
-      _customerCache.loading = null
-      _customerCache.subscribers.forEach(fn => fn([]))
-      // Ikke cache tom liste permanent — prøv på nytt neste gang
-      setTimeout(() => { _customerCache.data = null }, 5000)
-      return []
+      return kunderFraDisk(min)
     })
   return _customerCache.loading
 }
 
+// Samme som ansatteFraDisk: kundevelgeren var like tom offline.
+async function kunderFraDisk(min) {
+  const liste = await lesListeFraDisk('kunder:alle')
+  if (_customerCache.nokkel !== min) return _customerCache.data || []
+  _customerCache.data = liste
+  _customerCache.loading = null
+  _customerCache.subscribers.forEach(fn => fn(liste))
+  if (!liste.length) setTimeout(() => { _customerCache.data = null }, 5000)
+  return liste
+}
+
 function invalidateCustomerCache() {
+  _customerCache.nokkel = null
   _customerCache.data = null
   _customerCache.loading = null
 }
@@ -3967,6 +4272,35 @@ function useCustomers() {
     return () => { mounted = false; _customerCache.subscribers.delete(sub) }
   }, [])
   return customers
+}
+
+// ── SENTRAL RYDDING VED BEDRIFTSBYTTE ────────────────────────────────────
+// Andre forsvarslinje ved siden av nøklene på hver enkelt cache. Kalles fra
+// settAktivBedrift(), altså når companyId faktisk endrer seg i app-tilstanden.
+//
+// Den henger BEVISST på companyId og ikke på onAuthStateChange: en støtteøkt
+// bytter bedrift uten å røre auth i det hele tatt (startSupportSession kaller
+// bare en RPC og window.location.reload()), så en auth-lytter ville aldri fyrt
+// ved det scenariet som betyr mest.
+//
+// IndexedDB røres ikke her. Den er offline-lageret, og å tømme det ved hvert
+// bytte ville ødelagt offline-bruken. Nøklene der må prefikses med bedrift —
+// egen sak.
+function tomBedriftsCacher(nyBedriftId) {
+  try { invalidateCustomerCache() } catch (_) {}
+  try { invalidateEmployeeCache() } catch (_) {}
+  try { invalidateBrandCache() } catch (_) {}
+  try { tomDataCache() } catch (_) {}          // _memCache (ikke IndexedDB)
+  // Varsle monterte velgere med tom liste. Uten dette ville de stått igjen med
+  // forrige bedrifts rader til komponenten tilfeldigvis ble montert på nytt.
+  try { _customerCache.subscribers.forEach(fn => fn([])) } catch (_) {}
+  try { _employeeCache.subscribers.forEach(fn => fn([])) } catch (_) {}
+  // Hent på nytt for den nye bedriften, så velgerne fylles igjen uten at
+  // brukeren må navigere bort og tilbake. Ikke ved utlogging (nyBedriftId null).
+  if (nyBedriftId) {
+    try { getCachedCustomers() } catch (_) {}
+    try { getCachedEmployees() } catch (_) {}
+  }
 }
 
 // CustomerSelect — søkbar kundevelger med duplikatadvarsel for privatkunder
@@ -5181,9 +5515,13 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
                     placeholder="Søk etter kunde — navn, kundenr, orgnr, e-post..."
                   />
                 </FLabel>
-                <p style={{ margin:'4px 0 0', fontSize:'11px', color:'#94a3b8' }}>
-                  Finner du ikke kunden? Opprett den først i Kundeoversikt — så vises den her.
-                </p>
+                <NyKundeInline onOpprettet={c => { set('customer_id', c.id); set('client_name', c.name || '') }} />
+                {!form.customer_id && (
+                  <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#b45309', fontWeight:'600' }}>
+                    Uten en valgt kunde kan prosjektet ikke synkes til Tripletex. Kundenavnet under
+                    er kun tekst til visning.
+                  </p>
+                )}
               </div>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Kundenavn (kan overstyres manuelt)"><FInput value={form.client_name} onChange={e => set('client_name', e.target.value)} placeholder="Navn på kunde" /></FLabel></div>
               <FLabel label="Kontaktperson"><FInput value={form.client_contact} onChange={e => set('client_contact', e.target.value)} placeholder="Navn" /></FLabel>
@@ -5423,6 +5761,10 @@ function ProsjekterPage({ onNavigateDetail }) {
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user, kanStyreProsjekt } = useAuth()
   const appAlert = useAppAlert()
+  // MÅ være her. Uten den binder confirm(...) lenger nede til window.confirm, som er
+  // nettleserens native dialog: den tar en streng, får et objekt, og viser
+  // «[object Object]».
+  const confirm = useConfirm()
   const isMobH = typeof window !== 'undefined' && window.innerWidth < 768
   const [project, setProject] = useState(null)
   const [allProjects, setAllProjects] = useState([])
@@ -5530,6 +5872,68 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
   }
 
+  // Synk-tilstanden deles av merket øverst, knappen i knapperaden og feilboksen
+  // under headeren — tre ulike steder i kortet. Derfor ligger den her, ikke i en
+  // av dem. Pilfunksjonene under leses først ved klikk, så de når
+  // sjekkStartdatoFoerSynk selv om den defineres rett nedenfor.
+  const synk = useIntegrasjonSynk({
+    entitet: 'project',
+    radId: { projectId },
+    alleredeSynket: project?.tripletex_id,
+    forhaandssjekk: () => sjekkStartdatoFoerSynk(),
+    onFerdig: () => load(),
+  })
+
+  // Tripletex setter sin EGEN startdato hvis vi ikke sender en. Timer ført før den
+  // datoen kan da ikke føres på prosjektet i Tripletex. Vi varsler før sending og
+  // foreslår den tidligste datoen det faktisk finnes timer på — hentet og sortert i
+  // databasen, ikke i frontend.
+  const sjekkStartdatoFoerSynk = async () => {
+    if (project?.start_date) return true
+    if (project?.tripletex_id) return true   // allerede opprettet — startdato settes ikke på nytt
+
+    let tidligste = null
+    try {
+      const { data } = await supabase
+        .from('timesheet_entries')
+        .select('date')
+        .eq('project_id', projectId)
+        .not('date', 'is', null)
+        .order('date', { ascending: true })
+        .limit(1)
+      tidligste = data && data[0] ? String(data[0].date).slice(0, 10) : null
+    } catch (_) { /* uten timer får brukeren den generelle advarselen under */ }
+
+    if (tidligste) {
+      const ok = await confirm({
+        message: 'Prosjektet mangler startdato',
+        subMessage: 'Sender vi det uten startdato, setter Tripletex sin egen — og timer ført '
+          + `før den datoen kan ikke føres på prosjektet der. Det finnes registrerte timer helt `
+          + `tilbake til ${tidligste}. Datoen lagres på prosjektet med én gang, også hvis `
+          + 'synken skulle stoppe på noe annet etterpå — den er riktig uansett, siden det er '
+          + 'datoen prosjektet faktisk startet hos oss. Vil du ha en annen dato, avbryt og '
+          + 'sett den i prosjektskjemaet.',
+        confirmLabel: `Lagre ${tidligste} og synk`,
+      })
+      if (!ok) return false
+      const { error } = await supabase.from('projects').update({ start_date: tidligste }).eq('id', projectId)
+      if (error) {
+        appAlert({ message: 'Kunne ikke lagre startdato', subMessage: error.message, kind: 'error' })
+        return false
+      }
+      await load()
+      return true
+    }
+
+    return await confirm({
+      message: 'Prosjektet mangler startdato',
+      subMessage: 'Tripletex setter da sin egen startdato ved opprettelse. Føres det timer med '
+        + 'eldre dato senere, kan de ikke registreres på prosjektet i Tripletex. '
+        + 'Vi fant ingen registrerte timer å foreslå en dato fra. Vil du synke likevel?',
+      confirmLabel: 'Synk likevel',
+    })
+  }
+
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
   if (!project) return <div style={{ ...f, textAlign:'center', padding:'60px' }}><p>Prosjekt ikke funnet</p><button onClick={onBack} style={{ background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'8px 16px', cursor:'pointer' }}>← Tilbake</button></div>
 
@@ -5592,6 +5996,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
               <div style={{ display:'flex', alignItems:'center', gap: isMobH ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobH ? '17px' : '20px', fontWeight:'bold', color:'#0f172a' }}>{project.name}</h1>
                 <StatusBadge status={project.status} />
+                <SynkMerke synk={synk} />
               </div>
               {project.project_number && <p style={{ margin:'3px 0 0', fontSize: isMobH ? '11px' : '13px', color:'#94a3b8' }}>#{project.project_number}</p>}
             </div>
@@ -5604,9 +6009,20 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
               <button onClick={() => setShowCreateSub(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #059669', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500', color:'#059669', flex: isMobH ? 1 : 'none' }}>{isMobH ? '+ Under' : '+ Underprosjekt'}</button>
             )}
             <button onClick={() => setShowEdit(true)} style={{ padding: isMobH ? '8px 10px' : '9px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobH ? '12px' : '14px', fontWeight:'500' }}>✏️</button>
+            <SynkKnapp synk={synk} isMob={isMobH} />
             {kanStyreProsjekt && <button onClick={() => setShowDelete(true)} style={{ padding: isMobH ? '8px 10px' : '9px 14px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobH ? '12px' : '14px' }}>🗑️</button>}
           </div>
         </div>
+
+        {/* Feilboksen i full bredde. Stoppet synken på manglende kunde, får brukeren
+            kundekoblingen rett i boksen — problemet og løsningen på samme sted. */}
+        <SynkFeil
+          synk={synk}
+          ekstra={synk.feil && synk.feil.reason === 'missing_customer'
+            ? <div style={{ marginTop: '10px' }}><KobleKunde project={project} isMob={isMobH} variant="akutt" onFerdig={load} /></div>
+            : null}
+        />
+
         {project.status === 'arkivert' && (
           <div style={{ marginTop:'12px', background:'#f5f3ff', border:'1px solid #e9d5ff', borderRadius:'10px', padding:'10px 16px', display:'flex', alignItems:'center', gap:'10px' }}>
             <span style={{ fontSize:'16px' }}>📦</span>
@@ -5851,6 +6267,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
           </div>
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🏢 Kunde</h3>
+            {/* Koblingen hører hjemme her, ved kunden — ikke som varselboks i toppen
+                av siden. Et prosjekt uten ekte kunde er som regel ikke en feil, bare
+                ikke koblet. Komponenten skjuler seg selv når prosjektet HAR en kunde,
+                eller når ingen regnskapsintegrasjon er tilkoblet. */}
+            <div style={{ marginBottom:'10px' }}>
+              <KobleKunde project={project} isMob={isMobH} variant="lenke" onFerdig={load} />
+            </div>
             {project.client_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><button onClick={visKunde} style={{ margin:0, padding:0, background:'none', border:'none', textAlign:'left', cursor:'pointer', fontWeight:'600', color:'#059669', fontSize: isMobH ? '13px' : '14px', textDecoration:'underline', textUnderlineOffset:'2px' }}>{kundeLaster ? 'Laster …' : project.client_name}</button>{project.client_contact && <p style={{ margin:0, fontSize: isMobH ? '11px' : '13px', color:'#475569' }}>👤 {project.client_contact}</p>}{project.client_email && <a href={`mailto:${project.client_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.client_email}</a>}{project.client_phone && <a href={`tel:${project.client_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.client_phone}</a>}<span style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px' }}>Trykk på navnet for detaljer</span></div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ingen kundeinformasjon</p>}
           </div>
           {(project.resident_name||project.resident_phone||project.resident_email) && (
@@ -13889,12 +14312,20 @@ const ConfirmContext = React.createContext(null)
 function ConfirmProvider({ children }) {
   // Keep ALL state in a single ref to avoid stale closure issues
   const [dialog, setDialog] = React.useState(null)
+  // Verdien i tallfeltet når dialogen ber om et tall (dialog.input).
+  const [inputVerdi, setInputVerdi] = React.useState('')
   // dialog = { message, subMessage, confirmLabel, cancelLabel, danger, alertOnly, kind } | null
   //   cancelLabel: egen tekst på avbryt-knappen. Noen valg er ikke «gjør / ikke gjør»
   //     men to reelle alternativ («Ja, regn om» / «Nei, behold prisen per rull») —
   //     da må begge knappene si hva de gjør. Faller tilbake til 'Avbryt'.
   //   alertOnly: true  → vis kun OK-knapp (ingen Avbryt), for "info"/"obs"-meldinger
   //   kind: 'info' | 'warn' | 'success' | 'error' — styrer ikon og farge på toppen
+  //   input: { label, enhet, plassholder, min, max, hjelp } → dialogen viser et
+  //     TALLFELT, og confirm() svarer med tallet i stedet for true. Avbryt gir
+  //     false som før. Brukes når vi mangler en opplysning brukeren har foran seg
+  //     — rullengden på en duk, antall plater i en pakke — og alternativet ville
+  //     vært å gi opp eller gjette. Ligger her, ikke i hver kaller, fordi vi
+  //     aldri bruker nettleserens prompt().
   const cbRef = React.useRef(null) // holds { resolve }
 
   // confirm() opens the dialog and returns a Promise
@@ -13902,15 +14333,31 @@ function ConfirmProvider({ children }) {
     const options = typeof opts === 'string' ? { message: opts } : opts
     return new Promise((resolve) => {
       cbRef.current = resolve
+      setInputVerdi(options?.input?.verdi != null ? String(options.input.verdi) : '')
       setDialog(options)
     })
   }, [])
 
+  // Tallet i feltet, eller null når det ikke er brukbart.
+  const inputTall = (() => {
+    if (!dialog?.input) return null
+    const n = parseFloat(String(inputVerdi).replace(',', '.'))
+    if (!isFinite(n) || n <= 0) return null
+    const { min, max } = dialog.input
+    if (min != null && n < min) return null
+    if (max != null && n > max) return null
+    return n
+  })()
+
   const respond = (value) => {
+    // Ber dialogen om et tall, er tallet svaret — ikke true.
+    const svar = (value === true && dialog?.input) ? inputTall : value
+    if (value === true && dialog?.input && svar === null) return   // ugyldig: bli stående
     setDialog(null)
+    setInputVerdi('')
     const cb = cbRef.current
     cbRef.current = null
-    if (cb) cb(value)
+    if (cb) cb(svar)
   }
 
   // Hent ikon og bakgrunnsfarge fra kind (eller danger-flagget)
@@ -13991,6 +14438,31 @@ function ConfirmProvider({ children }) {
                 </div>
               )}
             </div>
+            {/* Tallfelt når dialogen ber om en opplysning brukeren har foran seg. */}
+            {dialog.input && (
+              <div style={{ padding:'0 24px 4px' }}>
+                <label style={{ display:'block', fontSize:'12px', fontWeight:'700', color:'#374151', marginBottom:'6px' }}>
+                  {dialog.input.label || 'Verdi'}
+                </label>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
+                  <input autoFocus type="text" inputMode="decimal" value={inputVerdi}
+                    onChange={e => setInputVerdi(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') respond(true) }}
+                    placeholder={dialog.input.plassholder || ''}
+                    style={{ flex:1, minWidth:0, padding:'11px 13px', border:`1px solid ${inputVerdi && inputTall === null ? '#fecaca' : '#e2e8f0'}`,
+                      borderRadius:'10px', fontSize:'16px', fontFamily:'inherit', color:'#0f172a', background:'white', boxSizing:'border-box' }} />
+                  {dialog.input.enhet && <span style={{ fontSize:'14px', color:'#64748b', fontWeight:'600', flexShrink:0 }}>{dialog.input.enhet}</span>}
+                </div>
+                {inputVerdi && inputTall === null ? (
+                  <div style={{ fontSize:'11px', color:'#dc2626', marginTop:'6px' }}>
+                    Skriv et tall{dialog.input.min != null && dialog.input.max != null ? ` mellom ${fmtTall(dialog.input.min)} og ${fmtTall(dialog.input.max)}` : ''}.
+                  </div>
+                ) : dialog.input.hjelp ? (
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'6px', lineHeight:1.5 }}>{dialog.input.hjelp}</div>
+                ) : null}
+              </div>
+            )}
+
             {/* flexWrap: en egendefinert cancelLabel kan være lang («Nei, behold
                 407,40 per rull»). På 375 px legger knappene seg da under hverandre
                 i stedet for å presses ut av dialogen. */}
@@ -14002,8 +14474,10 @@ function ConfirmProvider({ children }) {
                 </button>
               )}
               <button onClick={() => respond(true)}
-                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700', color:'white', background: dialog.alertOnly ? '#059669' : (dialog.danger ? '#dc2626' : '#059669') }}
-                autoFocus>
+                disabled={!!dialog.input && inputTall === null}
+                style={{ padding:'10px 22px', border:'none', borderRadius:'10px', cursor: (dialog.input && inputTall === null) ? 'default' : 'pointer', fontSize:'14px', fontWeight:'700', color:'white',
+                  background: (dialog.input && inputTall === null) ? '#a7f3d0' : (dialog.alertOnly ? '#059669' : (dialog.danger ? '#dc2626' : '#059669')) }}
+                autoFocus={!dialog.input}>
                 {dialog.confirmLabel || (dialog.alertOnly ? 'OK' : (dialog.danger ? 'Slett' : 'Bekreft'))}
               </button>
             </div>
@@ -17715,10 +18189,10 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   // Månedsforbruk av AI-uttrekk for egen bedrift (til teller)
   const lastAiForbruk = async () => {
     try {
-      const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-      if (!prof?.company_id) return
+      const bedriftId = await hentSkrivebedriftId()
+      if (!bedriftId) return
       const start = new Date(); start.setDate(1); start.setHours(0, 0, 0, 0)
-      const { count } = await supabase.from('anbud_ai_uttrekk_logg').select('id', { count: 'exact', head: true }).eq('company_id', prof.company_id).gte('created_at', start.toISOString())
+      const { count } = await supabase.from('anbud_ai_uttrekk_logg').select('id', { count: 'exact', head: true }).eq('company_id', bedriftId).gte('created_at', start.toISOString())
       setAiForbruk({ brukt: count || 0, inkludert: ANBUD_AI_INKLUDERT })
     } catch (_) { /* teller er kosmetisk */ }
   }
@@ -17757,8 +18231,8 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
       leggTil(nye); await lastOppKilde(file)
       // Logg forbruk KUN ved treff, og oppdater teller
       try {
-        const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-        if (prof?.company_id) await supabase.from('anbud_ai_uttrekk_logg').insert({ company_id: prof.company_id, user_id: user?.id || null, poster_antall: nye.length })
+        const bedriftId = await hentSkrivebedriftId()
+        if (bedriftId) await supabase.from('anbud_ai_uttrekk_logg').insert({ company_id: bedriftId, user_id: user?.id || null, poster_antall: nye.length })
       } catch (_) { /* logging skal ikke blokkere flyten */ }
       await lastAiForbruk()
       await appAlert({ message: `✓ ${nye.length} poster lest ut og fagfordelt`, subMessage: 'Forslagene er et utgangspunkt — kontroller beskrivelse, mengde og faggruppe før du sender.', kind: 'success' })
@@ -24959,8 +25433,11 @@ function FeedbackModal({ onClose, kontekst }) {
       // Hent bedriftsnavn
       let companyName = null
       try {
-        const { data: cs } = await supabase.from('company_settings').select('company_name').limit(1).single()
-        companyName = cs?.company_name || null
+        // Kolonnen heter «name», ikke «company_name» — bekreftet mot både prod og
+        // Utvikling. Feilen sto i en tom catch, så feilrapporter har hittil blitt
+        // sendt uten bedriftsnavn uten at noe varslet.
+        const { data: cs } = await supabase.from('company_settings').select('name').limit(1).single()
+        companyName = cs?.name || null
       } catch(e) {}
 
       // Last opp skjermbilde først (hvis aktivt)
@@ -30333,6 +30810,10 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
             </div>
           )}
 
+          {/* Send godkjente timer til regnskapssystemet. Skjuler seg selv når
+              ingen kobling finnes, eller når ingen godkjente timer står klare. */}
+          <SendGodkjenteTimer entries={gruppe.entries} isMob={isMobG} onFerdig={onRefresh} />
+
           {/* Entries per day */}
           {weekDates.map((date,i)=>{
             const dayEntries = gruppe.entries.filter(e => e.date === date)
@@ -30408,6 +30889,10 @@ function GodkjenningView({ timesheets, employees, projects, user, onRefresh, erB
                           </div>
                         </div>
                       )}
+
+                        {/* Synkstatus for GODKJENTE timer: sendt, stoppet med årsak,
+                            eller klar til sending. Skjult for alt annet enn godkjent. */}
+                        <TimeSynkRad entry={e} isMob={isMobG} onFerdig={onRefresh} />
                     </div>
                   )
                 })}
@@ -38886,10 +39371,21 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               </div>
             </div>
           </div>
-          <button onClick={() => setEditing(true)}
-            style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
-            ✏️{!isMobKD && ' Rediger'}
-          </button>
+          {/* INGEN SYNK-KNAPP HER ENNÅ — og det er med vilje.
+              UI-omarbeidingen (b9553b0, 22. august) la inn SynkMerke, SynkKnapp
+              og SynkFeil i dette kortet, men bare ETT useIntegrasjonSynk-kall,
+              og det havnet i prosjektskjemaet. Her sto «synk» udefinert, og
+              Kundeoversikt krasjet med «synk is not defined» så snart man åpnet
+              en kunde. Sto i produksjon fra 22. august.
+              Markupen er fjernet i stedet for å gjette på hooken: alleredeSynket
+              skal hentes fra external_links, og den lesingen flyttes i DEL 2.
+              Knappen settes inn igjen der — komplett, med sin egen hook. */}
+          <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            <button onClick={() => setEditing(true)}
+              style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
+              ✏️{!isMobKD && ' Rediger'}
+            </button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -41570,9 +42066,10 @@ function CRMImportModal({ user, onClose, onDone }) {
     const ok = await confirm({ message:`Importere ${toImport.length} nye leads?`, subMessage: counts.duplikat ? `${counts.duplikat} duplikat(er) hoppes over.` : undefined, confirmLabel:'Importer' })
     if (!ok) return
     setImporting(true); setStep(4); setProgress(0); setImportTotal(toImport.length)
-    // company_id fra profilen — settes eksplisitt så RLS/synlighet er garantert
-    let companyId = null
-    try { const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single(); companyId = prof?.company_id || null } catch(_) {}
+    // company_id settes eksplisitt så RLS/synlighet er garantert. Kilden MÅ være
+    // auth_company_id() — under en støtteøkt peker profilens bedrift og den
+    // bedriften databasen skriver til på hver sin kunde.
+    const companyId = await hentSkrivebedriftId()
     let imported = 0
     const errors = []
     const kildeVal = kilde.trim() // settes på alle rader i importen
@@ -41581,12 +42078,12 @@ function CRMImportModal({ user, onClose, onDone }) {
     // titusener av rader du aldri har hatt en jobb for.
     for (let i = 0; i < toImport.length; i += 100) {
       const batch = toImport.slice(i, i + 100)
-      const payloads = batch.map(r => ({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id }))
+      const payloads = batch.map(r => medBedriftId({ ...r.payload, kilde: kildeVal, created_by: user?.id }, companyId))
       const { error } = await supabase.from('customers').insert(payloads)
       if (error) {
         // Én rad i batchen feilet — insert én og én for å isolere, ikke avbryt
         for (const r of batch) {
-          const { error: e2 } = await supabase.from('customers').insert({ ...r.payload, kilde: kildeVal, company_id: companyId, created_by: user?.id })
+          const { error: e2 } = await supabase.from('customers').insert(medBedriftId({ ...r.payload, kilde: kildeVal, created_by: user?.id }, companyId))
           if (e2) errors.push({ name: r.payload.name, orgnr: r.payload.orgnr, reason: e2.message })
           else imported++
         }
@@ -46332,9 +46829,10 @@ function BildedokPage() {
     if (!files.length) return
     setUploading(true)
     try {
-      // company_id kreves for at RLS skal la brukeren lese raden etterpå — ellers blir bildet "usynlig" ved henting
-      let companyId = null
-      try { const { data: prof } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single(); companyId = prof?.company_id || null } catch(_) {}
+      // company_id kreves for at RLS skal la brukeren lese raden etterpå — ellers blir bildet "usynlig" ved henting.
+      // Kilden MÅ være auth_company_id(): under en støtteøkt gir user_profiles din egen
+      // bedrift, og RLS avviser da raden fordi den peker på kundens prosjekt.
+      const companyId = await hentSkrivebedriftId()
       // Offline (Lag 3): hold bildet lokalt og legg i kø; lastes opp ved synk.
       const lagreEnOffline = async (file) => {
         const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')
@@ -46342,7 +46840,7 @@ function BildedokPage() {
         const path = `bildedok/${safeName}`
         const key = 'pending-img:' + nyId()
         await idbBlobSett(key, file)
-        const payload = sanitizeDbPayload({
+        const payload = medBedriftId(sanitizeDbPayload({
           id: nyId(),
           file_url: '',
           file_name: file.name,
@@ -46352,9 +46850,8 @@ function BildedokPage() {
           plassering: plassering || null,
           description: note || null,
           created_by: user?.id || null,
-          company_id: companyId,
           upload_method: 'manuell',
-        })
+        }), companyId)
         await koLeggTil({ tabell: 'photos', type: 'insert', payload, radId: payload.id, bilder: [{ key, path }], bildeForm: 'public-url', bildeFelt: 'file_url' })
       }
 
@@ -46375,7 +46872,7 @@ function BildedokPage() {
           const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
           if (upErr) { console.error('[bildedok] storage upload feilet:', upErr); throw upErr }
           const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
-          const payload = sanitizeDbPayload({
+          const payload = medBedriftId(sanitizeDbPayload({
             file_url: publicUrl,
             file_name: file.name,
             fase: fase || 'under_arbeid',
@@ -46384,9 +46881,8 @@ function BildedokPage() {
             plassering: plassering || null,
             description: note || null,
             created_by: user?.id || null,
-            company_id: companyId,
             upload_method: 'manuell',
-          })
+          }), companyId)
           const { error: dbErr } = await supabase.from('photos').insert(payload)
           if (dbErr) {
             console.error('[bildedok] insert i photos-tabellen feilet:', dbErr, 'payload:', payload)
@@ -47498,14 +47994,11 @@ function FdvNyUeRequestModal({ projectId, onClose, onSaved }) {
         created_by: user?.id,
       }
       console.log('[FDV-UE] Insert-data:', insertData)
-      // Prøv å hente company_id hvis den finnes (valgfritt)
-      try {
-        const { data: profile } = await supabase.from('user_profiles').select('company_id').eq('id', user?.id).single()
-        if (profile?.company_id) {
-          insertData.company_id = profile.company_id
-          console.log('[FDV-UE] La til company_id:', profile.company_id)
-        }
-      } catch (e) { console.log('[FDV-UE] company_id ikke funnet (OK):', e?.message) }
+      // company_id fra auth_company_id() — samme kilde som DEFAULT-verdien på
+      // tabellen. user_profiles ville gitt din egen bedrift under en støtteøkt.
+      // Får vi ingen id, utelates feltet så DEFAULT tar over.
+      const fdvBedriftId = await hentSkrivebedriftId()
+      if (fdvBedriftId) insertData.company_id = fdvBedriftId
       const { data, error } = await supabase.from('fdv_ue_requests').insert(insertData).select().single()
       console.log('[FDV-UE] Insert-resultat:', { data, error })
       if (error) throw error
@@ -49626,17 +50119,33 @@ function harModul(innst, modulId) {
 
 // Henter de tre kolonnene én gang og gir deg predikatet. Erstatter fem
 // separate active_modules-spørringer som hver manglet prøveperioden.
+//
+// TRE TILSTANDER, IKKE TO. «Vet ikke» er ikke det samme som «nei».
+// Svarer ikke spørringen — typisk uten nett — sto innstillinger igjen som null,
+// og harModul(null) returnerer false. Da fikk en betalende kunde uten dekning
+// salgspopupen «Bestill nå — 1 499 kr» på en modul bedriften eier.
+//
+// harModul(null) === false er RIKTIG og røres ikke: den brukes åtte steder, og
+// å snu den ville flippet tilgang også online i vinduet før data er lastet.
+// Den tredje tilstanden hører hjemme hos kalleren, som «ukjent». Regelen for
+// alle som leser den: ved ukjent skal vi ikke SELGE. Se kallstedene.
 function useModulTilgang() {
   const [innstillinger, setInnstillinger] = useState(null)
   const [laster, setLaster] = useState(true)
+  const [ukjent, setUkjent] = useState(false)
   useEffect(() => {
     let aktiv = true
     supabase.from('company_settings').select(MODUL_TILGANG_KOLONNER).limit(1).single()
-      .then(({ data }) => { if (aktiv) { setInnstillinger(data || null); setLaster(false) } })
-      .catch(() => { if (aktiv) setLaster(false) })
+      .then(({ data, error }) => {
+        if (!aktiv) return
+        if (error || !data) setUkjent(true)
+        else { setInnstillinger(data); setUkjent(false) }
+        setLaster(false)
+      })
+      .catch(() => { if (aktiv) { setUkjent(true); setLaster(false) } })
     return () => { aktiv = false }
   }, [])
-  return { innstillinger, laster, harModul: (modulId) => harModul(innstillinger, modulId) }
+  return { innstillinger, laster, ukjent, harModul: (modulId) => harModul(innstillinger, modulId) }
 }
 
 // ─── MIN BEDRIFT MODULE ───────────────────────────────────────────────────────
@@ -51354,6 +51863,792 @@ function EpostInnstillingerSeksjon({ settings, user, isMob, onSaved }) {
   )
 }
 
+// ── REGNSKAPSINTEGRASJON: FELLES GRUNNLAG ───────────────────────
+// Ingenting her er Tripletex-spesifikt. Fiken, PowerOffice og Visma kommer senere,
+// og da skal UI-et ikke bygges om — kun tabellen under utvides.
+const REGNSKAPSSYSTEM = {
+  tripletex:   { navn: 'Tripletex' },
+  fiken:       { navn: 'Fiken' },
+  poweroffice: { navn: 'PowerOffice' },
+  visma:       { navn: 'Visma' },
+}
+
+// MIDLERTIDIG: den gamle RPC-en tripletex_integration_status() returnerer ikke
+// hvilket system som er koblet til. Til integration_status() er kjørt i begge
+// prosjekter antar vi tripletex når svaret mangler provider.
+// NÅR STATUSEN SVARER MED PROVIDER OVERALT: slett denne ÉNE linjen og
+// «|| REGNSKAP_ANTATT» i useRegnskapssystem under. Ingenting annet.
+const REGNSKAP_ANTATT = 'tripletex'
+
+// Status hentes ÉN gang per sidelast og deles av alle kort. Uten cachen ville hvert
+// kunde- og prosjektkort gjort sitt eget RPC-kall bare for å avgjøre om en knapp vises.
+// Cachen er NØKLET PÅ BEDRIFT. Uten nøkkelen ville statusen fra én bedrift blitt
+// stående når man bytter bedrift uten full sidelast — for eksempel ved
+// støtteinnlogging hos en kunde — og da ville kundens prosjekter vist VÅR
+// tilkobling. Samme mønster som hentAktivPrislisteCached bruker allerede.
+const AV = { tilkoblet: false, provider: null, navn: '' }
+const _regnskapCache = {}          // companyId → { tilkoblet, provider, navn }
+function useRegnskapssystem() {
+  const { companyId } = useAuth()
+  const [info, setInfo] = useState(() => (companyId && _regnskapCache[companyId]) || AV)
+  useEffect(() => {
+    let avbrutt = false
+    // Ingen bedrift ennå (laster, eller utlogget) → vis ingenting.
+    if (!companyId) { setInfo(AV); return }
+    // Vis det vi vet om DENNE bedriften med en gang, aldri en annen bedrifts svar.
+    setInfo(_regnskapCache[companyId] || AV)
+    ;(async () => {
+      if (!_regnskapCache[companyId]) {
+        // Ny funksjon først, gammel som reserve. Da spiller det ingen rolle om
+        // App.jsx lastes opp før eller etter at SQL-en er kjørt.
+        let st = null
+        try { const r = await supabase.rpc('integration_status'); if (!r.error) st = r.data } catch (_) {}
+        if (!st) { try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) st = r.data } catch (_) {} }
+        st = st || { connection_status: 'not_configured' }
+        const provider = st.provider || REGNSKAP_ANTATT
+        _regnskapCache[companyId] = {
+          tilkoblet: st.connection_status === 'connected',
+          provider,
+          navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
+        }
+      }
+      if (!avbrutt) setInfo(_regnskapCache[companyId])
+    })()
+    return () => { avbrutt = true }
+  }, [companyId])
+  return info
+}
+
+// Leser feilen fra en Edge Function slik den faktisk lyder. Funksjonene legger en
+// forståelig norsk tekst i «error» og en teknisk detalj i «detail» — vi viser den
+// første i klartekst og gjemmer den andre bak «Vis teknisk detalj», så brukeren ikke
+// møter rå JSON, men vi ikke mister den heller.
+async function lesIntegrasjonsfeil(error, data) {
+  if (data && data.error) return { melding: String(data.error), detalj: data.detail ? String(data.detail) : '', reason: data.reason || '' }
+  let melding = (error && error.message) || 'Ukjent feil'
+  let detalj = '', reason = ''
+  try {
+    const b = await error.context.json()
+    if (b && b.error) melding = String(b.error)
+    if (b && b.detail) detalj = String(b.detail)
+    if (b && b.reason) reason = String(b.reason)
+  } catch (_) {}
+  return { melding, detalj, reason }
+}
+
+// All synk-logikk samlet i én hook, så knappen kan stå i kortets knapperad mens
+// feilboksen står i full bredde under headeren. En feilboks inne i en flex-rad
+// ville sprengt oppsettet.
+function useIntegrasjonSynk({ entitet, radId, alleredeSynket, forhaandssjekk, onFerdig }) {
+  const { companyId } = useAuth()
+  const appAlert = useAppAlert()
+  const { tilkoblet, provider, navn } = useRegnskapssystem()
+  const [jobber, setJobber] = useState(false)
+  const [feil, setFeil] = useState(null)
+  // Egen tilstand for den eksterne id-en. Prop-en kommer fra forelderens rad-objekt,
+  // og den peker fortsatt på den gamle raden etter en synk.
+  const [synketId, setSynketId] = useState(alleredeSynket || null)
+  useEffect(() => { setSynketId(alleredeSynket || null) }, [alleredeSynket])
+
+  const synk = async () => {
+    setFeil(null)
+    if (forhaandssjekk) { const videre = await forhaandssjekk(); if (!videre) return }
+    setJobber(true)
+    try {
+      // Funksjonsnavnet følger systemet: fiken-customer-sync når provider er fiken.
+      const { data, error } = await supabase.functions.invoke(`${provider}-${entitet}-sync`, { body: { companyId, ...radId } })
+      if (error || (data && data.error)) { setFeil(await lesIntegrasjonsfeil(error, data)); return }
+      const nyId = (data && (data.tripletexCustomerId ?? data.tripletexProjectId ?? data.externalId)) || null
+      if (nyId) setSynketId(nyId)
+      const h = (data && data.action) || 'ok'
+      appAlert({
+        message: h === 'created' ? `Opprettet i ${navn}`
+          : h === 'linked_existing' ? `Koblet til en eksisterende oppføring i ${navn}`
+          : h === 'noop' ? 'Allerede synket — ingenting å gjøre'
+          : `Synket til ${navn}`,
+        kind: 'success',
+      })
+      if (onFerdig) onFerdig()
+    } catch (e) {
+      setFeil({ melding: (e && e.message) || String(e), detalj: '', reason: '' })
+    } finally { setJobber(false) }
+  }
+
+  return { tilkoblet, provider, navn, jobber, feil, synketId, synk }
+}
+
+// Knappen. Samme visuelle vekt som «Rediger»: nøytral grå ramme, hvit bakgrunn,
+// fontWeight 500. Synk er en sjelden handling og skal ikke rope høyere enn naboene.
+function SynkKnapp({ synk, isMob }) {
+  if (!synk.tilkoblet) return null
+  return (
+    <button
+      onClick={synk.synk}
+      disabled={synk.jobber}
+      title={synk.synketId ? `Synk til ${synk.navn} på nytt` : `Synk til ${synk.navn}`}
+      style={{
+        padding: isMob ? '8px 10px' : '9px 16px', border: '1px solid #e2e8f0', borderRadius: '10px',
+        background: 'white', cursor: synk.jobber ? 'default' : 'pointer',
+        fontSize: isMob ? '12px' : '14px', fontWeight: '500',
+        color: synk.jobber ? '#94a3b8' : 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
+      }}
+    >
+      {synk.jobber ? 'Synker…' : isMob ? '↗ Synk' : (synk.synketId ? '↗ Synk på nytt' : `↗ Synk til ${synk.navn}`)}
+    </button>
+  )
+}
+
+// Merket står ved siden av statusmerket øverst, i samme pillestil som naboen, men
+// i dempet blått — det er opplysning, ikke status.
+function SynkMerke({ synk }) {
+  if (!synk.tilkoblet || !synk.synketId) return null
+  return (
+    <span
+      title={`${synk.navn}-id ${synk.synketId}`}
+      style={{ background: '#f0f9ff', color: '#0369a1', borderRadius: '999px', fontSize: '12px', fontWeight: '700', padding: '2px 10px', whiteSpace: 'nowrap' }}
+    >
+      {synk.navn}
+    </span>
+  )
+}
+
+// Feilboksen. Full bredde, under headeren. «ekstra» lar kortet legge inn en handling
+// som løser nettopp denne feilen — prosjektkortet bruker det til kundekoblingen.
+function SynkFeil({ synk, ekstra }) {
+  const [visDetalj, setVisDetalj] = useState(false)
+  if (!synk.tilkoblet || !synk.feil) return null
+  return (
+    <div style={{ marginTop: '12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '11px 13px', fontSize: '13px', color: '#991b1b', lineHeight: 1.5 }}>
+      <div style={{ fontWeight: '700', marginBottom: '3px' }}>Synk til {synk.navn} stoppet</div>
+      <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{synk.feil.melding}</div>
+      {ekstra}
+      {synk.feil.detalj && (
+        <div style={{ marginTop: '8px' }}>
+          <button onClick={() => setVisDetalj(v => !v)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#b91c1c', fontSize: '12px', fontWeight: '700', textDecoration: 'underline' }}>
+            {visDetalj ? 'Skjul teknisk detalj' : 'Vis teknisk detalj'}
+          </button>
+          {visDetalj && (
+            <div style={{ marginTop: '6px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '11px', background: 'white', border: '1px solid #fecaca', borderRadius: '8px', padding: '8px 10px' }}>
+              {synk.feil.detalj}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TIMER TIL REGNSKAPSSYSTEMET (DEL 5) ────────────────────────────────────
+// Hva brukeren skal gjøre når en time stoppes. Edge-funksjonen svarer med en
+// forståelig norsk melding OG en «reason»; meldingen forklarer HVA som er galt,
+// dette forklarer HVOR det rettes. Særlig employee_not_linked er viktig: det er
+// det første en ny kunde møter, siden ingen ansatte er koblet fra start.
+// {system} erstattes med navnet på det tilkoblede systemet ved visning, så teksten
+// aldri nevner Tripletex direkte.
+const TIME_STOPP_HJELP = {
+  employee_not_linked:      'Koble den ansatte under Min bedrift → Integrasjoner → Oppsett for synk. Ingen ansatte er koblet fra start, og koblingen må gjøres manuelt for hver enkelt — vi gjetter aldri på navn.',
+  missing_default_activity: 'Velg standardaktivitet under Min bedrift → Integrasjoner → Oppsett for synk.',
+  project_sync_required:    'Åpne prosjektet og trykk «Synk til {system}» der først.',
+  before_project_start:     'Rett prosjektets startdato, eller før timen på nytt med en dato innenfor prosjektperioden.',
+  not_approved:             'Få timen godkjent først. Bare godkjente timer kan sendes.',
+  overtime_not_supported:   'Overtid støttes ikke ennå. Timen må føres som normaltid, eller registreres direkte i regnskapssystemet.',
+  absence_not_supported:    'Fravær synkes ikke ennå. Registrer det direkte i regnskapssystemet.',
+  changed_after_sync:       'Timen er endret etter sending. Rett den i regnskapssystemet, eller kontakt regnskap.',
+  missing_project:          'Før timen på et prosjekt.',
+}
+
+function timeStoppHjelp(reason, navn) {
+  const t = TIME_STOPP_HJELP[reason]
+  return t ? t.replace(/\{system\}/g, navn || 'regnskapssystemet') : ''
+}
+
+// Sender ÉN godkjent time. Brukes både av per-rad-knappen og av samlesendingen,
+// så oppførselen er nøyaktig den samme uansett hvor man trykker.
+async function sendEnTime(provider, companyId, entryId) {
+  try {
+    const { data, error } = await supabase.functions.invoke(`${provider}-hours-sync`, { body: { companyId, entryId } })
+    if (error || (data && data.error)) {
+      const f = await lesIntegrasjonsfeil(error, data)
+      return { ok: false, ...f }
+    }
+    return { ok: true, action: (data && data.action) || 'created', eksternId: (data && data.tripletexEntryId) || null }
+  } catch (e) {
+    return { ok: false, melding: (e && e.message) || String(e), detalj: '', reason: '' }
+  }
+}
+
+// Status på én timerad: sendt / feilet / klar til sending. Vises kun for
+// GODKJENTE timer, og bare når et regnskapssystem er tilkoblet.
+function TimeSynkRad({ entry, isMob, onFerdig }) {
+  const { companyId } = useAuth()
+  const { tilkoblet, provider, navn } = useRegnskapssystem()
+  const [jobber, setJobber] = useState(false)
+  const [feil, setFeil] = useState(null)
+  const [sendtId, setSendtId] = useState(entry?.tripletex_entry_id || null)
+  useEffect(() => { setSendtId(entry?.tripletex_entry_id || null) }, [entry?.tripletex_entry_id])
+
+  const godkjent = (entry?.status || '') === 'Godkjent'
+  if (!tilkoblet || !godkjent) return null
+
+  const send = async () => {
+    setFeil(null); setJobber(true)
+    const r = await sendEnTime(provider, companyId, entry.id)
+    setJobber(false)
+    if (r.ok) { setSendtId(r.eksternId || true); if (onFerdig) onFerdig() }
+    else setFeil(r)
+  }
+
+  const lagretFeil = !sendtId && !feil && entry?.tripletex_sync_error ? { melding: entry.tripletex_sync_error, detalj: '', reason: '' } : null
+  const vist = feil || lagretFeil
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+        {sendtId ? (
+          <span style={{ background: '#f0f9ff', color: '#0369a1', border: '1px solid #bae6fd', borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '3px 10px' }}>
+            ✓ Sendt til {navn}
+          </span>
+        ) : (
+          <>
+            {vist && (
+              <span style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: '999px', fontSize: '11px', fontWeight: '700', padding: '3px 10px' }}>
+                Stoppet
+              </span>
+            )}
+            <button onClick={send} disabled={jobber} style={{ padding: isMob ? '9px 12px' : '7px 14px', border: '1px solid #e2e8f0', borderRadius: '8px', background: 'white', cursor: jobber ? 'default' : 'pointer', fontSize: '12px', fontWeight: '600', color: jobber ? '#94a3b8' : 'inherit' }}>
+              {jobber ? 'Sender…' : vist ? `Prøv igjen` : `↗ Send til ${navn}`}
+            </button>
+          </>
+        )}
+      </div>
+
+      {vist && (
+        <div style={{ marginTop: '7px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '9px', padding: '9px 11px', fontSize: '12px', color: '#991b1b', lineHeight: 1.5 }}>
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{vist.melding}</div>
+          {timeStoppHjelp(vist.reason, navn) && (
+            <div style={{ marginTop: '6px', paddingTop: '6px', borderTop: '1px solid #fecaca', fontWeight: '600' }}>
+              {timeStoppHjelp(vist.reason, navn)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Samlesending for én ukes godkjente timer. Sender én om gangen — regnskapssystemet
+// kobler hver time til prosjekt og aktivitet hver for seg, og en feil på én time
+// skal ikke stoppe de andre.
+function SendGodkjenteTimer({ entries, isMob, onFerdig }) {
+  const { companyId } = useAuth()
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const { tilkoblet, provider, navn } = useRegnskapssystem()
+  const [jobber, setJobber] = useState(false)
+  const [fremdrift, setFremdrift] = useState(null)   // { gjort, av }
+  const [resultat, setResultat] = useState(null)     // { sendt, stoppet: [{ tekst, melding, reason }] }
+
+  // Kun godkjente timer som ikke alt er sendt. Overtid og fravær filtreres bort
+  // her også, så tellingen stemmer med det som faktisk kan sendes.
+  const kandidater = (entries || []).filter(e =>
+    (e.status || '') === 'Godkjent' &&
+    !e.tripletex_entry_id &&
+    !e.absence_type &&
+    (Number(e.overtime_50) || 0) === 0 &&
+    (Number(e.overtime_100) || 0) === 0 &&
+    (Number(e.normal_hours) || 0) > 0
+  )
+
+  if (!tilkoblet || kandidater.length === 0) return null
+
+  const send = async () => {
+    const ok = await confirm({
+      message: `Send ${kandidater.length} godkjente ${kandidater.length === 1 ? 'time' : 'timer'} til ${navn}?`,
+      subMessage: `Bare godkjente normaltimer sendes. Overtid og fravær holdes utenfor. Timer som allerede er sendt, hoppes over.`,
+      confirmLabel: 'Send',
+    })
+    if (!ok) return
+
+    setJobber(true); setResultat(null)
+    const stoppet = []
+    let sendt = 0
+    for (let i = 0; i < kandidater.length; i++) {
+      const e = kandidater[i]
+      setFremdrift({ gjort: i, av: kandidater.length })
+      const r = await sendEnTime(provider, companyId, e.id)
+      if (r.ok) sendt++
+      else stoppet.push({ tekst: `${String(e.date).slice(0, 10)} · ${fmtHours(e.normal_hours)}t`, melding: r.melding, reason: r.reason })
+    }
+    setFremdrift(null); setJobber(false); setResultat({ sendt, stoppet })
+    if (stoppet.length === 0) appAlert({ message: `${sendt} ${sendt === 1 ? 'time' : 'timer'} sendt til ${navn}`, kind: 'success' })
+    if (onFerdig) onFerdig()
+  }
+
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <button onClick={send} disabled={jobber} style={{ width: '100%', padding: isMob ? '14px' : '12px', background: 'white', color: jobber ? '#94a3b8' : '#0369a1', border: '1px solid #bae6fd', borderRadius: '10px', cursor: jobber ? 'default' : 'pointer', fontSize: isMob ? '14px' : '14px', fontWeight: '700' }}>
+        {jobber
+          ? `Sender… ${fremdrift ? `${fremdrift.gjort + 1} av ${fremdrift.av}` : ''}`
+          : `↗ Send ${kandidater.length} godkjente ${kandidater.length === 1 ? 'time' : 'timer'} til ${navn}`}
+      </button>
+
+      {resultat && (
+        <div style={{ marginTop: '10px', background: resultat.stoppet.length ? '#fef2f2' : '#f0fdf4', border: `1px solid ${resultat.stoppet.length ? '#fecaca' : '#bbf7d0'}`, borderRadius: '10px', padding: '11px 13px', fontSize: '13px', color: resultat.stoppet.length ? '#991b1b' : '#166534', lineHeight: 1.5 }}>
+          <div style={{ fontWeight: '700', marginBottom: resultat.stoppet.length ? '6px' : 0 }}>
+            {resultat.sendt} sendt{resultat.stoppet.length ? `, ${resultat.stoppet.length} stoppet` : ''}
+          </div>
+          {resultat.stoppet.map((f, i) => (
+            <div key={i} style={{ marginTop: '7px', paddingTop: '7px', borderTop: '1px solid #fecaca' }}>
+              <div style={{ fontWeight: '700', fontSize: '12px' }}>{f.tekst}</div>
+              <div style={{ fontSize: '12px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{f.melding}</div>
+              {timeStoppHjelp(f.reason, navn) && (
+                <div style={{ fontSize: '12px', fontWeight: '600', marginTop: '3px' }}>{timeStoppHjelp(f.reason, navn)}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Oppretter en kunde uten å forlate prosjektskjemaet. Bare de to feltene Tripletex
+// faktisk krever: navn og organisasjonsnummer. Resten fylles ut i Kundeoversikt senere.
+// Den nye kunden velges automatisk, så brukeren ikke må lete den opp igjen.
+function NyKundeInline({ onOpprettet }) {
+  const appAlert = useAppAlert()
+  const { user } = useAuth()
+  const [apen, setApen] = useState(false)
+  const [navn, setNavn] = useState('')
+  const [orgnr, setOrgnr] = useState('')
+  const [lagrer, setLagrer] = useState(false)
+
+  const opprett = async () => {
+    const n = navn.trim()
+    const o = orgnr.replace(/\D/g, '')
+    if (!n) { appAlert({ message: 'Kunden må ha et navn', kind: 'warn' }); return }
+    if (o && o.length !== 9) {
+      appAlert({ message: 'Organisasjonsnummer må ha ni siffer', subMessage: `Du skrev ${o.length} siffer.`, kind: 'warn' })
+      return
+    }
+    setLagrer(true)
+    try {
+      // Samme kundenummer-tildeling som Kundeoversikt bruker.
+      const { data: alle } = await supabase.from('customers').select('customer_number')
+      const liste = alle || []
+      let customer_number = nextSequenceNumber(liste, 'K', 'customer_number', { withYear: false })
+      if (liste.some(k => k.customer_number === customer_number)) customer_number = customer_number + 'B'
+
+      const { data: ny, error } = await supabase
+        .from('customers')
+        .insert({ name: n, orgnr: o || null, type: 'bedrift', customer_number, created_by: user?.id, er_kunde: true })
+        .select('id, name, orgnr')
+        .single()
+      if (error) throw new Error(error.message)
+
+      appAlert({ message: `Kunden «${ny.name}» er opprettet og valgt`, kind: 'success' })
+      setApen(false); setNavn(''); setOrgnr('')
+      if (onOpprettet) onOpprettet(ny)
+    } catch (e) {
+      appAlert({ message: 'Kunne ikke opprette kunden', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLagrer(false) }
+  }
+
+  const felt = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '9px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+
+  if (!apen) {
+    return (
+      <button type="button" onClick={() => setApen(true)} style={{ marginTop: '6px', background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: '#059669', fontSize: '12px', fontWeight: '700', textDecoration: 'underline' }}>
+        + Ny kunde
+      </button>
+    )
+  }
+
+  return (
+    <div style={{ marginTop: '8px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '11px 12px' }}>
+      <div style={{ fontSize: '12px', fontWeight: '700', color: '#334155', marginBottom: '8px' }}>Ny kunde</div>
+      <input value={navn} onChange={e => setNavn(e.target.value)} placeholder="Navn på kunden" style={{ ...felt, marginBottom: '7px' }} aria-label="Navn på ny kunde" />
+      <input value={orgnr} onChange={e => setOrgnr(e.target.value)} placeholder="Organisasjonsnummer (ni siffer)" inputMode="numeric" style={{ ...felt, marginBottom: '4px' }} aria-label="Organisasjonsnummer" />
+      <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '9px' }}>
+        Org.nr kan stå tomt nå, men må fylles ut før kunden kan synkes til Tripletex.
+      </div>
+      <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap' }}>
+        <button type="button" onClick={opprett} disabled={lagrer} style={{ background: lagrer ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '9px', padding: '8px 15px', fontSize: '13px', fontWeight: '600', cursor: lagrer ? 'default' : 'pointer' }}>
+          {lagrer ? 'Oppretter…' : 'Opprett og velg'}
+        </button>
+        <button type="button" onClick={() => setApen(false)} disabled={lagrer} style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '9px', padding: '8px 15px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+          Avbryt
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// Gamle prosjekter har kundenavn som fritekst i client_name uten en ekte kobling i
+// customer_id. Tripletex krever en ekte kunde, så disse må kobles. Vi FORESLÅR treff
+// på org.nr eller navn, men kobler aldri av oss selv: feil kunde på et prosjekt gir
+// faktura til feil mottaker.
+// To varianter:
+//   variant="lenke" — dempet lenke i «🏢 Kunde»-kortet, der kunden vises. Ingen gul
+//     ramme: et prosjekt uten kunde er som regel ikke en feil, bare ikke koblet.
+//   variant="akutt" — inni den røde feilboksen når en synk stoppet på manglende
+//     kunde. Da står problemet og løsningen på samme sted.
+function KobleKunde({ project, isMob, variant = 'lenke', onFerdig }) {
+  const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const { tilkoblet, navn } = useRegnskapssystem()
+  const [apen, setApen] = useState(false)
+  const [soek, setSoek] = useState('')
+  const [treff, setTreff] = useState([])
+  const [laster, setLaster] = useState(false)
+  // Debouncet søketekst. Uten den gikk det ett databasekall per tastetrykk.
+  // Samme mønster og størrelsesorden som CRM-lista bruker allerede.
+  const [debSoek, setDebSoek] = useState('')
+
+  // Vises når prosjektet mangler en ekte kunde — enten det står et fritekstnavn der
+  // eller ingenting i det hele tatt. Tidligere krevde vi client_name, og prosjekter
+  // helt uten kundeinformasjon ble stående med feilmeldingen «velg en kunde» og ingen
+  // knapp å gjøre det med.
+  const trengsKobling = !project?.customer_id
+  const fritekstNavn = (project?.client_name || '').trim()
+
+  // Søk i DATABASEN, ikke i en nedlastet liste. Kundetabellen kan være stor, og
+  // PostgREST returnerer maks 1000 rader.
+  const finn = async (tekst) => {
+    const q = (tekst || '').trim()
+    if (q.length < 2) { setTreff([]); return }
+    setLaster(true)
+    try {
+      const siffer = q.replace(/\D/g, '')
+      const betingelser = [`name.ilike.%${q}%`]
+      if (siffer.length >= 9) betingelser.push(`orgnr.eq.${siffer}`)
+      const { data, error } = await supabase
+        .from('customers')
+        .select('id, name, orgnr, tripletex_customer_id')
+        .eq('er_kunde', true)
+        .or(betingelser.join(','))
+        .order('name', { ascending: true })
+        .limit(10)
+      if (error) throw new Error(error.message)
+      setTreff(data || [])
+    } catch (e) {
+      appAlert({ message: 'Kunne ikke søke etter kunder', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLaster(false) }
+  }
+
+  // Søk kjøres 300 ms etter siste tastetrykk, ikke på hvert.
+  useEffect(() => {
+    if (!apen) return
+    const t = setTimeout(() => { finn(debSoek) }, 300)
+    return () => clearTimeout(t)
+  }, [debSoek, apen])
+
+  const aapne = () => {
+    setApen(true)
+    // Har prosjektet et fritekstnavn, fyller vi det inn og lar effekten over søke.
+    // Har det ingenting, åpner vi et tomt søkefelt i stedet for å la brukeren stå fast.
+    setSoek(fritekstNavn)
+    setDebSoek(fritekstNavn)
+    if (!fritekstNavn) setTreff([])
+  }
+
+  const koble = async (kunde) => {
+    const ok = await confirm({
+      message: `Koble prosjektet til «${kunde.name}»?`,
+      subMessage: [
+        kunde.orgnr
+          ? `Org.nr ${kunde.orgnr}.`
+          : `Kunden mangler org.nr. Den må ha org.nr før prosjektet kan synkes til ${navn}.`,
+        fritekstNavn
+          ? `Prosjektet står i dag med kundenavnet «${fritekstNavn}» som ren tekst.`
+          : 'Prosjektet har ingen kunde registrert i dag.',
+      ].join(' '),
+      confirmLabel: 'Koble til kunde',
+    })
+    if (!ok) return
+    try {
+      const { error } = await supabase.from('projects').update({ customer_id: kunde.id, client_name: kunde.name }).eq('id', project.id)
+      if (error) throw new Error(error.message)
+      appAlert({ message: 'Prosjektet er koblet til kunden', kind: 'success' })
+      setApen(false)
+      if (onFerdig) onFerdig()
+    } catch (e) {
+      appAlert({ message: 'Kunne ikke koble kunden', subMessage: (e && e.message) || String(e), kind: 'error' })
+    }
+  }
+
+  if (!tilkoblet || !trengsKobling) return null
+
+  const akutt = variant === 'akutt'
+  const inp = { width: '100%', padding: '9px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }
+  const lenkestil = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: '13px', fontWeight: '600', textDecoration: 'underline', textUnderlineOffset: '2px', textAlign: 'left', color: akutt ? '#b91c1c' : '#059669' }
+
+  return (
+    <div>
+      {akutt && (
+        <div style={{ fontSize: '13px', color: '#991b1b', lineHeight: 1.5, marginBottom: '8px' }}>
+          {fritekstNavn
+            ? <>Kundenavnet «{fritekstNavn}» står som ren tekst.</>
+            : <>Prosjektet har ingen kunde registrert.</>}
+        </div>
+      )}
+
+      {!apen ? (
+        <button onClick={aapne} style={lenkestil}>Koble til kunde</button>
+      ) : (
+        <div>
+          <input
+            value={soek}
+            onChange={e => { setSoek(e.target.value); setDebSoek(e.target.value) }}
+            placeholder="Søk på navn eller organisasjonsnummer"
+            style={{ ...inp, marginBottom: '8px' }}
+            aria-label="Søk etter kunde"
+          />
+          {laster ? (
+            <div style={{ fontSize: '13px', color: '#64748b' }}>Søker…</div>
+          ) : treff.length === 0 ? (
+            <div style={{ fontSize: '13px', color: '#64748b' }}>
+              {soek.trim().length < 2
+                ? 'Søk på kundens navn eller organisasjonsnummer. Minst to tegn.'
+                : 'Ingen treff. Opprett kunden i Kundeoversikt først — så kan du koble den her.'}
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {treff.map(k => (
+                <button key={k.id} onClick={() => koble(k)} style={{ display: 'flex', flexDirection: isMob ? 'column' : 'row', alignItems: isMob ? 'flex-start' : 'center', justifyContent: 'space-between', gap: isMob ? '2px' : '10px', textAlign: 'left', background: 'white', border: '1px solid #e2e8f0', borderRadius: '9px', padding: '9px 11px', cursor: 'pointer', width: '100%' }}>
+                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{k.name}</span>
+                  <span style={{ fontSize: '12px', color: k.orgnr ? '#64748b' : '#b45309', fontWeight: k.orgnr ? '400' : '700' }}>
+                    {k.orgnr ? `Org.nr ${k.orgnr}` : 'Mangler org.nr'}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setApen(false)} style={{ ...lenkestil, marginTop: '8px', fontSize: '12px', fontWeight: '700', color: akutt ? '#b91c1c' : '#64748b' }}>Avbryt</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── TRIPLETEX: OPPSETT AV ANSATTE OG STANDARDAKTIVITET (DEL 3) ─────────────
+// Vises kun når integrasjonen er tilkoblet. Henter ansatte og aktiviteter fra
+// Tripletex via Edge Function tripletex-lookup (skrivefri — kun GET mot Tripletex).
+//
+// Koblingen ansatt → Tripletex-ansatt er ALLTID eksplisitt. Vi gjetter aldri på navn:
+// to personer kan hete det samme, og feil kobling gir timer på feil person, altså feil
+// lønn. Ukoblede ansatte vises tydelig i stedet for å bli forsøkt gjettet.
+//
+// Standardaktivitet lagres per bedrift. Tripletex krever en aktivitet på hver time, og
+// vårt eget aktivitetsfelt er fritekst som ikke kan mappes trygt.
+function TripletexOppsett({ companyId, isMob }) {
+  const appAlert = useAppAlert()
+  const [laster, setLaster] = useState(true)
+  const [feil, setFeil] = useState(null)          // { melding, detalj }
+  const [ttAnsatte, setTtAnsatte] = useState([])
+  const [ttAktiviteter, setTtAktiviteter] = useState([])
+  const [notat, setNotat] = useState('')
+  const [ansatte, setAnsatte] = useState([])
+  const [aktivitet, setAktivitet] = useState('')
+  const [lagrerAktivitet, setLagrerAktivitet] = useState(false)
+  const [lagrerAnsatt, setLagrerAnsatt] = useState(null)   // employees.id som lagres nå
+
+  // Henter Tripletex-feilen slik den faktisk lyder. Edge-funksjonen legger Tripletex'
+  // egen tekst i feltet «error»; uten dette ville brukeren bare fått «kunne ikke hente».
+  const lesFeilmelding = async (error, data) => {
+    if (data && data.error) return String(data.error)
+    let d = (error && error.message) || 'Ukjent feil'
+    try { const b = await error.context.json(); if (b && b.error) d = String(b.error) } catch (_) {}
+    return d
+  }
+
+  const last = async () => {
+    setLaster(true); setFeil(null)
+    try {
+      // Egne ansatte: sortert i DATABASEN, ikke i frontend.
+      const { data: egne, error: eErr } = await supabase
+        .from('employees')
+        .select('id, first_name, last_name, tripletex_employee_id')
+        .order('first_name', { ascending: true })
+        .order('last_name', { ascending: true })
+        .limit(1000)
+      if (eErr) throw new Error(`Kunne ikke hente ansatte fra En Plattform: ${eErr.message}`)
+      setAnsatte(egne || [])
+
+      // Gjeldende standardaktivitet.
+      try {
+        const { data: akt } = await supabase.rpc('tripletex_get_default_activity')
+        setAktivitet(akt === null || akt === undefined ? '' : String(akt))
+      } catch (_) { setAktivitet('') }
+
+      // Listene fra Tripletex.
+      const { data, error } = await supabase.functions.invoke('tripletex-lookup', { body: { companyId } })
+      if (error || (data && data.error)) {
+        setFeil({ melding: 'Tripletex svarte med en feil', detalj: await lesFeilmelding(error, data) })
+        setTtAnsatte([]); setTtAktiviteter([]); setNotat('')
+        return
+      }
+      setTtAnsatte((data && data.employees) || [])
+      setTtAktiviteter((data && data.activities) || [])
+      setNotat((data && data.note) || '')
+    } catch (e) {
+      setFeil({ melding: 'Kunne ikke hente oppsettet', detalj: (e && e.message) || String(e) })
+    } finally { setLaster(false) }
+  }
+  // [companyId], ikke []. Ansattlister, koblinger og standardaktivitet tilhører ÉN
+  // bedrift. Tilstanden tømmes først, så ingenting fra forrige bedrift vises mens
+  // det nye hentes.
+  useEffect(() => {
+    setTtAnsatte([]); setTtAktiviteter([]); setAnsatte([]); setAktivitet(''); setNotat(''); setFeil(null)
+    last()
+  }, [companyId])
+
+  const velgAktivitet = async (verdi) => {
+    const forrige = aktivitet
+    setAktivitet(verdi); setLagrerAktivitet(true)
+    try {
+      const { error } = await supabase.rpc('tripletex_set_default_activity', {
+        p_activity_id: verdi === '' ? null : Number(verdi),
+      })
+      if (error) throw new Error(error.message)
+      appAlert({ message: 'Standardaktivitet lagret', kind: 'success' })
+    } catch (e) {
+      setAktivitet(forrige)
+      appAlert({ message: 'Kunne ikke lagre standardaktivitet', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLagrerAktivitet(false) }
+  }
+
+  const koble = async (ansattId, verdi) => {
+    const forrige = ansatte
+    const ny = verdi === '' ? null : Number(verdi)
+    setAnsatte(rader => rader.map(r => (r.id === ansattId ? { ...r, tripletex_employee_id: ny } : r)))
+    setLagrerAnsatt(ansattId)
+    try {
+      // Går via RPC, ikke rett på tabellen. Dette var det ENESTE stedet
+      // nettleseren skrev en integrasjonskobling selv. RPC-en er SECURITY
+      // DEFINER, henter bedriften fra auth_company_id(), sjekker at ansatten
+      // tilhører den, skriver external_links OG speiler til den gamle kolonnen
+      // så lenge dobbeltskrivingen varer.
+      const { error } = await supabase.rpc('sett_ekstern_kobling_ansatt', {
+        p_employee_id: ansattId,
+        p_external_id: ny == null ? null : String(ny),
+      })
+      if (error) throw new Error(error.message)
+    } catch (e) {
+      setAnsatte(forrige)
+      appAlert({ message: 'Kunne ikke lagre koblingen', subMessage: (e && e.message) || String(e), kind: 'error' })
+    } finally { setLagrerAnsatt(null) }
+  }
+
+  const navn = (a) => `${a.first_name || ''} ${a.last_name || ''}`.trim() || '(uten navn)'
+  const antallKoblet = ansatte.filter(a => a.tripletex_employee_id).length
+  const antallMangler = ansatte.length - antallKoblet
+
+  const ramme = { marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #e2e8f0' }
+  const overskrift = { margin: '0 0 4px', fontSize: isMob ? '15px' : '16px', fontWeight: '700', color: '#0f172a' }
+  const hjelp = { margin: '0 0 14px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }
+  const merkelapp = { display: 'block', fontSize: '13px', fontWeight: '600', color: '#334155', marginBottom: '6px' }
+  const velger = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', background: 'white', boxSizing: 'border-box', maxWidth: '100%' }
+  const rad = { display: 'flex', flexDirection: isMob ? 'column' : 'row', alignItems: isMob ? 'stretch' : 'center', gap: isMob ? '6px' : '12px', padding: '10px 0', borderBottom: '1px solid #f1f5f9' }
+  const radNavn = { flex: isMob ? 'none' : '0 0 40%', fontSize: '14px', fontWeight: '600', color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }
+  const prikk = (koblet) => ({ width: '8px', height: '8px', borderRadius: '999px', background: koblet ? '#16a34a' : '#f59e0b', flexShrink: 0 })
+
+  return (
+    <div style={ramme}>
+      <h3 style={overskrift}>Oppsett for synk</h3>
+      <p style={hjelp}>
+        Før timer kan sendes til Tripletex må hver ansatt kobles til riktig person i Tripletex,
+        og bedriften må velge én standardaktivitet. Listene hentes fra Tripletex.
+      </p>
+
+      {laster ? (
+        <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Henter lister fra Tripletex…</div>
+      ) : feil ? (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '10px', padding: '12px 14px', fontSize: '13px', color: '#991b1b' }}>
+          <div style={{ fontWeight: '700', marginBottom: '4px' }}>{feil.melding}</div>
+          <div style={{ marginBottom: '10px' }}>Dette er svaret fra Tripletex, uendret:</div>
+          <div style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: '12px', background: 'white', border: '1px solid #fecaca', borderRadius: '8px', padding: '9px 11px', marginBottom: '10px' }}>
+            {feil.detalj}
+          </div>
+          <button onClick={last} style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '9px 16px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>Prøv igjen</button>
+        </div>
+      ) : (
+        <>
+          {/* ── STANDARDAKTIVITET ── */}
+          <div style={{ marginBottom: '20px' }}>
+            <label style={merkelapp} htmlFor="tt-aktivitet">Standardaktivitet for timer</label>
+            <select
+              id="tt-aktivitet"
+              value={aktivitet}
+              disabled={lagrerAktivitet || ttAktiviteter.length === 0}
+              onChange={e => velgAktivitet(e.target.value)}
+              style={velger}
+            >
+              <option value="">{ttAktiviteter.length === 0 ? 'Ingen aktiviteter i Tripletex' : 'Ikke valgt'}</option>
+              {ttAktiviteter.map(a => <option key={a.id} value={String(a.id)}>{a.name}</option>)}
+            </select>
+            {notat && (
+              <div style={{ marginTop: '8px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '10px 12px', fontSize: '13px', color: '#78350f', lineHeight: 1.5 }}>
+                {notat}
+              </div>
+            )}
+          </div>
+
+          {/* ── ANSATTKOBLING ── */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+            <label style={{ ...merkelapp, marginBottom: 0 }}>Koble ansatte til Tripletex</label>
+            {ansatte.length > 0 && (
+              <span style={{ fontSize: '13px', fontWeight: '700', color: antallMangler > 0 ? '#b45309' : '#166534' }}>
+                {antallMangler > 0
+                  ? `${antallMangler} av ${ansatte.length} mangler kobling`
+                  : `Alle ${ansatte.length} er koblet`}
+              </span>
+            )}
+          </div>
+          <p style={{ margin: '0 0 6px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
+            Velg selv hvem som er hvem. Vi kobler aldri automatisk på navn — to personer kan
+            hete det samme, og feil kobling gir timer på feil person.
+          </p>
+
+          {ansatte.length === 0 ? (
+            <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Ingen ansatte registrert i En Plattform ennå.</div>
+          ) : (
+            <div>
+              {ansatte.map(a => (
+                <div key={a.id} style={rad}>
+                  <div style={radNavn}>
+                    <span style={prikk(!!a.tripletex_employee_id)} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{navn(a)}</span>
+                    {!a.tripletex_employee_id && (
+                      <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '2px 8px', flexShrink: 0 }}>Ikke koblet</span>
+                    )}
+                  </div>
+                  <select
+                    value={a.tripletex_employee_id ? String(a.tripletex_employee_id) : ''}
+                    disabled={lagrerAnsatt === a.id || ttAnsatte.length === 0}
+                    onChange={e => koble(a.id, e.target.value)}
+                    style={{ ...velger, flex: '1 1 auto' }}
+                    aria-label={`Tripletex-ansatt for ${navn(a)}`}
+                  >
+                    <option value="">{ttAnsatte.length === 0 ? 'Ingen ansatte i Tripletex' : 'Ikke koblet'}</option>
+                    {ttAnsatte.map(t => <option key={t.id} value={String(t.id)}>{t.name}</option>)}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: '14px' }}>
+            <button onClick={last} style={{ background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '9px 16px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+              Hent listene på nytt fra Tripletex
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── TRIPLETEX-INTEGRASJON (Innstillinger → Integrasjoner) ──────────────────
 // Lar admin/eier lime inn bedriftens Tripletex employee-token. Tokenet sendes til
 // Edge Function tripletex-session (krypteres server-side) og kan ALDRI leses tilbake
@@ -51366,8 +52661,12 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
   const [tokenInput, setTokenInput] = useState('')
   const [bytter, setBytter] = useState(false)
   const [jobber, setJobber] = useState(false)
+  const [visVeiviser, setVisVeiviser] = useState(null)  // null = brukeren har ikke valgt selv ennå
 
   const loadStatus = async () => {
+    // setLaster(true) FØRST: uten den ville forrige bedrifts status blitt stående
+    // synlig mens den nye hentes, ved bytte av bedrift uten sidelast.
+    setLaster(true)
     try {
       const { data, error } = await supabase.rpc('tripletex_integration_status')
       if (error) throw error
@@ -51377,10 +52676,18 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
       setStatus({ connection_status: 'not_configured', has_token: false })
     } finally { setLaster(false) }
   }
-  useEffect(() => { loadStatus() }, [])
+  // [companyId], ikke []. Byttes bedrift uten full sidelast — for eksempel ved
+  // støtteinnlogging — skal statusen hentes for den nye bedriften, ikke bli stående.
+  useEffect(() => {
+    setStatus(null); setTokenInput(''); setBytter(false); setVisVeiviser(null)
+    loadStatus()
+  }, [companyId])
 
   const harToken = !!status?.has_token
   const cs = status?.connection_status || 'not_configured'
+  // Veiviseren står åpen så lenge ingen nøkkel er lagret — det er da den trengs.
+  // Er nøkkelen på plass, er den slått sammen, men fortsatt ett klikk unna.
+  const veiviserApen = visVeiviser === null ? !harToken : visVeiviser
   const fmtTid = (t) => { try { return t ? new Date(t).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' }) : '' } catch (_) { return '' } }
 
   const sv = {
@@ -51424,6 +52731,10 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
   const inp = { width: '100%', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '14px', outline: 'none', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }
   const btnPrimar = { background: jobber ? '#94a3b8' : '#059669', color: 'white', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: jobber ? 'default' : 'pointer' }
   const btnSekundar = { background: '#f1f5f9', color: '#334155', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 18px', fontSize: '14px', fontWeight: '600', cursor: jobber ? 'default' : 'pointer' }
+  const veiviserRamme = { border: '1px solid #e2e8f0', borderRadius: '12px', background: '#f8fafc', marginBottom: '16px', overflow: 'hidden' }
+  const veiviserTopp = { width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', padding: isMob ? '12px 14px' : '13px 18px', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', font: 'inherit', boxSizing: 'border-box' }
+  const steg = { marginBottom: '12px' }
+  const advarselBoks = { marginTop: '14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '10px', padding: '11px 13px', fontSize: '13px', color: '#78350f', lineHeight: 1.55 }
 
   return (
     <div style={kort}>
@@ -51434,6 +52745,60 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
       <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#64748b', lineHeight: 1.5 }}>
         Koble bedriften til Tripletex (regnskap) for å synke kunder, prosjekter og godkjente timer. Nøkkelen lagres kryptert og kan aldri leses tilbake.
       </p>
+
+      {/* ── TILKOBLINGSVEIVISER ──────────────────────────────────────────────────
+          Fire steg fra «har ikke Tripletex ennå» til «nøkkelen er limt inn». Ordlyden
+          sier gjennomgående «du eller regnskapsføreren din»: i små byggebedrifter er
+          det oftest en ekstern regnskapsfører som administrerer Tripletex-kontoen, og
+          da er det bare den personen som faktisk kan aktivere API-modulen og lage
+          nøkkelen. Rekkefølgen er ikke tilfeldig — steg 2 må gjøres før steg 3, ellers
+          finnes ikke menypunktet nøkkelen lages fra. */}
+      <div style={veiviserRamme}>
+        <button type="button" onClick={() => setVisVeiviser(!veiviserApen)} aria-expanded={veiviserApen} style={veiviserTopp}>
+          <span style={{ fontWeight: '700', fontSize: isMob ? '14px' : '15px', color: '#0f172a' }}>Slik lager du nøkkelen</span>
+          <span style={{ color: '#64748b', fontSize: '13px', fontWeight: '600', flexShrink: 0 }}>{veiviserApen ? 'Skjul ▲' : 'Vis ▼'}</span>
+        </button>
+
+        {veiviserApen && (
+          <div style={{ padding: isMob ? '0 14px 14px' : '0 18px 18px' }}>
+            <ol style={{ margin: 0, paddingLeft: '20px', fontSize: '13px', color: '#334155', lineHeight: 1.6 }}>
+              <li style={steg}>
+                <strong>Bedriften må ha sitt eget Tripletex-abonnement.</strong><br />
+                En Plattform kan ikke opprette en Tripletex-konto for deg. Har ikke bedriften
+                Tripletex fra før, må du eller regnskapsføreren din skaffe det først — direkte
+                hos Tripletex, eller gjennom regnskapsføreren som allerede fører regnskapet.
+              </li>
+              <li style={steg}>
+                <strong>En administrator må aktivere API-modulen i Tripletex først.</strong><br />
+                Dette må gjøres før du går videre til steg 3. Er ikke API-modulen aktivert,
+                finnes ikke menypunktet «API-tilgang» i Tripletex i det hele tatt — da er det
+                ingenting å lete etter. Du eller regnskapsføreren din må være administrator i
+                Tripletex-bedriften for å aktivere modulen.
+              </li>
+              <li style={steg}>
+                <strong>Lag nøkkelen i Tripletex.</strong><br />
+                Når API-modulen er aktivert, går du eller regnskapsføreren din til
+                <strong> Min profil</strong> → <strong>API-tilgang</strong> → <strong>Ny nøkkel</strong>.
+                Skriv <strong>En Plattform</strong> som applikasjonsnavn. Nøkkelen vises bare
+                én gang — kopier den med det samme.
+              </li>
+              <li style={{ ...steg, marginBottom: 0 }}>
+                <strong>Lim nøkkelen inn i feltet under</strong> og trykk «Lagre og test tilkobling».
+                Vi tester mot Tripletex med en gang, så du ser om den virker før du går videre.
+              </li>
+            </ol>
+
+            <div style={advarselBoks}>
+              <div style={{ fontWeight: '700', marginBottom: '3px' }}>Viktig om rettigheter</div>
+              Nøkkelen arver rettighetene til den som lager den. Lager du eller regnskapsføreren
+              din nøkkelen med en bruker som har begrenset tilgang i Tripletex, vil tilkoblingen
+              se ut til å virke nå, men synkingen kan feile uforklarlig senere — på akkurat de
+              kundene, prosjektene eller timene den brukeren ikke får se. Bruk en bruker som har
+              tilgang til det som skal synkes.
+            </div>
+          </div>
+        )}
+      </div>
 
       {laster ? (
         <div style={{ color: '#94a3b8', fontSize: '14px', padding: '8px 0' }}>Laster status…</div>
@@ -51468,6 +52833,10 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
               </div>
             </div>
           )}
+
+          {/* Oppsett av ansatte og standardaktivitet — kun når tilkoblingen faktisk
+              virker. Er den ikke det, har vi ingen sesjon å hente listene med. */}
+          {cs === 'connected' && <TripletexOppsett companyId={companyId} isMob={isMob} />}
         </>
       )}
     </div>
@@ -51476,11 +52845,16 @@ function TripletexIntegrasjonSeksjon({ companyId, isMob }) {
 
 function MinBedriftPage() {
   const { user, companyId, role, isPlatformOwner } = useAuth()
-  const kanIntegrasjon = isPlatformOwner || role === 'admin' || role === 'superadmin'
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const [tab, setTab] = useState('info')
   const [settings, setSettings] = useState(null)
+  // Fanen «Integrasjoner» er SKJULT som standard og slås på per bedrift med
+  // company_settings.tripletex_integrasjon_synlig = true. Mangler kolonnen (SQL-en er
+  // ikke kjørt ennå) blir verdien undefined; mangler raden er settings null. Begge
+  // veier gir skjult fane, ikke krasj. Rollekravet gjelder i TILLEGG, ikke i stedet.
+  const integrasjonSynlig = settings?.tripletex_integrasjon_synlig === true
+  const kanIntegrasjon = integrasjonSynlig && (isPlatformOwner || role === 'admin' || role === 'superadmin')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [logoUploading, setLogoUploading] = useState(false)
@@ -51506,7 +52880,10 @@ function MinBedriftPage() {
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [])
+  // [companyId], ikke []. Byttes bedrift uten full sidelast, må settings hentes
+  // på nytt — ellers står forrige bedrifts verdier igjen, inkludert flagget
+  // tripletex_integrasjon_synlig som avgjør om Integrasjoner-fanen vises.
+  useEffect(() => { setSettings(null); load() }, [companyId])
 
   // ── Stripe-abonnement ──
   const [starterAbo, setStarterAbo] = useState(false)
@@ -52354,6 +53731,19 @@ function rolleKanSlette(role) { return role === 'admin' || role === 'leder' }
 // hjelper bare hvis noen oppdager feilen. Ansatt kan fortsatt lage VARIANTER i
 // biblioteket og bruke «Oppdater priser» på sine egne kalkyler.
 function rolleKanStyrePrisgrunnlag(role) { return role === 'admin' || role === 'leder' }
+
+// Kan denne rollen SE innkjøpsprisene i prisboken?
+//
+// Speiler RLS-policyen rbac_okonomi_sel på prisbok og prislister, som er
+// RESTRICTIVE: auth_role() in ('admin','leder','les') OR is_platform_owner().
+// «ansatt» står bevisst utenfor — innkjøpspriser er økonomidata. Plattformeier
+// legges til av KALLEREN (useAuth), som er den som vet det; denne funksjonen
+// dekker rolledelen. Endres policyen, må begge endres i samme runde, ellers
+// lyver grensesnittet om hva brukeren får se.
+//
+// Prisene som ALT står på materiallinjene i en kalkyle er ikke berørt: de er
+// lagret på raden, og vises som før for alle.
+function rolleKanSePriser(role) { return role === 'admin' || role === 'leder' || role === 'les' }
 
 // Kan denne rollen REDIGERE en bestemt modul? Les kan aldri; ansatt er view-only på enkelte (Ordre/Endringer).
 function rolleKanRedigereModul(role, navId) {
@@ -53680,11 +55070,13 @@ const BIM_KALKYLE_MODULER = ['kalkulator', 'bim_kalkyle']
 // Hook for å hente BIM-Kalkyle-status. Leser nå de samme tre kolonnene som
 // ruten, så modulen og navigasjonen ikke kan svare ulikt på samme spørsmål.
 function useBimKalkyleStatus() {
-  const { innstillinger, laster } = useModulTilgang()
+  const { innstillinger, laster, ukjent } = useModulTilgang()
+  // Ukjent teller som «har» her. Vi selger ikke noe vi ikke vet at mangler.
   return {
     innstillinger,
-    hasKalkulator: harModul(innstillinger, 'kalkulator'),
-    hasBimKalkyle: harModul(innstillinger, BIM_KALKYLE_MODULER),
+    ukjent,
+    hasKalkulator: ukjent || harModul(innstillinger, 'kalkulator'),
+    hasBimKalkyle: ukjent || harModul(innstillinger, BIM_KALKYLE_MODULER),
     loading: laster,
   }
 }
@@ -53695,8 +55087,10 @@ function useBimKalkyleStatus() {
 function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   // Samme kilde som ruten og modulen. Har bedriften kalkulator — enten kjoept
   // eller via proeveperioden — vises den korte varianten uten basis-prislinjene.
-  const { innstillinger: uInnst, laster: loading } = useModulTilgang()
-  const hasBasis = loading ? true : harModul(uInnst, 'kalkulator')
+  const { innstillinger: uInnst, laster: loading, ukjent } = useModulTilgang()
+  // «laster» ble alt behandlet som ja her. «ukjent» hører til samme kategori:
+  // vi vet ikke, og da skal vi ikke legge på basis-prislinjene og be om penger.
+  const hasBasis = (loading || ukjent) ? true : harModul(uInnst, 'kalkulator')
 
   const totalPrice = hasBasis ? 1899 : 3398
   const mobUp = typeof window !== 'undefined' && window.innerWidth < 768
@@ -59433,13 +60827,36 @@ function rangerTreff(rad, soeketermSanitisert, soekeOrd) {
 }
 
 // Hovedsøkefunksjonen. Returnerer rangerte, dedupliserte resultater.
+// Forklaringen når prisboken er stengt for rollen.
+//
+// sok_prisbok er SECURITY DEFINER og omgår RLS, så uten en rollesjekk der ville
+// en ansatt kunnet søke opp innkjøpsprisene likevel. Sjekken ligger nå i
+// funksjonen, og da får klienten tomt svar. Et søk som bare gir «ingen treff»
+// ser ut som en feil — brukeren leter videre og melder det inn. Derfor sier vi
+// hvorfor, og hva som fortsatt virker.
+const PRIS_TILGANG_TEKST = 'Innkjøpsprisene er økonomidata, og din rolle har ikke tilgang til prisboken. Prisene som alt står på materiallinjene vises som før. Skal en vare kobles eller en pris oppdateres, må admin eller leder gjøre det.'
+
+function PrisTilgangNotis({ kompakt }) {
+  return (
+    <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding: kompakt ? '8px 10px' : '12px 14px',
+      display:'flex', alignItems:'flex-start', gap:'8px' }}>
+      <span style={{ fontSize: kompakt ? '13px' : '15px', lineHeight:1.2, flexShrink:0 }}>🔒</span>
+      <div style={{ fontSize: kompakt ? '11px' : '12px', color:'#475569', lineHeight:1.5 }}>{PRIS_TILGANG_TEKST}</div>
+    </div>
+  )
+}
+
 async function utforPrisbokSoek({
   userId,
   soeketerm,
   maxResultater = 10,
   kategoriFilter = null,
+  kanSePriser = true,
 }) {
   if (!userId) return []
+  // Rollesjekken ligger i sok_prisbok. Her sparer vi den dømte rundturen — og
+  // kalleren viser PrisTilgangNotis i stedet for «ingen treff».
+  if (!kanSePriser) return []
   const renTerm = sanitiserSoeketerm(soeketerm)
   if (!renTerm || renTerm.length < 2) return []
 
@@ -59463,7 +60880,15 @@ async function utforPrisbokSoek({
       p_maks: 100,
     })
     if (error) {
-      console.warn('[prisbok] sok_prisbok feilet:', error.message)
+      // 42501 = insufficient_privilege: rollesjekken i sok_prisbok avviste kallet.
+      // Kommer den hit, er den klientside speilingen (rolleKanSePriser) ute av takt
+      // med policyen i databasen — og da viser vi «ingen treff» der vi skulle vist
+      // forklaringen. Loggen sier det tydelig, slik at det er til å finne.
+      if (error.code === '42501') {
+        console.warn('[prisbok] sok_prisbok nektet tilgang for denne rollen. Sjekk at rolleKanSePriser() stemmer med rbac_okonomi_sel.')
+      } else {
+        console.warn('[prisbok] sok_prisbok feilet:', error.message)
+      }
       return []
     }
     rader = data || []
@@ -59505,7 +60930,7 @@ async function utforPrisbokSoek({
 
 // React hook som wrapper utforPrisbokSoek
 function usePrisbokSoek() {
-  const { user, companyId } = useAuth()
+  const { user, companyId, kanSePriser } = useAuth()
   const [aktivPrislisteKlar, setAktivPrislisteKlar] = useState(false)
 
   // Forhåndsinnlast aktiv prisliste når brukeren er klar
@@ -59518,11 +60943,12 @@ function usePrisbokSoek() {
     return utforPrisbokSoek({
       userId: user?.id,
       soeketerm,
+      kanSePriser,
       ...opts,
     })
-  }, [user?.id])
+  }, [user?.id, kanSePriser])
 
-  return { sok, aktivPrislisteKlar }
+  return { sok, aktivPrislisteKlar, kanSePriser }
 }
 
 // ─── KOBLING AV MATERIALLINJER MOT PRISLISTE (Oppgave 2) ─────────────────────
@@ -59942,40 +61368,245 @@ const ENHET_NAVN = {
 }
 function enhetTekst(kanonisk) { return ENHET_NAVN[kanonisk] || kanonisk }
 
-// Enheter der prisen gjelder en hel leveranse, ikke et areal. Bare disse er
-// kandidater for rull→m²-omregning.
+// Interne felt på en materiallinje — de som starter med _. ÉN kilde til sannhet:
+// hvitelisten i bibliotekTilBygningsdel bygges FRA denne listen, så et felt som
+// føres opp under `lagres` blir automatisk med når en bygningsdel hentes fra
+// biblioteket. Det var nettopp den drifta som ga det falske rull-varselet:
+// _omregning ble skrevet til biblioteket, men ikke lest tilbake.
+//
+//   lagres     — hører til linjen og skal overleve lagring
+//   lagresIkke — arbeidsflagg som bare gjelder i økten de ble satt i
+//
+// tests/materiallinje-felt.mjs feiler dersom et _-felt brukes på en
+// materiallinje uten å stå i én av de to listene.
+const MAT_INTERNE_FELT = {
+  lagres: ['_omregning', '_prisEnhet'],
+  lagresIkke: ['_ny', '_varselVist'],
+}
+
+// Enheter der prisen gjelder en hel leveranse, ikke et areal. Disse utløser
+// VARSELET når linjen står i m² eller løpemeter.
 const LEVERANSE_ENHETER = new Set(['rul', 'stk', 'pk'])
 
-// Rimelighetsgrenser for en rull byggduk. De er der for å stoppe mønsteret fra
-// å treffe noe som ikke er en rull: «Grunnmur tykk 0,125x8m» ville gitt 1 m²,
-// men 0,125 m er en TYKKELSE, ikke en rullbredde.
-const RULL_MIN_BREDDE = 0.5,  RULL_MAKS_BREDDE = 5
-const RULL_MIN_LENGDE = 5,    RULL_MAKS_LENGDE = 250
-const RULL_MIN_AREAL  = 5
+// Enheter vi kan REGNE OM automatisk. «pk» er utelatt: dimensjonen i navnet
+// gjelder da én plate, mens prisen gjelder hele pakken («Glava plate 36 150mm
+// 565x1200mm», PK). Antall plater per pakke står ingen steder i prislisten —
+// pakn_str er tom på alle rader — så en omregning ville blitt feil med nøyaktig
+// antallet i pakken. Det er samme klasse feil som vi jakter på, bare innført av
+// oss selv. Slike linjer får spørsmål eller varsel, ikke stille omregning.
+const OMREGN_ENHETER = new Set(['rul', 'stk'])
 
-// «bredde x lengde m» i varenavnet. Krever «m» rett etter lengden, og at det
-// ikke er starten på et annet ord — ellers ville «200my» og «2400mm» treffe.
-const _RULL_RE = /(\d{1,3}(?:\.\d{1,3})?)\s*x\s*(\d{1,4}(?:\.\d{1,3})?)\s*m(?![a-zæøå0-9])/g
+// Rimelighetsgrenser, i METER og m². De skiller ting som DEKKER et areal —
+// ruller, duk, plater — fra ting som bare har mål i navnet.
+//
+// Det er BREDDEN som gjør jobben, ikke arealet. «Damp- og vindsperretape
+// 25m x 50mm» dekker 1,25 m² og «Brannmurplate 1220x1000x50mm» 1,22 m² — helt
+// likt areal, men tapen er 5 cm bred og platen 1 meter. Arealgrensen kan derfor
+// ikke skille dem; breddegrensen kan.
+//
+// Målt mot ekte navn fra prislisten:
+//   godkjennes: dampsperre 2,6×15 m (39 m²) · vindsperre 1,3×25 (32,5) ·
+//               gipsplate 1200x2400mm (2,88) · OSB 600x2400 (1,44) ·
+//               brannmurplate 1220x1000mm (1,22) · armeringsnett 2x5m (10) ·
+//               dekkfilt 0.65mx25m (16,25) · stålnett 77x117cm (0,90)
+//   avvises:    tape 25m x 50mm (bredde 0,05) · fugearmering 18mmx4m (0,018) ·
+//               Leca-blokk 10x25x50cm (0,25) · vinkelbeslag 88x88mm (0,088) ·
+//               skrue 4,2x55mm · «Gran 48x148» og «Bjelke kerto 48x200» (0,048)
+const RULL_MIN_BREDDE = 0.3,  RULL_MAKS_BREDDE = 6
+const RULL_MIN_LENGDE = 0.8,  RULL_MAKS_LENGDE = 250
+const RULL_MIN_AREAL  = 0.5,  RULL_MAKS_AREAL  = 500
+
+// Flest plater vi godtar i én pakke. Grensen skal fange TASTEFEIL, ikke
+// beskrive virkeligheten: skriver noen 120 i stedet for 12, må systemet stoppe.
+// En grense som slipper gjennom en tifeil er en ny variant av nettopp den feilen
+// vi holder på å fjerne. Den står to steder — i dialogen, som sperrer knappen,
+// OG i koden som leser svaret. Dialogen er en hjelp for brukeren; sperren i
+// koden er den som faktisk holder.
+const PAKN_MAKS_PLATER = 100
+
+// Millimeter og centimeter til meter. Enheten leses PER TALL, ikke for hele
+// uttrykket: «25m x 50mm» er 25 meter ganger 50 millimeter, og leser vi begge
+// som samme enhet blir arealet 1000 ganger feil.
+const _DIM_ENHET_M = { mm: 0.001, cm: 0.01, m: 1 }
+
+// Arealet oppgitt DIREKTE i navnet: «DAMPSPERRE 3,00M 0,20MM 75M2 BACA» → 75 m².
+// Det er det sikreste signalet vi har når det finnes — ingen utregning, ingen
+// gjetning om hvilket tall som er hva.
+const _AREAL_RE = /(\d{1,4}(?:\.\d{1,3})?)\s*m(?:2|²)(?![a-zæøå0-9])/g
+
+// En kjede av «tall (enhet) x tall (enhet) …», med inntil fire ledd.
+//
+// MERK plasseringen av grensen (?![a-wyzæøå0-9]): den ligger INNE i den valgfrie
+// enhetsgruppen. Sto den utenfor, ville «1.30x25m» blitt avvist — etter tallet
+// «1.30» kommer «x», og grensen ville slått til før kjeden fikk begynne. Grensen
+// skal bare gjelde når en enhet faktisk er lest, slik at «2400mm» ikke leses som
+// 2400 meter og «300ml» ikke som 300 meter.
+//
+// Og «x» er utelatt fra grensen (a-w, y, z) med vilje: «Dekkfilt 0.65mx25m»
+// skriver enheten midt i kjeden, og da må x-en få følge rett etter «m».
+const _KJEDE_RE = /\d{1,5}(?:\.\d{1,3})?\s*(?:(?:mm|cm|m)(?![a-wyzæøå0-9]))?(?:\s*x\s*\d{1,5}(?:\.\d{1,3})?\s*(?:(?:mm|cm|m)(?![a-wyzæøå0-9]))?){1,3}/g
+
+// Ett ledd i kjeden: tallet og enheten det selv bærer.
+const _LEDD_RE = /^(\d{1,5}(?:\.\d{1,3})?)\s*(mm|cm|m)?$/
+
+// Leser leddene i en kjede om til METER. Et ledd uten egen enhet arver den
+// enheten som står i kjeden ellers («0,20x2600x15000mm» → alle i mm,
+// «2x5m» → begge i meter). Står det ingen enhet noe sted, leses tallene som
+// millimeter — det er det konservative valget: da blir arealet lite, og lite
+// areal avvises av grensene over. «Gran 48x148» skal ikke bli en rull.
+function _kjedeTilMeter(kjede) {
+  const ledd = kjede.split('x').map(d => d.trim()).filter(Boolean)
+  const lest = []
+  for (const d of ledd) {
+    const m = _LEDD_RE.exec(d)
+    _LEDD_RE.lastIndex = 0
+    if (!m) return []
+    const tall = parseFloat(m[1])
+    if (!isFinite(tall) || tall <= 0) return []
+    lest.push({ tall, enhet: m[2] || null })
+  }
+  const felles = (lest.find(l => l.enhet) || {}).enhet || 'mm'
+  return lest.map(l => l.tall * _DIM_ENHET_M[l.enhet || felles])
+}
 
 // Hvor mange m² dekker én rull/pakke av denne varen?
-// Returnerer null når vi ikke kan lese det trygt ut av navnet — og da skal
-// ingen omregning tilbys. Mønsteret treffer dampsperre, vindsperre og
-// underlagsduk; det finner ingenting på tape, bånd og pakninger, og det avviser
-// «Grunnmur tykk 0,125x8m».
+//
+// Returnerer null når vi ikke kan lese det trygt ut av navnet — og da skal ingen
+// omregning tilbys. Det er ikke en sjelden utgang: «ULTIPRO DAMPSPERRE 0,20MM
+// 2,6M» oppgir bredden, men ikke lengden på rullen. Ingen parser kan gjette
+// den. Der er enhetsvarselet den eneste beskyttelsen, og derfor må varselet stå
+// på egne ben — se enhetsAvvik og _prisEnhet.
+//
+// To veier, i prioritert rekkefølge:
+//   1. arealet står i navnet («75M2»)  → bruk det
+//   2. en dimensjonskjede             → regn hvert ledd om til meter, dropp alt
+//                                        unntatt de to største, gang dem
+// Regel 2 er din: det minste tallet er tykkelsen, de to største er bredde og
+// lengde. Den holder også for fire ledd og for omvendt rekkefølge.
 function rullDekning(varenavn) {
   const s = normaliserVaretekst(varenavn)
   if (!s) return null
-  _RULL_RE.lastIndex = 0
-  let m
-  while ((m = _RULL_RE.exec(s)) !== null) {
-    const bredde = parseFloat(m[1])
-    const lengde = parseFloat(m[2])
-    if (!isFinite(bredde) || !isFinite(lengde)) continue
-    if (bredde < RULL_MIN_BREDDE || bredde > RULL_MAKS_BREDDE) continue
-    if (lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) continue
+
+  // 1) Areal oppgitt direkte.
+  _AREAL_RE.lastIndex = 0
+  let a
+  while ((a = _AREAL_RE.exec(s)) !== null) {
+    const areal = parseFloat(a[1])
+    if (!isFinite(areal)) continue
+    if (areal < RULL_MIN_AREAL || areal > RULL_MAKS_AREAL) continue
+    return { bredde: null, lengde: null, areal: Math.round(areal * 1000) / 1000, kilde: 'areal' }
+  }
+
+  // 2) Dimensjonskjede. Bare den FØRSTE brukbare kjeden vurderes, og holder den
+  // ikke målene, gir vi opp i stedet for å lete videre i navnet.
+  //
+  // «Fugearmering 18mmx4m 100x4m=400lm» er grunnen: første kjede er produktets
+  // egen dimensjon (18 mm × 4 m — for smal, avvises), mens den andre er
+  // pakningsinformasjon (100 stk × 4 m = 400 lm). Leste vi videre, ville vi lest
+  // 100 m × 4 m = 400 m² og priset en armeringsstrimmel som en presenning.
+  _KJEDE_RE.lastIndex = 0
+  let k
+  while ((k = _KJEDE_RE.exec(s)) !== null) {
+    const meter = _kjedeTilMeter(k[0]).filter(v => isFinite(v) && v > 0)
+    if (meter.length < 2) continue
+    const sortert = [...meter].sort((x, y) => y - x)
+    const lengde = sortert[0]
+    const bredde = sortert[1]
+    if (lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) return null
     const areal = bredde * lengde
-    if (areal < RULL_MIN_AREAL) continue
-    return { bredde, lengde, areal: Math.round(areal * 1000) / 1000 }
+    if (bredde < RULL_MIN_BREDDE || bredde > RULL_MAKS_BREDDE) return null
+    if (areal < RULL_MIN_AREAL || areal > RULL_MAKS_AREAL) return null
+    return {
+      bredde: Math.round(bredde * 1000) / 1000,
+      lengde: Math.round(lengde * 1000) / 1000,
+      areal: Math.round(areal * 1000) / 1000,
+      kilde: 'dimensjon',
+    }
+  }
+  return null
+}
+
+// ── PAKNINGSSTØRRELSE — SPØR NÅR NAVNET IKKE HOLDER ─────────────────────────
+// rullDekning() gir opp på helt lovlige varenavn. «ULTIPRO DAMPSPERRE 0,20MM
+// 2,6M» oppgir bredden men ikke lengden på rullen; «GLAVA PLATE 36 150MM
+// 565X1200MM» oppgir platen men ikke hvor mange plater som ligger i pakken.
+// Ingen regex kan gjette de tallene — men brukeren har pakken foran seg.
+//
+// Da spør vi, én gang per VARE, og lagrer svaret i prisbok (pakn_str,
+// pakn_enhet, pakn_manuell = true). Neste gang varen velges leses det lagrede
+// svaret FØRST, og spørsmålet stilles ikke igjen.
+//
+// pakn_enhet forteller hva tallet er, og bare tre verdier skrives:
+//   'm2'  → arealet én leveranseenhet dekker. Brukes rett.
+//   'm'   → lengden. Ganges med bredden, som fortsatt leses av navnet.
+//   'stk' → antall plater i pakken. Ganges med platearealet fra navnet.
+// Vi lagrer det brukeren faktisk svarte, ikke et avledet tall. Da kan en feil
+// rettes ved å se på raden, og tallet betyr noe også for et menneske.
+
+// Alle «tall + enhet» i navnet. Samme grense som i kjeden, av samme grunn:
+// «2400mm» skal ikke leses som 2400 meter, og «300ml» ikke som 300 meter.
+const _TALL_ENHET_RE = /(\d{1,5}(?:\.\d{1,3})?)\s*(mm|cm|m)(?![a-wyzæøå0-9])/g
+
+// Ett enkelt mål i navnet som kan være en BREDDE. Vi tør bare kalle det bredden
+// når det er NØYAKTIG ett tall innenfor breddegrensene: «0,20mm 2,6m» har bare
+// ett (2,6 m — 0,20 mm er tykkelsen), mens «1,2m 2,4m» har to, og da vet vi
+// ikke hvilket som er bredden. Der spør vi om arealet i stedet for å gjette.
+function rullBreddeAlene(varenavn) {
+  const s = normaliserVaretekst(varenavn)
+  if (!s) return null
+  _TALL_ENHET_RE.lastIndex = 0
+  const kandidater = []
+  let m
+  while ((m = _TALL_ENHET_RE.exec(s)) !== null) {
+    const meter = parseFloat(m[1]) * (_DIM_ENHET_M[m[2]] || 0)
+    if (!isFinite(meter) || meter <= 0) continue
+    if (meter < RULL_MIN_BREDDE || meter > RULL_MAKS_BREDDE) continue
+    kandidater.push(Math.round(meter * 1000) / 1000)
+  }
+  const unike = [...new Set(kandidater)]
+  return unike.length === 1 ? unike[0] : null
+}
+
+// Er arealet innenfor det vi tør regne med? Gjelder også et tall brukeren har
+// skrevet selv — en tastefeil på antall plater skal ikke gi 4000 m² per pakke.
+function _arealOk(a) { return isFinite(a) && a >= RULL_MIN_AREAL && a <= RULL_MAKS_AREAL }
+
+// pakn_enhet slik den er lagret, normalisert til de tre verdiene vi skriver.
+// Egen mapper, ikke normaliserEnhet(): der er «m» et synonym for løpemeter, og
+// her betyr det lengden på rullen.
+function _paknEnhet(e) {
+  const s = String(e == null ? '' : e).trim().toLowerCase().replace(/\s+/g, '')
+  if (s === 'm2' || s === 'm²' || s === 'kvm') return 'm2'
+  if (s === 'm' || s === 'lm' || s === 'meter') return 'm'
+  if (s === 'stk' || s === 'pl' || s === 'plater') return 'stk'
+  return ''
+}
+
+// Dekningen som er LAGRET på varen — brukerens eget svar fra sist, eller
+// leverandørens pakningsstørrelse om den noen gang kommer med i importen.
+// Har forrang over navnet: et oppgitt tall er sikrere enn en tolkning.
+function pakningsDekning(vare) {
+  const str = parseFloat(String(vare?.pakn_str ?? '').replace(',', '.'))
+  if (!isFinite(str) || str <= 0) return null
+  const enhet = _paknEnhet(vare?.pakn_enhet)
+  const kilde = vare?.pakn_manuell === true ? 'lagret_manuell' : 'lagret'
+  if (enhet === 'm2') {
+    if (!_arealOk(str)) return null
+    return { bredde: null, lengde: null, areal: Math.round(str * 1000) / 1000, kilde }
+  }
+  if (enhet === 'm') {
+    const bredde = rullBreddeAlene(vare?.varenavn)
+    if (!bredde) return null
+    const areal = Math.round(bredde * str * 1000) / 1000
+    if (!_arealOk(areal)) return null
+    return { bredde, lengde: str, areal, kilde }
+  }
+  if (enhet === 'stk') {
+    const plate = rullDekning(vare?.varenavn)
+    if (!plate || !(plate.areal > 0)) return null
+    const areal = Math.round(plate.areal * str * 1000) / 1000
+    if (!_arealOk(areal)) return null
+    return { bredde: plate.bredde, lengde: plate.lengde, antall: str, areal, kilde }
   }
   return null
 }
@@ -60063,7 +61694,7 @@ function NobbKnapp({ varenavn, isMob, style }) {
 }
 
 function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) {
-  const { sok } = usePrisbokSoek()
+  const { sok, kanSePriser } = usePrisbokSoek()
   const [soekTekst, setSoekTekst] = useState(value?.varenavn || '')
   const [resultater, setResultater] = useState([])
   const [aapenDropdown, setAapenDropdown] = useState(false)
@@ -60193,9 +61824,13 @@ function PrisbokSoekFelt({ value, onChange, foreslagSoek, placeholder, isMob }) 
             </div>
           )}
           {!laster && resultater.length === 0 && (soekTekst.trim().length >= 2 || foreslagSoek) && (
-            <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
-              Ingen treff i prisboken — skriv inn manuelt
-            </div>
+            kanSePriser ? (
+              <div style={{ padding: '8px 12px', fontSize: '11px', color: '#94a3b8', fontStyle: 'italic' }}>
+                Ingen treff i prisboken — skriv inn manuelt
+              </div>
+            ) : (
+              <div style={{ padding: '8px' }}><PrisTilgangNotis kompakt /></div>
+            )
           )}
           {!laster && resultater.length > 0 && foreslagSoek && !soekTekst.trim() && (
             <div style={{ padding: '6px 12px', fontSize: '9px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.4px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
@@ -68567,8 +70202,10 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   // Samme kilde som ruten. Leste tidligere active_modules alene, uten aa vite
   // om proeveperioden — derfor fikk en proevebruker salgsmodal av en modul
   // navigasjonen nettopp hadde sluppet ham inn i.
-  const { innstillinger: bimInnstillinger, laster: bimLaster } = useModulTilgang()
-  const harBimKalkyle = harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
+  const { innstillinger: bimInnstillinger, laster: bimLaster, ukjent: bimUkjent } = useModulTilgang()
+  // Ukjent teller som «har»: uten nett svarer ikke company_settings, og da skal
+  // brukeren slippe inn i modulen han sannsynligvis eier — ikke møte salgsmodal.
+  const harBimKalkyle = bimUkjent || harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
 
   // Patch 23.2: Direkte-navigering fra BIM-Kalkyle i sidebar/dashboard
   // Når brukeren klikker BIM-Kalkyle skal de gå rett til IFC-opplasting,
@@ -68582,7 +70219,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
       setShowBimImport(false)
       setShowBimUpsell(false)
     }
-  }, [autoOpenBim, bimLaster, harBimKalkyle])
+  }, [autoOpenBim, bimLaster, bimUkjent, harBimKalkyle])
 
   const handleBimKalkyleClick = () => {
     if (harBimKalkyle) setShowBimImport(true)
@@ -70769,6 +72406,11 @@ function bibliotekTilBygningsdel(bd, mengde) {
       beskrivelse: a.beskrivelse || '',
       grunntid: parseFloat(a.grunntid) || 0,
     })),
+    // MERK: dette er en HVITELISTE — felt som ikke står her, forsvinner når en
+    // bygningsdel hentes fra biblioteket. Det var årsaken til det falske varselet:
+    // `_omregning` ble skrevet til biblioteket, men ikke lest tilbake. De interne
+    // _-feltene styres nå av MAT_INTERNE_FELT, og tests/materiallinje-felt.mjs
+    // feiler hvis et nytt felt ikke er ført opp der.
     materialer: materialer.map((mat) => ({
       id: nyRadId(),
       varenavn: mat.varenavn || '',
@@ -70776,6 +72418,13 @@ function bibliotekTilBygningsdel(bd, mengde) {
       mengde: parseFloat(mat.mengde) || 0,
       enhet: (mat.enhet || '').replace(/\/m²|\/stk/, ''),
       enhetspris: mat.enhetspris,
+      // De interne feltene som skal overleve, hentet fra MAT_INTERNE_FELT.lagres
+      // — ikke en egen liste her, for to lister glir fra hverandre.
+      ...Object.fromEntries(
+        MAT_INTERNE_FELT.lagres
+          .filter(felt => mat[felt] !== undefined && mat[felt] !== null)
+          .map(felt => [felt, mat[felt]])
+      ),
     })),
     underleverandorer: underleverandorer.map((u) => ({
       id: nyRadId(),
@@ -71571,7 +73220,7 @@ function nyPrisForLinje(linje, vare) {
   const gammelPris = parseFloat(linje?.enhetspris) || 0
   const raaPris = _prisTall(vare?.pris_per_enhet)
   if (raaPris === null) {
-    return { gammelPris, nyPris: null, harNyPris: false, nyEnhet: linje?.enhet || '', nyOmregning: null, omregnetFra: null }
+    return { gammelPris, nyPris: null, harNyPris: false, nyEnhet: linje?.enhet || '', vareEnhet: vare?.enhet || '', nyOmregning: null, omregnetFra: null }
   }
   const omr = linje?._omregning
   if (omr && parseFloat(omr.areal) > 0) {
@@ -71582,6 +73231,7 @@ function nyPrisForLinje(linje, vare) {
       nyPris: Math.round((raaPris / parseFloat(omr.areal)) * 100) / 100,
       harNyPris: true,
       nyEnhet: linje.enhet,
+      vareEnhet: vare?.enhet || '',
       nyOmregning: { ...omr, fraPris: raaPris },
       omregnetFra: { pris: raaPris, enhet: omr.fraEnhet, areal: parseFloat(omr.areal) },
     }
@@ -71590,7 +73240,11 @@ function nyPrisForLinje(linje, vare) {
     gammelPris,
     nyPris: raaPris,
     harNyPris: true,
-    nyEnhet: vare?.enhet || linje?.enhet || '',
+    // Linjens enhet beholdes. En prisoppdatering endrer prisen, ikke hva linjen
+    // måles i. Før ble den satt til varens enhet, og da forsvant nettopp det
+    // avviket som skulle varsles om.
+    nyEnhet: linje?.enhet || vare?.enhet || '',
+    vareEnhet: vare?.enhet || '',
     nyOmregning: null,
     omregnetFra: null,
   }
@@ -71599,7 +73253,7 @@ function nyPrisForLinje(linje, vare) {
 // Klassifiserer materiallinjer mot bedriftens aktive prisliste.
 //   poster: [{ sti, linje }] — `sti` er kallerens egen peker tilbake til linjen
 // Returnerer { prisliste, endret, uendret, utgatt, ukoblet, feil }
-async function byggPrisforslag(poster, userId, companyId) {
+async function byggPrisforslag(poster, userId, companyId, kanSePriser = true) {
   const tomt = { prisliste: null, endret: [], uendret: [], utgatt: [], utenPris: [], ukoblet: [], feil: null }
   const alle = Array.isArray(poster) ? poster : []
   if (alle.length === 0) return tomt
@@ -71610,7 +73264,8 @@ async function byggPrisforslag(poster, userId, companyId) {
 
   let prisliste = null
   try {
-    prisliste = await hentAktivPrisliste(companyId, userId, 'id, navn, created_at')
+    // Uten pristilgang blir spørringen avvist av RLS uansett — vi hopper over den.
+    if (kanSePriser) prisliste = await hentAktivPrisliste(companyId, userId, 'id, navn, created_at')
     // Antall varer og importdato gjør det mulig å KJENNE IGJEN prislisten. Har
     // brukeren flere, er en oppdatering mot feil liste like skadelig som ingen
     // oppdatering — og verre, fordi den ser ut som den gikk bra.
@@ -71623,6 +73278,12 @@ async function byggPrisforslag(poster, userId, companyId) {
     }
   } catch (e) { /* faller gjennom til feilmeldingen under */ }
   if (!prisliste) {
+    // Har rollen ikke tilgang til prisboken, er «ingen aktiv prisliste» feil svar:
+    // bedriften HAR en liste, brukeren får bare ikke lese den. Sender vi ham til
+    // Prisbok, finner han ingenting og tror det er en feil.
+    if (!kanSePriser) {
+      return { ...tomt, ukoblet, feil: 'Innkjøpsprisene er økonomidata, og din rolle har ikke tilgang til dem. Prisene som står i kalkylen er lagret på linjene og gjelder fortsatt — men de kan bare oppdateres av admin eller leder.' }
+    }
     return { ...tomt, ukoblet, feil: 'Ingen aktiv prisliste. Gå til Prisbok og sett en prisliste som aktiv.' }
   }
 
@@ -71648,7 +73309,7 @@ async function byggPrisforslag(poster, userId, companyId) {
     const vare = prisMap[nobb]
     if (!vare) { utgatt.push({ ...p, nobb }); continue }
 
-    const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
+    const { gammelPris, nyPris, harNyPris, nyEnhet, vareEnhet, nyOmregning, omregnetFra } = nyPrisForLinje(p.linje, vare)
     // Varen finnes, men prislisten har ingen brukbar pris. Da rører vi den ikke.
     if (!harNyPris) {
       utenPris.push({ ...p, nobb, varenavn: p.linje.varenavn || vare.varenavn || '', nyttVarenavn: vare.varenavn || '', gammelPris, raaPris: vare.pris_per_enhet })
@@ -71665,8 +73326,10 @@ async function byggPrisforslag(poster, userId, companyId) {
       diffProsent: gammelPris > 0 ? ((nyPris - gammelPris) / gammelPris) * 100 : null,
       mengde: parseFloat(p.linje.mengde) || 0,
       enhet: p.linje.enhet || '',
-      nyEnhet, nyOmregning, omregnetFra,
-      enhetByttes: normaliserEnhet(nyEnhet) !== normaliserEnhet(p.linje.enhet || ''),
+      nyEnhet, vareEnhet, nyOmregning, omregnetFra,
+      // Prisen gjelder en ANNEN enhet enn linjen måles i. Linjen endres ikke —
+      // vi sier det, slik at brukeren kan rette mengden eller velge en annen vare.
+      prisEnhetAvviker: !nyOmregning && !!enhetsAvvik(p.linje.enhet || '', vareEnhet),
     }
     if (_prisLik(gammelPris, nyPris)) uendret.push(post)
     else endret.push(post)
@@ -71680,8 +73343,12 @@ async function byggPrisforslag(poster, userId, companyId) {
 // Feltene som skal skrives på linjen når en prisendring godtas.
 function prisforslagTilFelter(post) {
   const felter = { enhetspris: post.nyPris, varenavn: post.nyttVarenavn || post.varenavn }
+  // Enheten prisen gjelder i, slik at varselet virker også på linjer som bare
+  // har fått ny pris (ikke ny vare). Se beregnVareFelter.
+  if (post.vareEnhet) felter._prisEnhet = post.vareEnhet
   if (post.nyOmregning) felter._omregning = post.nyOmregning
-  else if (post.nyEnhet) felter.enhet = post.nyEnhet
+  // Linjens egen enhet røres IKKE av en prisoppdatering. Sto den i m² før, står
+  // den i m² etter — det er prisen som er ny, ikke hva linjen måles i.
   return felter
 }
 
@@ -71718,38 +73385,194 @@ async function beregnVareFelter(confirm, vare, linje) {
     nobb: String(vare?.varenummer ?? '').trim(),
     varenavn: vare?.varenavn || linje?.varenavn || '',
     enhetspris: pris,
-    enhet: vareEnhet || linje?.enhet || '',
+    // LINJENS enhet vinner. Her sto det motsatt, og det var årsaken til at en
+    // 562,40 kr/STK-pris kunne stå på en m²-linje uten et eneste varsel: å
+    // skrive om linjens enhet til varens gjorde de to like, og enhetsAvvik()
+    // sammenlignet STK mot STK og fant ingenting. Koblingen slettet beviset.
+    // Har linjen ingen enhet, arver den fortsatt varens.
+    enhet: linje?.enhet || vareEnhet || '',
+    // Enheten PRISEN gjelder i. Lagres på linjen slik at varselet kan
+    // sammenligne uten å slå opp i prisboken — det virker da også for roller
+    // uten pristilgang, og etter at en prisliste er slettet.
+    _prisEnhet: vareEnhet || null,
     _omregning: null,
   }
   const linjeEnhet = normaliserEnhet(linje?.enhet)
   if (linjeEnhet !== 'm2') return felter
-  if (!LEVERANSE_ENHETER.has(normaliserEnhet(vareEnhet))) return felter
-  const rull = rullDekning(vare?.varenavn)
-  if (!rull || pris <= 0) return felter
+  const vEnhet = normaliserEnhet(vareEnhet)
+  if (!LEVERANSE_ENHETER.has(vEnhet)) return felter
+  if (pris <= 0) return felter
+
+  // Lagret svar FØRST, deretter navnet. «pk» leses aldri av navnet alene:
+  // dimensjonen der gjelder én plate, prisen hele pakken — se OMREGN_ENHETER.
+  const lagret = pakningsDekning(vare)
+  const rull = lagret || (OMREGN_ENHETER.has(vEnhet) ? rullDekning(vare?.varenavn) : null)
+  const enhNavn = enhetTekst(vEnhet)
+  const enhOrd = vEnhet === 'rul' ? 'rull' : vEnhet === 'pk' ? 'pakke' : 'enhet'
+
+  // Kan vi ikke lese dekningen, spør vi om det ene tallet som mangler i stedet
+  // for å gi opp. Se sporOmPakning.
+  if (!rull) return await sporOmPakning(confirm, felter, { vare, linje, pris, vEnhet, enhNavn, enhOrd })
 
   const perM2 = Math.round((pris / rull.areal) * 100) / 100
-  const enhNavn = enhetTekst(normaliserEnhet(vareEnhet))
+  // Hvor tallene kommer fra skal stå i dialogen. En omregning brukeren ikke kan
+  // etterprøve er like ugjennomsiktig som den feilen vi prøver å fange.
+  const kildeTekst = rull.kilde === 'lagret_manuell'
+    ? 'Pakningsstørrelsen ble oppgitt manuelt på denne varen tidligere, og er lagret i prislisten. Stemmer den ikke, velg «Nei» — da får du spørsmålet på nytt neste gang.'
+    : rull.kilde === 'lagret'
+    ? 'Pakningsstørrelsen står oppgitt i prislisten.'
+    : rull.kilde === 'areal'
+    ? 'Arealet står i varenavnet. Stemmer det ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.'
+    : 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.'
   const ok = await confirm({
     message: vare.varenavn,
     subMessage: `Prislisten priser denne per ${enhNavn}. Linjen står i m². Vil du bruke m²-prisen?`,
     details: {
-      stats: [{ title: 'Regnestykke', subtitle: 'lest ut av varenavnet', items: [
-        { label: 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` },
+      stats: [{ title: 'Regnestykke', subtitle: rull.kilde === 'dimensjon' || rull.kilde === 'areal' ? 'lest ut av varenavnet' : 'lagret på varen', items: [
+        ...(rull.antall > 0 ? [{ label: 'Antall i pakken', value: `${fmtTall(rull.antall)} stk` }] : []),
+        ...(rull.bredde > 0 && rull.lengde > 0 ? [{ label: rull.antall > 0 ? 'Platemål' : 'Bredde × lengde', value: `${fmtTall(rull.bredde)} m × ${fmtTall(rull.lengde)} m` }] : []),
         { label: `Én ${enhNavn} dekker`, value: `${fmtTall(rull.areal)} m²` },
         { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
         { label: 'Pris per m²', value: fmtKr2(perM2), highlight: true },
       ] }],
-      notes: [{ icon: 'ℹ️', kind: 'info', text: 'Dimensjonen er lest ut av varenavnet, ikke hentet fra prislisten. Stemmer den ikke, velg «Nei» — da står prisen per leveranseenhet, og du setter mengden selv.' }],
+      notes: [{ icon: 'ℹ️', kind: 'info', text: kildeTekst }],
     },
     confirmLabel: 'Ja, regn om',
     cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
   })
   if (!ok) return felter
+  return _omregnetFelter(felter, linje, vareEnhet, pris, rull)
+}
+
+// Bygger de omregnede feltene. Egen funksjon fordi den brukes fra fire steder
+// (lest dekning + tre spørsmålsvarianter), og da skal `_omregning` få nøyaktig
+// samme form uansett — det er dette objektet varselet leser for å tie, og
+// markøren «↩ fra rull» for å vise seg.
+function _omregnetFelter(felter, linje, vareEnhet, pris, dek) {
+  const perM2 = Math.round((pris / dek.areal) * 100) / 100
   return {
     ...felter,
     enhet: linje?.enhet || 'm²',
     enhetspris: perM2,
-    _omregning: { fraEnhet: vareEnhet, fraPris: pris, bredde: rull.bredde, lengde: rull.lengde, areal: rull.areal },
+    _omregning: {
+      fraEnhet: vareEnhet, fraPris: pris,
+      bredde: dek.bredde > 0 ? dek.bredde : null,
+      lengde: dek.lengde > 0 ? dek.lengde : null,
+      antall: dek.antall > 0 ? dek.antall : null,
+      areal: dek.areal,
+      kilde: dek.kilde || null,
+    },
+  }
+}
+
+// Spør om det ENE tallet som mangler, og regn om med svaret. Tre spørsmål, i
+// denne rekkefølgen:
+//   1. pakke med lesbart platemål  → «Hvor mange plater i pakken?»
+//   2. lesbar bredde, ukjent lengde → «Hvor lang er én rull?»
+//   3. ellers                       → «Hvor mange m² dekker én rull?»
+//
+// Avbryter brukeren, står prisen per leveranseenhet og enhetsvarselet blir
+// stående. Det er den viktigste beskyttelsen, og den skal ikke kunne forsvinne
+// fordi et spørsmål ble lukket.
+//
+// Svaret lagres på varen (best effort — en feilet skriving skal ikke rulle
+// tilbake en omregning brukeren nettopp har bekreftet i skjermen).
+async function sporOmPakning(confirm, felter, ctx) {
+  const { vare, linje, pris, vEnhet, enhNavn, enhOrd } = ctx
+  const felles = {
+    message: vare?.varenavn || 'Varen',
+    confirmLabel: 'Regn om',
+    cancelLabel: `Nei, behold ${fmtKr2(pris)} per ${enhNavn}`,
+  }
+  const hjelp = `Vet du ikke tallet, velg «Nei». Da står prisen per ${enhNavn}, og linjen blir merket med at enheten ikke stemmer.`
+  const lagres = { icon: '💾', kind: 'info', text: 'Svaret lagres på varen i prislisten, så du blir ikke spurt om den igjen.' }
+
+  // 1) Pakke: platemålet står i navnet, antallet i pakken gjør ikke.
+  const plate = vEnhet === 'pk' ? rullDekning(vare?.varenavn) : null
+  if (plate && plate.areal > 0) {
+    const svar = await confirm({
+      ...felles,
+      subMessage: `Prislisten priser denne per pakke, men linjen regnes i m². Platemålet står i varenavnet — antallet plater i pakken gjør det ikke.`,
+      details: {
+        stats: [{ title: 'Én plate', subtitle: 'lest ut av varenavnet', items: [
+          ...(plate.bredde > 0 ? [{ label: 'Bredde × lengde', value: `${fmtTall(plate.bredde)} m × ${fmtTall(plate.lengde)} m` }] : []),
+          { label: 'Plateareal', value: `${fmtTall(plate.areal)} m²` },
+          { label: 'Pris per pakke', value: fmtKr2(pris) },
+        ] }],
+        notes: [lagres],
+      },
+      input: { label: 'Antall plater i pakken', enhet: 'plater', plassholder: 'f.eks. 12', min: 1, max: PAKN_MAKS_PLATER, hjelp },
+    })
+    const antall = parseFloat(svar)
+    if (!isFinite(antall) || antall < 1 || antall > PAKN_MAKS_PLATER) return felter
+    const areal = Math.round(plate.areal * antall * 1000) / 1000
+    if (!_arealOk(areal)) return felter
+    lagrePakningsstorrelse(vare, antall, 'stk')
+    return _omregnetFelter(felter, linje, vare?.enhet || '', pris, { ...plate, antall, areal, kilde: 'lagret_manuell' })
+  }
+
+  // 2) Bredden står i navnet, lengden gjør ikke. Gjelder bare rull og stk —
+  // for en pakke ville bredde × lengde gitt arealet av ÉN plate, ikke pakken.
+  const bredde = OMREGN_ENHETER.has(vEnhet) ? rullBreddeAlene(vare?.varenavn) : null
+  if (bredde) {
+    const svar = await confirm({
+      ...felles,
+      subMessage: `Prislisten priser denne per ${enhNavn}, men linjen regnes i m². Bredden står i varenavnet — lengden gjør den ikke.`,
+      details: {
+        stats: [{ title: 'Det vi vet', subtitle: 'lest ut av varenavnet', items: [
+          { label: 'Bredde', value: `${fmtTall(bredde)} m` },
+          { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+        ] }],
+        notes: [lagres],
+      },
+      input: { label: `Lengde per ${enhOrd}`, enhet: 'm', plassholder: 'f.eks. 25', min: RULL_MIN_LENGDE, max: RULL_MAKS_LENGDE, hjelp },
+    })
+    const lengde = parseFloat(svar)
+    if (!isFinite(lengde) || lengde < RULL_MIN_LENGDE || lengde > RULL_MAKS_LENGDE) return felter
+    const areal = Math.round(bredde * lengde * 1000) / 1000
+    if (!_arealOk(areal)) return felter
+    lagrePakningsstorrelse(vare, lengde, 'm')
+    return _omregnetFelter(felter, linje, vare?.enhet || '', pris, { bredde, lengde, areal, kilde: 'lagret_manuell' })
+  }
+
+  // 3) Ingenting brukbart i navnet. Da er arealet det eneste tallet vi kan be
+  // om — brukeren leser det av pakken.
+  const svar = await confirm({
+    ...felles,
+    subMessage: `Prislisten priser denne per ${enhNavn}, men linjen regnes i m². Vi finner ingen mål i varenavnet vi tør regne på.`,
+    details: {
+      stats: [{ title: 'Det vi vet', subtitle: 'fra prislisten', items: [
+        { label: `Pris per ${enhNavn}`, value: fmtKr2(pris) },
+      ] }],
+      notes: [lagres],
+    },
+    input: { label: `Hvor mange m² dekker én ${enhOrd}?`, enhet: 'm²', plassholder: 'f.eks. 32,5', min: RULL_MIN_AREAL, max: RULL_MAKS_AREAL, hjelp },
+  })
+  const areal = parseFloat(svar)
+  if (!isFinite(areal) || !_arealOk(areal)) return felter
+  lagrePakningsstorrelse(vare, areal, 'm2')
+  return _omregnetFelter(felter, linje, vare?.enhet || '', pris, { bredde: null, lengde: null, areal, kilde: 'lagret_manuell' })
+}
+
+// Skriver brukerens svar til prisbok. SECURITY DEFINER-funksjon av samme grunn
+// som sletting og omdøping: den setter statement_timeout selv, gjør sin egen
+// bedrifts- og rollesjekk, og treffer raden på (prisliste_id, varenummer).
+//
+// Best effort. Feiler skrivingen, er omregningen på linjen fortsatt riktig —
+// brukeren får bare spørsmålet på nytt neste gang varen velges.
+async function lagrePakningsstorrelse(vare, str, enhet) {
+  try {
+    const nummer = String(vare?.varenummer ?? '').trim()
+    if (!nummer || !vare?.prisliste_id) return
+    const { error } = await supabase.rpc('lagre_pakningsstorrelse', {
+      p_prisliste_id: vare.prisliste_id,
+      p_varenummer: nummer,
+      p_str: String(str),
+      p_enhet: enhet,
+    })
+    if (error) console.warn('[pakning] kunne ikke lagre pakningsstørrelse:', error.message)
+  } catch (e) {
+    console.warn('[pakning] kunne ikke lagre pakningsstørrelse:', e?.message || e)
   }
 }
 
@@ -71865,7 +73688,7 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
         radLinjer.push({ navn: m.varenavn || 'Uten navn', nobb: String(m.nobb).trim(), type: 'utgatt', pris: parseFloat(m.enhetspris) || 0 })
         return m
       }
-      const { gammelPris, nyPris, harNyPris, nyEnhet, nyOmregning } = nyPrisForLinje(m, vare)
+      const { gammelPris, nyPris, harNyPris, nyEnhet, vareEnhet, nyOmregning } = nyPrisForLinje(m, vare)
       // Varen finnes i prislisten, men uten en brukbar pris. Da rører vi den
       // ikke. Før ble slike linjer skrevet til 0 kr, eller talt som «uendret»
       // når biblioteklinjen også sto på 0 — begge er villedende.
@@ -71888,8 +73711,10 @@ async function oppdaterBibliotekMotPrisliste({ prislisteId, prislisteNavn, compa
         omregnet: !!nyOmregning,
       })
       const felter = { ...m, enhetspris: nyPris, varenavn: vare.varenavn || m.varenavn }
+      // Enheten på linjen røres ikke — se nyPrisForLinje. Varens enhet lagres,
+      // slik at varselet virker også på bibliotekrader.
+      if (vareEnhet) felter._prisEnhet = vareEnhet
       if (nyOmregning) felter._omregning = nyOmregning
-      else felter.enhet = nyEnhet
       return felter
     })
 
@@ -72290,7 +74115,7 @@ const KALK_SENDT_STATUS = new Set(['Tilbud sendt', 'Tilbud godkjent'])
 // som er sendt til kunde: originalen står urørt med prisene kunden fikk, og de
 // nye prisene går i en ny versjon. Å rette originalen er fortsatt mulig, men
 // ligger bak bekreftelsessteget.
-function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
+function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, kanSePriser = true, sendtStatus, onSkriv, onFinnErstatning, onLagRevisjon, onClose }) {
   const [laster, setLaster] = useState(true)
   const [forslag, setForslag] = useState(null)
   const [valgt, setValgt] = useState(() => new Set())
@@ -72304,7 +74129,7 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, s
 
   useEffect(() => {
     let avbrutt = false
-    byggPrisforslag(poster, userId, companyId)
+    byggPrisforslag(poster, userId, companyId, kanSePriser)
       .then(res => {
         if (avbrutt) return
         setForslag(res)
@@ -72526,9 +74351,10 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, s
                               ↩ ny pris per {enhetTekst(normaliserEnhet(p.omregnetFra.enhet))} er {fmtKr2(p.omregnetFra.pris)} — delt på {fmtTall(p.omregnetFra.areal)} m², som før
                             </div>
                           )}
-                          {p.enhetByttes && !p.nyOmregning && (
-                            <div style={{ fontSize:'11px', color:'#c2410c', marginTop:'5px' }}>
-                              ⚠ enheten endres fra {p.enhet || '—'} til {p.nyEnhet} — kontroller mengden etterpå
+                          {p.prisEnhetAvviker && (
+                            <div style={{ fontSize:'11px', color:'#be123c', marginTop:'5px', lineHeight:1.5 }}>
+                              ⚠ prisen gjelder per {enhetTekst(normaliserEnhet(p.vareEnhet))}, men linjen står i {enhetTekst(normaliserEnhet(p.enhet))}.
+                              Mengden og prisen regnes i ulike enheter — kontroller linjen etter oppdateringen.
                             </div>
                           )}
                         </div>
@@ -73132,7 +74958,7 @@ function KalkyleDiffModal({ diff, onClose }) {
 
 function KalkBibliotekPage({ onBack }) {
   const confirm = useConfirm()
-  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag, kanSePriser } = useAuth()
   const [activeFag, setActiveFag] = useState('tomrer')
   const [expandedKat, setExpandedKat] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
@@ -73437,6 +75263,15 @@ function KalkBibliotekPage({ onBack }) {
                                         <span title="Ingen NOBB-kobling — prisen er en veiledende standardverdi"
                                           style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', background:'#fffbeb', border:'1px solid #fde68a', padding:'1px 5px', borderRadius:'4px' }}>≈ veiledende</span>
                                       )}
+                                      {/* Uten denne kunne man ikke se at prisen er en omregnet
+                                         m²-pris — og da ser en rull-pris delt på arealet bare
+                                         ut som en mistenkelig lav pris. */}
+                                      {m._omregning && parseFloat(m._omregning.areal) > 0 && (
+                                        <span title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${m._omregning.bredde ? `${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ` : ''}${fmtTall(m._omregning.areal)} m²`}
+                                          style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', background:'#eff6ff', border:'1px solid #bfdbfe', padding:'1px 5px', borderRadius:'4px' }}>
+                                          ↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}
+                                        </span>
+                                      )}
                                     </div>
                                   )
                                 })}
@@ -73511,6 +75346,7 @@ function KalkBibliotekPage({ onBack }) {
           poster={prisPoster(prisBd)}
           userId={user?.id}
           companyId={companyId}
+          kanSePriser={kanSePriser}
           onSkriv={(valgte) => skrivPriserPaaBd(prisBd, valgte)}
           onFinnErstatning={(p) => {
             const linje = (prisBd.materialer || [])[p.sti.index]
@@ -73698,7 +75534,11 @@ function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, kanErstatte, o
 // bygningsdeler lå i én haug på tvers av yttervegg, gulv og himling.
 function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   const confirm = useConfirm()
-  const { kanStyrePrisgrunnlag } = useAuth()
+  // companyId og user manglet her. hentAktivPrisliste() lenger nede kalles med
+  // begge, inne i en try med tom catch — så ReferenceError-en ble svelget, og
+  // NOBB-materialer fikk GAMLE PRISER uten at noe sa fra. Ingen krasj, ingen
+  // melding, bare feil tall i tilbudet. Innført 8f18592, 18. august.
+  const { kanStyrePrisgrunnlag, companyId, user } = useAuth()
   const [mengde, setMengde] = useState(1)
   const [selectedBd, setSelectedBd] = useState(null)
   const [expandedKat, setExpandedKat] = useState(null)
@@ -73826,7 +75666,30 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
                     const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbs)
                     if (priser) {
                       const prisMap = {}; priser.forEach(p => { prisMap[p.varenummer] = p })
-                      bd.materialer = bd.materialer.map(m => m.nobb && prisMap[m.nobb] ? { ...m, enhetspris: prisMap[m.nobb].pris_per_enhet, varenavn: prisMap[m.nobb].varenavn || m.varenavn } : m)
+                      // Enheten prisen gjelder i lagres her også. Uten den ville en
+                      // rull-pris kunne havne på en m²-linje uten at varselet kunne
+                      // se det — linjen er hentet fra biblioteket, ikke koblet av en
+                      // bruker, så ingen dialog har vært innom.
+                      //
+                      // Er linjen alt omregnet (_omregning fra biblioteket), skal den
+                      // nye leveranseprisen deles på det SAMME arealet — ellers ville
+                      // en omregnet m²-pris blitt overskrevet med rullprisen.
+                      bd.materialer = bd.materialer.map(m => {
+                        const vare = m.nobb ? prisMap[m.nobb] : null
+                        if (!vare) return m
+                        const omr = m._omregning
+                        const raa = parseFloat(vare.pris_per_enhet)
+                        const pris = (omr && parseFloat(omr.areal) > 0 && isFinite(raa))
+                          ? Math.round((raa / parseFloat(omr.areal)) * 100) / 100
+                          : vare.pris_per_enhet
+                        return {
+                          ...m,
+                          enhetspris: pris,
+                          varenavn: vare.varenavn || m.varenavn,
+                          ...(vare.enhet ? { _prisEnhet: vare.enhet } : {}),
+                          ...(omr && parseFloat(omr.areal) > 0 && isFinite(raa) ? { _omregning: { ...omr, fraPris: raa } } : {}),
+                        }
+                      })
                     }
                   }
                 } catch(e) {}
@@ -73853,7 +75716,7 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
 // Layout er bygget for 375 px: full skjerm på mobil, ett kort per forslag med
 // trykkflate over 56 px, og ingen sideveis scroll.
 function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose }) {
-  const { sok: prisbokSok } = usePrisbokSoek()
+  const { sok: prisbokSok, kanSePriser } = usePrisbokSoek()
   const [idx, setIdx] = useState(0)
   const [kandidater, setKandidater] = useState([])
   const [laster, setLaster] = useState(false)
@@ -73866,6 +75729,13 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
   const kjoringRef = React.useRef(0)
   const sokRef = React.useRef(0)
   const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+  // Scrollboksen og kortene i den. Vi måler dem for å kunne si «N treff til
+  // nedenfor» — uten det tallet ser tre kort ut som at listen er slutt, og da
+  // har vi løst at søkefeltet er usynlig ved å gjøre forslagene usynlige.
+  const innholdRef = React.useRef(null)
+  const kortRef = React.useRef([])
+  const rafRef = React.useRef(0)
+  const [antallUnder, setAntallUnder] = useState(0)
 
   // Køen fryses ved åpning. Kobler brukeren linje 1, forsvinner den fra
   // parentens `linjer` — uten frysing ville listen krympe under føttene på oss
@@ -73882,6 +75752,10 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
     setKandidater([])
     setEgetSok('')
     setSokTreff([])
+    // Med et sticky søkefelt ville scrollposisjonen fulgt med til neste linje:
+    // materiallinje-kortet sto da utenfor synsfeltet på en linje brukeren ikke
+    // har sett ennå. Vi ruller til topp for hver ny linje.
+    if (innholdRef.current) innholdRef.current.scrollTop = 0
     finnKoblingsKandidater(prisbokSok, aktiv, 5)
       .then(res => { if (kjoringRef.current === kjoring) { setKandidater(res); setLaster(false) } })
       .catch(() => { if (kjoringRef.current === kjoring) { setKandidater([]); setLaster(false) } })
@@ -73901,6 +75775,32 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
     return () => clearTimeout(t)
   }, [egetSok])
 
+  // ── «N TREFF TIL NEDENFOR» ─────────────────────────────────────────────────
+  // Søkefeltet flyttet til toppen koster plass: antall helt synlige kort går
+  // fra fire til tre. Dette tallet er det som gjør de tre til «det er mer her»
+  // i stedet for «listen er slutt».
+  //
+  // Måler med getBoundingClientRect, ikke offsetTop: scrollboksen er ikke
+  // posisjonert, så offsetTop måles fra modal-boksen og ville vært forskjøvet
+  // med hele headerhøyden.
+  const maalUnder = () => {
+    const boks = innholdRef.current
+    if (!boks) { setAntallUnder(0); return }
+    const kant = boks.getBoundingClientRect().bottom
+    let n = 0
+    for (const el of kortRef.current) {
+      // 4 px slark: et kort som så vidt berører kanten regnes som synlig.
+      if (el && el.getBoundingClientRect().bottom > kant + 4) n++
+    }
+    setAntallUnder(n)
+  }
+  // Treghetsscrolling på iOS fyrer onScroll mange ganger i sekundet, og hver
+  // måling er inntil 15 rect-oppslag. Én måling per frame er nok.
+  const paaScroll = () => {
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => { rafRef.current = 0; maalUnder() })
+  }
+
   const nesteLinje = () => setIdx(i => i + 1)
 
   // onKoble kan åpne en bekreftelsesdialog (rull→m²). Vi må vente på svaret før
@@ -73918,10 +75818,49 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
   const ferdig = !aktiv
   const totalt = koe.length
 
+  // Én liste, to tilstander. Står det tekst i søkefeltet, viser listen treff;
+  // er feltet tomt, viser den forslagene. Overskriften sier hvilket. Å vise
+  // begge samtidig ville gitt 5 forslag + 15 treff = 20 kort, og
+  // gjeninnført nettopp scrollingen vi fjerner.
+  const term = egetSok.trim()
+  const sokAktiv = term.length > 0
+  const visteKort = sokAktiv ? sokTreff : kandidater
+
+  // Teller under feltet. Den forteller at søket VIRKET selv når treffene
+  // ligger utenfor synsfeltet — og ved ett tegn sier den hva som mangler, slik
+  // at feltet aldri ser dødt ut mens minimumsgrensen holder søket tilbake.
+  const tellerTekst = (() => {
+    if (!sokAktiv) return null
+    if (sokLaster) return 'Søker …'
+    if (term.length < 2) return 'Skriv ett tegn til …'
+    if (sokTreff.length > 0) return `${sokTreff.length} treff — viser de nærmeste først`
+    return null   // null treff håndteres under, med egen forklaring
+  })()
+
+  // Tømmer brukeren feltet, er han tilbake i «vis meg forslagene» — og da skal
+  // han se toppen av dem, ikke bunnen av listen han nettopp forlot. Uten dette
+  // sto materiallinje-kortet utenfor synsfeltet etter et avbrutt søk.
+  useEffect(() => { if (!sokAktiv && innholdRef.current) innholdRef.current.scrollTop = 0 }, [sokAktiv])
+
+  // Måler på nytt når listen endres — ved bytte av linje, ved nytt søk, og når
+  // feltet tømmes og forslagene kommer tilbake. Uten dette står tallet fra
+  // forrige liste og lyver. requestAnimationFrame fordi kortene må være malt
+  // før de kan måles.
+  useEffect(() => {
+    const id = requestAnimationFrame(maalUnder)
+    return () => cancelAnimationFrame(id)
+  }, [visteKort, ferdig])
+  // Rydder en måling som ligger i kø når modalen lukkes.
+  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }, [])
+
+  // Kortene registreres i rekkefølge for målingen. Nullstilles ved hver
+  // rendring, ellers vokser listen med gamle noder som ikke står i DOM-en.
+  kortRef.current = []
+
   const kort = (p, visBegrunnelse) => {
     const stil = KOB_TILLIT_STIL[p._kobTillit] || KOB_TILLIT_STIL.lav
     return (
-      <button key={p.id || p.varenummer} onClick={() => velgProdukt(p)} disabled={jobber}
+      <button key={p.id || p.varenummer} ref={el => { if (el) kortRef.current.push(el) }} onClick={() => velgProdukt(p)} disabled={jobber}
         style={{ display:'block', width:'100%', textAlign:'left', border:'1px solid #e2e8f0', borderRadius:'12px', background:'white', padding:'12px 14px', marginBottom:'8px', cursor: jobber ? 'default' : 'pointer', opacity: jobber ? 0.6 : 1, minHeight:'56px', boxSizing:'border-box' }}>
         <div style={{ display:'flex', alignItems:'flex-start', gap:'8px', justifyContent:'space-between' }}>
           <div style={{ flex:1, minWidth:0 }}>
@@ -73970,8 +75909,10 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
           )}
         </div>
 
-        {/* Innhold */}
-        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+        {/* Innhold. Wrapperen er posisjonert fordi «N treff til nedenfor» ligger
+            absolutt i bunnen av det SYNLIGE området, ikke i bunnen av listen. */}
+        <div style={{ position:'relative', flex:1, minHeight:0, display:'flex' }}>
+        <div ref={innholdRef} onScroll={paaScroll} style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
           {ferdig ? (
             <div style={{ textAlign:'center', padding:'32px 8px' }}>
               <div style={{ fontSize:'40px', marginBottom:'10px' }}>{koblet > 0 ? '✅' : '👍'}</div>
@@ -73984,7 +75925,7 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
           ) : (
             <>
               {/* Linjen som skal kobles */}
-              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+              <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px' }}>
                 <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.03em', marginBottom:'4px' }}>MATERIALLINJE</div>
                 <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', wordBreak:'break-word' }}>{aktiv.varenavn || 'Uten navn'}</div>
                 <div style={{ fontSize:'12px', color:'#64748b', marginTop:'4px' }}>
@@ -73992,38 +75933,94 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
                 </div>
               </div>
 
-              {/* Forslag */}
-              {laster && (
+              {/* Søkefeltet ØVERST, og sticky. Sto det under forslagslisten så
+                  brukeren det aldri: målt lå det 145 px under kanten ved
+                  åpning, på en scrollboks som er 502 px høy. Sticky fordi 15
+                  treff gir ~2 000 px innhold — uten det forsvinner feltet
+                  oppover mens han leter, og et søk kan ikke rettes uten å
+                  scrolle tilbake.
+
+                  top: -14px, negative margins og egen bakgrunn: uten det
+                  ville innholdet vist seg i den 14 px brede stripen mellom
+                  boksens kant og feltets klebepunkt.
+
+                  Telleren er MED i det klebende feltet. Den skal jo bevise at
+                  søket virket mens treffene ligger utenfor synsfeltet — da kan
+                  den ikke være det første som forsvinner. */}
+              <div style={{ position:'sticky', top:'-14px', zIndex:3, background:'#f8fafc', margin:'0 -16px 10px', padding:'14px 16px 8px' }}>
+                <div style={{ position:'relative' }}>
+                  <span style={{ position:'absolute', left:'12px', top:'50%', transform:'translateY(-50%)', fontSize:'14px', color:'#94a3b8', pointerEvents:'none' }}>🔍</span>
+                  <input value={egetSok} onChange={e => setEgetSok(e.target.value)}
+                    placeholder="Varenavn eller NOBB"
+                    style={{ width:'100%', boxSizing:'border-box', padding:'11px 40px 11px 36px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'16px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
+                  {/* 16 px skriftstørrelse og 32 px trykkflate: under 16 px
+                      zoomer iOS inn på feltet når det får fokus, og da må
+                      brukeren zoome ut igjen manuelt. */}
+                  {egetSok !== '' && (
+                    <button onClick={() => setEgetSok('')} aria-label="Tøm søket"
+                      style={{ position:'absolute', right:'5px', top:'50%', transform:'translateY(-50%)', width:'32px', height:'32px', border:'none', background:'#f1f5f9', color:'#64748b', borderRadius:'8px', fontSize:'17px', lineHeight:1, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', padding:0 }}>×</button>
+                  )}
+                </div>
+                {tellerTekst && (
+                  <div style={{ fontSize:'11px', color: sokLaster ? '#2563eb' : '#64748b', marginTop:'6px' }}>{tellerTekst}</div>
+                )}
+              </div>
+
+              {/* Forslag eller treff — samme liste, ulik overskrift */}
+              {laster && !sokAktiv && (
                 <div style={{ textAlign:'center', padding:'22px', fontSize:'13px', color:'#2563eb' }}>Leter i prislisten din …</div>
               )}
-              {!laster && kandidater.length > 0 && (
+              {visteKort.length > 0 && (
                 <>
-                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>FORSLAG FRA PRISLISTEN DIN</div>
-                  {kandidater.map(p => kort(p, true))}
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>
+                    {sokAktiv ? 'SØKERESULTAT' : 'FORSLAG FRA PRISLISTEN DIN'}
+                  </div>
+                  {visteKort.map(p => kort(p, !sokAktiv))}
                 </>
               )}
-              {!laster && kandidater.length === 0 && (
-                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
-                  <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
-                  <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
-                    Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk gjerne selv under — eller hopp over, så beholder linjen den veiledende prisen.
+
+              {/* Null treff på et eget søk. NOBB-forslaget gjelder bare roller
+                  som faktisk kan slå opp i prisboken — å sende en ansatt på
+                  jakt etter et nummer han uansett ikke får søke på, er verre
+                  enn å si ingenting. Der vinner tilgangsnotisen alene. */}
+              {sokAktiv && !sokLaster && term.length >= 2 && sokTreff.length === 0 && (
+                kanSePriser ? (
+                  <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', marginBottom:'4px' }}>Ingen treff for «{term}»</div>
+                    <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+                      Prøv NOBB-nummeret i stedet — det treffer nøyaktig én vare, og navnet i prislisten er ofte skrevet annerledes enn på tegningen.
+                    </div>
                   </div>
-                </div>
+                ) : <PrisTilgangNotis kompakt />
               )}
 
-              {/* Søk selv */}
-              <div style={{ marginTop:'14px' }}>
-                <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'7px' }}>SØK SELV</div>
-                <input value={egetSok} onChange={e => setEgetSok(e.target.value)}
-                  placeholder="Varenavn eller NOBB-nummer …"
-                  style={{ width:'100%', boxSizing:'border-box', padding:'11px 13px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white' }} />
-                {sokLaster && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker …</div>}
-                {!sokLaster && egetSok.trim().length >= 2 && sokTreff.length === 0 && (
-                  <div style={{ fontSize:'12px', color:'#94a3b8', marginTop:'8px' }}>Ingen treff for «{egetSok.trim()}».</div>
-                )}
-                {sokTreff.length > 0 && <div style={{ marginTop:'8px' }}>{sokTreff.map(p => kort(p, false))}</div>}
-              </div>
+              {/* Ingen forslag å vise, og brukeren søker ikke selv ennå */}
+              {!laster && !sokAktiv && kandidater.length === 0 && (
+                kanSePriser ? (
+                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'12px 14px' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'600', color:'#92400e', marginBottom:'4px' }}>Ingen god kandidat</div>
+                    <div style={{ fontSize:'12px', color:'#a16207', lineHeight:1.5 }}>
+                      Vi fant ingen vare i prislisten med samme dimensjon og materialtype. Søk selv i feltet over — eller hopp over, så beholder linjen den veiledende prisen.
+                    </div>
+                  </div>
+                ) : (
+                  // «Ingen god kandidat» ville vært feil svar her: det er ikke
+                  // dimensjonen som mangler, det er tilgangen.
+                  <PrisTilgangNotis />
+                )
+              )}
             </>
+          )}
+        </div>
+          {/* «N treff til nedenfor» — ligger i bunnen av det synlige området og
+              forsvinner idet siste kort er framme. pointerEvents: none, slik at
+              den aldri stjeler et trykk fra kortet under seg. */}
+          {antallUnder > 0 && (
+            <div style={{ position:'absolute', left:0, right:0, bottom:0, height:'46px', display:'flex', alignItems:'flex-end', justifyContent:'center', paddingBottom:'7px', pointerEvents:'none', background:'linear-gradient(to bottom, rgba(248,250,252,0) 0%, rgba(248,250,252,0.55) 45%, rgba(248,250,252,0.95) 100%)' }}>
+              <span style={{ fontSize:'11px', fontWeight:'700', color:'white', background:'rgba(15,23,42,0.85)', padding:'5px 13px', borderRadius:'999px', boxShadow:'0 4px 12px rgba(15,23,42,0.25)' }}>
+                ↓ {antallUnder} {sokAktiv ? 'treff' : 'forslag'} til nedenfor
+              </span>
+            </div>
           )}
         </div>
 
@@ -74046,7 +76043,7 @@ function KoblingsassistentModal({ linjer, bdNavn, prisLabel, onKoble, onClose })
 // ─── PRISBOK PAGE (5001-import + søk) ────────────────────────────────────────
 
 function PrisbokPage({ onBack }) {
-  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag, kanSePriser } = useAuth()
   const confirm = useConfirm()
   const [prislister, setPrislister] = useState([])
   const [aktivPrisliste, setAktivPrisliste] = useState(null)
@@ -74478,6 +76475,8 @@ function PrisbokPage({ onBack }) {
 
   const searchPrisbok = async () => {
     if (!search.trim()) { setPrisbok([]); return }
+    // Rollesjekken ligger i sok_prisbok — kallet ville bare gitt en feil.
+    if (!kanSePriser) { setPrisbok([]); return }
     try {
       // Bruker sok_prisbok (SECURITY DEFINER) — direkte ILIKE mot prisbok kan ikke
       // bruke trigram-indeksen under RLS og gir statement timeout på 305k rader.
@@ -74648,9 +76647,15 @@ function PrisbokPage({ onBack }) {
           </div>
         )}
 
+        {/* Uten pristilgang er både listen og søket tomt. Da skal siden si hvorfor,
+            ikke la brukeren søke forgjeves. */}
+        {!kanSePriser && <div style={{ marginBottom:'16px' }}><PrisTilgangNotis /></div>}
+
         {/* Search */}
         <div style={{ display:'flex', gap:'12px', alignItems:'center', marginBottom:'16px' }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Søk NOBB-nummer, varenavn eller kategori (min. 2 tegn)..." style={{ ...qInp, maxWidth:'500px', flex:1 }} />
+          <input value={search} onChange={e => setSearch(e.target.value)} disabled={!kanSePriser}
+            placeholder={kanSePriser ? '🔍 Søk NOBB-nummer, varenavn eller kategori (min. 2 tegn)...' : 'Søk er ikke tilgjengelig for din rolle'}
+            style={{ ...qInp, maxWidth:'500px', flex:1, background: kanSePriser ? undefined : '#f8fafc', color: kanSePriser ? undefined : '#94a3b8' }} />
           {prisbok.length > 0 && <span style={{ fontSize:'13px', color:'#94a3b8' }}>{prisbok.length} treff{aktivPrisliste ? ` i "${aktivPrisliste.navn}"` : ''}</span>}
         </div>
 
@@ -75304,7 +77309,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
 function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
-  const { user, companyId, kanStyrePrisgrunnlag } = useAuth()
+  const { user, companyId, kanStyrePrisgrunnlag, kanSePriser } = useAuth()
   // Bedriftens egne bygningsdeler. `rader` er de lagrede overstyringene —
   // finnBibliotekMalId og lagre-knappen leser dem for å vite om bygningsdelen
   // alt finnes i biblioteket.
@@ -75445,7 +77450,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // opp ennå. Ett kall per pulje på 100. Numre som ikke finnes lagres som null,
   // så vi ikke spør om dem igjen.
   useEffect(() => {
-    if (!user?.id) return
+    // Uten pristilgang blir oppslaget avvist av RLS. Merkingen av enhetsavvik
+    // uteblir da — den er en hjelp, ikke en forutsetning.
+    if (!user?.id || !kanSePriser) return
     const alle = nobbSignatur ? nobbSignatur.split(',').filter(Boolean) : []
     const mangler = alle.filter(n => !(n in prisEnhetRef.current))
     if (mangler.length === 0) return
@@ -75469,13 +77476,22 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
       } catch(e) { /* stille: merkingen er en hjelp, ikke en forutsetning */ }
     })()
     return () => { avbrutt = true }
-  }, [nobbSignatur, user?.id])
+  }, [nobbSignatur, user?.id, kanSePriser])
 
   // Enhetsavviket på én materiallinje, eller null når alt stemmer.
   // Er linjen bevisst omregnet (bruker bekreftet rull→m²), er det ikke et avvik.
+  //
+  // `_prisEnhet` er enheten prisen ble hentet i, lagret på linjen da varen ble
+  // valgt eller prisen oppdatert. Den leses FØRST, og det er det som gjør
+  // varselet uavhengig av prisboken: det virker uten nettverk, for roller uten
+  // pristilgang, og etter at prislisten er slettet eller byttet. Oppslaget er
+  // bare en reserve for linjer som ble koblet før feltet fanst.
   const linjeEnhetsAvvik = (m) => {
     if (!m || !matErKoblet(m)) return null
-    if (m._omregning) return null
+    // Flagget må være BRUKBART for å dempe varselet. Er arealet 0 eller borte,
+    // er linjen ikke omregnet på en måte vi kan stå for — da skal varselet stå.
+    if (m._omregning && parseFloat(m._omregning.areal) > 0) return null
+    if (m._prisEnhet) return enhetsAvvik(m.enhet, m._prisEnhet)
     const oppslag = prisEnheter[String(m.nobb).trim()]
     if (!oppslag) return null
     return enhetsAvvik(m.enhet, oppslag.enhet)
@@ -76818,8 +78834,19 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                               {!isExpanded && (() => {
                                 const kob = tellKobledeLinjer(bd.materialer)
                                 if (kob.total === 0) return null
-                                const alle = kob.ukoblet === 0
-                                return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste`} style={{ fontSize:'10px', background: alle ? '#f0fdf4' : '#fffbeb', color: alle ? '#15803d' : '#a16207', padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>{alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}</span>
+                                // «8 av 8 koblet» skal ikke lyse grønt når en av dem har
+                                // pris i feil enhet. En grønn teller som lyver er verre
+                                // enn ingen teller.
+                                const avvik = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
+                                const alle = kob.ukoblet === 0 && avvik === 0
+                                // Sammenslått er dette det ENESTE signalet om enhetsavvik, så
+                                // det må skille seg fra gult: gult = mangler kobling (uferdig),
+                                // dempet rødt = prisen står i feil enhet (feil tall).
+                                const bgT = avvik > 0 ? '#fff1f2' : alle ? '#f0fdf4' : '#fffbeb'
+                                const fgT = avvik > 0 ? '#be123c' : alle ? '#15803d' : '#a16207'
+                                return <span title={`${kob.koblet} av ${kob.total} materiallinjer er koblet til din prisliste${avvik > 0 ? ` · ${avvik} har pris i en annen enhet enn linjen` : ''}`}
+                                  style={{ fontSize:'10px', background: bgT, color: fgT, padding:'1px 6px', borderRadius:'4px', flexShrink:0, fontWeight:'600' }}>
+                                  {avvik > 0 ? '⚠' : alle ? '🔗' : '⚠️'} {kob.koblet}/{kob.total}{avvik > 0 ? ` · ${avvik} feil` : ''}</span>
                               })()}
                             </div>
                             <div style={{ display:'flex', alignItems:'center', gap: isMobKV ? '6px' : '10px', flexShrink:0 }}>
@@ -77081,10 +79108,13 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                     har en veiledende standardpris. Det skal stå der. */}
                                 {(() => {
                                   const kob = tellKobledeLinjer(bd.materialer)
-                                  const alle = kob.total > 0 && kob.ukoblet === 0
                                   // Uten denne telleren må brukeren åpne hver rad for å finne
                                   // linjen der enheten ikke stemmer.
                                   const avvikAntall = (bd.materialer||[]).filter(mm => linjeEnhetsAvvik(mm)).length
+                                  // «8 av 8 koblet» skal ikke være grønn når én av linjene har
+                                  // pris i feil enhet. Den sa alt var i orden mens en dampsperre
+                                  // sto 39 ganger for høyt.
+                                  const alle = kob.total > 0 && kob.ukoblet === 0 && avvikAntall === 0
                                   return (
                                     <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'8px' }}>
                                       <span style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8' }}>📦 MATERIALER</span>
@@ -77094,7 +79124,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         </span>
                                       )}
                                       {avvikAntall > 0 && (
-                                        <span title="Prisen på disse linjene gjelder en annen enhet enn linjen regnes i. Velg varen på nytt med 🔍 for å rette det." style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background:'#fff7ed', color:'#c2410c', border:'1px solid #fed7aa' }}>
+                                        <span title="Prisen på disse linjene gjelder en annen enhet enn linjen regnes i. Velg varen på nytt med 🔍 for å rette det." style={{ fontSize:'11px', fontWeight:'600', padding:'3px 9px', borderRadius:'999px', background:'#fff1f2', color:'#be123c', border:'1px solid #fecdd3' }}>
                                           ⚠ {avvikAntall} {avvikAntall === 1 ? 'linje' : 'linjer'} med feil enhet
                                         </span>
                                       )}
@@ -77137,7 +79167,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                       const koblet = matErKoblet(m)
                                       const avvik = linjeEnhetsAvvik(m)
                                       return (
-                                        <div key={m.id} style={{ border:'1px solid ' + (avvik ? '#fed7aa' : koblet ? '#f1f5f9' : '#fde68a'), background: avvik ? '#fff7ed' : (koblet ? 'white' : '#fffdf3'), borderRadius:'10px', padding:'9px 11px' }}>
+                                        <div key={m.id} style={{ border:'1px solid ' + (avvik ? '#fecdd3' : koblet ? '#f1f5f9' : '#fde68a'), background: avvik ? '#fff1f2' : (koblet ? 'white' : '#fffdf3'), borderRadius:'10px', padding:'9px 11px' }}>
                                           <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', alignItems:'baseline' }}>
                                             <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word', minWidth:0 }}>{m.varenavn || 'Uten navn'}</span>
                                             <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', whiteSpace:'nowrap', flexShrink:0 }}>{fmt(r.medFortjeneste * effM)}</span>
@@ -77149,7 +79179,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                           {(!koblet || avvik || m._omregning) && (
                                             <div style={{ display:'flex', gap:'5px', flexWrap:'wrap', marginTop:'6px' }}>
                                               {!koblet && <span style={{ fontSize:'9px', fontWeight:'700', color:'#a16207', background:'#fffbeb', border:'1px solid #fde68a', padding:'2px 6px', borderRadius:'4px' }}>≈ veiledende</span>}
-                                              {avvik && <span style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', background:'#fff7ed', border:'1px solid #fed7aa', padding:'2px 6px', borderRadius:'4px' }}>⚠ {avvik.kort}</span>}
+                                              {avvik && <span style={{ fontSize:'9px', fontWeight:'700', color:'#be123c', background:'#fff1f2', border:'1px solid #fecdd3', padding:'2px 6px', borderRadius:'4px' }}>⚠ {avvik.kort}</span>}
                                               {m._omregning && <span style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', background:'#eff6ff', border:'1px solid #bfdbfe', padding:'2px 6px', borderRadius:'4px' }}>↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}</span>}
                                             </div>
                                           )}
@@ -77193,7 +79223,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         const koblet = matErKoblet(m)
                                         const avvik = linjeEnhetsAvvik(m)
                                         return (
-                                          <tr key={m.id} style={{ background: avvik ? '#fff7ed' : (koblet ? 'transparent' : '#fffdf3') }}>
+                                          <tr key={m.id} style={{ background: avvik ? '#fff1f2' : (koblet ? 'transparent' : '#fffdf3') }}>
                                             <td style={{ padding:'3px 2px' }}>
                                               <div style={{ display:'flex', gap:'2px', alignItems:'center' }}>
                                                 <input value={m.nobb||''} onChange={e => updateMaterial(kalk.id,bd.id,m.id,'nobb',e.target.value)} onBlur={async (e) => {
@@ -77249,11 +79279,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                   er galt — det er denne feilen som gjorde 407,40 kr/rull til
                                                   407,40 kr/m². */}
                                               {avvik && (
-                                                <div title={avvik.lang} style={{ fontSize:'9px', fontWeight:'700', color:'#c2410c', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>⚠ {avvik.kort}</div>
+                                                <div title={avvik.lang} style={{ fontSize:'9px', fontWeight:'700', color:'#be123c', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>⚠ {avvik.kort}</div>
                                               )}
                                               {/* Bevisst omregnet fra leveranseenhet — vis hva som ligger bak tallet. */}
                                               {koblet && m._omregning && (
-                                                <div title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ${fmtTall(m._omregning.areal)} m²`}
+                                                <div title={`Regnet om fra ${fmtKr2(m._omregning.fraPris)} per ${enhetTekst(normaliserEnhet(m._omregning.fraEnhet))} — ${m._omregning.bredde ? `${fmtTall(m._omregning.bredde)} m × ${fmtTall(m._omregning.lengde)} m dekker ` : ''}${fmtTall(m._omregning.areal)} m²`}
                                                   style={{ fontSize:'9px', fontWeight:'700', color:'#1d4ed8', marginTop:'2px', textAlign:'right', lineHeight:1.25 }}>
                                                   ↩ fra {enhetTekst(normaliserEnhet(m._omregning.fraEnhet))}
                                                 </div>
@@ -79438,7 +81468,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const [plId, setPlId] = useState(null)
           const [velger, setVelger] = useState(false)
           const searchRef = React.useRef(0)
-          const { sok: prisbokSok } = usePrisbokSoek()
+          const { sok: prisbokSok, kanSePriser } = usePrisbokSoek()
 
           const PRODUKT_KATEGORIER = [
             { id: 'isolasjon', label: 'Isolasjon', emoji: '🧱', keywords: ['ISOLASJON','EPS','XPS','GLAVA','ROCKWOOL','FLEXI','SUNDOLITT','JACKO','MINERALULL'] },
@@ -79560,7 +81590,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv søketekst eller velg en kategori</div>
                   )}
                   {hasSearched && res.length === 0 && !searching && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
+                    kanSePriser
+                      ? <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
+                      : <div style={{ padding:'16px' }}><PrisTilgangNotis /></div>
                   )}
                   {res.map(p => (
                     <button key={p.id} onClick={() => selectProduct(p)}
@@ -79600,6 +81632,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           poster={prisPosterFraKalkyle()}
           userId={user?.id}
           companyId={companyId}
+          kanSePriser={kanSePriser}
           sendtStatus={KALK_SENDT_STATUS.has(k.status) ? k.status : null}
           onSkriv={skrivPrisoppdatering}
           onFinnErstatning={(p) => {
@@ -82479,7 +84512,11 @@ function AppContent() {
   }, [])
   // Offline Lag 2: forhåndslasting — hold cachen fersk mens vi har nett.
   React.useEffect(() => {
-    if (!user) return
+    // MÅ vente på companyId. Cachen nøkles på bedrift, og idbSett forkaster
+    // stille alt som skrives før bedriften er kjent. Uten denne sperra ville de
+    // 21 listene blitt hentet og kastet ved hver innlogging, og cachen stått tom
+    // til neste runde fem minutter senere.
+    if (!user || !companyId) return
     forhandslast({ tving: true })                                   // ved oppstart
     const interval = setInterval(() => forhandslast(), 5 * 60 * 1000) // hver 5. min
     const paaNett = () => forhandslast({ tving: true })             // ved gjenoppkobling
@@ -82491,7 +84528,7 @@ function AppContent() {
       window.removeEventListener('online', paaNett)
       document.removeEventListener('visibilitychange', synlig)
     }
-  }, [user])
+  }, [user, companyId])
   // Offline Lag 3: tøm skrivekøen mot serveren når vi har nett.
   React.useEffect(() => {
     if (!user) return
@@ -82666,7 +84703,13 @@ function AppContent() {
     if (!user) return
     supabase.from('company_settings').select('*').limit(1).single()
       .then(({ data, error }) => {
-        if (error || !data) { setActiveModules(['grunnpakke']); return }
+        // Svarte ikke spørringen — typisk uten nett — VET vi ikke hvilke moduler
+        // bedriften har. Å skrive ['grunnpakke'] her var å påstå at bedriften eier
+        // grunnpakken og ingenting mer, og resultatet var salgspopupen «Bestill nå
+        // — 1 499 kr» på Kalkulasjon hos en kunde som betaler for den.
+        // null er den ærlige verdien: isModuleActive behandler den som «vis som
+        // aktiv», og da selger vi ikke noe vi ikke vet at mangler.
+        if (error || !data) { setActiveModules(null); return }
         
         const status = data.subscription_status || 'active'
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
@@ -82702,7 +84745,7 @@ function AppContent() {
           setActiveModules(data.active_modules || ['grunnpakke'])
         }
       })
-      .catch(() => setActiveModules(['grunnpakke']))
+      .catch(() => setActiveModules(null))   // samme som over: ukjent, ikke «bare grunnpakke»
   }, [user])
 
   // Løpende sjekk: blir bedriften sperret mens brukeren er innlogget, låses de ut umiddelbart
@@ -82742,7 +84785,10 @@ function AppContent() {
   } : null
 
   const isModuleActive = (navId) => {
-    if (!activeModules) return true // still loading, show as active
+    // null betyr «vet ikke» — enten fordi vi fortsatt laster, eller fordi
+    // spørringen ikke svarte. I begge tilfeller viser vi modulen som aktiv.
+    // Alternativet er å låse den og be en betalende kunde kjøpe den på nytt.
+    if (!activeModules) return true
     const requiredModule = navToModule[navId]
     if (!requiredModule) return true // always accessible (dashboard, minbedrift, brukeradmin, varsler)
     return harModul(modulInnstillinger, requiredModule)
