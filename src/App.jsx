@@ -39364,7 +39364,6 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
-                <SynkMerke synk={synk} />
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
                 {kunde.orgnr && <span>Org.nr: {kunde.orgnr}  </span>}
@@ -39372,18 +39371,22 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               </div>
             </div>
           </div>
-          {/* Sekundærhandling til venstre for primærknappen, samme mønster som
-              prosjektkortet. Rediger forblir den grønne. */}
+          {/* INGEN SYNK-KNAPP HER ENNÅ — og det er med vilje.
+              UI-omarbeidingen (b9553b0, 22. august) la inn SynkMerke, SynkKnapp
+              og SynkFeil i dette kortet, men bare ETT useIntegrasjonSynk-kall,
+              og det havnet i prosjektskjemaet. Her sto «synk» udefinert, og
+              Kundeoversikt krasjet med «synk is not defined» så snart man åpnet
+              en kunde. Sto i produksjon fra 22. august.
+              Markupen er fjernet i stedet for å gjette på hooken: alleredeSynket
+              skal hentes fra external_links, og den lesingen flyttes i DEL 2.
+              Knappen settes inn igjen der — komplett, med sin egen hook. */}
           <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
-            <SynkKnapp synk={synk} isMob={isMobKD} />
             <button onClick={() => setEditing(true)}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
               ✏️{!isMobKD && ' Rediger'}
             </button>
           </div>
         </div>
-
-        <SynkFeil synk={synk} />
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
@@ -75531,7 +75534,11 @@ function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, kanErstatte, o
 // bygningsdeler lå i én haug på tvers av yttervegg, gulv og himling.
 function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   const confirm = useConfirm()
-  const { kanStyrePrisgrunnlag } = useAuth()
+  // companyId og user manglet her. hentAktivPrisliste() lenger nede kalles med
+  // begge, inne i en try med tom catch — så ReferenceError-en ble svelget, og
+  // NOBB-materialer fikk GAMLE PRISER uten at noe sa fra. Ingen krasj, ingen
+  // melding, bare feil tall i tilbudet. Innført 8f18592, 18. august.
+  const { kanStyrePrisgrunnlag, companyId, user } = useAuth()
   const [mengde, setMengde] = useState(1)
   const [selectedBd, setSelectedBd] = useState(null)
   const [expandedKat, setExpandedKat] = useState(null)
