@@ -2,39 +2,96 @@
 // Håndterer pushvarsler og klikk på varsler, OG app-skall-caching (Offline Lag 1),
 // OG bilde-caching av Supabase storage (Offline — bilder offline).
 // Ligger i /public og serveres på /sw.js.
-// Versjonsnummeret kan bumpes for å tvinge oppdatering av service worker i nettleseren.
-const SW_VERSION = 'v3'
+//
+// PRECACHE-LISTA GENERERES VED BYGG. Vite gir bundlen et innholdshash-navn ved
+// hver build, og denne fila er statisk — den kan umulig kjenne navnet på forhånd.
+// scripts/lag-sw.mjs bytter derfor ut de to markørene under med de faktiske
+// filnavnene fra dist/ og en build-id utledet av selve lista.
+//
+// Markørene er gyldig JS også UERSTATTET, så `npm run dev` fungerer som før: da
+// faller vi tilbake til bare skallet, uten bundle.
+//
+// Sidegevinsten er at fila endrer bytes ved hver deploy der bundlen endres — og
+// det er nettopp det som får nettleseren til å installere service workeren på
+// nytt. Med en statisk liste skjedde det aldri.
+const BUILD_ID = 'EP_BUILD_ID'
+const PRECACHE_JSON = 'EP_PRECACHE'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // OFFLINE LAG 1 — APP-SKALL-CACHING
 // ─────────────────────────────────────────────────────────────────────────────
-const SHELL_CACHE = 'ep-shell-' + SW_VERSION
-const PRECACHE_URLS = ['/', '/index.html', '/icon-192.png', '/badge-96.png']
+const SHELL_CACHE = 'ep-shell-' + BUILD_ID
+const META_CACHE = 'ep-meta'              // slettes aldri — holder rekkefølgen på bygg
+const BEHOLD_GENERASJONER = 2
+
+const PRECACHE_URLS = (() => {
+  try {
+    const liste = JSON.parse(PRECACHE_JSON)
+    if (Array.isArray(liste) && liste.length) return liste
+  } catch (e) { /* ikke erstattet — utviklingsmodus */ }
+  return ['/', '/index.html']
+})()
+
+// / og /index.html MÅ hentes ferskt: de er ikke hashet, og en foreldet index.html
+// peker på en bundle som ikke finnes lenger. De hashede filene er uforanderlige,
+// så der lar vi HTTP-cachen svare — ellers lastes bundlen (3,6 MB) ned to ganger
+// ved hver install: én gang av siden, én gang av oss.
+function precacheForesporsel(url) {
+  const maaVaereFersk = url === '/' || url === '/index.html'
+  return maaVaereFersk ? new Request(url, { cache: 'reload' }) : new Request(url)
+}
 
 async function precacheShell() {
   const cache = await caches.open(SHELL_CACHE)
-  await Promise.allSettled(
-    PRECACHE_URLS.map((url) => cache.add(new Request(url, { cache: 'reload' })))
+  await Promise.allSettled(PRECACHE_URLS.map((url) => cache.add(precacheForesporsel(url))))
+}
+
+// Rekkefølgen på bygg, i en cache som aldri slettes. Uten den kan vi ikke vite
+// hvilken skall-cache som er forrige generasjon og hvilke som er eldre — navnene
+// alene sier ingenting om alder.
+async function huskBygg(id) {
+  const meta = await caches.open(META_CACHE)
+  let liste = []
+  try {
+    const r = await meta.match('/__bygg')
+    if (r) liste = await r.json()
+  } catch (e) { liste = [] }
+  if (!Array.isArray(liste)) liste = []
+  liste = [id, ...liste.filter((x) => x !== id)].slice(0, 8)
+  await meta.put('/__bygg', new Response(JSON.stringify(liste), { headers: { 'Content-Type': 'application/json' } }))
+  return liste
+}
+
+// Oppryddingen ligger i INSTALL, ikke i activate. Grunnen: skipWaiting() gjør at
+// den nye service workeren overtar umiddelbart, mens brukere fortsatt kan ha den
+// gamle siden åpen og lese assets fra forrige cache. Slettet vi den ved activate,
+// ville de forsvunnet under beina på dem midt i arbeidet.
+//
+// Ved å rydde i install og beholde de to siste generasjonene, får forrige bygg
+// leve til det er to deploys gammelt. Da beholder vi umiddelbare oppdateringer
+// OG unngår å dra assets vekk fra noen som er i gang.
+async function ryddGamleSkall() {
+  const liste = await huskBygg(BUILD_ID)
+  const behold = new Set(liste.slice(0, BEHOLD_GENERASJONER).map((id) => 'ep-shell-' + id))
+  const navnListe = await caches.keys()
+  await Promise.all(
+    navnListe
+      .filter((navn) => navn.startsWith('ep-shell-') && !behold.has(navn))
+      .map((navn) => caches.delete(navn))
   )
 }
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(precacheShell())
+  event.waitUntil((async () => {
+    await precacheShell()
+    await ryddGamleSkall()
+  })())
   self.skipWaiting()
 })
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    (async () => {
-      const navnListe = await caches.keys()
-      await Promise.all(
-        navnListe
-          .filter((navn) => navn.startsWith('ep-shell-') && navn !== SHELL_CACHE)
-          .map((navn) => caches.delete(navn))
-      )
-      await self.clients.claim()
-    })()
-  )
+  // Skall-cachene ryddes i install, ikke her — se ryddGamleSkall().
+  event.waitUntil(self.clients.claim())
 })
 
 self.addEventListener('fetch', (event) => {
@@ -78,7 +135,15 @@ self.addEventListener('fetch', (event) => {
       try {
         const ferskt = await fetch(req)
         if (ferskt && ferskt.ok && ferskt.type === 'basic') {
-          cache.put(req, ferskt.clone())
+          // MÅ holdes i live av event.waitUntil. Uten den returnerer vi svaret på
+          // neste linje, respondWith innfris, og service workeren har ingen
+          // utestående jobb — nettleseren står fritt til å terminere den midt i
+          // skrivingen. cache.put er atomisk, så en avbrutt skriving legger igjen
+          // INGENTING. Det var nettopp derfor bundlen aldri havnet i cachen: den
+          // er 3,6 MB, og klonen må bufres i sin helhet før skrivingen fullføres.
+          // Å await-e her i stedet ville forsinket siden med hele skrivingen.
+          try { event.waitUntil(cache.put(req, ferskt.clone())) }
+          catch (e2) { /* eventet er ikke lenger aktivt — hopp over cachingen */ }
         }
         return ferskt
       } catch (e) {
