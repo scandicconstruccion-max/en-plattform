@@ -122,6 +122,34 @@ function huskBedrift(brukerId, bedriftId) {
   try { localStorage.setItem('ep-bedrift:' + brukerId, bedriftId) } catch (e) { /* svelg */ }
 }
 
+// Siste BEKREFTEDE profil for en bruker. Samme mønster og begrunnelse som
+// huskBedrift() over.
+//
+// Uten nett når loadProfile verken user_profiles eller fallback-spørringen, og
+// profile blir null. Da mister vi ikke bare navnet: role, module_access og alle
+// rettighetene utledet av dem forsvinner også — kanSlette, kanStyreProsjekt,
+// erAdmin og kanSePriser blir false selv for en admin.
+//
+// Verst er navnet. displayName falt tilbake på e-postprefikset, og displayName
+// SKRIVES til databasen: completed_by_name på sjekkpunkt, uploaded_by_name på
+// prosjektfil, from_name ved maskinoverlevering, reserved_by_name på
+// reservasjon. Offline går de gjennom skrivekøen og blir replayet. En bruker som
+// logger inn med support@enplattform.no fikk «support» stående i sjekklista.
+//
+// Lagres kun etter at profilen faktisk er hentet fra databasen, og nøkles på
+// bruker-id så neste bruker på samme enhet ikke arver den.
+function husketProfil(brukerId) {
+  if (!brukerId) return null
+  try {
+    const raa = localStorage.getItem('ep-profil:' + brukerId)
+    return raa ? JSON.parse(raa) : null
+  } catch (e) { return null }
+}
+function huskProfil(brukerId, profil) {
+  if (!brukerId || !profil) return
+  try { localStorage.setItem('ep-profil:' + brukerId, JSON.stringify(profil)) } catch (e) { /* svelg */ }
+}
+
 // Engangsopprydding av nøkler skrevet før prefikset fantes. De har ingen bedrift
 // i seg og kan aldri leses igjen — de ville bare ligget og tatt plass.
 //
@@ -1969,6 +1997,12 @@ function AuthProvider({ children }) {
           }
         } catch (_) {}
       }
+      // Fikk vi en profil, husk den. Fikk vi ingen — typisk uten nett, der begge
+      // spørringene feiler — er siste bekreftede profil det beste vi har. Uten
+      // den mister vi navn, rolle og rettigheter, og displayName faller tilbake
+      // på noe som ikke er et navn og som blir skrevet til databasen.
+      if (prof) huskProfil(authUser.id, prof)
+      else prof = husketProfil(authUser.id)
       setProfile(prof)
 
       // Engangsmigrering av opplæringstur-historikk: har brukeren sett-turer i
@@ -2025,7 +2059,11 @@ function AuthProvider({ children }) {
   }, [])
 
   // Display name: full_name from profile, fallback to email prefix
-  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
+  // E-postprefikset er ALDRI et navn. Det var det som gjorde at
+  // support@enplattform.no dukket opp som «support» — i grensesnittet, og verre,
+  // i databasen via skrivekøen. Har vi ingen profil (heller ikke fra disk), vet
+  // vi ikke hvem dette er, og da skal vi si det i stedet for å gjette.
+  const displayName = profile?.full_name || 'Ikke identifisert'
   const isPlatformOwner = profile?.platform_role === 'platform_owner'
   const profilBedriftId = profile?.company_id || null
   // Bedriften appen FAKTISK jobber i. Databasen avgjør det med auth_company_id():
