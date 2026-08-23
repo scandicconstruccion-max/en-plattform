@@ -369,6 +369,11 @@ async function forhandslast({ tving = false } = {}) {
       const gruppe = FORHANDSLAST_LISTER.slice(i, i + 4)
       await Promise.all(gruppe.map(([key, q]) => lesMedCache(key, q)))
     }
+    // Ansatte og kunder ligger IKKE i FORHANDSLAST_LISTER: de går ikke gjennom
+    // lesMedCache, fordi bare et utvalg av feltene får lagres på disk. De varmes
+    // opp her i stedet, ellers er de kalde til noen åpner et skjema.
+    try { await getCachedEmployees() } catch (_) {}
+    try { await getCachedCustomers() } catch (_) {}
     _forhandslastSist = Date.now()
   } catch (e) { /* svelg – forhåndslasting er best-effort */ }
   finally { _forhandslastKjorer = false }
@@ -3769,6 +3774,39 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 // NØKLET PÅ BEDRIFT, av samme grunn som _brandCache: EmployeeNameSelect brukes 19
 // steder, og prosjektleder og timegodkjenner lagres som id. Velges en ansatt fra
 // forrige bedrifts liste, skrives en id som ikke finnes for denne bedriften.
+// ── HVA SOM FÅR LIGGE PÅ DISK ──────────────────────────────────────────────
+// Ansatt- og kundelista hentes rett fra Supabase og hadde ingen offline-fallback
+// i det hele tatt: uten nett skrev de en TOM liste til abonnentene, og
+// nedtrekkene sa «Ingen ansatte funnet». Nå lagres de i IndexedDB — men bare
+// disse feltene.
+//
+// employees inneholder også hourly_rate, monthly_salary, birth_date, address,
+// emergency_contact_name/phone/relation og notes. Det er lønn, fødselsdato,
+// hjemmeadresse og kontaktinfo til pårørende — sistnevnte tilhører en person som
+// ikke engang bruker systemet. Det skal ikke ligge ukryptert i IndexedDB på
+// telefonen til hver eneste ansatt.
+//
+// customers.orgnr er utelatt av samme grunn: feltet er merket «Org.nr /
+// Fødselsnr» i tilbudsskjemaet, så det kan inneholde et fødselsnummer.
+// Konsekvensen er at man ikke kan søke opp en kunde på org.nr offline.
+//
+// Online-spørringene er UENDRET (select('*')), så ingenting endrer seg der.
+// Projeksjonen gjelder kun det som skrives til disk.
+const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'tripletex_employee_id']
+const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'phone']
+
+function plukkFelt(rad, felt) {
+  const ut = {}
+  for (const f of felt) if (rad && rad[f] !== undefined) ut[f] = rad[f]
+  return ut
+}
+async function lesListeFraDisk(noekkel) {
+  try {
+    const c = await idbHent(noekkel)
+    return c && Array.isArray(c.data) ? c.data : []
+  } catch (e) { return [] }
+}
+
 const _employeeCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 // Returnerer visningsnavn uansett om ansatt har first_name+last_name eller kombinert name-felt
@@ -3795,27 +3833,35 @@ function getCachedEmployees() {
       if (_employeeCache.nokkel !== min) return _employeeCache.data || []
       if (error) {
         console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
-        _employeeCache.data = []
-        _employeeCache.loading = null
-        _employeeCache.subscribers.forEach(fn => fn([]))
-        // Ikke cache tom liste permanent — prøv på nytt neste gang
-        setTimeout(() => { _employeeCache.data = null }, 5000)
-        return []
+        return ansatteFraDisk(min)
       }
       _employeeCache.data = data || []
       _employeeCache.loading = null
       _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
+      // Skriv gjennom til disk, men bare de feltene som får ligge der.
+      idbSett('ansatte:alle', _employeeCache.data.map(r => plukkFelt(r, ANSATT_OFFLINE_FELT)))
       console.log(`[EmployeeCache] Lastet ${_employeeCache.data.length} ansatte`)
       return _employeeCache.data
     })
     .catch(err => {
       console.error('[EmployeeCache] Exception:', err)
-      _employeeCache.data = []
-      _employeeCache.loading = null
-      setTimeout(() => { _employeeCache.data = null }, 5000)
-      return []
+      return ansatteFraDisk(min)
     })
   return _employeeCache.loading
+}
+
+// Fallback når nettet svikter. Før skrev vi en TOM liste til abonnentene her,
+// og nedtrekkene sa «Ingen ansatte funnet» offline. Nå leser vi siste kjente
+// liste fra disk i stedet. Finnes den ikke, blir svaret tomt som før.
+async function ansatteFraDisk(min) {
+  const liste = await lesListeFraDisk('ansatte:alle')
+  if (_employeeCache.nokkel !== min) return _employeeCache.data || []
+  _employeeCache.data = liste
+  _employeeCache.loading = null
+  _employeeCache.subscribers.forEach(fn => fn(liste))
+  // Ikke lås en tom liste permanent — prøv nettet på nytt neste gang.
+  if (!liste.length) setTimeout(() => { _employeeCache.data = null }, 5000)
+  return liste
 }
 
 function invalidateEmployeeCache() {
@@ -4183,19 +4229,27 @@ function getCachedCustomers() {
       _customerCache.data = rader
       _customerCache.loading = null
       _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
+      // Skriv gjennom til disk, men bare de feltene som får ligge der.
+      idbSett('kunder:alle', rader.map(r => plukkFelt(r, KUNDE_OFFLINE_FELT)))
       console.log(`[CustomerCache] Lastet ${rader.length} kunder (er_kunde=true)`)
       return _customerCache.data
     })
     .catch(err => {
       console.error('[CustomerCache] Feil ved henting av kunder:', err)
-      _customerCache.data = []
-      _customerCache.loading = null
-      _customerCache.subscribers.forEach(fn => fn([]))
-      // Ikke cache tom liste permanent — prøv på nytt neste gang
-      setTimeout(() => { _customerCache.data = null }, 5000)
-      return []
+      return kunderFraDisk(min)
     })
   return _customerCache.loading
+}
+
+// Samme som ansatteFraDisk: kundevelgeren var like tom offline.
+async function kunderFraDisk(min) {
+  const liste = await lesListeFraDisk('kunder:alle')
+  if (_customerCache.nokkel !== min) return _customerCache.data || []
+  _customerCache.data = liste
+  _customerCache.loading = null
+  _customerCache.subscribers.forEach(fn => fn(liste))
+  if (!liste.length) setTimeout(() => { _customerCache.data = null }, 5000)
+  return liste
 }
 
 function invalidateCustomerCache() {
