@@ -52018,13 +52018,6 @@ const REGNSKAPSSYSTEM = {
   visma:       { navn: 'Visma' },
 }
 
-// MIDLERTIDIG: den gamle RPC-en tripletex_integration_status() returnerer ikke
-// hvilket system som er koblet til. Til integration_status() er kjørt i begge
-// prosjekter antar vi tripletex når svaret mangler provider.
-// NÅR STATUSEN SVARER MED PROVIDER OVERALT: slett denne ÉNE linjen og
-// «|| REGNSKAP_ANTATT» i useRegnskapssystem under. Ingenting annet.
-const REGNSKAP_ANTATT = 'tripletex'
-
 // Status hentes ÉN gang per sidelast og deles av alle kort. Uten cachen ville hvert
 // kunde- og prosjektkort gjort sitt eget RPC-kall bare for å avgjøre om en knapp vises.
 // Cachen er NØKLET PÅ BEDRIFT. Uten nøkkelen ville statusen fra én bedrift blitt
@@ -52048,11 +52041,20 @@ function useRegnskapssystem() {
         // App.jsx lastes opp før eller etter at SQL-en er kjørt.
         let st = null
         try { const r = await supabase.rpc('integration_status'); if (!r.error) st = r.data } catch (_) {}
-        if (!st) { try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) st = r.data } catch (_) {} }
+        // Gammel RPC som reserve. Den filtrerer SELV på provider = 'tripletex',
+        // så svarer den 'connected', ER systemet Tripletex. Det er et faktum fra
+        // spørringen, ikke en antakelse om hva bedriften sannsynligvis bruker.
+        // Svarer den noe annet, blir provider null — og da vises ingenting
+        // regnskapsrelatert uansett, fordi alle kortene sjekker tilkoblet først.
+        let fraTripletexRpc = false
+        if (!st) {
+          try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) { st = r.data; fraTripletexRpc = true } } catch (_) {}
+        }
         st = st || { connection_status: 'not_configured' }
-        const provider = st.provider || REGNSKAP_ANTATT
+        const tilkoblet = st.connection_status === 'connected'
+        const provider = st.provider || (fraTripletexRpc && tilkoblet ? 'tripletex' : null)
         _regnskapCache[companyId] = {
-          tilkoblet: st.connection_status === 'connected',
+          tilkoblet,
           provider,
           navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
         }
