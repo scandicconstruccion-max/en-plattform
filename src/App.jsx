@@ -103,6 +103,25 @@ async function idbHent(noekkel) {
   } catch (e) { return null }
 }
 
+// Siste BEKREFTEDE bedrift for en bruker, i localStorage.
+//
+// Ved en kald start uten nett når vi verken auth_company_id() eller
+// user_profiles — loadProfile setter da profile til null. Uten denne huskelappen
+// ville fail-closed slått av hele offline-lesingen, nøyaktig i situasjonen
+// offline-modus finnes for: appen åpnes på nytt i en kjeller uten dekning.
+//
+// Lagres KUN etter at bedriften er bekreftet mot databasen, og nøkles på
+// bruker-id så neste bruker på samme enhet ikke arver den. Verdien er riktig for
+// dataene som alt ligger i offline-cachen — det er de samme to kildene.
+function husketBedrift(brukerId) {
+  if (!brukerId) return null
+  try { return localStorage.getItem('ep-bedrift:' + brukerId) || null } catch (e) { return null }
+}
+function huskBedrift(brukerId, bedriftId) {
+  if (!brukerId || !bedriftId) return
+  try { localStorage.setItem('ep-bedrift:' + brukerId, bedriftId) } catch (e) { /* svelg */ }
+}
+
 // Engangsopprydding av nøkler skrevet før prefikset fantes. De har ingen bedrift
 // i seg og kan aldri leses igjen — de ville bare ligget og tatt plass.
 //
@@ -2027,11 +2046,15 @@ function AuthProvider({ children }) {
       try {
         const { data, error } = await supabase.rpc('auth_company_id')
         if (error) throw error
-        if (levende) setStotteBedriftId(data || profilBedriftId)
+        const bekreftet = data || profilBedriftId
+        huskBedrift(user.id, bekreftet)            // huskelapp for kald start uten nett
+        if (levende) setStotteBedriftId(bekreftet)
       } catch (e) {
-        // Svarer ikke databasen, faller vi tilbake til profilen. Det er samme
-        // oppførsel som før denne endringen — ikke dårligere.
-        if (levende) setStotteBedriftId(profilBedriftId)
+        // Svarer ikke databasen, faller vi tilbake til profilen. Uten nett er
+        // også den tom (loadProfile setter profile til null), og da er siste
+        // bekreftede bedrift for denne brukeren det beste vi har. Uten den ville
+        // offline-cachen vært utilgjengelig ved en kald start uten dekning.
+        if (levende) setStotteBedriftId(profilBedriftId || husketBedrift(user.id))
       }
     })()
     return () => { levende = false }
