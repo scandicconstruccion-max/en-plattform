@@ -122,6 +122,34 @@ function huskBedrift(brukerId, bedriftId) {
   try { localStorage.setItem('ep-bedrift:' + brukerId, bedriftId) } catch (e) { /* svelg */ }
 }
 
+// Siste BEKREFTEDE profil for en bruker. Samme mønster og begrunnelse som
+// huskBedrift() over.
+//
+// Uten nett når loadProfile verken user_profiles eller fallback-spørringen, og
+// profile blir null. Da mister vi ikke bare navnet: role, module_access og alle
+// rettighetene utledet av dem forsvinner også — kanSlette, kanStyreProsjekt,
+// erAdmin og kanSePriser blir false selv for en admin.
+//
+// Verst er navnet. displayName falt tilbake på e-postprefikset, og displayName
+// SKRIVES til databasen: completed_by_name på sjekkpunkt, uploaded_by_name på
+// prosjektfil, from_name ved maskinoverlevering, reserved_by_name på
+// reservasjon. Offline går de gjennom skrivekøen og blir replayet. En bruker som
+// logger inn med support@enplattform.no fikk «support» stående i sjekklista.
+//
+// Lagres kun etter at profilen faktisk er hentet fra databasen, og nøkles på
+// bruker-id så neste bruker på samme enhet ikke arver den.
+function husketProfil(brukerId) {
+  if (!brukerId) return null
+  try {
+    const raa = localStorage.getItem('ep-profil:' + brukerId)
+    return raa ? JSON.parse(raa) : null
+  } catch (e) { return null }
+}
+function huskProfil(brukerId, profil) {
+  if (!brukerId || !profil) return
+  try { localStorage.setItem('ep-profil:' + brukerId, JSON.stringify(profil)) } catch (e) { /* svelg */ }
+}
+
 // Engangsopprydding av nøkler skrevet før prefikset fantes. De har ingen bedrift
 // i seg og kan aldri leses igjen — de ville bare ligget og tatt plass.
 //
@@ -341,6 +369,11 @@ async function forhandslast({ tving = false } = {}) {
       const gruppe = FORHANDSLAST_LISTER.slice(i, i + 4)
       await Promise.all(gruppe.map(([key, q]) => lesMedCache(key, q)))
     }
+    // Ansatte og kunder ligger IKKE i FORHANDSLAST_LISTER: de går ikke gjennom
+    // lesMedCache, fordi bare et utvalg av feltene får lagres på disk. De varmes
+    // opp her i stedet, ellers er de kalde til noen åpner et skjema.
+    try { await getCachedEmployees() } catch (_) {}
+    try { await getCachedCustomers() } catch (_) {}
     _forhandslastSist = Date.now()
   } catch (e) { /* svelg – forhåndslasting er best-effort */ }
   finally { _forhandslastKjorer = false }
@@ -1969,6 +2002,12 @@ function AuthProvider({ children }) {
           }
         } catch (_) {}
       }
+      // Fikk vi en profil, husk den. Fikk vi ingen — typisk uten nett, der begge
+      // spørringene feiler — er siste bekreftede profil det beste vi har. Uten
+      // den mister vi navn, rolle og rettigheter, og displayName faller tilbake
+      // på noe som ikke er et navn og som blir skrevet til databasen.
+      if (prof) huskProfil(authUser.id, prof)
+      else prof = husketProfil(authUser.id)
       setProfile(prof)
 
       // Engangsmigrering av opplæringstur-historikk: har brukeren sett-turer i
@@ -2025,7 +2064,11 @@ function AuthProvider({ children }) {
   }, [])
 
   // Display name: full_name from profile, fallback to email prefix
-  const displayName = profile?.full_name || user?.email?.split('@')[0] || 'Bruker'
+  // E-postprefikset er ALDRI et navn. Det var det som gjorde at
+  // support@enplattform.no dukket opp som «support» — i grensesnittet, og verre,
+  // i databasen via skrivekøen. Har vi ingen profil (heller ikke fra disk), vet
+  // vi ikke hvem dette er, og da skal vi si det i stedet for å gjette.
+  const displayName = profile?.full_name || 'Ikke identifisert'
   const isPlatformOwner = profile?.platform_role === 'platform_owner'
   const profilBedriftId = profile?.company_id || null
   // Bedriften appen FAKTISK jobber i. Databasen avgjør det med auth_company_id():
@@ -3731,6 +3774,39 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 // NØKLET PÅ BEDRIFT, av samme grunn som _brandCache: EmployeeNameSelect brukes 19
 // steder, og prosjektleder og timegodkjenner lagres som id. Velges en ansatt fra
 // forrige bedrifts liste, skrives en id som ikke finnes for denne bedriften.
+// ── HVA SOM FÅR LIGGE PÅ DISK ──────────────────────────────────────────────
+// Ansatt- og kundelista hentes rett fra Supabase og hadde ingen offline-fallback
+// i det hele tatt: uten nett skrev de en TOM liste til abonnentene, og
+// nedtrekkene sa «Ingen ansatte funnet». Nå lagres de i IndexedDB — men bare
+// disse feltene.
+//
+// employees inneholder også hourly_rate, monthly_salary, birth_date, address,
+// emergency_contact_name/phone/relation og notes. Det er lønn, fødselsdato,
+// hjemmeadresse og kontaktinfo til pårørende — sistnevnte tilhører en person som
+// ikke engang bruker systemet. Det skal ikke ligge ukryptert i IndexedDB på
+// telefonen til hver eneste ansatt.
+//
+// customers.orgnr er utelatt av samme grunn: feltet er merket «Org.nr /
+// Fødselsnr» i tilbudsskjemaet, så det kan inneholde et fødselsnummer.
+// Konsekvensen er at man ikke kan søke opp en kunde på org.nr offline.
+//
+// Online-spørringene er UENDRET (select('*')), så ingenting endrer seg der.
+// Projeksjonen gjelder kun det som skrives til disk.
+const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'tripletex_employee_id']
+const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'phone']
+
+function plukkFelt(rad, felt) {
+  const ut = {}
+  for (const f of felt) if (rad && rad[f] !== undefined) ut[f] = rad[f]
+  return ut
+}
+async function lesListeFraDisk(noekkel) {
+  try {
+    const c = await idbHent(noekkel)
+    return c && Array.isArray(c.data) ? c.data : []
+  } catch (e) { return [] }
+}
+
 const _employeeCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
 
 // Returnerer visningsnavn uansett om ansatt har first_name+last_name eller kombinert name-felt
@@ -3757,27 +3833,35 @@ function getCachedEmployees() {
       if (_employeeCache.nokkel !== min) return _employeeCache.data || []
       if (error) {
         console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
-        _employeeCache.data = []
-        _employeeCache.loading = null
-        _employeeCache.subscribers.forEach(fn => fn([]))
-        // Ikke cache tom liste permanent — prøv på nytt neste gang
-        setTimeout(() => { _employeeCache.data = null }, 5000)
-        return []
+        return ansatteFraDisk(min)
       }
       _employeeCache.data = data || []
       _employeeCache.loading = null
       _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
+      // Skriv gjennom til disk, men bare de feltene som får ligge der.
+      idbSett('ansatte:alle', _employeeCache.data.map(r => plukkFelt(r, ANSATT_OFFLINE_FELT)))
       console.log(`[EmployeeCache] Lastet ${_employeeCache.data.length} ansatte`)
       return _employeeCache.data
     })
     .catch(err => {
       console.error('[EmployeeCache] Exception:', err)
-      _employeeCache.data = []
-      _employeeCache.loading = null
-      setTimeout(() => { _employeeCache.data = null }, 5000)
-      return []
+      return ansatteFraDisk(min)
     })
   return _employeeCache.loading
+}
+
+// Fallback når nettet svikter. Før skrev vi en TOM liste til abonnentene her,
+// og nedtrekkene sa «Ingen ansatte funnet» offline. Nå leser vi siste kjente
+// liste fra disk i stedet. Finnes den ikke, blir svaret tomt som før.
+async function ansatteFraDisk(min) {
+  const liste = await lesListeFraDisk('ansatte:alle')
+  if (_employeeCache.nokkel !== min) return _employeeCache.data || []
+  _employeeCache.data = liste
+  _employeeCache.loading = null
+  _employeeCache.subscribers.forEach(fn => fn(liste))
+  // Ikke lås en tom liste permanent — prøv nettet på nytt neste gang.
+  if (!liste.length) setTimeout(() => { _employeeCache.data = null }, 5000)
+  return liste
 }
 
 function invalidateEmployeeCache() {
@@ -4145,19 +4229,27 @@ function getCachedCustomers() {
       _customerCache.data = rader
       _customerCache.loading = null
       _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
+      // Skriv gjennom til disk, men bare de feltene som får ligge der.
+      idbSett('kunder:alle', rader.map(r => plukkFelt(r, KUNDE_OFFLINE_FELT)))
       console.log(`[CustomerCache] Lastet ${rader.length} kunder (er_kunde=true)`)
       return _customerCache.data
     })
     .catch(err => {
       console.error('[CustomerCache] Feil ved henting av kunder:', err)
-      _customerCache.data = []
-      _customerCache.loading = null
-      _customerCache.subscribers.forEach(fn => fn([]))
-      // Ikke cache tom liste permanent — prøv på nytt neste gang
-      setTimeout(() => { _customerCache.data = null }, 5000)
-      return []
+      return kunderFraDisk(min)
     })
   return _customerCache.loading
+}
+
+// Samme som ansatteFraDisk: kundevelgeren var like tom offline.
+async function kunderFraDisk(min) {
+  const liste = await lesListeFraDisk('kunder:alle')
+  if (_customerCache.nokkel !== min) return _customerCache.data || []
+  _customerCache.data = liste
+  _customerCache.loading = null
+  _customerCache.subscribers.forEach(fn => fn(liste))
+  if (!liste.length) setTimeout(() => { _customerCache.data = null }, 5000)
+  return liste
 }
 
 function invalidateCustomerCache() {
@@ -39272,7 +39364,6 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
-                <SynkMerke synk={synk} />
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
                 {kunde.orgnr && <span>Org.nr: {kunde.orgnr}  </span>}
@@ -39280,18 +39371,22 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               </div>
             </div>
           </div>
-          {/* Sekundærhandling til venstre for primærknappen, samme mønster som
-              prosjektkortet. Rediger forblir den grønne. */}
+          {/* INGEN SYNK-KNAPP HER ENNÅ — og det er med vilje.
+              UI-omarbeidingen (b9553b0, 22. august) la inn SynkMerke, SynkKnapp
+              og SynkFeil i dette kortet, men bare ETT useIntegrasjonSynk-kall,
+              og det havnet i prosjektskjemaet. Her sto «synk» udefinert, og
+              Kundeoversikt krasjet med «synk is not defined» så snart man åpnet
+              en kunde. Sto i produksjon fra 22. august.
+              Markupen er fjernet i stedet for å gjette på hooken: alleredeSynket
+              skal hentes fra external_links, og den lesingen flyttes i DEL 2.
+              Knappen settes inn igjen der — komplett, med sin egen hook. */}
           <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
-            <SynkKnapp synk={synk} isMob={isMobKD} />
             <button onClick={() => setEditing(true)}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
               ✏️{!isMobKD && ' Rediger'}
             </button>
           </div>
         </div>
-
-        <SynkFeil synk={synk} />
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
@@ -50024,17 +50119,33 @@ function harModul(innst, modulId) {
 
 // Henter de tre kolonnene én gang og gir deg predikatet. Erstatter fem
 // separate active_modules-spørringer som hver manglet prøveperioden.
+//
+// TRE TILSTANDER, IKKE TO. «Vet ikke» er ikke det samme som «nei».
+// Svarer ikke spørringen — typisk uten nett — sto innstillinger igjen som null,
+// og harModul(null) returnerer false. Da fikk en betalende kunde uten dekning
+// salgspopupen «Bestill nå — 1 499 kr» på en modul bedriften eier.
+//
+// harModul(null) === false er RIKTIG og røres ikke: den brukes åtte steder, og
+// å snu den ville flippet tilgang også online i vinduet før data er lastet.
+// Den tredje tilstanden hører hjemme hos kalleren, som «ukjent». Regelen for
+// alle som leser den: ved ukjent skal vi ikke SELGE. Se kallstedene.
 function useModulTilgang() {
   const [innstillinger, setInnstillinger] = useState(null)
   const [laster, setLaster] = useState(true)
+  const [ukjent, setUkjent] = useState(false)
   useEffect(() => {
     let aktiv = true
     supabase.from('company_settings').select(MODUL_TILGANG_KOLONNER).limit(1).single()
-      .then(({ data }) => { if (aktiv) { setInnstillinger(data || null); setLaster(false) } })
-      .catch(() => { if (aktiv) setLaster(false) })
+      .then(({ data, error }) => {
+        if (!aktiv) return
+        if (error || !data) setUkjent(true)
+        else { setInnstillinger(data); setUkjent(false) }
+        setLaster(false)
+      })
+      .catch(() => { if (aktiv) { setUkjent(true); setLaster(false) } })
     return () => { aktiv = false }
   }, [])
-  return { innstillinger, laster, harModul: (modulId) => harModul(innstillinger, modulId) }
+  return { innstillinger, laster, ukjent, harModul: (modulId) => harModul(innstillinger, modulId) }
 }
 
 // ─── MIN BEDRIFT MODULE ───────────────────────────────────────────────────────
@@ -52413,7 +52524,15 @@ function TripletexOppsett({ companyId, isMob }) {
     setAnsatte(rader => rader.map(r => (r.id === ansattId ? { ...r, tripletex_employee_id: ny } : r)))
     setLagrerAnsatt(ansattId)
     try {
-      const { error } = await supabase.from('employees').update({ tripletex_employee_id: ny }).eq('id', ansattId)
+      // Går via RPC, ikke rett på tabellen. Dette var det ENESTE stedet
+      // nettleseren skrev en integrasjonskobling selv. RPC-en er SECURITY
+      // DEFINER, henter bedriften fra auth_company_id(), sjekker at ansatten
+      // tilhører den, skriver external_links OG speiler til den gamle kolonnen
+      // så lenge dobbeltskrivingen varer.
+      const { error } = await supabase.rpc('sett_ekstern_kobling_ansatt', {
+        p_employee_id: ansattId,
+        p_external_id: ny == null ? null : String(ny),
+      })
       if (error) throw new Error(error.message)
     } catch (e) {
       setAnsatte(forrige)
@@ -54951,11 +55070,13 @@ const BIM_KALKYLE_MODULER = ['kalkulator', 'bim_kalkyle']
 // Hook for å hente BIM-Kalkyle-status. Leser nå de samme tre kolonnene som
 // ruten, så modulen og navigasjonen ikke kan svare ulikt på samme spørsmål.
 function useBimKalkyleStatus() {
-  const { innstillinger, laster } = useModulTilgang()
+  const { innstillinger, laster, ukjent } = useModulTilgang()
+  // Ukjent teller som «har» her. Vi selger ikke noe vi ikke vet at mangler.
   return {
     innstillinger,
-    hasKalkulator: harModul(innstillinger, 'kalkulator'),
-    hasBimKalkyle: harModul(innstillinger, BIM_KALKYLE_MODULER),
+    ukjent,
+    hasKalkulator: ukjent || harModul(innstillinger, 'kalkulator'),
+    hasBimKalkyle: ukjent || harModul(innstillinger, BIM_KALKYLE_MODULER),
     loading: laster,
   }
 }
@@ -54966,8 +55087,10 @@ function useBimKalkyleStatus() {
 function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   // Samme kilde som ruten og modulen. Har bedriften kalkulator — enten kjoept
   // eller via proeveperioden — vises den korte varianten uten basis-prislinjene.
-  const { innstillinger: uInnst, laster: loading } = useModulTilgang()
-  const hasBasis = loading ? true : harModul(uInnst, 'kalkulator')
+  const { innstillinger: uInnst, laster: loading, ukjent } = useModulTilgang()
+  // «laster» ble alt behandlet som ja her. «ukjent» hører til samme kategori:
+  // vi vet ikke, og da skal vi ikke legge på basis-prislinjene og be om penger.
+  const hasBasis = (loading || ukjent) ? true : harModul(uInnst, 'kalkulator')
 
   const totalPrice = hasBasis ? 1899 : 3398
   const mobUp = typeof window !== 'undefined' && window.innerWidth < 768
@@ -70079,8 +70202,10 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   // Samme kilde som ruten. Leste tidligere active_modules alene, uten aa vite
   // om proeveperioden — derfor fikk en proevebruker salgsmodal av en modul
   // navigasjonen nettopp hadde sluppet ham inn i.
-  const { innstillinger: bimInnstillinger, laster: bimLaster } = useModulTilgang()
-  const harBimKalkyle = harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
+  const { innstillinger: bimInnstillinger, laster: bimLaster, ukjent: bimUkjent } = useModulTilgang()
+  // Ukjent teller som «har»: uten nett svarer ikke company_settings, og da skal
+  // brukeren slippe inn i modulen han sannsynligvis eier — ikke møte salgsmodal.
+  const harBimKalkyle = bimUkjent || harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
 
   // Patch 23.2: Direkte-navigering fra BIM-Kalkyle i sidebar/dashboard
   // Når brukeren klikker BIM-Kalkyle skal de gå rett til IFC-opplasting,
@@ -70094,7 +70219,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
       setShowBimImport(false)
       setShowBimUpsell(false)
     }
-  }, [autoOpenBim, bimLaster, harBimKalkyle])
+  }, [autoOpenBim, bimLaster, bimUkjent, harBimKalkyle])
 
   const handleBimKalkyleClick = () => {
     if (harBimKalkyle) setShowBimImport(true)
@@ -75409,7 +75534,11 @@ function LagreBygningsdelModal({ bd, fagId, innebygd, kategorier, kanErstatte, o
 // bygningsdeler lå i én haug på tvers av yttervegg, gulv og himling.
 function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   const confirm = useConfirm()
-  const { kanStyrePrisgrunnlag } = useAuth()
+  // companyId og user manglet her. hentAktivPrisliste() lenger nede kalles med
+  // begge, inne i en try med tom catch — så ReferenceError-en ble svelget, og
+  // NOBB-materialer fikk GAMLE PRISER uten at noe sa fra. Ingen krasj, ingen
+  // melding, bare feil tall i tilbudet. Innført 8f18592, 18. august.
+  const { kanStyrePrisgrunnlag, companyId, user } = useAuth()
   const [mengde, setMengde] = useState(1)
   const [selectedBd, setSelectedBd] = useState(null)
   const [expandedKat, setExpandedKat] = useState(null)
@@ -84574,7 +84703,13 @@ function AppContent() {
     if (!user) return
     supabase.from('company_settings').select('*').limit(1).single()
       .then(({ data, error }) => {
-        if (error || !data) { setActiveModules(['grunnpakke']); return }
+        // Svarte ikke spørringen — typisk uten nett — VET vi ikke hvilke moduler
+        // bedriften har. Å skrive ['grunnpakke'] her var å påstå at bedriften eier
+        // grunnpakken og ingenting mer, og resultatet var salgspopupen «Bestill nå
+        // — 1 499 kr» på Kalkulasjon hos en kunde som betaler for den.
+        // null er den ærlige verdien: isModuleActive behandler den som «vis som
+        // aktiv», og da selger vi ikke noe vi ikke vet at mangler.
+        if (error || !data) { setActiveModules(null); return }
         
         const status = data.subscription_status || 'active'
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
@@ -84610,7 +84745,7 @@ function AppContent() {
           setActiveModules(data.active_modules || ['grunnpakke'])
         }
       })
-      .catch(() => setActiveModules(['grunnpakke']))
+      .catch(() => setActiveModules(null))   // samme som over: ukjent, ikke «bare grunnpakke»
   }, [user])
 
   // Løpende sjekk: blir bedriften sperret mens brukeren er innlogget, låses de ut umiddelbart
@@ -84650,7 +84785,10 @@ function AppContent() {
   } : null
 
   const isModuleActive = (navId) => {
-    if (!activeModules) return true // still loading, show as active
+    // null betyr «vet ikke» — enten fordi vi fortsatt laster, eller fordi
+    // spørringen ikke svarte. I begge tilfeller viser vi modulen som aktiv.
+    // Alternativet er å låse den og be en betalende kunde kjøpe den på nytt.
+    if (!activeModules) return true
     const requiredModule = navToModule[navId]
     if (!requiredModule) return true // always accessible (dashboard, minbedrift, brukeradmin, varsler)
     return harModul(modulInnstillinger, requiredModule)
