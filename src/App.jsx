@@ -4919,9 +4919,21 @@ const db = {
     return res.data
   },
   async getProject(id) {
-    const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
-    if (error) throw error
-    return data
+    // Ett enkelt oppslag har ingen offline-vei, men HELE lista har det —
+    // projects:alle er en av de forhåndslastede nøklene og inneholder samme
+    // rader (select('*')). Svarer ikke nettet, plukker vi prosjektet derfra.
+    // Uten dette ga «Prosjekt ikke funnet» på ethvert prosjekt offline, selv om
+    // lista over dem virket.
+    try {
+      const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
+      if (error) throw error
+      return data
+    } catch (e) {
+      const alle = await db.getProjects()
+      const fraCache = (alle || []).find(p => p.id === id)
+      if (fraCache) return fraCache
+      throw e
+    }
   },
   async createProject(data) {
     const { data: result, error } = await supabase.from('projects').insert(data).select().single()
@@ -5903,18 +5915,26 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
   const load = async () => {
     try {
-      const [proj, allProj, clRes, emRes, tmplRes] = await Promise.all([
+      // allSettled, ikke all. Med Promise.all veltet ÉN feilende spørring hele
+      // lastingen — offline avvises alle fem, setProject kjørte aldri, og siden
+      // sa «Prosjekt ikke funnet» selv om prosjektet lå i cachen. Nå tar hver
+      // del sitt eget utfall: prosjektet og lista kommer fra IndexedDB, mens
+      // sjekklister og endringsmeldinger står tomme til man er på nett igjen.
+      const [projR, allProjR, clRes, emRes, tmplRes] = await Promise.allSettled([
         db.getProject(projectId),
         db.getProjects(),
         supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('endringsmeldinger').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('checklist_templates').select('id, category').then(r => r.data || []),
       ])
-      setProject(proj)
-      setAllProjects(allProj)
-      setChecklists(clRes.data || [])
-      setEndringsmeldinger(emRes.data || [])
-      setChecklistTemplates(tmplRes)
+      const proj = projR.status === 'fulfilled' ? projR.value : null
+      // Fant vi ikke prosjektet i det hele tatt, la forrige verdi stå i stedet
+      // for å vise «Prosjekt ikke funnet» over noe som kanskje finnes.
+      if (proj) setProject(proj)
+      if (allProjR.status === 'fulfilled') setAllProjects(allProjR.value || [])
+      setChecklists(clRes.status === 'fulfilled' ? (clRes.value.data || []) : [])
+      setEndringsmeldinger(emRes.status === 'fulfilled' ? (emRes.value.data || []) : [])
+      setChecklistTemplates(tmplRes.status === 'fulfilled' ? tmplRes.value : [])
       // Last navn/epost på den som godkjenner timer (hvis satt)
       if (proj?.time_approver_id) {
         try {
@@ -39080,9 +39100,16 @@ function KunderPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [k, p, q, inv] = await Promise.all([
+      // allSettled + getCachedCustomers. Før sto det hentEgneKunder() rått i en
+      // Promise.all med fire nettkall: offline avvises alle, setKunder kjørte
+      // aldri, og Kundeoversikt viste «0 kunder» selv om kunder:alle lå i
+      // IndexedDB med alle radene. Den skjermen har aldri virket offline.
+      // Merk: offline gir cachen PROJEKSJONEN (id, kundenummer, navn, type,
+      // er_kunde, e-post, telefon) — org.nr og poststed mangler til man er på
+      // nett igjen. Lista, søket og tellerne virker.
+      const [k, p, q, inv] = await Promise.allSettled([
         // Kun egne kunder. CRM-leads har er_kunde = false og hører hjemme i CRM.
-        hentEgneKunder(),
+        getCachedCustomers(),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
         // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
@@ -39090,7 +39117,10 @@ function KunderPage() {
         supabase.from('quotes').select('id,title,status,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
-      setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
+      setKunder(k.status === 'fulfilled' ? (k.value || []) : [])
+      setProsjekter(p.status === 'fulfilled' ? (p.value || []) : [])
+      setTilbud(q.status === 'fulfilled' ? (q.value || []) : [])
+      setFakturaer(inv.status === 'fulfilled' ? (inv.value || []) : [])
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
