@@ -50116,17 +50116,33 @@ function harModul(innst, modulId) {
 
 // Henter de tre kolonnene én gang og gir deg predikatet. Erstatter fem
 // separate active_modules-spørringer som hver manglet prøveperioden.
+//
+// TRE TILSTANDER, IKKE TO. «Vet ikke» er ikke det samme som «nei».
+// Svarer ikke spørringen — typisk uten nett — sto innstillinger igjen som null,
+// og harModul(null) returnerer false. Da fikk en betalende kunde uten dekning
+// salgspopupen «Bestill nå — 1 499 kr» på en modul bedriften eier.
+//
+// harModul(null) === false er RIKTIG og røres ikke: den brukes åtte steder, og
+// å snu den ville flippet tilgang også online i vinduet før data er lastet.
+// Den tredje tilstanden hører hjemme hos kalleren, som «ukjent». Regelen for
+// alle som leser den: ved ukjent skal vi ikke SELGE. Se kallstedene.
 function useModulTilgang() {
   const [innstillinger, setInnstillinger] = useState(null)
   const [laster, setLaster] = useState(true)
+  const [ukjent, setUkjent] = useState(false)
   useEffect(() => {
     let aktiv = true
     supabase.from('company_settings').select(MODUL_TILGANG_KOLONNER).limit(1).single()
-      .then(({ data }) => { if (aktiv) { setInnstillinger(data || null); setLaster(false) } })
-      .catch(() => { if (aktiv) setLaster(false) })
+      .then(({ data, error }) => {
+        if (!aktiv) return
+        if (error || !data) setUkjent(true)
+        else { setInnstillinger(data); setUkjent(false) }
+        setLaster(false)
+      })
+      .catch(() => { if (aktiv) { setUkjent(true); setLaster(false) } })
     return () => { aktiv = false }
   }, [])
-  return { innstillinger, laster, harModul: (modulId) => harModul(innstillinger, modulId) }
+  return { innstillinger, laster, ukjent, harModul: (modulId) => harModul(innstillinger, modulId) }
 }
 
 // ─── MIN BEDRIFT MODULE ───────────────────────────────────────────────────────
@@ -55043,11 +55059,13 @@ const BIM_KALKYLE_MODULER = ['kalkulator', 'bim_kalkyle']
 // Hook for å hente BIM-Kalkyle-status. Leser nå de samme tre kolonnene som
 // ruten, så modulen og navigasjonen ikke kan svare ulikt på samme spørsmål.
 function useBimKalkyleStatus() {
-  const { innstillinger, laster } = useModulTilgang()
+  const { innstillinger, laster, ukjent } = useModulTilgang()
+  // Ukjent teller som «har» her. Vi selger ikke noe vi ikke vet at mangler.
   return {
     innstillinger,
-    hasKalkulator: harModul(innstillinger, 'kalkulator'),
-    hasBimKalkyle: harModul(innstillinger, BIM_KALKYLE_MODULER),
+    ukjent,
+    hasKalkulator: ukjent || harModul(innstillinger, 'kalkulator'),
+    hasBimKalkyle: ukjent || harModul(innstillinger, BIM_KALKYLE_MODULER),
     loading: laster,
   }
 }
@@ -55058,8 +55076,10 @@ function useBimKalkyleStatus() {
 function BimKalkyleUpsellModal({ onClose, onNavigate }) {
   // Samme kilde som ruten og modulen. Har bedriften kalkulator — enten kjoept
   // eller via proeveperioden — vises den korte varianten uten basis-prislinjene.
-  const { innstillinger: uInnst, laster: loading } = useModulTilgang()
-  const hasBasis = loading ? true : harModul(uInnst, 'kalkulator')
+  const { innstillinger: uInnst, laster: loading, ukjent } = useModulTilgang()
+  // «laster» ble alt behandlet som ja her. «ukjent» hører til samme kategori:
+  // vi vet ikke, og da skal vi ikke legge på basis-prislinjene og be om penger.
+  const hasBasis = (loading || ukjent) ? true : harModul(uInnst, 'kalkulator')
 
   const totalPrice = hasBasis ? 1899 : 3398
   const mobUp = typeof window !== 'undefined' && window.innerWidth < 768
@@ -70171,8 +70191,10 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
   // Samme kilde som ruten. Leste tidligere active_modules alene, uten aa vite
   // om proeveperioden — derfor fikk en proevebruker salgsmodal av en modul
   // navigasjonen nettopp hadde sluppet ham inn i.
-  const { innstillinger: bimInnstillinger, laster: bimLaster } = useModulTilgang()
-  const harBimKalkyle = harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
+  const { innstillinger: bimInnstillinger, laster: bimLaster, ukjent: bimUkjent } = useModulTilgang()
+  // Ukjent teller som «har»: uten nett svarer ikke company_settings, og da skal
+  // brukeren slippe inn i modulen han sannsynligvis eier — ikke møte salgsmodal.
+  const harBimKalkyle = bimUkjent || harModul(bimInnstillinger, BIM_KALKYLE_MODULER)
 
   // Patch 23.2: Direkte-navigering fra BIM-Kalkyle i sidebar/dashboard
   // Når brukeren klikker BIM-Kalkyle skal de gå rett til IFC-opplasting,
@@ -70186,7 +70208,7 @@ function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
       setShowBimImport(false)
       setShowBimUpsell(false)
     }
-  }, [autoOpenBim, bimLaster, harBimKalkyle])
+  }, [autoOpenBim, bimLaster, bimUkjent, harBimKalkyle])
 
   const handleBimKalkyleClick = () => {
     if (harBimKalkyle) setShowBimImport(true)
@@ -84666,7 +84688,13 @@ function AppContent() {
     if (!user) return
     supabase.from('company_settings').select('*').limit(1).single()
       .then(({ data, error }) => {
-        if (error || !data) { setActiveModules(['grunnpakke']); return }
+        // Svarte ikke spørringen — typisk uten nett — VET vi ikke hvilke moduler
+        // bedriften har. Å skrive ['grunnpakke'] her var å påstå at bedriften eier
+        // grunnpakken og ingenting mer, og resultatet var salgspopupen «Bestill nå
+        // — 1 499 kr» på Kalkulasjon hos en kunde som betaler for den.
+        // null er den ærlige verdien: isModuleActive behandler den som «vis som
+        // aktiv», og da selger vi ikke noe vi ikke vet at mangler.
+        if (error || !data) { setActiveModules(null); return }
         
         const status = data.subscription_status || 'active'
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
@@ -84702,7 +84730,7 @@ function AppContent() {
           setActiveModules(data.active_modules || ['grunnpakke'])
         }
       })
-      .catch(() => setActiveModules(['grunnpakke']))
+      .catch(() => setActiveModules(null))   // samme som over: ukjent, ikke «bare grunnpakke»
   }, [user])
 
   // Løpende sjekk: blir bedriften sperret mens brukeren er innlogget, låses de ut umiddelbart
@@ -84742,7 +84770,10 @@ function AppContent() {
   } : null
 
   const isModuleActive = (navId) => {
-    if (!activeModules) return true // still loading, show as active
+    // null betyr «vet ikke» — enten fordi vi fortsatt laster, eller fordi
+    // spørringen ikke svarte. I begge tilfeller viser vi modulen som aktiv.
+    // Alternativet er å låse den og be en betalende kunde kjøpe den på nytt.
+    if (!activeModules) return true
     const requiredModule = navToModule[navId]
     if (!requiredModule) return true // always accessible (dashboard, minbedrift, brukeradmin, varsler)
     return harModul(modulInnstillinger, requiredModule)
