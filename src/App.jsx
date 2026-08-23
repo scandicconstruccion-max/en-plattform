@@ -374,6 +374,7 @@ async function forhandslast({ tving = false } = {}) {
     // opp her i stedet, ellers er de kalde til noen åpner et skjema.
     try { await getCachedEmployees() } catch (_) {}
     try { await getCachedCustomers() } catch (_) {}
+    try { await getCachedKoblinger() } catch (_) {}
     _forhandslastSist = Date.now()
   } catch (e) { /* svelg – forhåndslasting er best-effort */ }
   finally { _forhandslastKjorer = false }
@@ -3864,6 +3865,96 @@ async function ansatteFraDisk(min) {
   return liste
 }
 
+// ── EKSTERNE KOBLINGER ─────────────────────────────────────────────────────
+// external_links erstatter kolonner per regnskapssystem. I stedet for at hver
+// tabell bærer en tripletex_*-kolonne per rad, hentes alle koblinger for
+// bedriften ÉN gang og indekseres på entity_id.
+//
+// Nøklet på bedrift og skrevet gjennom til IndexedDB, som ansatte og kunder.
+// Før flyttingen lå synk-merkene INNE i de cachede radene; uten dette ville de
+// vært borte offline. Tabellen har ingen sensitive felt, men projeksjonen står
+// likevel eksplisitt — regelen skal være den samme overalt.
+const KOBLING_OFFLINE_FELT = ['provider', 'entity_type', 'entity_id', 'external_id', 'synced_at', 'sync_error', 'metadata']
+const _koblingCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
+
+function getCachedKoblinger() {
+  const nokkel = _aktivBedriftId
+  if (_koblingCache.data && _koblingCache.nokkel === nokkel) return Promise.resolve(_koblingCache.data)
+  if (_koblingCache.loading && _koblingCache.nokkel === nokkel) return _koblingCache.loading
+  _koblingCache.nokkel = nokkel
+  _koblingCache.data = null
+  const min = nokkel
+  // RLS filtrerer på company_id = auth_company_id(), så vi ber ikke om bedrift her.
+  _koblingCache.loading = supabase.from('external_links')
+    .select('provider, entity_type, entity_id, external_id, synced_at, sync_error, metadata')
+    .limit(1000)
+    .then(({ data, error }) => {
+      if (_koblingCache.nokkel !== min) return _koblingCache.data || []
+      if (error) {
+        console.error('[Koblinger] Feil ved henting av external_links:', error)
+        return koblingerFraDisk(min)
+      }
+      _koblingCache.data = data || []
+      _koblingCache.loading = null
+      _koblingCache.subscribers.forEach(fn => fn(_koblingCache.data))
+      idbSett('ekstern:koblinger', _koblingCache.data.map(r => plukkFelt(r, KOBLING_OFFLINE_FELT)))
+      return _koblingCache.data
+    })
+    .catch(err => {
+      console.error('[Koblinger] Exception:', err)
+      return koblingerFraDisk(min)
+    })
+  return _koblingCache.loading
+}
+
+async function koblingerFraDisk(min) {
+  const liste = await lesListeFraDisk('ekstern:koblinger')
+  if (_koblingCache.nokkel !== min) return _koblingCache.data || []
+  _koblingCache.data = liste
+  _koblingCache.loading = null
+  _koblingCache.subscribers.forEach(fn => fn(liste))
+  if (!liste.length) setTimeout(() => { _koblingCache.data = null }, 5000)
+  return liste
+}
+
+function invalidateKoblingCache() {
+  _koblingCache.nokkel = null
+  _koblingCache.data = null
+  _koblingCache.loading = null
+}
+
+function useEksterneKoblinger() {
+  const [koblinger, setKoblinger] = useState(_koblingCache.data || [])
+  useEffect(() => {
+    let levende = true
+    const paaEndring = (liste) => { if (levende) setKoblinger(liste) }
+    _koblingCache.subscribers.add(paaEndring)
+    getCachedKoblinger().then(liste => { if (levende) setKoblinger(liste) })
+    // En fullført synk skriver nye rader i external_links. Uten dette ville
+    // merket først dukket opp ved neste sidelast.
+    const paaSynk = () => { invalidateKoblingCache(); getCachedKoblinger() }
+    window.addEventListener('ep-synk-fullfort', paaSynk)
+    return () => {
+      levende = false
+      _koblingCache.subscribers.delete(paaEndring)
+      window.removeEventListener('ep-synk-fullfort', paaSynk)
+    }
+  }, [])
+  return koblinger
+}
+
+// Slår opp koblingen for én rad. provider utelates med vilje: appen viser ett
+// regnskapssystem om gangen, og bedriften kan bare ha én tilkobling.
+function finnKobling(koblinger, entityType, entityId) {
+  if (!entityId) return null
+  return (koblinger || []).find(k => k.entity_type === entityType && k.entity_id === entityId) || null
+}
+
+function useKobling(entityType, entityId) {
+  const koblinger = useEksterneKoblinger()
+  return React.useMemo(() => finnKobling(koblinger, entityType, entityId), [koblinger, entityType, entityId])
+}
+
 function invalidateEmployeeCache() {
   _employeeCache.nokkel = null
   _employeeCache.data = null
@@ -4289,17 +4380,20 @@ function useCustomers() {
 function tomBedriftsCacher(nyBedriftId) {
   try { invalidateCustomerCache() } catch (_) {}
   try { invalidateEmployeeCache() } catch (_) {}
+  try { invalidateKoblingCache() } catch (_) {}
   try { invalidateBrandCache() } catch (_) {}
   try { tomDataCache() } catch (_) {}          // _memCache (ikke IndexedDB)
   // Varsle monterte velgere med tom liste. Uten dette ville de stått igjen med
   // forrige bedrifts rader til komponenten tilfeldigvis ble montert på nytt.
   try { _customerCache.subscribers.forEach(fn => fn([])) } catch (_) {}
   try { _employeeCache.subscribers.forEach(fn => fn([])) } catch (_) {}
+  try { _koblingCache.subscribers.forEach(fn => fn([])) } catch (_) {}
   // Hent på nytt for den nye bedriften, så velgerne fylles igjen uten at
   // brukeren må navigere bort og tilbake. Ikke ved utlogging (nyBedriftId null).
   if (nyBedriftId) {
     try { getCachedCustomers() } catch (_) {}
     try { getCachedEmployees() } catch (_) {}
+    try { getCachedKoblinger() } catch (_) {}
   }
 }
 
@@ -5876,10 +5970,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   // under headeren — tre ulike steder i kortet. Derfor ligger den her, ikke i en
   // av dem. Pilfunksjonene under leses først ved klikk, så de når
   // sjekkStartdatoFoerSynk selv om den defineres rett nedenfor.
+  // Synk-status kommer nå fra external_links, ikke fra projects.tripletex_id.
+  // Kolonnen står igjen som sikkerhetsnett, men leses ikke lenger.
+  const prosjektKobling = useKobling('project', projectId)
   const synk = useIntegrasjonSynk({
     entitet: 'project',
     radId: { projectId },
-    alleredeSynket: project?.tripletex_id,
+    alleredeSynket: prosjektKobling?.external_id,
     forhaandssjekk: () => sjekkStartdatoFoerSynk(),
     onFerdig: () => load(),
   })
@@ -5890,7 +5987,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   // databasen, ikke i frontend.
   const sjekkStartdatoFoerSynk = async () => {
     if (project?.start_date) return true
-    if (project?.tripletex_id) return true   // allerede opprettet — startdato settes ikke på nytt
+    if (prosjektKobling?.external_id) return true   // allerede opprettet — startdato settes ikke på nytt
 
     let tidligste = null
     try {
@@ -5925,13 +6022,17 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       return true
     }
 
-    return await confirm({
+    // «Synk likevel» sto her før, men den løy: uten startdato svarer Tripletex
+    // 422 VALIDATION_ERROR, og synken feiler uansett hva brukeren trykker.
+    // Vi ber om datoen i stedet for å tilby en knapp som ikke kan virke.
+    await appAlert({
       message: 'Prosjektet mangler startdato',
-      subMessage: 'Tripletex setter da sin egen startdato ved opprettelse. Føres det timer med '
-        + 'eldre dato senere, kan de ikke registreres på prosjektet i Tripletex. '
-        + 'Vi fant ingen registrerte timer å foreslå en dato fra. Vil du synke likevel?',
-      confirmLabel: 'Synk likevel',
+      subMessage: `${synk.navn} krever startdato på prosjektet og avviser det uten. `
+        + 'Vi fant ingen registrerte timer å foreslå en dato fra, så den må settes manuelt. '
+        + 'Åpne prosjektskjemaet, fyll inn startdato, og synk på nytt.',
+      kind: 'warning',
     })
+    return false
   }
 
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
@@ -39233,6 +39334,17 @@ const CRM_ORDRE_GRENSE = 100
 function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
+  // Synk-knappen som manglet siden 22. august. UI-omarbeidingen la inn markupen
+  // her, men hooken havnet i prosjektskjemaet — «synk» sto udefinert og
+  // Kundeoversikt krasjet. Nå har kortet sin egen, og alleredeSynket kommer fra
+  // external_links i stedet for customers.tripletex_customer_id.
+  const kundeKobling = useKobling('customer', kunde?.id)
+  const synk = useIntegrasjonSynk({
+    entitet: 'customer',
+    radId: { customerId: kunde?.id },
+    alleredeSynket: kundeKobling?.external_id,
+    onFerdig: () => { if (onRefresh) onRefresh() },
+  })
   const [editing, setEditing] = useState(false)
   const [kontakter, setKontakter] = useState([])
   const [notater, setNotater] = useState([])
@@ -39364,6 +39476,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
+                <SynkMerke synk={synk} />
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
                 {kunde.orgnr && <span>Org.nr: {kunde.orgnr}  </span>}
@@ -39371,22 +39484,18 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               </div>
             </div>
           </div>
-          {/* INGEN SYNK-KNAPP HER ENNÅ — og det er med vilje.
-              UI-omarbeidingen (b9553b0, 22. august) la inn SynkMerke, SynkKnapp
-              og SynkFeil i dette kortet, men bare ETT useIntegrasjonSynk-kall,
-              og det havnet i prosjektskjemaet. Her sto «synk» udefinert, og
-              Kundeoversikt krasjet med «synk is not defined» så snart man åpnet
-              en kunde. Sto i produksjon fra 22. august.
-              Markupen er fjernet i stedet for å gjette på hooken: alleredeSynket
-              skal hentes fra external_links, og den lesingen flyttes i DEL 2.
-              Knappen settes inn igjen der — komplett, med sin egen hook. */}
+          {/* Sekundærhandling til venstre for primærknappen, samme mønster som
+              prosjektkortet. Rediger forblir den grønne. */}
           <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            <SynkKnapp synk={synk} isMob={isMobKD} />
             <button onClick={() => setEditing(true)}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
               ✏️{!isMobKD && ' Rediger'}
             </button>
           </div>
         </div>
+
+        <SynkFeil synk={synk} />
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
@@ -51923,6 +52032,20 @@ function useRegnskapssystem() {
 // forståelig norsk tekst i «error» og en teknisk detalj i «detail» — vi viser den
 // første i klartekst og gjemmer den andre bak «Vis teknisk detalj», så brukeren ikke
 // møter rå JSON, men vi ikke mister den heller.
+// Unik-skranken external_links_ekstern_uniq hindrer at to av VÅRE rader peker
+// på samme objekt hos regnskapssystemet. Den gjør nytte, men Postgres sin egen
+// tekst — «duplicate key value violates unique constraint» — sier ingenting til
+// en tømrer. Her oversettes den til hva som faktisk skjedde.
+function lesKoblingsfeil(melding, alleredeKobletNavn) {
+  const raa = String(melding || '')
+  if (/external_links_ekstern_uniq|duplicate key value violates unique constraint/i.test(raa)) {
+    return alleredeKobletNavn
+      ? `Den personen er allerede koblet til ${alleredeKobletNavn}. Én person i regnskapssystemet kan bare kobles til én ansatt hos dere. Fjern den andre koblingen først.`
+      : 'Den personen er allerede koblet til en annen ansatt. Én person i regnskapssystemet kan bare kobles til én ansatt hos dere. Fjern den andre koblingen først.'
+  }
+  return raa
+}
+
 async function lesIntegrasjonsfeil(error, data) {
   if (data && data.error) return { melding: String(data.error), detalj: data.detail ? String(data.detail) : '', reason: data.reason || '' }
   let melding = (error && error.message) || 'Ukjent feil'
@@ -51960,6 +52083,11 @@ function useIntegrasjonSynk({ entitet, radId, alleredeSynket, forhaandssjekk, on
       if (error || (data && data.error)) { setFeil(await lesIntegrasjonsfeil(error, data)); return }
       const nyId = (data && (data.tripletexCustomerId ?? data.tripletexProjectId ?? data.externalId)) || null
       if (nyId) setSynketId(nyId)
+      // Synken skrev en ny rad i external_links. Frisk opp koblingene, ellers
+      // står merkene i ANDRE visninger igjen til neste sidelast — knappen her
+      // oppdaterer bare sin egen synketId.
+      invalidateKoblingCache()
+      getCachedKoblinger()
       const h = (data && data.action) || 'ok'
       appAlert({
         message: h === 'created' ? `Opprettet i ${navn}`
@@ -52071,6 +52199,10 @@ async function sendEnTime(provider, companyId, entryId) {
       const f = await lesIntegrasjonsfeil(error, data)
       return { ok: false, ...f }
     }
+    // Samme grunn som i useIntegrasjonSynk: timesynken skriver external_links,
+    // og både radmerket og samleknappens telling leser derfra.
+    invalidateKoblingCache()
+    getCachedKoblinger()
     return { ok: true, action: (data && data.action) || 'created', eksternId: (data && data.tripletexEntryId) || null }
   } catch (e) {
     return { ok: false, melding: (e && e.message) || String(e), detalj: '', reason: '' }
@@ -52084,8 +52216,10 @@ function TimeSynkRad({ entry, isMob, onFerdig }) {
   const { tilkoblet, provider, navn } = useRegnskapssystem()
   const [jobber, setJobber] = useState(false)
   const [feil, setFeil] = useState(null)
-  const [sendtId, setSendtId] = useState(entry?.tripletex_entry_id || null)
-  useEffect(() => { setSendtId(entry?.tripletex_entry_id || null) }, [entry?.tripletex_entry_id])
+  // Fra external_links, ikke fra timesheet_entries.tripletex_entry_id.
+  const kobling = useKobling('timesheet_entry', entry?.id)
+  const [sendtId, setSendtId] = useState(kobling?.external_id || null)
+  useEffect(() => { setSendtId(kobling?.external_id || null) }, [kobling?.external_id])
 
   const godkjent = (entry?.status || '') === 'Godkjent'
   if (!tilkoblet || !godkjent) return null
@@ -52098,7 +52232,7 @@ function TimeSynkRad({ entry, isMob, onFerdig }) {
     else setFeil(r)
   }
 
-  const lagretFeil = !sendtId && !feil && entry?.tripletex_sync_error ? { melding: entry.tripletex_sync_error, detalj: '', reason: '' } : null
+  const lagretFeil = !sendtId && !feil && kobling?.sync_error ? { melding: kobling.sync_error, detalj: '', reason: '' } : null
   const vist = feil || lagretFeil
 
   return (
@@ -52141,6 +52275,7 @@ function TimeSynkRad({ entry, isMob, onFerdig }) {
 // skal ikke stoppe de andre.
 function SendGodkjenteTimer({ entries, isMob, onFerdig }) {
   const { companyId } = useAuth()
+  const koblinger = useEksterneKoblinger()
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const { tilkoblet, provider, navn } = useRegnskapssystem()
@@ -52150,9 +52285,16 @@ function SendGodkjenteTimer({ entries, isMob, onFerdig }) {
 
   // Kun godkjente timer som ikke alt er sendt. Overtid og fravær filtreres bort
   // her også, så tellingen stemmer med det som faktisk kan sendes.
+  // Allerede sendte timer plukkes ut av external_links i stedet for av en
+  // kolonne på hver rad. Ett oppslag for hele uka, ikke ett felt per time.
+  const sendte = new Set(
+    (koblinger || [])
+      .filter(k => k.entity_type === 'timesheet_entry' && k.external_id)
+      .map(k => k.entity_id)
+  )
   const kandidater = (entries || []).filter(e =>
     (e.status || '') === 'Godkjent' &&
-    !e.tripletex_entry_id &&
+    !sendte.has(e.id) &&
     !e.absence_type &&
     (Number(e.overtime_50) || 0) === 0 &&
     (Number(e.overtime_100) || 0) === 0 &&
@@ -52324,7 +52466,7 @@ function KobleKunde({ project, isMob, variant = 'lenke', onFerdig }) {
       if (siffer.length >= 9) betingelser.push(`orgnr.eq.${siffer}`)
       const { data, error } = await supabase
         .from('customers')
-        .select('id, name, orgnr, tripletex_customer_id')
+        .select('id, name, orgnr')
         .eq('er_kunde', true)
         .or(betingelser.join(','))
         .order('name', { ascending: true })
@@ -52442,6 +52584,16 @@ function KobleKunde({ project, isMob, variant = 'lenke', onFerdig }) {
 // Standardaktivitet lagres per bedrift. Tripletex krever en aktivitet på hver time, og
 // vårt eget aktivitetsfelt er fritekst som ikke kan mappes trygt.
 function TripletexOppsett({ companyId, isMob }) {
+  // Ansattkoblingen leses nå fra external_links. lokalKobling er en optimistisk
+  // overstyring så nedtrekket svarer med én gang, før RPC-en og den nye
+  // hentingen er tilbake. Nøkkelen ryddes når serveren har bekreftet.
+  const koblinger = useEksterneKoblinger()
+  const [lokalKobling, setLokalKobling] = useState({})
+  const eksternIdFor = (ansattId) => (
+    Object.prototype.hasOwnProperty.call(lokalKobling, ansattId)
+      ? lokalKobling[ansattId]
+      : (finnKobling(koblinger, 'employee', ansattId)?.external_id || null)
+  )
   const appAlert = useAppAlert()
   const [laster, setLaster] = useState(true)
   const [feil, setFeil] = useState(null)          // { melding, detalj }
@@ -52468,7 +52620,7 @@ function TripletexOppsett({ companyId, isMob }) {
       // Egne ansatte: sortert i DATABASEN, ikke i frontend.
       const { data: egne, error: eErr } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, tripletex_employee_id')
+        .select('id, first_name, last_name')
         .order('first_name', { ascending: true })
         .order('last_name', { ascending: true })
         .limit(1000)
@@ -52519,9 +52671,8 @@ function TripletexOppsett({ companyId, isMob }) {
   }
 
   const koble = async (ansattId, verdi) => {
-    const forrige = ansatte
     const ny = verdi === '' ? null : Number(verdi)
-    setAnsatte(rader => rader.map(r => (r.id === ansattId ? { ...r, tripletex_employee_id: ny } : r)))
+    setLokalKobling(o => ({ ...o, [ansattId]: ny }))
     setLagrerAnsatt(ansattId)
     try {
       // Går via RPC, ikke rett på tabellen. Dette var det ENESTE stedet
@@ -52533,15 +52684,28 @@ function TripletexOppsett({ companyId, isMob }) {
         p_employee_id: ansattId,
         p_external_id: ny == null ? null : String(ny),
       })
-      if (error) throw new Error(error.message)
+      if (error) {
+        // Hvem er det som allerede har denne personen? Uten navnet blir
+        // meldingen «noen andre», og da må brukeren lete selv.
+        const opptattAv = ny == null ? null : (koblinger || []).find(
+          k => k.entity_type === 'employee' && String(k.external_id) === String(ny) && k.entity_id !== ansattId
+        )
+        const opptattNavn = opptattAv ? (ansatte.find(a => a.id === opptattAv.entity_id) || null) : null
+        throw new Error(lesKoblingsfeil(error.message, opptattNavn ? navn(opptattNavn) : null))
+      }
+      // Hent koblingene på nytt, og slipp den optimistiske overstyringen når
+      // serveren har svart. Da er det ÉN kilde igjen, ikke to som kan sprike.
+      invalidateKoblingCache()
+      await getCachedKoblinger()
+      setLokalKobling(o => { const k = { ...o }; delete k[ansattId]; return k })
     } catch (e) {
-      setAnsatte(forrige)
+      setLokalKobling(o => { const k = { ...o }; delete k[ansattId]; return k })
       appAlert({ message: 'Kunne ikke lagre koblingen', subMessage: (e && e.message) || String(e), kind: 'error' })
     } finally { setLagrerAnsatt(null) }
   }
 
   const navn = (a) => `${a.first_name || ''} ${a.last_name || ''}`.trim() || '(uten navn)'
-  const antallKoblet = ansatte.filter(a => a.tripletex_employee_id).length
+  const antallKoblet = ansatte.filter(a => eksternIdFor(a.id)).length
   const antallMangler = ansatte.length - antallKoblet
 
   const ramme = { marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #e2e8f0' }
@@ -52617,14 +52781,14 @@ function TripletexOppsett({ companyId, isMob }) {
               {ansatte.map(a => (
                 <div key={a.id} style={rad}>
                   <div style={radNavn}>
-                    <span style={prikk(!!a.tripletex_employee_id)} />
+                    <span style={prikk(!!eksternIdFor(a.id))} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{navn(a)}</span>
-                    {!a.tripletex_employee_id && (
+                    {!eksternIdFor(a.id) && (
                       <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '2px 8px', flexShrink: 0 }}>Ikke koblet</span>
                     )}
                   </div>
                   <select
-                    value={a.tripletex_employee_id ? String(a.tripletex_employee_id) : ''}
+                    value={eksternIdFor(a.id) ? String(eksternIdFor(a.id)) : ''}
                     disabled={lagrerAnsatt === a.id || ttAnsatte.length === 0}
                     onChange={e => koble(a.id, e.target.value)}
                     style={{ ...velger, flex: '1 1 auto' }}
