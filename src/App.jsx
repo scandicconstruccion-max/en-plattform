@@ -372,6 +372,14 @@ async function forhandslast({ tving = false } = {}) {
     // Ansatte og kunder ligger IKKE i FORHANDSLAST_LISTER: de går ikke gjennom
     // lesMedCache, fordi bare et utvalg av feltene får lagres på disk. De varmes
     // opp her i stedet, ellers er de kalde til noen åpner et skjema.
+    // Ved tvungen kjøring — oppstart og gjenoppkobling — skal de tre hentes på
+    // NYTT. Uten dette ville de blitt stående på diskversjonen fra offline-økten
+    // til komponenten tilfeldigvis ble montert på nytt.
+    if (tving) {
+      try { invalidateKoblingCache() } catch (_) {}
+      try { invalidateEmployeeCache() } catch (_) {}
+      try { invalidateCustomerCache() } catch (_) {}
+    }
     try { await getCachedEmployees() } catch (_) {}
     try { await getCachedCustomers() } catch (_) {}
     try { await getCachedKoblinger() } catch (_) {}
@@ -765,6 +773,16 @@ function settAktivBedrift(id) {
   // Første gang vi vet hvilken bedrift vi står i: fjern nøklene fra før
   // prefikset ble innført. Best-effort, blokkerer ingenting.
   if (ny) { try { ryddGamleIdbNokler() } catch (_) {} }
+  // Og fyll de tre modul-cachene. Komponenter som rakk å montere FØR bedriften
+  // var avklart, fikk tom liste og hadde ingen grunn til å spørre igjen — deres
+  // useEffect har kjørt ferdig. Abonnentene varsles når hentingen er ferdig.
+  // Gjelder særlig kald start uten nett, der bedriften kommer fra huskelappen
+  // og altså litt senere enn ved en vanlig innlogging.
+  if (ny && forrige === null) {
+    try { getCachedKoblinger() } catch (_) {}
+    try { getCachedEmployees() } catch (_) {}
+    try { getCachedCustomers() } catch (_) {}
+  }
 }
 
 // Bedriften en NY rad faktisk havner i. Samme kilde som DEFAULT-verdien
@@ -3822,10 +3840,12 @@ function getCachedEmployees() {
   const nokkel = _aktivBedriftId
   if (_employeeCache.data && _employeeCache.nokkel === nokkel) return Promise.resolve(_employeeCache.data)
   if (_employeeCache.loading && _employeeCache.nokkel === nokkel) return _employeeCache.loading
+  if (!nokkel) return Promise.resolve([])          // bedrift ikke avklart — se getCachedKoblinger
   // Ny bedrift: forkast forrige liste FØR hentingen starter.
   _employeeCache.nokkel = nokkel
   _employeeCache.data = null
   const min = nokkel
+  if (erFrakoblet()) { _employeeCache.loading = ansatteFraDisk(min); return _employeeCache.loading }
   _employeeCache.loading = supabase.from('employees')
     .select('*')
     .order('last_name', { nullsFirst: false })
@@ -3861,8 +3881,17 @@ async function ansatteFraDisk(min) {
   _employeeCache.loading = null
   _employeeCache.subscribers.forEach(fn => fn(liste))
   // Ikke lås en tom liste permanent — prøv nettet på nytt neste gang.
-  if (!liste.length) setTimeout(() => { _employeeCache.data = null }, 5000)
+  if (!liste.length && !erFrakoblet()) setTimeout(() => { _employeeCache.data = null }, 5000)
   return liste
+}
+
+// Uten nett skal vi ikke røre nettverket i det hele tatt. lesMedCache har hatt
+// denne sjekken hele tiden; de tre modul-cachene under gikk rett på Supabase,
+// feilet, og leste disk FØRST etterpå. Offline ga det en konsoll full av
+// «Failed to fetch» — 327 på under to minutter — og et vindu der listene sto
+// tomme før diskversjonen kom.
+function erFrakoblet() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
 }
 
 // ── EKSTERNE KOBLINGER ─────────────────────────────────────────────────────
@@ -3881,9 +3910,14 @@ function getCachedKoblinger() {
   const nokkel = _aktivBedriftId
   if (_koblingCache.data && _koblingCache.nokkel === nokkel) return Promise.resolve(_koblingCache.data)
   if (_koblingCache.loading && _koblingCache.nokkel === nokkel) return _koblingCache.loading
+  // Bedriften er ikke avklart ennå. Ikke cache noe under en tom nøkkel — da ble
+  // en tom liste stående til nøkkelen endret seg, og disklesingen var uansett
+  // fail-closed. Vi svarer tomt og prøver igjen når bedriften er kjent.
+  if (!nokkel) return Promise.resolve([])
   _koblingCache.nokkel = nokkel
   _koblingCache.data = null
   const min = nokkel
+  if (erFrakoblet()) { _koblingCache.loading = koblingerFraDisk(min); return _koblingCache.loading }
   // RLS filtrerer på company_id = auth_company_id(), så vi ber ikke om bedrift her.
   _koblingCache.loading = supabase.from('external_links')
     .select('provider, entity_type, entity_id, external_id, synced_at, sync_error, metadata')
@@ -3913,7 +3947,10 @@ async function koblingerFraDisk(min) {
   _koblingCache.data = liste
   _koblingCache.loading = null
   _koblingCache.subscribers.forEach(fn => fn(liste))
-  if (!liste.length) setTimeout(() => { _koblingCache.data = null }, 5000)
+  // Bare legg opp til nytt forsøk når vi FAKTISK har nett. Offline ga denne
+  // timeren en ny runde «Failed to fetch» hvert femte sekund, ganget med
+  // antall monterte komponenter. Gjenoppkobling håndteres av forhandslast.
+  if (!liste.length && !erFrakoblet()) setTimeout(() => { _koblingCache.data = null }, 5000)
   return liste
 }
 
@@ -4309,10 +4346,12 @@ function getCachedCustomers() {
   const nokkel = _aktivBedriftId
   if (_customerCache.data && _customerCache.nokkel === nokkel) return Promise.resolve(_customerCache.data)
   if (_customerCache.loading && _customerCache.nokkel === nokkel) return _customerCache.loading
+  if (!nokkel) return Promise.resolve([])          // bedrift ikke avklart — se getCachedKoblinger
   // Ny bedrift: forkast forrige liste FØR hentingen starter.
   _customerCache.nokkel = nokkel
   _customerCache.data = null
   const min = nokkel
+  if (erFrakoblet()) { _customerCache.loading = kunderFraDisk(min); return _customerCache.loading }
   _customerCache.loading = hentEgneKunder()
     .then(rader => {
       // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
@@ -4339,7 +4378,7 @@ async function kunderFraDisk(min) {
   _customerCache.data = liste
   _customerCache.loading = null
   _customerCache.subscribers.forEach(fn => fn(liste))
-  if (!liste.length) setTimeout(() => { _customerCache.data = null }, 5000)
+  if (!liste.length && !erFrakoblet()) setTimeout(() => { _customerCache.data = null }, 5000)
   return liste
 }
 
