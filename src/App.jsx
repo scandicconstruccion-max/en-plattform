@@ -323,7 +323,7 @@ function tomDataCache(prefix) {
 //                funksjonen UMIDDELBART fra minnet (momentant modulbytte) og oppdaterer i
 //                bakgrunnen. Uten callback er oppførselen identisk med før (nettverk-først).
 // Returnerer { data, fraCache, lagretAt, feil }.
-async function lesMedCache(noekkel, lagQuery, onFersk) {
+async function lesMedCache(noekkel, lagQuery, onFersk, valg) {
   // Vet vi allerede at vi er offline? Les fra minne, så IndexedDB.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     const m = _memCache.get(noekkel)
@@ -345,7 +345,10 @@ async function lesMedCache(noekkel, lagQuery, onFersk) {
     meldNett(true)
     const lagretAt = Date.now()
     _memCache.set(noekkel, { data, lagretAt })
-    idbSett(noekkel, data)                                     // fire-and-forget
+    // tilDisk former hva som LAGRES, ikke hva kalleren får. Minne-cachen og
+    // returverdien er alltid det fulle svaret; disken kan være smalere. Brukes
+    // der spørringen henter felt som ikke skal ligge ukryptert på en telefon.
+    idbSett(noekkel, (valg && valg.tilDisk) ? valg.tilDisk(data) : data)   // fire-and-forget
     return { data, lagretAt }
   }
 
@@ -486,7 +489,54 @@ const FORHANDSLAST_LISTER = [
   ['ressurs:planer', () => supabase.from('resource_plans').select('*')],
   ['ressurs:milestones', () => supabase.from('calendar_events').select('*').eq('type', 'milestone').order('start_date')],
   ['ressurs:skills', () => supabase.from('employee_skills').select('*')],
+  // Timelistene er uke-baserte, men spørringen henter ALLE uker på én gang og
+  // filtrerer i minnet. Da har offline-brukeren hele historikken sin, ikke bare
+  // uka han sist åpnet. tilDisk brukes fordi select('*') på en tabell vi ikke
+  // har enumerert kolonnene til ikke skal havne ukryptert på telefonen.
+  ['timelister:alle',
+    () => supabase.from('timesheets').select('*, timesheet_entries(*)').order('year', { ascending: false }).order('week_number', { ascending: false }),
+    { tilDisk: timelisterTilDisk }],
 ]
+
+// Kun feltene skjermbildene faktisk leser. Ingen av dem er lønnsrelatert:
+// timeprisen ligger på employees.hourly_rate og skal ALDRI til disk.
+// Bommer denne lista på et felt, mister offline-visningen en kolonne — online
+// er urørt, fordi spørringen fortsatt henter alt.
+const TIMELISTE_FELT = ['id', 'employee_id', 'week_number', 'year', 'status', 'created_by', 'reject_comment']
+const TIMELISTE_LINJE_FELT = ['id', 'timesheet_id', 'project_id', 'date', 'start_time', 'end_time',
+  'normal_hours', 'overtime_50', 'overtime_100', 'travel_km', 'diet', 'expenses', 'expenses_description',
+  'description', 'notes', 'activity', 'absence_type', 'status', 'reject_comment']
+function timelisterTilDisk(rader) {
+  return (rader || []).map(t => ({
+    ...plukkFelt(t, TIMELISTE_FELT),
+    timesheet_entries: (t.timesheet_entries || []).map(e => plukkFelt(e, TIMELISTE_LINJE_FELT)),
+  }))
+}
+
+// Ansatte til timelistene. Spørringen henter hourly_rate fordi Oversikt regner
+// lønnskost av den — men den KAN IKKE caches: en timepris per ansatt, ukryptert
+// på hver telefon, er nøyaktig det vi holdt utenfor ANSATT_OFFLINE_FELT.
+//
+// Offline faller vi derfor tilbake på den vanlige ansatt-cachen, som er uten
+// timepris. Kallstedene ser det på at hourly_rate mangler — ikke på at den er 0.
+// Forskjellen er hele poenget: 0 kr er et tall, og et tall blir trodd.
+async function hentTimelisteAnsatte() {
+  try {
+    const { data, error } = await supabase.from('employees')
+      .select('id,first_name,last_name,hourly_rate,user_id,email')
+      .eq('status', 'Aktiv').order('last_name')
+    if (error) throw error
+    if (data == null) throw new Error('tomt svar uten feil')
+    meldNett(true)
+    return data
+  } catch (e) {
+    meldNett(!erNettverksfeil(e))
+    const fraDisk = await getCachedEmployees()
+    return (fraDisk || [])
+      .filter(a => (a.status || 'Aktiv') === 'Aktiv')
+      .sort((a, b) => String(a.last_name || '').localeCompare(String(b.last_name || ''), 'nb'))
+  }
+}
 let _forhandslastKjorer = false
 let _forhandslastSist = 0
 async function forhandslast({ tving = false } = {}) {
@@ -499,7 +549,7 @@ async function forhandslast({ tving = false } = {}) {
     // Kjør i små grupper så vi ikke fyrer av alle kallene samtidig
     for (let i = 0; i < FORHANDSLAST_LISTER.length; i += 4) {
       const gruppe = FORHANDSLAST_LISTER.slice(i, i + 4)
-      await Promise.all(gruppe.map(([key, q]) => lesMedCache(key, q)))
+      await Promise.all(gruppe.map(([key, q, valg]) => lesMedCache(key, q, undefined, valg)))
     }
     // Ansatte og kunder ligger IKKE i FORHANDSLAST_LISTER: de går ikke gjennom
     // lesMedCache, fordi bare et utvalg av feltene får lagres på disk. De varmes
@@ -29318,6 +29368,7 @@ function TimelistePage() {
   const [selectedWeek, setSelectedWeek] = useState(getWeekNumber(new Date()))
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null })
   // Tripletex-modell: ingen separat "rediger"-side lenger. Dagene er direkte
   // klikkbare i ukeoversikten. (Tidligere fantes editingSheet-state for en
   // egen TimesheetEditor-side; den ble fjernet til fordel for inline editor.)
@@ -29342,13 +29393,20 @@ function TimelistePage() {
 
   const load = async () => {
     try {
+      // Alle tre går gjennom datalaget, som selv faller tilbake til disk når
+      // nettet ikke svarer. Ingen av dem kaster, så Promise.all er trygg:
+      // en modul som mangler skal ikke ta med seg de to andre i fallet.
       const [emp, proj, ts] = await Promise.all([
-        supabase.from('employees').select('id,first_name,last_name,hourly_rate,user_id,email').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
-        supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}).then(r=>r.data||[])
+        hentTimelisteAnsatte(),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')).then(r => r.data || []),
+        lesMedCache('timelister:alle',
+          () => supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}),
+          undefined, { tilDisk: timelisterTilDisk }),
       ])
-      setEmployees(emp); setProjects(proj); setTimesheets(ts)
-      setEntries(ts.flatMap(t=>t.timesheet_entries||[]))
+      const rader = ts.data || []
+      setEmployees(emp); setProjects(proj); setTimesheets(rader)
+      setEntries(rader.flatMap(t=>t.timesheet_entries||[]))
+      setCacheInfo({ fraCache: !!ts.fraCache, lagretAt: ts.lagretAt || null })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -29364,6 +29422,24 @@ function TimelistePage() {
     t.week_number===selectedWeek && t.year===selectedYear &&
     t.employee_id===effektivAnsatt
   )
+
+  // ── UKEPEKER OFFLINE ──────────────────────────────────────────────────────
+  // Modulen åpner alltid på inneværende uke. Står man uten dekning på en mandag
+  // og forrige uke er det siste som rakk å bli lagret, viser skjermen 0 timer —
+  // og en tømrer leser det som at timene hans er borte. De er ikke det.
+  //
+  // Vi hopper IKKE automatisk til uka med timer. Uka man ser på avgjør hvor nye
+  // timer føres, og timelister er lønnsgrunnlag: et stille ukebytte er en verre
+  // feil enn en tom uke. I stedet sier vi hvilken uke som faktisk ligger lagret,
+  // og lar ham gå dit med ett trykk.
+  const sisteLagredeUke = timesheets
+    .filter(t => t.employee_id === effektivAnsatt && (t.timesheet_entries || []).length > 0)
+    .map(t => ({ ar: t.year, uke: t.week_number }))
+    .sort((a, b) => (b.ar - a.ar) || (b.uke - a.uke))[0] || null
+  const visUkepeker = !!cacheInfo.fraCache
+    && !((currentSheet && currentSheet.timesheet_entries) || []).length
+    && !!sisteLagredeUke
+    && !(sisteLagredeUke.ar === selectedYear && sisteLagredeUke.uke === selectedWeek)
 
   // Filtrer entries basert på godkjennings-tilgang:
   //   - Admin ser ALLE entries med status 'Til godkjenning'
@@ -29393,6 +29469,11 @@ function TimelistePage() {
           <div>
             <h1 style={{ fontSize: isMobTL ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
             {!isMobTL && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>}
+            {cacheInfo.fraCache && (
+              <div style={{ marginTop:'6px' }}>
+                <SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} />
+              </div>
+            )}
           </div>
           {pendingApprovalCount>0 && (
             <div style={{ background:'#fffbeb', borderRadius:'10px', padding: isMobTL ? '6px 10px' : '8px 14px', border:'1px solid #fde68a', fontSize: isMobTL ? '11px' : '13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
@@ -29442,6 +29523,22 @@ function TimelistePage() {
                 <button onClick={()=>{ setSelectedWeek(getWeekNumber(new Date())); setSelectedYear(new Date().getFullYear()) }} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
               </div>
             </div>
+
+            {visUkepeker && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding: isMobTL ? '11px 13px' : '13px 18px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+                <span style={{ fontSize:'18px', flexShrink:0 }}>📅</span>
+                <div style={{ fontSize:'13px', color:'#78350f', lineHeight:1.5, flex:'1 1 220px', minWidth:0 }}>
+                  Ingen timer i uke {selectedWeek} i de lagrede dataene. Siste uke med lagrede timer er{' '}
+                  <strong>uke {sisteLagredeUke.uke}, {sisteLagredeUke.ar}</strong>.
+                </div>
+                <button
+                  onClick={() => { setSelectedWeek(sisteLagredeUke.uke); setSelectedYear(sisteLagredeUke.ar) }}
+                  style={{ background:'white', color:'#78350f', border:'1px solid #fcd34d', borderRadius:'9px', padding:'8px 14px', fontSize:'13px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap' }}
+                >
+                  Gå til uke {sisteLagredeUke.uke}
+                </button>
+              </div>
+            )}
 
             {/* Kompakt total + status-rad — erstatter WeekSheet sin status-card.
                 Viser timer + entry-statussummering. Editoren under tar direkte klikk
@@ -30172,6 +30269,16 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack, i
 // ── STATS VIEW ────────────────────────────────────────────────────────────────
 function TimesheetStats({ entries, timesheets, employees, projects, selectedEmployee, statsView }) {
   const alert = useAppAlert()
+  // Timeprisen caches ikke (se hentTimelisteAnsatte). Uten den blir hver
+  // lønnslinje 0 kr — og en .xlsx med kolonnen «Timepris» fylt med nuller ser
+  // ut som et ekte lønnsgrunnlag. Tomt er trygt; feil tall er ikke.
+  //
+  // Sjekken er på om NØKKELEN finnes, ikke på om den har en verdi. Offline er
+  // hourly_rate ikke med i projeksjonen i det hele tatt; online er den med og
+  // kan være null fordi ingen har fylt den ut. Det andre er et helt vanlig
+  // tilfelle som skal kunne eksporteres — det gir bare 0 kr, og det er sant.
+  const harTimepris = employees.length === 0
+    || employees.some(e => Object.prototype.hasOwnProperty.call(e, 'hourly_rate'))
   const [reportType, setReportType] = useState('oversikt') // 'oversikt'|'ansatt'|'prosjekt'
   const [periodFrom, setPeriodFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` })
   const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split('T')[0])
@@ -30607,6 +30714,15 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   // Trigger valgt format
   const handleExport = async () => {
     const kind = showExportModal
+    if (kind === 'lonnsgrunnlag' && !harTimepris) {
+      setShowExportModal(null)
+      alert({
+        message: 'Lønnsgrunnlag krever nett',
+        subMessage: 'Timeprisene lagres ikke på telefonen, så et lønnsgrunnlag laget nå ville hatt 0 kr på hver linje. Timelister-eksporten virker som vanlig — den viser timer, ikke kroner.',
+        kind: 'warn',
+      })
+      return
+    }
     setShowExportModal(null)
     if (exportFormat === 'excel') await exportToExcel(kind)
     else await exportToPdf(kind)
@@ -30695,7 +30811,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
                   <td style={{ padding:'10px', textAlign:'right' }}>{totalDiet} kr</td>
                   <td style={{ padding:'10px', textAlign:'right' }}>{totalExpenses} kr</td>
                   <td style={{ padding:'10px', textAlign:'right' }}>{absenceDays}d</td>
-                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO')} kr</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{harTimepris ? Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO') + ' kr' : '—'}</td>
                 </tr>
               </tbody>
             </table>
