@@ -18,7 +18,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { AvvistFeil, hentAvsender, krevSammeBedrift } from '../_shared/auth.ts'
+import { AvvistFeil, hentAvsender, krevSammeBedrift } from './auth.ts'
 
 const TRIPLETEX_BASE = Deno.env.get('TRIPLETEX_API_BASE') ?? 'https://api-test.tripletex.tech'
 const CONSUMER_TOKEN = Deno.env.get('TRIPLETEX_CONSUMER_TOKEN') ?? ''
