@@ -29405,6 +29405,7 @@ function TimelistePage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedEmployee, setSelectedEmployee] = useState(null)
   const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null })
+  const nettStatusNaa = useTilkobling()
   // Tripletex-modell: ingen separat "rediger"-side lenger. Dagene er direkte
   // klikkbare i ukeoversikten. (Tidligere fantes editingSheet-state for en
   // egen TimesheetEditor-side; den ble fjernet til fordel for inline editor.)
@@ -29472,7 +29473,16 @@ function TimelistePage() {
     .filter(t => t.employee_id === effektivAnsatt && (t.timesheet_entries || []).length > 0)
     .map(t => ({ ar: t.year, uke: t.week_number }))
     .sort((a, b) => (b.ar - a.ar) || (b.uke - a.uke))[0] || null
-  const visUkepeker = !!cacheInfo.fraCache
+  //
+  // GATEN: «viser vi lagret data NÅ», ikke «gikk lasten mot disk». De to er
+  // ikke det samme, og forskjellen er hele grunnen til at pekeren manglet på
+  // mobil: lastes siden mens man har dekning og dekningen ryker etterpå, kom
+  // dataene fra nettet — fraCache er false — men brukeren står like fullt uten
+  // nett og ser 0 timer. Samme feilform som lønnsgrunnlag-sperren hadde:
+  // jeg gjettet på en egenskap ved lastingen i stedet for å spørre om
+  // tilstanden akkurat nå.
+  const viserLagretData = nettStatusNaa === NETT_AV || !!cacheInfo.fraCache
+  const visUkepeker = viserLagretData
     && !((currentSheet && currentSheet.timesheet_entries) || []).length
     && !!sisteLagredeUke
     && !(sisteLagredeUke.ar === selectedYear && sisteLagredeUke.uke === selectedWeek)
@@ -29505,9 +29515,9 @@ function TimelistePage() {
           <div>
             <h1 style={{ fontSize: isMobTL ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
             {!isMobTL && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>}
-            {cacheInfo.fraCache && (
+            {viserLagretData && cacheInfo.lagretAt && (
               <div style={{ marginTop:'6px' }}>
-                <SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} />
+                <SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache />
               </div>
             )}
           </div>
@@ -30844,7 +30854,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
                     <td style={{ padding:'10px', textAlign:'right', color:'#7c3aed' }}>{e.diet>0?e.diet+' kr':'—'}</td>
                     <td style={{ padding:'10px', textAlign:'right', color:'#374151' }}>{e.expenses>0?e.expenses+' kr':'—'}</td>
                     <td style={{ padding:'10px', textAlign:'right', color:'#0891b2' }}>{e.absence>0?e.absence+'d':'—'}</td>
-                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#059669' }}>{e.cost>0?Math.round(e.cost).toLocaleString('nb-NO')+' kr':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#059669' }}>{kanLonnsgrunnlag && e.cost>0?Math.round(e.cost).toLocaleString('nb-NO')+' kr':'—'}</td>
                   </tr>
                 ))}
                 <tr style={{ background:'#f0fdf4', fontWeight:'700' }}>
