@@ -18,6 +18,7 @@
 // ============================================================
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { AvvistFeil, hentAvsender, krevSammeBedrift } from '../_shared/auth.ts'
 
 const TRIPLETEX_BASE = Deno.env.get('TRIPLETEX_API_BASE') ?? 'https://api-test.tripletex.tech'
 const CONSUMER_TOKEN = Deno.env.get('TRIPLETEX_CONSUMER_TOKEN') ?? ''
@@ -70,16 +71,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ error: 'Server mangler hemmeligheter (TRIPLETEX_CONSUMER_TOKEN / TRIPLETEX_ENC_KEY)' }, 500)
     }
 
+    // ── HVEM SPØR ────────────────────────────────────────────────────────
+    // Før dette punktet bestemte kalleren selv hvilken bedrift han opererte i:
+    // companyId kom fra request-body, og funksjonen kjørte med service_role.
+    // Én innlogget bruker kunne dermed skrive en ANNEN bedrifts Tripletex-
+    // nøkkel — deres integrasjon sluttet å virke, og det de synket havnet i
+    // angriperens Tripletex-konto.
+    //
+    // Bedriften utledes nå av auth_company_id() for kallerens JWT, som er
+    // samme kilde som RLS og DEFAULT-verdiene i databasen. Under en støtteøkt
+    // svarer den med kundens bedrift, så støtteinnlogging virker uten unntak.
+    const avsender = await hentAvsender(req)
+
     const body = await req.json().catch(() => ({}))
-    const companyId = body?.companyId
+    // companyId i body styrer INGENTING lenger. Den godtas kun hvis den er
+    // identisk med den utledede, så en gammel klient ikke stille begynner å
+    // operere i feil bedrift. Feltet fjernes fra body i en senere runde.
+    krevSammeBedrift(avsender, body?.companyId, '/tripletex-session')
+    const companyId = avsender.companyId
     const force = !!body?.force
     // Fiks #3 (trimming): rens employee-token for mellomrom, tab og linjeskift.
     // Kunden limer ofte inn fra e-post/PDF og skal ikke straffes for et usynlig linjeskift.
     const employeeToken = typeof body?.employeeToken === 'string'
       ? body.employeeToken.replace(/\s+/g, '')
       : ''
-    if (!companyId) return json({ error: 'companyId er påkrevd' }, 400)
-
     // (Valgfritt, praktisk for testing) Lagre/oppdater employee-token hvis det sendes med.
     // Da holdes hovednøkkelen på ETT sted (Edge-hemmeligheten) — du slipper å røre den i SQL.
     // Fiks #1 (cache-forkasting): hvis tokenet AVVIKER fra det lagrede, skal cachen
@@ -196,6 +211,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     return json({ ok: true, cached: false, expires: expiresAt.toISOString() })
   } catch (e) {
+    // Avvisninger fra kontrollen bærer sin egen status og en tekst som er
+    // trygg å vise. Alt annet er 500 som før.
+    if (e instanceof AvvistFeil) return json({ error: e.message }, e.status)
     return json({ error: (e as Error)?.message ?? String(e) }, 500)
   }
 })
