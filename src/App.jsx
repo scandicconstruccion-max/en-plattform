@@ -76,6 +76,60 @@ function idbNokkel(noekkel) {
   if (!noekkel || !_aktivBedriftId) return null
   return _aktivBedriftId + '|' + noekkel
 }
+
+// ── VENT PÅ BEDRIFTEN FØR VI GIR OPP EN DISKLESING ─────────────────────────
+//
+// LES DETTE FØR DU RØRER idbHent. Dette er tredje gang samme mekanisme har
+// slått til, og det er her neste person kommer til å stå:
+//
+//   React kjører BARNS effekter FØR foreldrenes.
+//
+// companyId settes i AuthProvider sin egen effekt, etter et RPC mot
+// auth_company_id(). Alt som er montert under AuthProvider — altså hele appen —
+// har kjørt sin useEffect ferdig før den effekten i det hele tatt starter.
+// _aktivBedriftId speiles fra companyId og er derfor NULL i det vinduet.
+//
+// Online merkes det ikke: nettkallet svarer, og disken blir aldri spurt. Ved
+// kald start UTEN nett feiler nettkallet, lesMedCache faller tilbake til
+// idbHent — og fikk før dette null tilbake, fordi bedriften ikke var avklart.
+// Resultatet var tomme lister i hver eneste modul, i den ene situasjonen
+// offline-modus finnes for.
+//
+// Løsningen er ikke å slippe prefikset. Den er å VENTE litt. Bedriften kommer
+// hundrevis av millisekunder senere, ikke aldri — offline har AuthProvider en
+// huskelapp i localStorage å falle tilbake på.
+//
+// Taket er der fordi «aldri» finnes likevel: er brukeren logget ut, blir
+// bedriften aldri kjent. En lesing som henger for alltid er verre enn en som
+// gir opp.
+//
+// SKRIVING VENTER IKKE. idbSett er og blir fail-closed: vet vi ikke hvilken
+// bedrift vi står i, skriver vi ingenting. Å lese for sent koster et nettkall;
+// å skrive i feil bedrift koster tilliten. Sikkerhetsegenskapen fra sak B.
+const BEDRIFT_VENT_MS = 5000
+let _bedriftVentere = []
+function ventPaaBedrift() {
+  if (_aktivBedriftId) return Promise.resolve(_aktivBedriftId)
+  return new Promise((resolve) => {
+    const ventar = { vekk: null }
+    const t = setTimeout(() => {
+      _bedriftVentere = _bedriftVentere.filter(v => v !== ventar)
+      resolve(null)                                // ga opp — kalleren svarer tomt
+    }, BEDRIFT_VENT_MS)
+    ventar.vekk = (id) => { clearTimeout(t); resolve(id) }
+    _bedriftVentere.push(ventar)
+  })
+}
+// Kalles fra settAktivBedrift i det bedriften blir kjent. Lista tømmes FØR
+// vekkingen, så en ventende som rekker å legge seg på nytt ikke blir vekket to
+// ganger av samme runde.
+function vekkBedriftVentere(id) {
+  if (!id || !_bedriftVentere.length) return
+  const liste = _bedriftVentere
+  _bedriftVentere = []
+  for (const v of liste) { try { v.vekk(id) } catch (_) {} }
+}
+
 async function idbSett(noekkel, data) {
   const k = idbNokkel(noekkel)
   if (!k) return                                   // ukjent bedrift → ikke cache
@@ -90,8 +144,12 @@ async function idbSett(noekkel, data) {
   } catch (e) { /* svelg — caching skal aldri knekke hovedflyten */ }
 }
 async function idbHent(noekkel) {
+  if (!noekkel) return null
+  // Bedriften er kanskje ikke avklart ennå — se den lange forklaringen over
+  // ventPaaBedrift. Er den allerede kjent, koster denne linja ingenting.
+  if (!_aktivBedriftId) await ventPaaBedrift()
   const k = idbNokkel(noekkel)
-  if (!k) return null                              // ukjent bedrift → ingen fallback
+  if (!k) return null                              // fortsatt ukjent bedrift → ingen fallback
   try {
     const db = await idbAapne()
     return await new Promise((res, rej) => {
@@ -766,6 +824,9 @@ function settAktivBedrift(id) {
   const ny = id || null
   const forrige = _aktivBedriftId
   _aktivBedriftId = ny
+  // Slipp løs disklesinger som venter på å få vite hvilken bedrift de leser i.
+  // Skal skje FØRST: de har allerede feilet på nett og står og venter.
+  vekkBedriftVentere(ny)
   // Rydd KUN ved et faktisk bytte fra en tidligere bedrift. Første lasting går fra
   // null til en verdi, og da finnes ingen gamle data å rydde bort — å rydde der
   // ville kostet to spørringer ved hver eneste sidelast.
