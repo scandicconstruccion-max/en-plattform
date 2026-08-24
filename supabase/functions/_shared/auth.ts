@@ -56,6 +56,28 @@ export function loggSikkerhet(hendelse: string, detaljer: Record<string, unknown
   }
 }
 
+// Leser rollen ut av JWT-ens payload UTEN å verifisere signaturen. Det er
+// trygt her fordi verdien kun brukes til å AVVISE og til å skrive en
+// loggmelding — aldri til å slippe noen inn. Et forfalsket token med
+// role=authenticated kommer ikke lenger enn til getUser under.
+//
+// Grunnen til at den finnes: sammenligning mot nøkkelstrengen alene er ikke
+// nok. Roteres service-role-nøkkelen, eller kommer den fra et annet prosjekt,
+// treffer ikke strengsammenligningen — og da ville avvisningen sett ut som et
+// helt vanlig utløpt token i loggen. Rollen står i tokenet uansett.
+function lesRolleFraJwt(jwt: string): string {
+  try {
+    const del = jwt.split('.')[1]
+    if (!del) return ''
+    const b64 = del.replace(/-/g, '+').replace(/_/g, '/')
+    const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+    const payload = JSON.parse(atob(pad))
+    return String(payload?.role ?? '')
+  } catch (_) {
+    return ''
+  }
+}
+
 /**
  * Fastslår hvem som spør, og hvilken bedrift kallet gjelder.
  *
@@ -66,17 +88,26 @@ export async function hentAvsender(req: Request): Promise<Avsender> {
   const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!jwt) throw new AvvistFeil('Mangler Authorization', 401)
 
+  let sti = ''
+  try { sti = new URL(req.url).pathname } catch (_) { /* url skal aldri velte en avvisning */ }
+  const rolle = lesRolleFraJwt(jwt)
+
   // Service-role-nøkkelen er IKKE en avsender. Den identifiserer ingen, og en
   // funksjon som godtar den kan kalles på vegne av hvem som helst. Interne
   // kall mellom funksjoner skal videresende brukerens JWT i stedet.
-  if (SERVICE_ROLE && jwt === SERVICE_ROLE) {
-    loggSikkerhet('service_role brukt som avsender', { path: new URL(req.url).pathname })
+  //
+  // BEGGE sjekkene står med vilje: strengen fanger vår egen nøkkel, rollen
+  // fanger en rotert eller fremmed. Uten den andre ville avvisningen blitt
+  // liggende i loggen som et hvilket som helst utløpt token.
+  if ((SERVICE_ROLE && jwt === SERVICE_ROLE) || rolle === 'service_role') {
+    loggSikkerhet('service_role brukt som avsender', { sti, rolle })
     throw new AvvistFeil('Ugyldig sesjon', 401)
   }
-  // Anon-nøkkelen er offentlig og identifiserer heller ingen. getUser under
-  // ville avvist den uansett, men vi sier det eksplisitt: det er den nøkkelen
-  // «Verify JWT»-bryteren slipper gjennom, og den skal ikke komme lenger.
-  if (ANON_KEY && jwt === ANON_KEY) {
+  // Anon-nøkkelen er offentlig og identifiserer heller ingen. Den er nøkkelen
+  // «Verify JWT»-bryteren slipper gjennom, så den skal ikke komme lenger — og
+  // den skal være synlig i loggen når noen prøver.
+  if ((ANON_KEY && jwt === ANON_KEY) || rolle === 'anon') {
+    loggSikkerhet('anon-nøkkel brukt som avsender', { sti, rolle })
     throw new AvvistFeil('Ugyldig sesjon', 401)
   }
 
