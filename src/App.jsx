@@ -532,7 +532,16 @@ const FORHANDSLAST_LISTER = [
   ['timelister:alle',
     () => supabase.from('timesheets').select('*, timesheet_entries(*)').order('year', { ascending: false }).order('week_number', { ascending: false }),
     { tilDisk: timelisterTilDisk }],
+  // Sertifikatene hører til ansattlista, men ligger i en egen tabell og kan
+  // derfor ikke være med i ansatt-cachen. Et sertifikat er en kvalifikasjon
+  // som uansett vises på bygget — ikke personopplysninger av samme slag som
+  // lønn og fødselsdato. Hvitelistet likevel, så en ny kolonne i tabellen ikke
+  // havner på disk uten at noen har tatt stilling til den.
+  ['ansatte:sertifikater',
+    () => supabase.from('employee_certifications').select('*').order('expiry_date'),
+    { tilDisk: (rader) => (rader || []).map(r => plukkFelt(r, SERTIFIKAT_FELT)) }],
 ]
+const SERTIFIKAT_FELT = ['id', 'employee_id', 'name', 'issued_date', 'expiry_date']
 
 // Kun feltene skjermbildene faktisk leser. Ingen av dem er lønnsrelatert:
 // timeprisen ligger på employees.hourly_rate og skal ALDRI til disk.
@@ -556,6 +565,48 @@ function timelisterTilDisk(rader) {
 // Offline faller vi derfor tilbake på den vanlige ansatt-cachen, som er uten
 // timepris. Kallstedene ser det på at hourly_rate mangler — ikke på at den er 0.
 // Forskjellen er hele poenget: 0 kr er et tall, og et tall blir trodd.
+// Ansattlista til Ansatte-modulen. To bruksområder med ULIKE behov:
+//
+//   · Nedtrekkene rundt i appen (timeføring, prosjekt, ressursplan) går via
+//     useEmployees → getCachedEmployees og virker allerede offline. De trenger
+//     bare id, navn og user_id, og alt det ligger i ANSATT_OFFLINE_FELT.
+//   · Ansatte-MODULEN viser i tillegg sertifikater, og detaljkortet viser lønn,
+//     fødselsdato, adresse, pårørende og notater. Det siste kommer ALDRI på
+//     disk. Modulen blir derfor bevisst redusert offline, ikke komplett.
+//
+// Online er spørringen den samme som før, med den innebygde join-en og samme
+// fallback til enkel henting hvis join-en feiler (den gjør det i dag: 400).
+// Offline settes lista sammen av de to cachene i stedet.
+async function hentAnsatteMedSertifikater() {
+  try {
+    let { data, error } = await supabase.from('employees').select('*, employee_certifications(*)').order('last_name')
+    if (error) {
+      console.error('Ansatte-spørring med sertifikater feilet, faller tilbake til enkel henting:', error)
+      const enkel = await supabase.from('employees').select('*').order('last_name')
+      if (enkel.error) throw enkel.error
+      if (enkel.data == null) throw new Error('tomt svar uten feil')
+      data = enkel.data.map(x => ({ ...x, employee_certifications: [] }))
+    }
+    if (data == null) throw new Error('tomt svar uten feil')
+    meldNett(true)
+    return data
+  } catch (e) {
+    meldNett(!erNettverksfeil(e))
+    // Ansatte fra ansatt-cachen, sertifikater fra sin egen. Slås sammen her
+    // slik at lista ser lik ut for komponenten enten den kom fra nett eller disk.
+    const ansatte = await getCachedEmployees()
+    const sert = await lesListeFraDisk('ansatte:sertifikater')
+    const perAnsatt = new Map()
+    for (const c of sert) {
+      if (!perAnsatt.has(c.employee_id)) perAnsatt.set(c.employee_id, [])
+      perAnsatt.get(c.employee_id).push(c)
+    }
+    return (ansatte || [])
+      .map(a => ({ ...a, employee_certifications: perAnsatt.get(a.id) || [] }))
+      .sort((x, y) => String(x.last_name || '').localeCompare(String(y.last_name || ''), 'nb'))
+  }
+}
+
 async function hentTimelisteAnsatte() {
   try {
     const { data, error } = await supabase.from('employees')
@@ -4038,7 +4089,10 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 //
 // Online-spørringene er UENDRET (select('*')), så ingenting endrer seg der.
 // Projeksjonen gjelder kun det som skrives til disk.
-const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'tripletex_employee_id']
+// Lønn, fødselsdato, adresse, pårørende og fritekstnotater er BEVISST utelatt.
+// contract_type («Fast», «Timelønn») er lagt til her fordi ansattlista viser den
+// og den ikke sier noe om personen ut over hva slags avtale hun har.
+const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'contract_type', 'tripletex_employee_id']
 const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'phone']
 
 function plukkFelt(rad, felt) {
@@ -28491,19 +28545,19 @@ function AnsattePage() {
     }
   }, [selected])
   const [visning, setVisning] = useState('liste')
+  // Gate på TILSTAND, ikke på hvordan lasten gikk. Går dekningen etter at siden
+  // er lastet, kom dataene fra nettet — men brukeren står like fullt uten nett,
+  // og lønnskolonnen i lista er da fra før dekningen røk.
+  const frakobletA = useTilkobling() === NETT_AV
 
   const load = async () => {
     try {
-      // Hent ansatte med sertifikater. Hvis den innebygde join-en feiler (RLS/relasjon),
-      // faller vi tilbake til enkel henting slik at ansatte uansett vises.
-      let { data: e, error: eErr } = await supabase.from('employees').select('*, employee_certifications(*)').order('last_name')
-      if (eErr) {
-        console.error('Ansatte-spørring med sertifikater feilet, faller tilbake til enkel henting:', eErr)
-        const plain = await supabase.from('employees').select('*').order('last_name')
-        if (plain.error) console.error('Enkel ansatt-henting feilet også:', plain.error)
-        e = (plain.data || []).map(x => ({ ...x, employee_certifications: [] }))
-      }
-      const { data: p } = await supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')
+      // Begge går gjennom datalaget, som selv faller tilbake til disk.
+      // Ingen av dem kaster, så en manglende liste tar ikke med seg den andre.
+      const [e, p] = await Promise.all([
+        hentAnsatteMedSertifikater(),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')).then(r => r.data || []),
+      ])
       setEmployees(e || []); setProjects(p || [])
     } catch(err) { console.error(err) }
     finally { setLoading(false) }
@@ -28556,6 +28610,12 @@ function AnsattePage() {
           <div>
             <h1 style={{ fontSize: isMobE ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
             {!isMobE && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>}
+            {frakobletA && (
+              <div style={{ marginTop:'6px', display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#92400e', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'4px 10px', fontWeight:500 }}>
+                <span style={{ width:'7px', height:'7px', borderRadius:'50%', background:'#f59e0b', flexShrink:0 }} />
+                Frakoblet – viser lagret data uten lønn og persondetaljer
+              </div>
+            )}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
             {!isMobE && <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Import</button>}
@@ -28644,7 +28704,7 @@ function AnsattePage() {
                       {!isMobE && emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
                     </div>
                   </div>
-                  {!isMobE && emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
+                  {!isMobE && !frakobletA && emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
                   {!isMobE && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
@@ -28690,6 +28750,11 @@ function AnsattePage() {
 
 function AnsattDetaljer({ employee: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  // Detaljkortet er BEVISST redusert offline. Lønn, fødselsdato, adresse,
+  // pårørende og notater ligger ikke på disk og kommer ikke til å gjøre det.
+  // Uten et tydelig merke ville tomme felt lest som «ikke registrert» — og en
+  // adresse som «mangler» er en verre feil enn en som ikke vises.
+  const frakoblet = useTilkobling() === NETT_AV
   const [emp, setEmp] = useState(init)
   const [certs, setCerts] = useState([])
   const [empProjects, setEmpProjects] = useState([])
@@ -28702,11 +28767,20 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
 
   const loadDetails = async () => {
     const [c, ep, sk] = await Promise.all([
-      supabase.from('employee_certifications').select('*').eq('employee_id',emp.id).order('expiry_date').then(r=>r.data||[]),
+      // null = spørringen FEILET. Skilt fra [] med vilje: en ansatt uten
+      // sertifikater skal ikke få diskversjonen tredd nedover seg, for da ville
+      // et slettet sertifikat dukket opp igjen online.
+      supabase.from('employee_certifications').select('*').eq('employee_id',emp.id).order('expiry_date').then(r=>r.error?null:(r.data||[])),
       supabase.from('employee_projects').select('*, projects(name)').eq('employee_id',emp.id).order('from_date',{ascending:false}).then(r=>r.data||[]),
       supabase.from('employee_skills').select('*').eq('employee_id',emp.id).order('skill').then(r=>r.data||[])
     ])
-    setCerts(c); setEmpProjects(ep); setSkills(sk)
+    // Sertifikatene ligger allerede på disk for hele bedriften (ansattlista
+    // bruker dem til utløpsvarsler), så denne ene lista kan vi berge offline.
+    // employee_projects og employee_skills har ingen cache og blir tomme —
+    // merket i headeren sier fra om det.
+    if (c) setCerts(c)
+    else setCerts((await lesListeFraDisk('ansatte:sertifikater')).filter(x => x.employee_id === emp.id))
+    setEmpProjects(ep); setSkills(sk)
   }
   const refresh = async () => {
     const {data}=await supabase.from('employees').select('*').eq('id',emp.id).single()
@@ -28772,10 +28846,21 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            <button onClick={()=>setEditing(true)} style={{ padding: isMobED ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobED ? '12px' : '13px' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding: isMobED ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobED ? '12px' : '13px' }}>🗑️</button>
+            {/* Sperret offline. Skjemaet fylles fra raden vi HAR, og den mangler
+                lønn og adresse — en lagring derfra ville skrevet tomt over ekte
+                data hvis nettet kom tilbake midt i. */}
+            <button onClick={()=>setEditing(true)} disabled={frakoblet} title={frakoblet ? 'Redigering krever nett' : 'Rediger'} style={{ padding: isMobED ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: frakoblet ? 'not-allowed' : 'pointer', opacity: frakoblet ? 0.45 : 1, fontSize: isMobED ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} disabled={frakoblet} title={frakoblet ? 'Sletting krever nett' : 'Slett'} style={{ padding: isMobED ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor: frakoblet ? 'not-allowed' : 'pointer', opacity: frakoblet ? 0.45 : 1, color:'#dc2626', fontSize: isMobED ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
+
+        {frakoblet && (
+          <div style={{ marginTop: isMobED ? '12px' : '16px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding: isMobED ? '10px 12px' : '11px 14px', fontSize:'13px', color:'#78350f', lineHeight:1.55 }}>
+            <strong>Frakoblet – viser lagret data.</strong> Lønn, fødselsdato, adresse, pårørende og notater
+            lagres ikke på telefonen og vises derfor ikke her. Prosjekter og kompetanser er heller ikke lagret.
+            Redigering krever nett.
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'4px', marginTop: isMobED ? '14px' : '20px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
