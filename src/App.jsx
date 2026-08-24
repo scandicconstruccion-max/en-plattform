@@ -240,6 +240,72 @@ async function ryddGamleIdbNokler() {
   } catch (e) { /* svelg — opprydding skal aldri knekke oppstart */ }
 }
 
+// ── ER DETTE EN NETTVERKSFEIL? ─────────────────────────────────────────────
+// Fantes i seks nesten like kopier (køen, lagreMedKo, tre avvik-stier og
+// befaring). Én av dem hadde leddene i en annen rekkefølge. Seks steder som
+// skal svare det samme, sa det allerede ikke helt likt — derfor ett sted.
+//
+// navigator.onLine === false er PÅLITELIG i denne retningen: sier OS-et at
+// lenken er nede, er den nede. Motsatt vei er den verdiløs, og det er nettopp
+// derfor den ikke brukes til å slå fast at vi ER på nett noe sted.
+function erNettverksfeil(e) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  return /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+}
+
+// ── TILKOBLINGSSTATUS: HVA VI FAKTISK VET ──────────────────────────────────
+//
+// Merket nederst til venstre sto grønt «Tilkoblet» mens maskinen var frakoblet
+// og hver eneste modul var tom. Årsaken: useTilkobling leste navigator.onLine,
+// som initialiseres til true når siden lastes mens maskinen ALLEREDE er
+// frakoblet — og offline-hendelsen fyrer aldri, fordi den fyrer på overgangen,
+// og overgangen skjedde før siden fantes.
+//
+// Tre tilstander, ikke to. «Vet ikke» er ikke det samme som «tilkoblet»:
+//   'ukjent' — ingen rundtur forsøkt ennå. Merket viser INGENTING.
+//   'paa'    — et Supabase-kall er fullført. Bevis.
+//   'av'     — vi når ikke fram.
+//
+// ASYMMETRI. Ingen av signalene er pålitelige begge veier, så hvert av dem
+// brukes kun der det holder:
+//   · suksess                   → 'paa' ØYEBLIKKELIG. En fullført rundtur er bevis.
+//   · navigator.onLine === false → 'av' ØYEBLIKKELIG. Sikkert i denne retningen.
+//   · én nettverksfeil          → ingenting. På en byggeplass er ustabil dekning
+//     normaltilstanden, ikke en hendelse. Ett kall som ryker mens andre går
+//     gjennom betyr at nettet er tregt, ikke borte.
+//   · to på rad uten suksess    → 'av'.
+//   · online-hendelsen          → nullstiller telleren, men slår IKKE fast 'paa'.
+//     Lenken er oppe; om Supabase svarer vet vi først når noe har svart.
+//     forhandslast lytter på samme hendelse og fyrer av ekte kall, så svaret
+//     kommer på under et sekund.
+//
+// En datafeil fra serveren (RLS, 400) melder 'paa': serveren SVARTE. At svaret
+// var et avslag er et helt annet problem enn manglende dekning.
+const NETT_UKJENT = 'ukjent'
+const NETT_PAA = 'paa'
+const NETT_AV = 'av'
+const NETT_FEIL_GRENSE = 2
+let _nettStatus = (typeof navigator !== 'undefined' && navigator.onLine === false) ? NETT_AV : NETT_UKJENT
+let _nettFeilPaaRad = 0
+function nettStatus() { return _nettStatus }
+function settNettStatus(ny) {
+  if (ny === _nettStatus) return
+  _nettStatus = ny
+  try { window.dispatchEvent(new CustomEvent('ep-nett-endret')) } catch (_) {}
+}
+// ok = true betyr «vi nådde serveren», ikke «spørringen lyktes».
+function meldNett(ok) {
+  if (ok) { _nettFeilPaaRad = 0; settNettStatus(NETT_PAA); return }
+  _nettFeilPaaRad++
+  if (_nettFeilPaaRad >= NETT_FEIL_GRENSE) settNettStatus(NETT_AV)
+}
+// Lyttes på modulnivå, ikke i hooken: tilstanden skal være riktig uavhengig av
+// hva som tilfeldigvis er montert. Hooken abonnerer på ep-nett-endret.
+if (typeof window !== 'undefined') {
+  window.addEventListener('offline', () => { _nettFeilPaaRad = NETT_FEIL_GRENSE; settNettStatus(NETT_AV) })
+  window.addEventListener('online', () => { _nettFeilPaaRad = 0 })
+}
+
 // In-memory cache for momentane modulbytter (stale-while-revalidate).
 // Lever kun i nettleserens minne for denne økten — tømmes ved full reload og utlogging.
 const _memCache = new Map() // noekkel -> { data, lagretAt }
@@ -268,9 +334,15 @@ async function lesMedCache(noekkel, lagQuery, onFersk) {
 
   // Hent friskt, skriv gjennom til minne + IndexedDB.
   const hentFriskt = async () => {
-    const { data, error } = await lagQuery()
-    if (error) throw error
-    if (data == null) throw new Error('tomt svar uten feil')  // typisk ved tapt nett
+    // Hvert utfall meldes ÉN gang. Feilen kastes videre som før — denne
+    // funksjonen endrer ikke hva kalleren får, bare hva merket vet.
+    let svar
+    try { svar = await lagQuery() }
+    catch (e) { meldNett(!erNettverksfeil(e)); throw e }
+    const { data, error } = svar || {}
+    if (error) { meldNett(!erNettverksfeil(error)); throw error }
+    if (data == null) { meldNett(false); throw new Error('tomt svar uten feil') }  // typisk ved tapt nett
+    meldNett(true)
     const lagretAt = Date.now()
     _memCache.set(noekkel, { data, lagretAt })
     idbSett(noekkel, data)                                     // fire-and-forget
@@ -307,12 +379,14 @@ function formaterCacheTid(ts) {
 // Lite merke som kun vises når data kommer fra offline-cache.
 function SistOppdatert({ lagretAt, fraCache }) {
   // ÉN kilde til sannhet for nett-status — samme som TilkoblingsIndikator.
-  const online = useTilkobling()
+  const status = useTilkobling()
   if (!fraCache || !lagretAt) return null
   // På nett er «les fra cache, så revalider» normaltilfellet ved nesten hver
   // sidelasting. Å vise noe da blir støy og svekker den gule «Offline» sin kraft
-  // → vis INGENTING på nett. Gul linje kun når man faktisk er frakoblet.
-  if (online) return null
+  // → vis INGENTING på nett. Gul linje kun når vi VET at vi er frakoblet:
+  // 'ukjent' teller som ikke-frakoblet, ellers ville linja blinket gult i hver
+  // liste under kald last.
+  if (status !== NETT_AV) return null
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -536,10 +610,10 @@ async function lagreMedKo({ tabell, type, payload, radId, endringer, bilder, bil
     else await koLeggTil({ tabell, type: 'update', radId, endringer, bilder, bildeForm, bildeFelt })
   }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) { await leggIKo(); return { offline: true } }
-  try { await online(); return { offline: false } }
+  try { await online(); meldNett(true); return { offline: false } }
   catch (e) {
-    const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-      || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+    const nettFeil = erNettverksfeil(e)
+    meldNett(!nettFeil)
     if (nettFeil) { await leggIKo(); return { offline: true } }
     throw e
   }
@@ -750,13 +824,14 @@ async function flushKo() {
           if (error) throw error
         }
         await koSlett(op.id)                          // suksess → fjern fra kø
+        meldNett(true)
         antallFullfort++
       } catch (e) {
         // Diagnostikk: logg eksakt hva som feilet (tabell, type, melding)
         try { console.error('[flush-feil]', op.type, op.tabell, op.radId || (op.payload && op.payload.id), e) } catch (_) {}
         // Nettverksfeil = transient: stopp og prøv igjen senere, IKKE tell mot poison.
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
+        meldNett(!nettFeil)
         if (nettFeil) break
         // Ekte datafeil → tell mot poison-grensen (8 forsøk), så fortsett med resten.
         const forsok = (op.forsok || 0) + 1
@@ -2169,10 +2244,15 @@ function AuthProvider({ children }) {
       try {
         const { data, error } = await supabase.rpc('auth_company_id')
         if (error) throw error
+        // Dette er det FØRSTE nettkallet på hver eneste sidelast. Det er derfor
+        // dette stedet som lukker «ukjent»-vinduet, lenge før noen modul har
+        // rukket å laste.
+        meldNett(true)
         const bekreftet = data || profilBedriftId
         huskBedrift(user.id, bekreftet)            // huskelapp for kald start uten nett
         if (levende) setStotteBedriftId(bekreftet)
       } catch (e) {
+        meldNett(!erNettverksfeil(e))
         // Svarer ikke databasen, faller vi tilbake til profilen. Uten nett er
         // også den tom (loadProfile setter profile til null), og da er siste
         // bekreftede bedrift for denne brukeren det beste vi har. Uten den ville
@@ -3958,11 +4038,13 @@ function hentMedDiskFoerst({ cache, noekkel, felt, hentFraNett, navn }) {
     if (!erFrakoblet()) {
       try {
         const ferske = await hentFraNett()
+        meldNett(true)
         if (cache.nokkel !== min) return cache.data || []
         cache.data = ferske || []
         cache.subscribers.forEach(fn => fn(cache.data))
         idbSett(noekkel, cache.data.map(r => plukkFelt(r, felt)))
       } catch (e) {
+        meldNett(!erNettverksfeil(e))
         console.warn(`[${navn}] nettet svarte ikke — beholder diskversjonen:`, (e && e.message) || e)
       }
     }
@@ -10529,8 +10611,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         }
       } catch (e) {
         // Nettverksfeil midt i (mistet dekning) → fall tilbake til offline-kø.
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|err_internet|err_network|timeout/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
         if (nettFeil) { await lagreOfflineOgVis(); onSaved(); return }
         throw e   // ekte feil → vis i ytre catch
       }
@@ -10784,8 +10865,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
           await notifyProjectManager(dev.project_id, `Avvik ${newStatus.toLowerCase()}: ${dev.title}`, `Status endret til ${newStatus}${dev.location ? ' · Sted: '+dev.location : ''}`, newStatus === 'Lukket' ? 'success' : 'info', 'avvik')
         }
       } catch (e) {
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
         if (nettFeil) { await lagreOffline(); return }
         throw e
       }
@@ -11327,8 +11407,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
         if (error) throw error
         onSaved()
       } catch (e) {
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
         if (nettFeil) { await lagreOffline(); return }
         throw e
       }
@@ -47099,8 +47178,7 @@ function BildedokPage() {
           successCount++
         } catch (e) {
           // Nettverksfeil midt i → fall tilbake til offline-kø for denne fila.
-          const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-            || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+          const nettFeil = erNettverksfeil(e)
           if (nettFeil) { await lagreEnOffline(file) } else { throw e }
         }
       }
@@ -84611,18 +84689,23 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 // ─── END BEFARING VIEW PAGE ────────────────────────────────────────────────────
 
 // ─── TILKOBLINGSINDIKATOR (Offline Lag 1) ──────────────────────────────────────
-// Sporer om enheten er på nett. Lytter på nettleserens online/offline-hendelser.
-// I Lag 2 kan denne også mates fra faktiske Supabase-kall som feiler.
+// Sporer om vi faktisk når Supabase. Mates av ekte kallresultater (meldNett),
+// ikke av navigator.onLine alene — den lyver ved kald start uten dekning.
+// Returnerer 'ukjent' | 'paa' | 'av' — IKKE en boolsk. «Vet ikke» er en egen
+// tilstand, og kallstedene skal måtte ta stilling til den. Se den lange
+// forklaringen ved meldNett.
+//
+// Browser-hendelsene lyttes på modulnivå, ikke her: tilstanden skal være
+// riktig uavhengig av hva som er montert. Hooken abonnerer bare.
 function useTilkobling() {
-  const [online, setOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  const [status, setStatus] = React.useState(nettStatus)
   React.useEffect(() => {
-    const paaNett = () => setOnline(true)
-    const avNett = () => setOnline(false)
-    window.addEventListener('online', paaNett)
-    window.addEventListener('offline', avNett)
-    return () => { window.removeEventListener('online', paaNett); window.removeEventListener('offline', avNett) }
+    const oppdater = () => setStatus(nettStatus())
+    oppdater()                       // kan ha rukket å endre seg før effekten kjørte
+    window.addEventListener('ep-nett-endret', oppdater)
+    return () => window.removeEventListener('ep-nett-endret', oppdater)
   }, [])
-  return online
+  return status
 }
 
 // Tilkoblingsmarkør nederst til venstre.
@@ -84631,24 +84714,32 @@ function useTilkobling() {
 // Desktop: full pille med tekst (god plass).
 // Skjules helt når mobilmenyen er åpen, så den aldri ligger oppå menyinnhold.
 function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
-  const online = useTilkobling()
+  const status = useTilkobling()
   const koAntall = useKoAntall()
   const [nyligTilkoblet, setNyligTilkoblet] = React.useState(false)
-  const forrige = React.useRef(online)
+  // Sporer STATUS, ikke den boolske. «Tilkoblet igjen» skal kun vises ved en
+  // ekte gjenoppkobling, 'av' → 'paa'. Sporet vi den boolske, ville
+  // 'ukjent' → 'paa' — altså hver eneste normale sidelast — sett ut som en
+  // gjenoppkobling og blinket grønt i hjørnet hver gang.
+  const forrige = React.useRef(status)
   React.useEffect(() => {
-    if (online && forrige.current === false) {
+    if (status === NETT_PAA && forrige.current === NETT_AV) {
       setNyligTilkoblet(true)
       const t = setTimeout(() => setNyligTilkoblet(false), 3000)
-      forrige.current = online
+      forrige.current = status
       return () => clearTimeout(t)
     }
-    forrige.current = online
-  }, [online])
+    forrige.current = status
+  }, [status])
 
   // Ikke vis oppå den åpne mobilmenyen
   if (isMobile && mobileMenuOpen) return null
+  // Ingen rundtur forsøkt ennå: vi VET ikke, så vi påstår ikke. Vinduet varer
+  // ett nettkall. Å vise «Tilkoblet» her var hele feilen; å vise «Frakoblet»
+  // ville blinket gult ved hver normale sidelast og lært brukeren å overse gult.
+  if (status === NETT_UKJENT) return null
 
-  const offline = !online
+  const offline = status === NETT_AV
   const venter = koAntall > 0
 
   // Mobil + på nett + ingenting i kø → kun en liten prikk, ingen tekst
