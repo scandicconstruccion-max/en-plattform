@@ -4093,7 +4093,12 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 // contract_type («Fast», «Timelønn») er lagt til her fordi ansattlista viser den
 // og den ikke sier noe om personen ut over hva slags avtale hun har.
 const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'contract_type', 'tripletex_employee_id']
-const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'phone']
+// orgnr er BEVISST utelatt: feltet heter «Org.nr / Fødselsnr» i skjemaet og kan
+// altså inneholde et fødselsnummer. city og postal_code er med fordi lista er
+// nesten ubrukelig uten poststed, og et poststed peker ikke ut en person.
+// address, notes og value står utenfor — gateadresse til en privatkunde,
+// fritekst og kundeverdi hører ikke hjemme ukryptert på en telefon.
+const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'invoice_email', 'phone', 'city', 'postal_code', 'status']
 
 function plukkFelt(rad, felt) {
   const ut = {}
@@ -4598,20 +4603,37 @@ function buildPrivateDuplicateNameSet(customers) {
 // Henter ALLE egne kunder, ikke de tusen første. Supabase kapper på 1000 rader
 // per spørring; uten paginering forsvinner kunde nummer 1001 stille ut av hver
 // eneste velger, og ingenting i grensesnittet røper det.
-async function hentEgneKunder() {
+// diskReserve er OPT-IN, og det er ikke pirk. getCachedCustomers bruker denne
+// funksjonen som sin nettverkskilde: svarte den stille med diskdata, ville
+// hentMedDiskFoerst trodd at nettet svarte — den skriver resultatet tilbake til
+// disk og melder meldNett(true). Tilkoblingsmerket ville da stått grønt uten
+// dekning, altså nøyaktig løgnen trinn 2 fjernet.
+//
+// KunderPage ber om reserven; cache-motoren gjør det aldri. Fallbacken ligger
+// dermed INNE i hentEgneKunder, slik konklusjonen etter tilbakerullingene var,
+// uten at kallet i siden byttes ut og uten at cache-motoren blir lurt.
+async function hentEgneKunder({ diskReserve = false } = {}) {
   const SIDE = 1000
   const ut = []
-  for (let fra = 0; ; fra += SIDE) {
-    const { data, error } = await supabase.from('customers')
-      .select('*')
-      .eq('er_kunde', true)
-      .order('name')
-      .order('id', { ascending: true })   // stabil sortering: like navn må ikke bytte side
-      .range(fra, fra + SIDE - 1)
-    if (error) throw error
-    const bolk = data || []
-    ut.push(...bolk)
-    if (bolk.length < SIDE) break
+  try {
+    for (let fra = 0; ; fra += SIDE) {
+      const { data, error } = await supabase.from('customers')
+        .select('*')
+        .eq('er_kunde', true)
+        .order('name')
+        .order('id', { ascending: true })   // stabil sortering: like navn må ikke bytte side
+        .range(fra, fra + SIDE - 1)
+      if (error) throw error
+      const bolk = data || []
+      ut.push(...bolk)
+      if (bolk.length < SIDE) break
+    }
+  } catch (e) {
+    if (!diskReserve) throw e
+    meldNett(!erNettverksfeil(e))
+    // Samme nøkkel som getCachedCustomers skriver til. Lista er smalere enn
+    // nettversjonen — se KUNDE_OFFLINE_FELT — og skjermen sier fra om det.
+    return await lesListeFraDisk('kunder:alle')
   }
   return ut
 }
@@ -39434,6 +39456,9 @@ function KunderPage() {
   const { user } = useAuth()
   const confirm = useConfirm()
   const appAlert = useAppAlert()
+  // Gate på TILSTAND, ikke på hvordan lasten gikk — samme lærdom som i
+  // Timelister og Ansatte.
+  const frakobletK = useTilkobling() === NETT_AV
   const [kunder, setKunder] = useState([])
   const [prosjekter, setProsjekter] = useState([])
   const [tilbud, setTilbud] = useState([])
@@ -39527,13 +39552,14 @@ function KunderPage() {
       // ikke — de to settes ikke samtidig, og cachen svarte tomt.
       //
       // Skal denne skjermen virke offline, må fallbacken ligge INNE i
-      // hentEgneKunder(), ikke i et bytte av kallet her.
+      // hentEgneKunder(), ikke i et bytte av kallet her. Det er nettopp det
+      // diskReserve gjør: samme funksjon, samme kallsted, reserven på innsiden.
       //
       // allSettled beholdes: det er en ekte forbedring, og den var ikke
       // årsaken. Én feilende spørring skal ikke ta med seg kundelista.
       const [k, p, q, inv] = await Promise.allSettled([
         // Kun egne kunder. CRM-leads har er_kunde = false og hører hjemme i CRM.
-        hentEgneKunder(),
+        hentEgneKunder({ diskReserve: true }),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
         // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
@@ -39598,6 +39624,12 @@ function KunderPage() {
           <div>
             <h1 style={{ margin:0, fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
             <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{kunder.length} kunder</p>
+            {frakobletK && (
+              <div style={{ marginTop:'6px', display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#92400e', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'4px 10px', fontWeight:500 }}>
+                <span style={{ width:'7px', height:'7px', borderRadius:'50%', background:'#f59e0b', flexShrink:0 }} />
+                Frakoblet – viser lagret data uten org.nr og adresse
+              </div>
+            )}
           </div>
           <button data-tour="kunde-ny" onClick={() => setShowNew(true)}
             style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '8px 12px' : '10px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
@@ -39785,6 +39817,10 @@ const CRM_ORDRE_GRENSE = 100
 function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
+  // Kortet er redusert offline: org.nr og adresse ligger ikke på disk, og
+  // prosjekter, tilbud og fakturaer har ingen cache i det hele tatt. Tomme
+  // faner uten forklaring ville lest som «kunden har ingen prosjekter».
+  const frakobletKD = useTilkobling() === NETT_AV
   // Synk-knappen som manglet siden 22. august. UI-omarbeidingen la inn markupen
   // her, men hooken havnet i prosjektskjemaet — «synk» sto udefinert og
   // Kundeoversikt krasjet. Nå har kortet sin egen, og alleredeSynket kommer fra
@@ -39920,6 +39956,12 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
       {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKD ? '14px' : '20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
+        {frakobletKD && (
+          <div style={{ marginBottom:'12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 13px', fontSize:'13px', color:'#78350f', lineHeight:1.55 }}>
+            <strong>Frakoblet – viser lagret data.</strong> Org.nr og adresse lagres ikke på telefonen.
+            Prosjekter, tilbud og fakturaer er heller ikke lagret og vises som tomme.
+          </div>
+        )}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobKD ? '8px' : '12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '10px' : '14px', flex:1, minWidth:0 }}>
             {!isMobKD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>}
@@ -52464,13 +52506,31 @@ function useRegnskapssystem() {
         if (!st) {
           try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) { st = r.data; fraTripletexRpc = true } } catch (_) {}
         }
-        st = st || { connection_status: 'not_configured' }
-        const tilkoblet = st.connection_status === 'connected'
-        const provider = st.provider || (fraTripletexRpc && tilkoblet ? 'tripletex' : null)
-        _regnskapCache[companyId] = {
-          tilkoblet,
-          provider,
-          navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
+        // Svarte ingen av dem, er vi trolig uten nett. Da er sist BEKREFTEDE
+        // status et ærligere svar enn «ikke satt opp»: det siste ville skjult
+        // Tripletex-merket på kunder vi VET er synket, fordi alle synk-kortene
+        // sjekker tilkoblet først. Nøkkelen er prefikset på bedrift som alle
+        // andre, så en støtteøkt kan ikke arve vår status.
+        if (!st) {
+          const lagret = await idbHent('regnskap:status')
+          if (lagret && lagret.data && lagret.data.navn !== undefined) {
+            _regnskapCache[companyId] = lagret.data
+          }
+        }
+        if (!_regnskapCache[companyId]) {
+          const svarte = !!st
+          st = st || { connection_status: 'not_configured' }
+          const tilkoblet = st.connection_status === 'connected'
+          const provider = st.provider || (fraTripletexRpc && tilkoblet ? 'tripletex' : null)
+          const verdi = {
+            tilkoblet,
+            provider,
+            navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
+          }
+          _regnskapCache[companyId] = verdi
+          // Lagres KUN når databasen faktisk svarte. Ellers ville et
+          // nettverksavbrudd skrevet «ikke satt opp» over en ekte tilkobling.
+          if (svarte) idbSett('regnskap:status', verdi)
         }
       }
       if (!avbrutt) setInfo(_regnskapCache[companyId])
@@ -52560,16 +52620,19 @@ function useIntegrasjonSynk({ entitet, radId, alleredeSynket, forhaandssjekk, on
 // Knappen. Samme visuelle vekt som «Rediger»: nøytral grå ramme, hvit bakgrunn,
 // fontWeight 500. Synk er en sjelden handling og skal ikke rope høyere enn naboene.
 function SynkKnapp({ synk, isMob }) {
+  // Hook FØR enhver retur. Statusen kan være hentet fra disk under en kald
+  // offline-start, og da er knappen synlig selv om ingenting kan synkes.
+  const frakoblet = useTilkobling() === NETT_AV
   if (!synk.tilkoblet) return null
   return (
     <button
       onClick={synk.synk}
-      disabled={synk.jobber}
-      title={synk.synketId ? `Synk til ${synk.navn} på nytt` : `Synk til ${synk.navn}`}
+      disabled={synk.jobber || frakoblet}
+      title={frakoblet ? 'Synk krever nett' : (synk.synketId ? `Synk til ${synk.navn} på nytt` : `Synk til ${synk.navn}`)}
       style={{
         padding: isMob ? '8px 10px' : '9px 16px', border: '1px solid #e2e8f0', borderRadius: '10px',
-        background: 'white', cursor: synk.jobber ? 'default' : 'pointer',
-        fontSize: isMob ? '12px' : '14px', fontWeight: '500',
+        background: 'white', cursor: (synk.jobber || frakoblet) ? 'default' : 'pointer',
+        fontSize: isMob ? '12px' : '14px', fontWeight: '500', opacity: frakoblet ? 0.45 : 1,
         color: synk.jobber ? '#94a3b8' : 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
       }}
     >
