@@ -1,5 +1,5 @@
 // ============================================================
-// _shared/auth.ts — hvem spør, og hvilken bedrift gjelder kallet?
+// auth.ts — hvem spør, og hvilken bedrift gjelder kallet?
 // ------------------------------------------------------------
 // Bakgrunnen, kort: alle Tripletex-funksjonene tok imot companyId i request-
 // body og kjørte med service_role. Da bestemmer kalleren selv hvilken bedrift
@@ -21,6 +21,12 @@
 // støtteøkt svarer den derfor med KUNDENS bedrift helt av seg selv, og en
 // riktig kontroll slipper plattformeieren inn uten en eneste særregel.
 // Trenger noen et unntak for støtteøkt her, er kontrollen bygget feil.
+//
+// HVORFOR DEN LIGGER I FUNKSJONSMAPPA og ikke i _shared/: Edge Functions
+// deployes herfra gjennom Supabase-dashbordets Code-fane, som kun viser og
+// deployer filene inne i selve funksjonsmappa. En import som peker ut av
+// mappa gjør funksjonen umulig å deploye. Får de fire andre funksjonene
+// samme kontroll, får hver av dem sin egen kopi av denne fila.
 // ============================================================
 
 import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
