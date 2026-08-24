@@ -291,19 +291,55 @@ function nettStatus() { return _nettStatus }
 function settNettStatus(ny) {
   if (ny === _nettStatus) return
   _nettStatus = ny
+  // Tror vi at vi er frakoblet, må NOE spørre igjen. Ellers blir merket stående
+  // gult til brukeren tilfeldigvis gjør noe som treffer nettet — og en tømmer
+  // som ser «Frakoblet» mens han faktisk har dekning, slutter å tro på merket.
+  if (ny === NETT_AV) startNettProbe(); else stoppNettProbe()
   try { window.dispatchEvent(new CustomEvent('ep-nett-endret')) } catch (_) {}
 }
 // ok = true betyr «vi nådde serveren», ikke «spørringen lyktes».
 function meldNett(ok) {
   if (ok) { _nettFeilPaaRad = 0; settNettStatus(NETT_PAA); return }
-  _nettFeilPaaRad++
+  // Telleren stopper på grensen. Uten taket ville en lang tur uten dekning
+  // latt den vokse i det uendelige uten at det betyr noe.
+  if (_nettFeilPaaRad < NETT_FEIL_GRENSE) _nettFeilPaaRad++
   if (_nettFeilPaaRad >= NETT_FEIL_GRENSE) settNettStatus(NETT_AV)
 }
+
+// ── PROBE: den eneste veien tilbake fra 'av' som ikke krever at brukeren gjør noe ──
+//
+// Vi kan ikke stole på online-hendelsen alene. Den fyrer ikke når dekningen kommer
+// tilbake uten at lenken har vært formelt nede, og et bytte i DevTools oppfører seg
+// ikke nødvendigvis som en ekte gjenoppkobling. Sto merket gult, ble det stående.
+//
+// Probe kjører KUN mens vi tror vi er frakoblet, og stanser i det noe svarer.
+// auth_company_id() er valgt fordi den er billig, allerede i bruk, og svarer på
+// nøyaktig det spørsmålet som betyr noe: når vi fram til databasen?
+const NETT_PROBE_MS = 20000
+let _nettProbe = null
+async function nettProbeNaa() {
+  try {
+    const { error } = await supabase.rpc('auth_company_id')
+    meldNett(!erNettverksfeil(error))
+  } catch (e) { meldNett(!erNettverksfeil(e)) }
+}
+function startNettProbe() {
+  if (_nettProbe || typeof window === 'undefined') return
+  _nettProbe = setInterval(nettProbeNaa, NETT_PROBE_MS)
+}
+function stoppNettProbe() {
+  if (_nettProbe) { clearInterval(_nettProbe); _nettProbe = null }
+}
+
 // Lyttes på modulnivå, ikke i hooken: tilstanden skal være riktig uavhengig av
 // hva som tilfeldigvis er montert. Hooken abonnerer på ep-nett-endret.
 if (typeof window !== 'undefined') {
   window.addEventListener('offline', () => { _nettFeilPaaRad = NETT_FEIL_GRENSE; settNettStatus(NETT_AV) })
-  window.addEventListener('online', () => { _nettFeilPaaRad = 0 })
+  // Lenken er oppe — men det er ikke bevis for at Supabase svarer. Vi nullstiller
+  // telleren og SPØR, i stedet for å tro på hendelsen.
+  window.addEventListener('online', () => { _nettFeilPaaRad = 0; nettProbeNaa() })
+  // Sto vi allerede i 'av' ved oppstart, ble settNettStatus aldri kalt.
+  if (_nettStatus === NETT_AV) startNettProbe()
 }
 
 // In-memory cache for momentane modulbytter (stale-while-revalidate).
@@ -30277,8 +30313,18 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   // hourly_rate ikke med i projeksjonen i det hele tatt; online er den med og
   // kan være null fordi ingen har fylt den ut. Det andre er et helt vanlig
   // tilfelle som skal kunne eksporteres — det gir bare 0 kr, og det er sant.
-  const harTimepris = employees.length === 0
-    || employees.some(e => Object.prototype.hasOwnProperty.call(e, 'hourly_rate'))
+  //
+  // MEN dette alene er ikke nok, og første versjon slapp gjennom to hull:
+  //  1) En tom ansattliste ga fritt leide. Ingen ansatte betyr ikke «trygt å
+  //     eksportere», det betyr en fil uten linjer som ser ferdig ut.
+  //  2) Går man offline UTEN å laste siden på nytt, ligger de fulle radene —
+  //     med timepris — fortsatt i minne-cachen fra da man var på nett. Feltet
+  //     finnes altså, men tallene under kan være foreldet.
+  // Derfor står tilkoblingen ved siden av: et lønnsgrunnlag er et dokument
+  // noen betaler folk etter, og det skal bygges på ferske tall.
+  const nettStatusNaa = useTilkobling()
+  const harTimepris = employees.some(e => Object.prototype.hasOwnProperty.call(e, 'hourly_rate'))
+  const kanLonnsgrunnlag = harTimepris && nettStatusNaa !== NETT_AV
   const [reportType, setReportType] = useState('oversikt') // 'oversikt'|'ansatt'|'prosjekt'
   const [periodFrom, setPeriodFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` })
   const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split('T')[0])
@@ -30714,7 +30760,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   // Trigger valgt format
   const handleExport = async () => {
     const kind = showExportModal
-    if (kind === 'lonnsgrunnlag' && !harTimepris) {
+    if (kind === 'lonnsgrunnlag' && !kanLonnsgrunnlag) {
       setShowExportModal(null)
       alert({
         message: 'Lønnsgrunnlag krever nett',
@@ -30811,7 +30857,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
                   <td style={{ padding:'10px', textAlign:'right' }}>{totalDiet} kr</td>
                   <td style={{ padding:'10px', textAlign:'right' }}>{totalExpenses} kr</td>
                   <td style={{ padding:'10px', textAlign:'right' }}>{absenceDays}d</td>
-                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{harTimepris ? Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO') + ' kr' : '—'}</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{kanLonnsgrunnlag ? Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO') + ' kr' : '—'}</td>
                 </tr>
               </tbody>
             </table>
@@ -30972,15 +31018,33 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
               </>
             )}
 
+            {/* Sperren står BÅDE her og i handleExport. Her fordi en knapp man
+                ikke kan trykke er en bedre forklaring enn en feilmelding etterpå;
+                i handleExport fordi en sperre som kun finnes i en knapp er ingen
+                sperre — det var nettopp slik den forrige slapp gjennom. */}
+            {showExportModal === 'lonnsgrunnlag' && !kanLonnsgrunnlag && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'11px 13px', marginBottom:'12px', fontSize:'13px', color:'#78350f', lineHeight:1.55 }}>
+                <strong>Lønnsgrunnlag krever nett.</strong> Timeprisene lagres ikke på telefonen,
+                så et lønnsgrunnlag laget nå ville hatt 0 kr på hver linje. Timelister-eksporten
+                virker som vanlig — den viser timer, ikke kroner.
+              </div>
+            )}
+
             <div style={{ display:'flex', gap:'8px' }}>
               <button onClick={() => setShowExportModal(null)} disabled={exporting}
                 style={{ flex:1, padding:'12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'10px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>
                 Avbryt
               </button>
-              <button onClick={handleExport} disabled={exporting || (showExportModal === 'timelister' && eksportKolonner.size === 0)}
-                style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: exporting ? 'wait' : 'pointer', opacity: (showExportModal === 'timelister' && eksportKolonner.size === 0) ? 0.5 : 1 }}>
-                {exporting ? 'Eksporterer...' : `Last ned ${exportFormat === 'excel' ? 'Excel' : 'PDF'}`}
-              </button>
+              {(() => {
+                const sperret = (showExportModal === 'timelister' && eksportKolonner.size === 0)
+                  || (showExportModal === 'lonnsgrunnlag' && !kanLonnsgrunnlag)
+                return (
+                  <button onClick={handleExport} disabled={exporting || sperret}
+                    style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: (exporting || sperret) ? 'not-allowed' : 'pointer', opacity: sperret ? 0.5 : 1 }}>
+                    {exporting ? 'Eksporterer...' : `Last ned ${exportFormat === 'excel' ? 'Excel' : 'PDF'}`}
+                  </button>
+                )
+              })()}
             </div>
           </div>
         </div>
