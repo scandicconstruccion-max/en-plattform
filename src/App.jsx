@@ -12224,8 +12224,19 @@ function HmsPage() {
   useEffect(() => {
     const checkHandbokRevisjon = async () => {
       try {
+        // maybeSingle(), IKKE single(). En bedrift som ikke har opprettet
+        // HMS-håndboken ennå har null rader her, og det er en helt normal
+        // tilstand — ikke en feil. single() setter Accept:
+        // application/vnd.pgrst.object+json og krever NØYAKTIG én rad, så
+        // PostgREST svarte 406 og la en rød linje i konsollen ved hver
+        // sidelast for de bedriftene. Med limit(1) kan antallet bare være 0
+        // eller 1, så 406 betød alltid «ingen håndbok», aldri «flere treff».
+        //
+        // maybeSingle() gir { data: null, error: null } og HTTP 200 i samme
+        // tilfelle. Linja under tåler null fra før — den sjekker allerede
+        // handbok?.data?.neste_revisjon — så ingen tilpasning trengs.
         const { data: handbok } = await supabase.from('hms_records')
-          .select('id,data').eq('type','handbok').order('updated_at',{ascending:false}).limit(1).single()
+          .select('id,data').eq('type','handbok').order('updated_at',{ascending:false}).limit(1).maybeSingle()
         if (!handbok?.data?.neste_revisjon) return
         const dager = Math.ceil((new Date(handbok.data.neste_revisjon) - new Date()) / 86400000)
         if (dager > 30) return
