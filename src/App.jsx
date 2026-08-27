@@ -76,6 +76,60 @@ function idbNokkel(noekkel) {
   if (!noekkel || !_aktivBedriftId) return null
   return _aktivBedriftId + '|' + noekkel
 }
+
+// ── VENT PÅ BEDRIFTEN FØR VI GIR OPP EN DISKLESING ─────────────────────────
+//
+// LES DETTE FØR DU RØRER idbHent. Dette er tredje gang samme mekanisme har
+// slått til, og det er her neste person kommer til å stå:
+//
+//   React kjører BARNS effekter FØR foreldrenes.
+//
+// companyId settes i AuthProvider sin egen effekt, etter et RPC mot
+// auth_company_id(). Alt som er montert under AuthProvider — altså hele appen —
+// har kjørt sin useEffect ferdig før den effekten i det hele tatt starter.
+// _aktivBedriftId speiles fra companyId og er derfor NULL i det vinduet.
+//
+// Online merkes det ikke: nettkallet svarer, og disken blir aldri spurt. Ved
+// kald start UTEN nett feiler nettkallet, lesMedCache faller tilbake til
+// idbHent — og fikk før dette null tilbake, fordi bedriften ikke var avklart.
+// Resultatet var tomme lister i hver eneste modul, i den ene situasjonen
+// offline-modus finnes for.
+//
+// Løsningen er ikke å slippe prefikset. Den er å VENTE litt. Bedriften kommer
+// hundrevis av millisekunder senere, ikke aldri — offline har AuthProvider en
+// huskelapp i localStorage å falle tilbake på.
+//
+// Taket er der fordi «aldri» finnes likevel: er brukeren logget ut, blir
+// bedriften aldri kjent. En lesing som henger for alltid er verre enn en som
+// gir opp.
+//
+// SKRIVING VENTER IKKE. idbSett er og blir fail-closed: vet vi ikke hvilken
+// bedrift vi står i, skriver vi ingenting. Å lese for sent koster et nettkall;
+// å skrive i feil bedrift koster tilliten. Sikkerhetsegenskapen fra sak B.
+const BEDRIFT_VENT_MS = 5000
+let _bedriftVentere = []
+function ventPaaBedrift() {
+  if (_aktivBedriftId) return Promise.resolve(_aktivBedriftId)
+  return new Promise((resolve) => {
+    const ventar = { vekk: null }
+    const t = setTimeout(() => {
+      _bedriftVentere = _bedriftVentere.filter(v => v !== ventar)
+      resolve(null)                                // ga opp — kalleren svarer tomt
+    }, BEDRIFT_VENT_MS)
+    ventar.vekk = (id) => { clearTimeout(t); resolve(id) }
+    _bedriftVentere.push(ventar)
+  })
+}
+// Kalles fra settAktivBedrift i det bedriften blir kjent. Lista tømmes FØR
+// vekkingen, så en ventende som rekker å legge seg på nytt ikke blir vekket to
+// ganger av samme runde.
+function vekkBedriftVentere(id) {
+  if (!id || !_bedriftVentere.length) return
+  const liste = _bedriftVentere
+  _bedriftVentere = []
+  for (const v of liste) { try { v.vekk(id) } catch (_) {} }
+}
+
 async function idbSett(noekkel, data) {
   const k = idbNokkel(noekkel)
   if (!k) return                                   // ukjent bedrift → ikke cache
@@ -90,8 +144,12 @@ async function idbSett(noekkel, data) {
   } catch (e) { /* svelg — caching skal aldri knekke hovedflyten */ }
 }
 async function idbHent(noekkel) {
+  if (!noekkel) return null
+  // Bedriften er kanskje ikke avklart ennå — se den lange forklaringen over
+  // ventPaaBedrift. Er den allerede kjent, koster denne linja ingenting.
+  if (!_aktivBedriftId) await ventPaaBedrift()
   const k = idbNokkel(noekkel)
-  if (!k) return null                              // ukjent bedrift → ingen fallback
+  if (!k) return null                              // fortsatt ukjent bedrift → ingen fallback
   try {
     const db = await idbAapne()
     return await new Promise((res, rej) => {
@@ -182,6 +240,108 @@ async function ryddGamleIdbNokler() {
   } catch (e) { /* svelg — opprydding skal aldri knekke oppstart */ }
 }
 
+// ── ER DETTE EN NETTVERKSFEIL? ─────────────────────────────────────────────
+// Fantes i seks nesten like kopier (køen, lagreMedKo, tre avvik-stier og
+// befaring). Én av dem hadde leddene i en annen rekkefølge. Seks steder som
+// skal svare det samme, sa det allerede ikke helt likt — derfor ett sted.
+//
+// navigator.onLine === false er PÅLITELIG i denne retningen: sier OS-et at
+// lenken er nede, er den nede. Motsatt vei er den verdiløs, og det er nettopp
+// derfor den ikke brukes til å slå fast at vi ER på nett noe sted.
+function erNettverksfeil(e) {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return true
+  return /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+}
+
+// ── TILKOBLINGSSTATUS: HVA VI FAKTISK VET ──────────────────────────────────
+//
+// Merket nederst til venstre sto grønt «Tilkoblet» mens maskinen var frakoblet
+// og hver eneste modul var tom. Årsaken: useTilkobling leste navigator.onLine,
+// som initialiseres til true når siden lastes mens maskinen ALLEREDE er
+// frakoblet — og offline-hendelsen fyrer aldri, fordi den fyrer på overgangen,
+// og overgangen skjedde før siden fantes.
+//
+// Tre tilstander, ikke to. «Vet ikke» er ikke det samme som «tilkoblet»:
+//   'ukjent' — ingen rundtur forsøkt ennå. Merket viser INGENTING.
+//   'paa'    — et Supabase-kall er fullført. Bevis.
+//   'av'     — vi når ikke fram.
+//
+// ASYMMETRI. Ingen av signalene er pålitelige begge veier, så hvert av dem
+// brukes kun der det holder:
+//   · suksess                   → 'paa' ØYEBLIKKELIG. En fullført rundtur er bevis.
+//   · navigator.onLine === false → 'av' ØYEBLIKKELIG. Sikkert i denne retningen.
+//   · én nettverksfeil          → ingenting. På en byggeplass er ustabil dekning
+//     normaltilstanden, ikke en hendelse. Ett kall som ryker mens andre går
+//     gjennom betyr at nettet er tregt, ikke borte.
+//   · to på rad uten suksess    → 'av'.
+//   · online-hendelsen          → nullstiller telleren, men slår IKKE fast 'paa'.
+//     Lenken er oppe; om Supabase svarer vet vi først når noe har svart.
+//     forhandslast lytter på samme hendelse og fyrer av ekte kall, så svaret
+//     kommer på under et sekund.
+//
+// En datafeil fra serveren (RLS, 400) melder 'paa': serveren SVARTE. At svaret
+// var et avslag er et helt annet problem enn manglende dekning.
+const NETT_UKJENT = 'ukjent'
+const NETT_PAA = 'paa'
+const NETT_AV = 'av'
+const NETT_FEIL_GRENSE = 2
+let _nettStatus = (typeof navigator !== 'undefined' && navigator.onLine === false) ? NETT_AV : NETT_UKJENT
+let _nettFeilPaaRad = 0
+function nettStatus() { return _nettStatus }
+function settNettStatus(ny) {
+  if (ny === _nettStatus) return
+  _nettStatus = ny
+  // Tror vi at vi er frakoblet, må NOE spørre igjen. Ellers blir merket stående
+  // gult til brukeren tilfeldigvis gjør noe som treffer nettet — og en tømmer
+  // som ser «Frakoblet» mens han faktisk har dekning, slutter å tro på merket.
+  if (ny === NETT_AV) startNettProbe(); else stoppNettProbe()
+  try { window.dispatchEvent(new CustomEvent('ep-nett-endret')) } catch (_) {}
+}
+// ok = true betyr «vi nådde serveren», ikke «spørringen lyktes».
+function meldNett(ok) {
+  if (ok) { _nettFeilPaaRad = 0; settNettStatus(NETT_PAA); return }
+  // Telleren stopper på grensen. Uten taket ville en lang tur uten dekning
+  // latt den vokse i det uendelige uten at det betyr noe.
+  if (_nettFeilPaaRad < NETT_FEIL_GRENSE) _nettFeilPaaRad++
+  if (_nettFeilPaaRad >= NETT_FEIL_GRENSE) settNettStatus(NETT_AV)
+}
+
+// ── PROBE: den eneste veien tilbake fra 'av' som ikke krever at brukeren gjør noe ──
+//
+// Vi kan ikke stole på online-hendelsen alene. Den fyrer ikke når dekningen kommer
+// tilbake uten at lenken har vært formelt nede, og et bytte i DevTools oppfører seg
+// ikke nødvendigvis som en ekte gjenoppkobling. Sto merket gult, ble det stående.
+//
+// Probe kjører KUN mens vi tror vi er frakoblet, og stanser i det noe svarer.
+// auth_company_id() er valgt fordi den er billig, allerede i bruk, og svarer på
+// nøyaktig det spørsmålet som betyr noe: når vi fram til databasen?
+const NETT_PROBE_MS = 20000
+let _nettProbe = null
+async function nettProbeNaa() {
+  try {
+    const { error } = await supabase.rpc('auth_company_id')
+    meldNett(!erNettverksfeil(error))
+  } catch (e) { meldNett(!erNettverksfeil(e)) }
+}
+function startNettProbe() {
+  if (_nettProbe || typeof window === 'undefined') return
+  _nettProbe = setInterval(nettProbeNaa, NETT_PROBE_MS)
+}
+function stoppNettProbe() {
+  if (_nettProbe) { clearInterval(_nettProbe); _nettProbe = null }
+}
+
+// Lyttes på modulnivå, ikke i hooken: tilstanden skal være riktig uavhengig av
+// hva som tilfeldigvis er montert. Hooken abonnerer på ep-nett-endret.
+if (typeof window !== 'undefined') {
+  window.addEventListener('offline', () => { _nettFeilPaaRad = NETT_FEIL_GRENSE; settNettStatus(NETT_AV) })
+  // Lenken er oppe — men det er ikke bevis for at Supabase svarer. Vi nullstiller
+  // telleren og SPØR, i stedet for å tro på hendelsen.
+  window.addEventListener('online', () => { _nettFeilPaaRad = 0; nettProbeNaa() })
+  // Sto vi allerede i 'av' ved oppstart, ble settNettStatus aldri kalt.
+  if (_nettStatus === NETT_AV) startNettProbe()
+}
+
 // In-memory cache for momentane modulbytter (stale-while-revalidate).
 // Lever kun i nettleserens minne for denne økten — tømmes ved full reload og utlogging.
 const _memCache = new Map() // noekkel -> { data, lagretAt }
@@ -199,7 +359,7 @@ function tomDataCache(prefix) {
 //                funksjonen UMIDDELBART fra minnet (momentant modulbytte) og oppdaterer i
 //                bakgrunnen. Uten callback er oppførselen identisk med før (nettverk-først).
 // Returnerer { data, fraCache, lagretAt, feil }.
-async function lesMedCache(noekkel, lagQuery, onFersk) {
+async function lesMedCache(noekkel, lagQuery, onFersk, valg) {
   // Vet vi allerede at vi er offline? Les fra minne, så IndexedDB.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     const m = _memCache.get(noekkel)
@@ -210,12 +370,21 @@ async function lesMedCache(noekkel, lagQuery, onFersk) {
 
   // Hent friskt, skriv gjennom til minne + IndexedDB.
   const hentFriskt = async () => {
-    const { data, error } = await lagQuery()
-    if (error) throw error
-    if (data == null) throw new Error('tomt svar uten feil')  // typisk ved tapt nett
+    // Hvert utfall meldes ÉN gang. Feilen kastes videre som før — denne
+    // funksjonen endrer ikke hva kalleren får, bare hva merket vet.
+    let svar
+    try { svar = await lagQuery() }
+    catch (e) { meldNett(!erNettverksfeil(e)); throw e }
+    const { data, error } = svar || {}
+    if (error) { meldNett(!erNettverksfeil(error)); throw error }
+    if (data == null) { meldNett(false); throw new Error('tomt svar uten feil') }  // typisk ved tapt nett
+    meldNett(true)
     const lagretAt = Date.now()
     _memCache.set(noekkel, { data, lagretAt })
-    idbSett(noekkel, data)                                     // fire-and-forget
+    // tilDisk former hva som LAGRES, ikke hva kalleren får. Minne-cachen og
+    // returverdien er alltid det fulle svaret; disken kan være smalere. Brukes
+    // der spørringen henter felt som ikke skal ligge ukryptert på en telefon.
+    idbSett(noekkel, (valg && valg.tilDisk) ? valg.tilDisk(data) : data)   // fire-and-forget
     return { data, lagretAt }
   }
 
@@ -249,12 +418,14 @@ function formaterCacheTid(ts) {
 // Lite merke som kun vises når data kommer fra offline-cache.
 function SistOppdatert({ lagretAt, fraCache }) {
   // ÉN kilde til sannhet for nett-status — samme som TilkoblingsIndikator.
-  const online = useTilkobling()
+  const status = useTilkobling()
   if (!fraCache || !lagretAt) return null
   // På nett er «les fra cache, så revalider» normaltilfellet ved nesten hver
   // sidelasting. Å vise noe da blir støy og svekker den gule «Offline» sin kraft
-  // → vis INGENTING på nett. Gul linje kun når man faktisk er frakoblet.
-  if (online) return null
+  // → vis INGENTING på nett. Gul linje kun når vi VET at vi er frakoblet:
+  // 'ukjent' teller som ikke-frakoblet, ellers ville linja blinket gult i hver
+  // liste under kald last.
+  if (status !== NETT_AV) return null
   return (
     <div style={{
       display: 'inline-flex', alignItems: 'center', gap: '6px',
@@ -354,7 +525,105 @@ const FORHANDSLAST_LISTER = [
   ['ressurs:planer', () => supabase.from('resource_plans').select('*')],
   ['ressurs:milestones', () => supabase.from('calendar_events').select('*').eq('type', 'milestone').order('start_date')],
   ['ressurs:skills', () => supabase.from('employee_skills').select('*')],
+  // Timelistene er uke-baserte, men spørringen henter ALLE uker på én gang og
+  // filtrerer i minnet. Da har offline-brukeren hele historikken sin, ikke bare
+  // uka han sist åpnet. tilDisk brukes fordi select('*') på en tabell vi ikke
+  // har enumerert kolonnene til ikke skal havne ukryptert på telefonen.
+  ['timelister:alle',
+    () => supabase.from('timesheets').select('*, timesheet_entries(*)').order('year', { ascending: false }).order('week_number', { ascending: false }),
+    { tilDisk: timelisterTilDisk }],
+  // Sertifikatene hører til ansattlista, men ligger i en egen tabell og kan
+  // derfor ikke være med i ansatt-cachen. Et sertifikat er en kvalifikasjon
+  // som uansett vises på bygget — ikke personopplysninger av samme slag som
+  // lønn og fødselsdato. Hvitelistet likevel, så en ny kolonne i tabellen ikke
+  // havner på disk uten at noen har tatt stilling til den.
+  ['ansatte:sertifikater',
+    () => supabase.from('employee_certifications').select('*').order('expiry_date'),
+    { tilDisk: (rader) => (rader || []).map(r => plukkFelt(r, SERTIFIKAT_FELT)) }],
 ]
+const SERTIFIKAT_FELT = ['id', 'employee_id', 'name', 'issued_date', 'expiry_date']
+
+// Kun feltene skjermbildene faktisk leser. Ingen av dem er lønnsrelatert:
+// timeprisen ligger på employees.hourly_rate og skal ALDRI til disk.
+// Bommer denne lista på et felt, mister offline-visningen en kolonne — online
+// er urørt, fordi spørringen fortsatt henter alt.
+const TIMELISTE_FELT = ['id', 'employee_id', 'week_number', 'year', 'status', 'created_by', 'reject_comment']
+const TIMELISTE_LINJE_FELT = ['id', 'timesheet_id', 'project_id', 'date', 'start_time', 'end_time',
+  'normal_hours', 'overtime_50', 'overtime_100', 'travel_km', 'diet', 'expenses', 'expenses_description',
+  'description', 'notes', 'activity', 'absence_type', 'status', 'reject_comment']
+function timelisterTilDisk(rader) {
+  return (rader || []).map(t => ({
+    ...plukkFelt(t, TIMELISTE_FELT),
+    timesheet_entries: (t.timesheet_entries || []).map(e => plukkFelt(e, TIMELISTE_LINJE_FELT)),
+  }))
+}
+
+// Ansatte til timelistene. Spørringen henter hourly_rate fordi Oversikt regner
+// lønnskost av den — men den KAN IKKE caches: en timepris per ansatt, ukryptert
+// på hver telefon, er nøyaktig det vi holdt utenfor ANSATT_OFFLINE_FELT.
+//
+// Offline faller vi derfor tilbake på den vanlige ansatt-cachen, som er uten
+// timepris. Kallstedene ser det på at hourly_rate mangler — ikke på at den er 0.
+// Forskjellen er hele poenget: 0 kr er et tall, og et tall blir trodd.
+// Ansattlista til Ansatte-modulen. To bruksområder med ULIKE behov:
+//
+//   · Nedtrekkene rundt i appen (timeføring, prosjekt, ressursplan) går via
+//     useEmployees → getCachedEmployees og virker allerede offline. De trenger
+//     bare id, navn og user_id, og alt det ligger i ANSATT_OFFLINE_FELT.
+//   · Ansatte-MODULEN viser i tillegg sertifikater, og detaljkortet viser lønn,
+//     fødselsdato, adresse, pårørende og notater. Det siste kommer ALDRI på
+//     disk. Modulen blir derfor bevisst redusert offline, ikke komplett.
+//
+// Online er spørringen den samme som før, med den innebygde join-en og samme
+// fallback til enkel henting hvis join-en feiler (den gjør det i dag: 400).
+// Offline settes lista sammen av de to cachene i stedet.
+async function hentAnsatteMedSertifikater() {
+  try {
+    let { data, error } = await supabase.from('employees').select('*, employee_certifications(*)').order('last_name')
+    if (error) {
+      console.error('Ansatte-spørring med sertifikater feilet, faller tilbake til enkel henting:', error)
+      const enkel = await supabase.from('employees').select('*').order('last_name')
+      if (enkel.error) throw enkel.error
+      if (enkel.data == null) throw new Error('tomt svar uten feil')
+      data = enkel.data.map(x => ({ ...x, employee_certifications: [] }))
+    }
+    if (data == null) throw new Error('tomt svar uten feil')
+    meldNett(true)
+    return data
+  } catch (e) {
+    meldNett(!erNettverksfeil(e))
+    // Ansatte fra ansatt-cachen, sertifikater fra sin egen. Slås sammen her
+    // slik at lista ser lik ut for komponenten enten den kom fra nett eller disk.
+    const ansatte = await getCachedEmployees()
+    const sert = await lesListeFraDisk('ansatte:sertifikater')
+    const perAnsatt = new Map()
+    for (const c of sert) {
+      if (!perAnsatt.has(c.employee_id)) perAnsatt.set(c.employee_id, [])
+      perAnsatt.get(c.employee_id).push(c)
+    }
+    return (ansatte || [])
+      .map(a => ({ ...a, employee_certifications: perAnsatt.get(a.id) || [] }))
+      .sort((x, y) => String(x.last_name || '').localeCompare(String(y.last_name || ''), 'nb'))
+  }
+}
+
+async function hentTimelisteAnsatte() {
+  try {
+    const { data, error } = await supabase.from('employees')
+      .select('id,first_name,last_name,hourly_rate,user_id,email')
+      .eq('status', 'Aktiv').order('last_name')
+    if (error) throw error
+    if (data == null) throw new Error('tomt svar uten feil')
+    meldNett(true)
+    return data
+  } catch (e) {
+    meldNett(!erNettverksfeil(e))
+    const fraDisk = await getCachedEmployees()
+    return (fraDisk || [])
+      .filter(a => (a.status || 'Aktiv') === 'Aktiv')
+      .sort((a, b) => String(a.last_name || '').localeCompare(String(b.last_name || ''), 'nb'))
+  }
+}
 let _forhandslastKjorer = false
 let _forhandslastSist = 0
 async function forhandslast({ tving = false } = {}) {
@@ -367,13 +636,22 @@ async function forhandslast({ tving = false } = {}) {
     // Kjør i små grupper så vi ikke fyrer av alle kallene samtidig
     for (let i = 0; i < FORHANDSLAST_LISTER.length; i += 4) {
       const gruppe = FORHANDSLAST_LISTER.slice(i, i + 4)
-      await Promise.all(gruppe.map(([key, q]) => lesMedCache(key, q)))
+      await Promise.all(gruppe.map(([key, q, valg]) => lesMedCache(key, q, undefined, valg)))
     }
     // Ansatte og kunder ligger IKKE i FORHANDSLAST_LISTER: de går ikke gjennom
     // lesMedCache, fordi bare et utvalg av feltene får lagres på disk. De varmes
     // opp her i stedet, ellers er de kalde til noen åpner et skjema.
+    // Ved tvungen kjøring — oppstart og gjenoppkobling — skal de tre hentes på
+    // NYTT. Uten dette ville de blitt stående på diskversjonen fra offline-økten
+    // til komponenten tilfeldigvis ble montert på nytt.
+    if (tving) {
+      try { invalidateKoblingCache() } catch (_) {}
+      try { invalidateEmployeeCache() } catch (_) {}
+      try { invalidateCustomerCache() } catch (_) {}
+    }
     try { await getCachedEmployees() } catch (_) {}
     try { await getCachedCustomers() } catch (_) {}
+    try { await getCachedKoblinger() } catch (_) {}
     _forhandslastSist = Date.now()
   } catch (e) { /* svelg – forhåndslasting er best-effort */ }
   finally { _forhandslastKjorer = false }
@@ -469,10 +747,10 @@ async function lagreMedKo({ tabell, type, payload, radId, endringer, bilder, bil
     else await koLeggTil({ tabell, type: 'update', radId, endringer, bilder, bildeForm, bildeFelt })
   }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) { await leggIKo(); return { offline: true } }
-  try { await online(); return { offline: false } }
+  try { await online(); meldNett(true); return { offline: false } }
   catch (e) {
-    const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-      || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+    const nettFeil = erNettverksfeil(e)
+    meldNett(!nettFeil)
     if (nettFeil) { await leggIKo(); return { offline: true } }
     throw e
   }
@@ -683,13 +961,14 @@ async function flushKo() {
           if (error) throw error
         }
         await koSlett(op.id)                          // suksess → fjern fra kø
+        meldNett(true)
         antallFullfort++
       } catch (e) {
         // Diagnostikk: logg eksakt hva som feilet (tabell, type, melding)
         try { console.error('[flush-feil]', op.type, op.tabell, op.radId || (op.payload && op.payload.id), e) } catch (_) {}
         // Nettverksfeil = transient: stopp og prøv igjen senere, IKKE tell mot poison.
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
+        meldNett(!nettFeil)
         if (nettFeil) break
         // Ekte datafeil → tell mot poison-grensen (8 forsøk), så fortsett med resten.
         const forsok = (op.forsok || 0) + 1
@@ -757,6 +1036,9 @@ function settAktivBedrift(id) {
   const ny = id || null
   const forrige = _aktivBedriftId
   _aktivBedriftId = ny
+  // Slipp løs disklesinger som venter på å få vite hvilken bedrift de leser i.
+  // Skal skje FØRST: de har allerede feilet på nett og står og venter.
+  vekkBedriftVentere(ny)
   // Rydd KUN ved et faktisk bytte fra en tidligere bedrift. Første lasting går fra
   // null til en verdi, og da finnes ingen gamle data å rydde bort — å rydde der
   // ville kostet to spørringer ved hver eneste sidelast.
@@ -764,6 +1046,16 @@ function settAktivBedrift(id) {
   // Første gang vi vet hvilken bedrift vi står i: fjern nøklene fra før
   // prefikset ble innført. Best-effort, blokkerer ingenting.
   if (ny) { try { ryddGamleIdbNokler() } catch (_) {} }
+  // Og fyll de tre modul-cachene. Komponenter som rakk å montere FØR bedriften
+  // var avklart, fikk tom liste og hadde ingen grunn til å spørre igjen — deres
+  // useEffect har kjørt ferdig. Abonnentene varsles når hentingen er ferdig.
+  // Gjelder særlig kald start uten nett, der bedriften kommer fra huskelappen
+  // og altså litt senere enn ved en vanlig innlogging.
+  if (ny && forrige === null) {
+    try { getCachedKoblinger() } catch (_) {}
+    try { getCachedEmployees() } catch (_) {}
+    try { getCachedCustomers() } catch (_) {}
+  }
 }
 
 // Bedriften en NY rad faktisk havner i. Samme kilde som DEFAULT-verdien
@@ -2089,10 +2381,15 @@ function AuthProvider({ children }) {
       try {
         const { data, error } = await supabase.rpc('auth_company_id')
         if (error) throw error
+        // Dette er det FØRSTE nettkallet på hver eneste sidelast. Det er derfor
+        // dette stedet som lukker «ukjent»-vinduet, lenge før noen modul har
+        // rukket å laste.
+        meldNett(true)
         const bekreftet = data || profilBedriftId
         huskBedrift(user.id, bekreftet)            // huskelapp for kald start uten nett
         if (levende) setStotteBedriftId(bekreftet)
       } catch (e) {
+        meldNett(!erNettverksfeil(e))
         // Svarer ikke databasen, faller vi tilbake til profilen. Uten nett er
         // også den tom (loadProfile setter profile til null), og da er siste
         // bekreftede bedrift for denne brukeren det beste vi har. Uten den ville
@@ -3792,8 +4089,16 @@ function EmployeeSelect({ value, onChange, placeholder, style, required, allowCl
 //
 // Online-spørringene er UENDRET (select('*')), så ingenting endrer seg der.
 // Projeksjonen gjelder kun det som skrives til disk.
-const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'tripletex_employee_id']
-const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'phone']
+// Lønn, fødselsdato, adresse, pårørende og fritekstnotater er BEVISST utelatt.
+// contract_type («Fast», «Timelønn») er lagt til her fordi ansattlista viser den
+// og den ikke sier noe om personen ut over hva slags avtale hun har.
+const ANSATT_OFFLINE_FELT = ['id', 'user_id', 'first_name', 'last_name', 'name', 'email', 'phone', 'role', 'position', 'department', 'status', 'employee_number', 'contract_type', 'tripletex_employee_id']
+// orgnr er BEVISST utelatt: feltet heter «Org.nr / Fødselsnr» i skjemaet og kan
+// altså inneholde et fødselsnummer. city og postal_code er med fordi lista er
+// nesten ubrukelig uten poststed, og et poststed peker ikke ut en person.
+// address, notes og value står utenfor — gateadresse til en privatkunde,
+// fritekst og kundeverdi hører ikke hjemme ukryptert på en telefon.
+const KUNDE_OFFLINE_FELT = ['id', 'customer_number', 'name', 'type', 'er_kunde', 'email', 'invoice_email', 'phone', 'city', 'postal_code', 'status']
 
 function plukkFelt(rad, felt) {
   const ut = {}
@@ -3818,50 +4123,152 @@ function getEmployeeName(emp) {
 }
 
 function getCachedEmployees() {
-  const nokkel = _aktivBedriftId
-  if (_employeeCache.data && _employeeCache.nokkel === nokkel) return Promise.resolve(_employeeCache.data)
-  if (_employeeCache.loading && _employeeCache.nokkel === nokkel) return _employeeCache.loading
-  // Ny bedrift: forkast forrige liste FØR hentingen starter.
-  _employeeCache.nokkel = nokkel
-  _employeeCache.data = null
-  const min = nokkel
-  _employeeCache.loading = supabase.from('employees')
-    .select('*')
-    .order('last_name', { nullsFirst: false })
-    .then(({ data, error }) => {
-      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
-      if (_employeeCache.nokkel !== min) return _employeeCache.data || []
-      if (error) {
-        console.error('[EmployeeCache] Feil ved henting av ansatte:', error)
-        return ansatteFraDisk(min)
-      }
-      _employeeCache.data = data || []
-      _employeeCache.loading = null
-      _employeeCache.subscribers.forEach(fn => fn(_employeeCache.data))
-      // Skriv gjennom til disk, men bare de feltene som får ligge der.
-      idbSett('ansatte:alle', _employeeCache.data.map(r => plukkFelt(r, ANSATT_OFFLINE_FELT)))
-      console.log(`[EmployeeCache] Lastet ${_employeeCache.data.length} ansatte`)
-      return _employeeCache.data
-    })
-    .catch(err => {
-      console.error('[EmployeeCache] Exception:', err)
-      return ansatteFraDisk(min)
-    })
-  return _employeeCache.loading
+  return hentMedDiskFoerst({
+    cache: _employeeCache,
+    noekkel: 'ansatte:alle',
+    felt: ANSATT_OFFLINE_FELT,
+    navn: 'EmployeeCache',
+    hentFraNett: async () => {
+      const { data, error } = await supabase.from('employees')
+        .select('*')
+        .order('last_name', { nullsFirst: false })
+      if (error) throw new Error(error.message)
+      return data || []
+    },
+  })
 }
 
-// Fallback når nettet svikter. Før skrev vi en TOM liste til abonnentene her,
-// og nedtrekkene sa «Ingen ansatte funnet» offline. Nå leser vi siste kjente
-// liste fra disk i stedet. Finnes den ikke, blir svaret tomt som før.
-async function ansatteFraDisk(min) {
-  const liste = await lesListeFraDisk('ansatte:alle')
-  if (_employeeCache.nokkel !== min) return _employeeCache.data || []
-  _employeeCache.data = liste
-  _employeeCache.loading = null
-  _employeeCache.subscribers.forEach(fn => fn(liste))
-  // Ikke lås en tom liste permanent — prøv nettet på nytt neste gang.
-  if (!liste.length) setTimeout(() => { _employeeCache.data = null }, 5000)
-  return liste
+// Brukes KUN til å hoppe over et nettkall vi vet vil feile — aldri til å
+// avgjøre om vi skal lese cache. Signalet er upålitelig ved kald start: lastes
+// siden mens maskinen er frakoblet, står navigator.onLine på true. Det er
+// derfor motoren under leser disk uansett hva denne svarer.
+function erFrakoblet() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false
+}
+
+// FELLES MOTOR for de tre modul-cachene. Disk først, så nett.
+//
+// navigator.onLine kan IKKE stoles på alene. Lastes siden mens maskinen
+// allerede er frakoblet, initialiseres den til true — tilkoblingsmerket nederst
+// til venstre viste «Tilkoblet» etter F5 med DevTools på Offline, og det er
+// samme signal (useTilkobling leser navigator.onLine). Da tok koden
+// nettverksgrenen selv om det ikke fantes nett.
+//
+// Løsningen er å ikke spørre om vi har nett. Vi leser disk, publiserer det vi
+// fant, og prøver deretter nettet. Svarer det, erstattes dataene og skrives
+// gjennom. Svarer det ikke, beholder vi diskversjonen. Ingen timer, ingen
+// retry-løkke: neste forsøk kommer når noen faktisk spør igjen, eller fra
+// forhandslast ved gjenoppkobling.
+//
+// Tre nesten like kopier av dette var grunnen til at samme feil fantes tre
+// steder. Nå er det én.
+function hentMedDiskFoerst({ cache, noekkel, felt, hentFraNett, navn }) {
+  const nokkel = _aktivBedriftId
+  if (cache.data && cache.nokkel === nokkel) return Promise.resolve(cache.data)
+  if (cache.loading && cache.nokkel === nokkel) return cache.loading
+  // Bedriften er ikke avklart. Ikke cache noe under en tom nøkkel — disklesing
+  // er fail-closed uten bedrift, og en tom liste ville blitt stående.
+  if (!nokkel) return Promise.resolve([])
+  cache.nokkel = nokkel
+  cache.data = null
+  const min = nokkel
+  cache.loading = (async () => {
+    const fraDisk = await lesListeFraDisk(noekkel)
+    // Rakk en annen bedrift å overta mens vi leste? Da skal ikke vårt svar skrives.
+    if (cache.nokkel !== min) return cache.data || []
+    if (fraDisk.length) {
+      cache.data = fraDisk
+      cache.subscribers.forEach(fn => fn(fraDisk))
+    }
+    if (!erFrakoblet()) {
+      try {
+        const ferske = await hentFraNett()
+        meldNett(true)
+        if (cache.nokkel !== min) return cache.data || []
+        cache.data = ferske || []
+        cache.subscribers.forEach(fn => fn(cache.data))
+        idbSett(noekkel, cache.data.map(r => plukkFelt(r, felt)))
+      } catch (e) {
+        meldNett(!erNettverksfeil(e))
+        console.warn(`[${navn}] nettet svarte ikke — beholder diskversjonen:`, (e && e.message) || e)
+      }
+    }
+    if (!cache.data) cache.data = fraDisk
+    cache.loading = null
+    // Fant vi ingenting noe sted, ikke lås den tomme lista. Neste gang noen
+    // spør, prøver vi på nytt — uten timer.
+    const ut = cache.data || []
+    if (!ut.length) cache.data = null
+    return ut
+  })()
+  return cache.loading
+}
+
+// ── EKSTERNE KOBLINGER ─────────────────────────────────────────────────────
+// external_links erstatter kolonner per regnskapssystem. I stedet for at hver
+// tabell bærer en tripletex_*-kolonne per rad, hentes alle koblinger for
+// bedriften ÉN gang og indekseres på entity_id.
+//
+// Nøklet på bedrift og skrevet gjennom til IndexedDB, som ansatte og kunder.
+// Før flyttingen lå synk-merkene INNE i de cachede radene; uten dette ville de
+// vært borte offline. Tabellen har ingen sensitive felt, men projeksjonen står
+// likevel eksplisitt — regelen skal være den samme overalt.
+const KOBLING_OFFLINE_FELT = ['provider', 'entity_type', 'entity_id', 'external_id', 'synced_at', 'sync_error', 'metadata']
+const _koblingCache = { nokkel: null, data: null, loading: null, subscribers: new Set() }
+
+function getCachedKoblinger() {
+  return hentMedDiskFoerst({
+    cache: _koblingCache,
+    noekkel: 'ekstern:koblinger',
+    felt: KOBLING_OFFLINE_FELT,
+    navn: 'Koblinger',
+    // RLS filtrerer på company_id = auth_company_id(), så vi ber ikke om bedrift her.
+    hentFraNett: async () => {
+      const { data, error } = await supabase.from('external_links')
+        .select('provider, entity_type, entity_id, external_id, synced_at, sync_error, metadata')
+        .limit(1000)
+      if (error) throw new Error(error.message)
+      return data || []
+    },
+  })
+}
+
+function invalidateKoblingCache() {
+  _koblingCache.nokkel = null
+  _koblingCache.data = null
+  _koblingCache.loading = null
+}
+
+function useEksterneKoblinger() {
+  const [koblinger, setKoblinger] = useState(_koblingCache.data || [])
+  useEffect(() => {
+    let levende = true
+    const paaEndring = (liste) => { if (levende) setKoblinger(liste) }
+    _koblingCache.subscribers.add(paaEndring)
+    getCachedKoblinger().then(liste => { if (levende) setKoblinger(liste) })
+    // En fullført synk skriver nye rader i external_links. Uten dette ville
+    // merket først dukket opp ved neste sidelast.
+    const paaSynk = () => { invalidateKoblingCache(); getCachedKoblinger() }
+    window.addEventListener('ep-synk-fullfort', paaSynk)
+    return () => {
+      levende = false
+      _koblingCache.subscribers.delete(paaEndring)
+      window.removeEventListener('ep-synk-fullfort', paaSynk)
+    }
+  }, [])
+  return koblinger
+}
+
+// Slår opp koblingen for én rad. provider utelates med vilje: appen viser ett
+// regnskapssystem om gangen, og bedriften kan bare ha én tilkobling.
+function finnKobling(koblinger, entityType, entityId) {
+  if (!entityId) return null
+  return (koblinger || []).find(k => k.entity_type === entityType && k.entity_id === entityId) || null
+}
+
+function useKobling(entityType, entityId) {
+  const koblinger = useEksterneKoblinger()
+  return React.useMemo(() => finnKobling(koblinger, entityType, entityId), [koblinger, entityType, entityId])
 }
 
 function invalidateEmployeeCache() {
@@ -3874,13 +4281,13 @@ function useEmployees() {
   const [emps, setEmps] = useState(_employeeCache.data || [])
   useEffect(() => {
     let mounted = true
-    if (_employeeCache.data) {
-      setEmps(_employeeCache.data)
-      return
-    }
-    getCachedEmployees().then(data => { if (mounted) setEmps(data) })
+    // ABONNER FØRST, ALLTID. Her sto en tidlig retur på «if
+    // (_employeeCache.data)» — og en TOM liste er truthy. Traff man den, ble
+    // tom state satt og abonnementet hoppet over, så komponenten hørte aldri
+    // at dataene kom like etterpå. Eldre enn DEL 2.
     const sub = (data) => { if (mounted) setEmps(data) }
     _employeeCache.subscribers.add(sub)
+    getCachedEmployees().then(data => { if (mounted) setEmps(data) })
     return () => { mounted = false; _employeeCache.subscribers.delete(sub) }
   }, [])
   return emps
@@ -4196,60 +4603,49 @@ function buildPrivateDuplicateNameSet(customers) {
 // Henter ALLE egne kunder, ikke de tusen første. Supabase kapper på 1000 rader
 // per spørring; uten paginering forsvinner kunde nummer 1001 stille ut av hver
 // eneste velger, og ingenting i grensesnittet røper det.
-async function hentEgneKunder() {
+// diskReserve er OPT-IN, og det er ikke pirk. getCachedCustomers bruker denne
+// funksjonen som sin nettverkskilde: svarte den stille med diskdata, ville
+// hentMedDiskFoerst trodd at nettet svarte — den skriver resultatet tilbake til
+// disk og melder meldNett(true). Tilkoblingsmerket ville da stått grønt uten
+// dekning, altså nøyaktig løgnen trinn 2 fjernet.
+//
+// KunderPage ber om reserven; cache-motoren gjør det aldri. Fallbacken ligger
+// dermed INNE i hentEgneKunder, slik konklusjonen etter tilbakerullingene var,
+// uten at kallet i siden byttes ut og uten at cache-motoren blir lurt.
+async function hentEgneKunder({ diskReserve = false } = {}) {
   const SIDE = 1000
   const ut = []
-  for (let fra = 0; ; fra += SIDE) {
-    const { data, error } = await supabase.from('customers')
-      .select('*')
-      .eq('er_kunde', true)
-      .order('name')
-      .order('id', { ascending: true })   // stabil sortering: like navn må ikke bytte side
-      .range(fra, fra + SIDE - 1)
-    if (error) throw error
-    const bolk = data || []
-    ut.push(...bolk)
-    if (bolk.length < SIDE) break
+  try {
+    for (let fra = 0; ; fra += SIDE) {
+      const { data, error } = await supabase.from('customers')
+        .select('*')
+        .eq('er_kunde', true)
+        .order('name')
+        .order('id', { ascending: true })   // stabil sortering: like navn må ikke bytte side
+        .range(fra, fra + SIDE - 1)
+      if (error) throw error
+      const bolk = data || []
+      ut.push(...bolk)
+      if (bolk.length < SIDE) break
+    }
+  } catch (e) {
+    if (!diskReserve) throw e
+    meldNett(!erNettverksfeil(e))
+    // Samme nøkkel som getCachedCustomers skriver til. Lista er smalere enn
+    // nettversjonen — se KUNDE_OFFLINE_FELT — og skjermen sier fra om det.
+    return await lesListeFraDisk('kunder:alle')
   }
   return ut
 }
 
 function getCachedCustomers() {
-  const nokkel = _aktivBedriftId
-  if (_customerCache.data && _customerCache.nokkel === nokkel) return Promise.resolve(_customerCache.data)
-  if (_customerCache.loading && _customerCache.nokkel === nokkel) return _customerCache.loading
-  // Ny bedrift: forkast forrige liste FØR hentingen starter.
-  _customerCache.nokkel = nokkel
-  _customerCache.data = null
-  const min = nokkel
-  _customerCache.loading = hentEgneKunder()
-    .then(rader => {
-      // Rakk en annen bedrift å overta mens vi hentet? Da skal ikke vårt svar skrives.
-      if (_customerCache.nokkel !== min) return _customerCache.data || []
-      _customerCache.data = rader
-      _customerCache.loading = null
-      _customerCache.subscribers.forEach(fn => fn(_customerCache.data))
-      // Skriv gjennom til disk, men bare de feltene som får ligge der.
-      idbSett('kunder:alle', rader.map(r => plukkFelt(r, KUNDE_OFFLINE_FELT)))
-      console.log(`[CustomerCache] Lastet ${rader.length} kunder (er_kunde=true)`)
-      return _customerCache.data
-    })
-    .catch(err => {
-      console.error('[CustomerCache] Feil ved henting av kunder:', err)
-      return kunderFraDisk(min)
-    })
-  return _customerCache.loading
-}
-
-// Samme som ansatteFraDisk: kundevelgeren var like tom offline.
-async function kunderFraDisk(min) {
-  const liste = await lesListeFraDisk('kunder:alle')
-  if (_customerCache.nokkel !== min) return _customerCache.data || []
-  _customerCache.data = liste
-  _customerCache.loading = null
-  _customerCache.subscribers.forEach(fn => fn(liste))
-  if (!liste.length) setTimeout(() => { _customerCache.data = null }, 5000)
-  return liste
+  return hentMedDiskFoerst({
+    cache: _customerCache,
+    noekkel: 'kunder:alle',
+    felt: KUNDE_OFFLINE_FELT,
+    navn: 'CustomerCache',
+    hentFraNett: () => hentEgneKunder(),
+  })
 }
 
 function invalidateCustomerCache() {
@@ -4262,13 +4658,10 @@ function useCustomers() {
   const [customers, setCustomers] = useState(_customerCache.data || [])
   useEffect(() => {
     let mounted = true
-    if (_customerCache.data) {
-      setCustomers(_customerCache.data)
-      return
-    }
-    getCachedCustomers().then(data => { if (mounted) setCustomers(data) })
+    // Abonner først, alltid — se useEmployees for hvorfor.
     const sub = (data) => { if (mounted) setCustomers(data) }
     _customerCache.subscribers.add(sub)
+    getCachedCustomers().then(data => { if (mounted) setCustomers(data) })
     return () => { mounted = false; _customerCache.subscribers.delete(sub) }
   }, [])
   return customers
@@ -4289,17 +4682,20 @@ function useCustomers() {
 function tomBedriftsCacher(nyBedriftId) {
   try { invalidateCustomerCache() } catch (_) {}
   try { invalidateEmployeeCache() } catch (_) {}
+  try { invalidateKoblingCache() } catch (_) {}
   try { invalidateBrandCache() } catch (_) {}
   try { tomDataCache() } catch (_) {}          // _memCache (ikke IndexedDB)
   // Varsle monterte velgere med tom liste. Uten dette ville de stått igjen med
   // forrige bedrifts rader til komponenten tilfeldigvis ble montert på nytt.
   try { _customerCache.subscribers.forEach(fn => fn([])) } catch (_) {}
   try { _employeeCache.subscribers.forEach(fn => fn([])) } catch (_) {}
+  try { _koblingCache.subscribers.forEach(fn => fn([])) } catch (_) {}
   // Hent på nytt for den nye bedriften, så velgerne fylles igjen uten at
   // brukeren må navigere bort og tilbake. Ikke ved utlogging (nyBedriftId null).
   if (nyBedriftId) {
     try { getCachedCustomers() } catch (_) {}
     try { getCachedEmployees() } catch (_) {}
+    try { getCachedKoblinger() } catch (_) {}
   }
 }
 
@@ -4828,9 +5224,21 @@ const db = {
     return res.data
   },
   async getProject(id) {
-    const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
-    if (error) throw error
-    return data
+    // Ett enkelt oppslag har ingen offline-vei, men HELE lista har det —
+    // projects:alle er en av de forhåndslastede nøklene og inneholder samme
+    // rader (select('*')). Svarer ikke nettet, plukker vi prosjektet derfra.
+    // Uten dette ga «Prosjekt ikke funnet» på ethvert prosjekt offline, selv om
+    // lista over dem virket.
+    try {
+      const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
+      if (error) throw error
+      return data
+    } catch (e) {
+      const alle = await db.getProjects()
+      const fraCache = (alle || []).find(p => p.id === id)
+      if (fraCache) return fraCache
+      throw e
+    }
   },
   async createProject(data) {
     const { data: result, error } = await supabase.from('projects').insert(data).select().single()
@@ -5812,18 +6220,26 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
   const load = async () => {
     try {
-      const [proj, allProj, clRes, emRes, tmplRes] = await Promise.all([
+      // allSettled, ikke all. Med Promise.all veltet ÉN feilende spørring hele
+      // lastingen — offline avvises alle fem, setProject kjørte aldri, og siden
+      // sa «Prosjekt ikke funnet» selv om prosjektet lå i cachen. Nå tar hver
+      // del sitt eget utfall: prosjektet og lista kommer fra IndexedDB, mens
+      // sjekklister og endringsmeldinger står tomme til man er på nett igjen.
+      const [projR, allProjR, clRes, emRes, tmplRes] = await Promise.allSettled([
         db.getProject(projectId),
         db.getProjects(),
         supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('endringsmeldinger').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('checklist_templates').select('id, category').then(r => r.data || []),
       ])
-      setProject(proj)
-      setAllProjects(allProj)
-      setChecklists(clRes.data || [])
-      setEndringsmeldinger(emRes.data || [])
-      setChecklistTemplates(tmplRes)
+      const proj = projR.status === 'fulfilled' ? projR.value : null
+      // Fant vi ikke prosjektet i det hele tatt, la forrige verdi stå i stedet
+      // for å vise «Prosjekt ikke funnet» over noe som kanskje finnes.
+      if (proj) setProject(proj)
+      if (allProjR.status === 'fulfilled') setAllProjects(allProjR.value || [])
+      setChecklists(clRes.status === 'fulfilled' ? (clRes.value.data || []) : [])
+      setEndringsmeldinger(emRes.status === 'fulfilled' ? (emRes.value.data || []) : [])
+      setChecklistTemplates(tmplRes.status === 'fulfilled' ? tmplRes.value : [])
       // Last navn/epost på den som godkjenner timer (hvis satt)
       if (proj?.time_approver_id) {
         try {
@@ -5876,10 +6292,13 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   // under headeren — tre ulike steder i kortet. Derfor ligger den her, ikke i en
   // av dem. Pilfunksjonene under leses først ved klikk, så de når
   // sjekkStartdatoFoerSynk selv om den defineres rett nedenfor.
+  // Synk-status kommer nå fra external_links, ikke fra projects.tripletex_id.
+  // Kolonnen står igjen som sikkerhetsnett, men leses ikke lenger.
+  const prosjektKobling = useKobling('project', projectId)
   const synk = useIntegrasjonSynk({
     entitet: 'project',
     radId: { projectId },
-    alleredeSynket: project?.tripletex_id,
+    alleredeSynket: prosjektKobling?.external_id,
     forhaandssjekk: () => sjekkStartdatoFoerSynk(),
     onFerdig: () => load(),
   })
@@ -5890,7 +6309,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   // databasen, ikke i frontend.
   const sjekkStartdatoFoerSynk = async () => {
     if (project?.start_date) return true
-    if (project?.tripletex_id) return true   // allerede opprettet — startdato settes ikke på nytt
+    if (prosjektKobling?.external_id) return true   // allerede opprettet — startdato settes ikke på nytt
 
     let tidligste = null
     try {
@@ -5925,13 +6344,17 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       return true
     }
 
-    return await confirm({
+    // «Synk likevel» sto her før, men den løy: uten startdato svarer Tripletex
+    // 422 VALIDATION_ERROR, og synken feiler uansett hva brukeren trykker.
+    // Vi ber om datoen i stedet for å tilby en knapp som ikke kan virke.
+    await appAlert({
       message: 'Prosjektet mangler startdato',
-      subMessage: 'Tripletex setter da sin egen startdato ved opprettelse. Føres det timer med '
-        + 'eldre dato senere, kan de ikke registreres på prosjektet i Tripletex. '
-        + 'Vi fant ingen registrerte timer å foreslå en dato fra. Vil du synke likevel?',
-      confirmLabel: 'Synk likevel',
+      subMessage: `${synk.navn} krever startdato på prosjektet og avviser det uten. `
+        + 'Vi fant ingen registrerte timer å foreslå en dato fra, så den må settes manuelt. '
+        + 'Åpne prosjektskjemaet, fyll inn startdato, og synk på nytt.',
+      kind: 'warning',
     })
+    return false
   }
 
   if (loading) return <div style={{ ...f, textAlign:'center', padding:'60px', color:'#94a3b8' }}>Laster prosjekt...</div>
@@ -10350,8 +10773,7 @@ function AvvikModal({ projects, user, onClose, onSaved, initial }) {
         }
       } catch (e) {
         // Nettverksfeil midt i (mistet dekning) → fall tilbake til offline-kø.
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|err_internet|err_network|timeout/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
         if (nettFeil) { await lagreOfflineOgVis(); onSaved(); return }
         throw e   // ekte feil → vis i ytre catch
       }
@@ -10605,8 +11027,7 @@ function AvvikDetaljer({ deviation, projects, onBack, user }) {
           await notifyProjectManager(dev.project_id, `Avvik ${newStatus.toLowerCase()}: ${dev.title}`, `Status endret til ${newStatus}${dev.location ? ' · Sted: '+dev.location : ''}`, newStatus === 'Lukket' ? 'success' : 'info', 'avvik')
         }
       } catch (e) {
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
         if (nettFeil) { await lagreOffline(); return }
         throw e
       }
@@ -11148,8 +11569,7 @@ function AvvikEditModal({ dev, projects, user, onClose, onSaved }) {
         if (error) throw error
         onSaved()
       } catch (e) {
-        const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-          || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+        const nettFeil = erNettverksfeil(e)
         if (nettFeil) { await lagreOffline(); return }
         throw e
       }
@@ -11804,8 +12224,19 @@ function HmsPage() {
   useEffect(() => {
     const checkHandbokRevisjon = async () => {
       try {
+        // maybeSingle(), IKKE single(). En bedrift som ikke har opprettet
+        // HMS-håndboken ennå har null rader her, og det er en helt normal
+        // tilstand — ikke en feil. single() setter Accept:
+        // application/vnd.pgrst.object+json og krever NØYAKTIG én rad, så
+        // PostgREST svarte 406 og la en rød linje i konsollen ved hver
+        // sidelast for de bedriftene. Med limit(1) kan antallet bare være 0
+        // eller 1, så 406 betød alltid «ingen håndbok», aldri «flere treff».
+        //
+        // maybeSingle() gir { data: null, error: null } og HTTP 200 i samme
+        // tilfelle. Linja under tåler null fra før — den sjekker allerede
+        // handbok?.data?.neste_revisjon — så ingen tilpasning trengs.
         const { data: handbok } = await supabase.from('hms_records')
-          .select('id,data').eq('type','handbok').order('updated_at',{ascending:false}).limit(1).single()
+          .select('id,data').eq('type','handbok').order('updated_at',{ascending:false}).limit(1).maybeSingle()
         if (!handbok?.data?.neste_revisjon) return
         const dager = Math.ceil((new Date(handbok.data.neste_revisjon) - new Date()) / 86400000)
         if (dager > 30) return
@@ -28147,19 +28578,19 @@ function AnsattePage() {
     }
   }, [selected])
   const [visning, setVisning] = useState('liste')
+  // Gate på TILSTAND, ikke på hvordan lasten gikk. Går dekningen etter at siden
+  // er lastet, kom dataene fra nettet — men brukeren står like fullt uten nett,
+  // og lønnskolonnen i lista er da fra før dekningen røk.
+  const frakobletA = useTilkobling() === NETT_AV
 
   const load = async () => {
     try {
-      // Hent ansatte med sertifikater. Hvis den innebygde join-en feiler (RLS/relasjon),
-      // faller vi tilbake til enkel henting slik at ansatte uansett vises.
-      let { data: e, error: eErr } = await supabase.from('employees').select('*, employee_certifications(*)').order('last_name')
-      if (eErr) {
-        console.error('Ansatte-spørring med sertifikater feilet, faller tilbake til enkel henting:', eErr)
-        const plain = await supabase.from('employees').select('*').order('last_name')
-        if (plain.error) console.error('Enkel ansatt-henting feilet også:', plain.error)
-        e = (plain.data || []).map(x => ({ ...x, employee_certifications: [] }))
-      }
-      const { data: p } = await supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')
+      // Begge går gjennom datalaget, som selv faller tilbake til disk.
+      // Ingen av dem kaster, så en manglende liste tar ikke med seg den andre.
+      const [e, p] = await Promise.all([
+        hentAnsatteMedSertifikater(),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id, name, parent_id, depth, project_number').order('name')).then(r => r.data || []),
+      ])
       setEmployees(e || []); setProjects(p || [])
     } catch(err) { console.error(err) }
     finally { setLoading(false) }
@@ -28212,6 +28643,12 @@ function AnsattePage() {
           <div>
             <h1 style={{ fontSize: isMobE ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>👷 Ansatte</h1>
             {!isMobE && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Register, sertifikater, prosjekttilknytning og historikk</p>}
+            {frakobletA && (
+              <div style={{ marginTop:'6px', display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#92400e', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'4px 10px', fontWeight:500 }}>
+                <span style={{ width:'7px', height:'7px', borderRadius:'50%', background:'#f59e0b', flexShrink:0 }} />
+                Frakoblet – viser lagret data uten lønn og persondetaljer
+              </div>
+            )}
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
             {!isMobE && <button onClick={()=>setShowImport(true)} style={{ background:'white', color:'#475569', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 16px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📥 Import</button>}
@@ -28300,7 +28737,7 @@ function AnsattePage() {
                       {!isMobE && emp.contract_type && <span style={{ fontSize:'12px', color:'#64748b' }}>📄 {emp.contract_type}</span>}
                     </div>
                   </div>
-                  {!isMobE && emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
+                  {!isMobE && !frakobletA && emp.hourly_rate && <div style={{ textAlign:'right', flexShrink:0 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a' }}>{fmtE(emp.hourly_rate)} kr/t</div></div>}
                   {!isMobE && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                 </div>
               )
@@ -28346,6 +28783,11 @@ function AnsattePage() {
 
 function AnsattDetaljer({ employee: init, projects, user, onBack }) {
   const confirm = useConfirm()
+  // Detaljkortet er BEVISST redusert offline. Lønn, fødselsdato, adresse,
+  // pårørende og notater ligger ikke på disk og kommer ikke til å gjøre det.
+  // Uten et tydelig merke ville tomme felt lest som «ikke registrert» — og en
+  // adresse som «mangler» er en verre feil enn en som ikke vises.
+  const frakoblet = useTilkobling() === NETT_AV
   const [emp, setEmp] = useState(init)
   const [certs, setCerts] = useState([])
   const [empProjects, setEmpProjects] = useState([])
@@ -28358,11 +28800,20 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
 
   const loadDetails = async () => {
     const [c, ep, sk] = await Promise.all([
-      supabase.from('employee_certifications').select('*').eq('employee_id',emp.id).order('expiry_date').then(r=>r.data||[]),
+      // null = spørringen FEILET. Skilt fra [] med vilje: en ansatt uten
+      // sertifikater skal ikke få diskversjonen tredd nedover seg, for da ville
+      // et slettet sertifikat dukket opp igjen online.
+      supabase.from('employee_certifications').select('*').eq('employee_id',emp.id).order('expiry_date').then(r=>r.error?null:(r.data||[])),
       supabase.from('employee_projects').select('*, projects(name)').eq('employee_id',emp.id).order('from_date',{ascending:false}).then(r=>r.data||[]),
       supabase.from('employee_skills').select('*').eq('employee_id',emp.id).order('skill').then(r=>r.data||[])
     ])
-    setCerts(c); setEmpProjects(ep); setSkills(sk)
+    // Sertifikatene ligger allerede på disk for hele bedriften (ansattlista
+    // bruker dem til utløpsvarsler), så denne ene lista kan vi berge offline.
+    // employee_projects og employee_skills har ingen cache og blir tomme —
+    // merket i headeren sier fra om det.
+    if (c) setCerts(c)
+    else setCerts((await lesListeFraDisk('ansatte:sertifikater')).filter(x => x.employee_id === emp.id))
+    setEmpProjects(ep); setSkills(sk)
   }
   const refresh = async () => {
     const {data}=await supabase.from('employees').select('*').eq('id',emp.id).single()
@@ -28428,10 +28879,21 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
             </div>
           </div>
           <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
-            <button onClick={()=>setEditing(true)} style={{ padding: isMobED ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize: isMobED ? '12px' : '13px' }}>✏️</button>
-            <button onClick={handleDelete} style={{ padding: isMobED ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor:'pointer', color:'#dc2626', fontSize: isMobED ? '12px' : '13px' }}>🗑️</button>
+            {/* Sperret offline. Skjemaet fylles fra raden vi HAR, og den mangler
+                lønn og adresse — en lagring derfra ville skrevet tomt over ekte
+                data hvis nettet kom tilbake midt i. */}
+            <button onClick={()=>setEditing(true)} disabled={frakoblet} title={frakoblet ? 'Redigering krever nett' : 'Rediger'} style={{ padding: isMobED ? '7px 10px' : '9px 14px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor: frakoblet ? 'not-allowed' : 'pointer', opacity: frakoblet ? 0.45 : 1, fontSize: isMobED ? '12px' : '13px' }}>✏️</button>
+            <button onClick={handleDelete} disabled={frakoblet} title={frakoblet ? 'Sletting krever nett' : 'Slett'} style={{ padding: isMobED ? '7px 10px' : '9px 12px', border:'1px solid #fecaca', borderRadius:'10px', background:'white', cursor: frakoblet ? 'not-allowed' : 'pointer', opacity: frakoblet ? 0.45 : 1, color:'#dc2626', fontSize: isMobED ? '12px' : '13px' }}>🗑️</button>
           </div>
         </div>
+
+        {frakoblet && (
+          <div style={{ marginTop: isMobED ? '12px' : '16px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding: isMobED ? '10px 12px' : '11px 14px', fontSize:'13px', color:'#78350f', lineHeight:1.55 }}>
+            <strong>Frakoblet – viser lagret data.</strong> Lønn, fødselsdato, adresse, pårørende og notater
+            lagres ikke på telefonen og vises derfor ikke her. Prosjekter og kompetanser er heller ikke lagret.
+            Redigering krever nett.
+          </div>
+        )}
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'4px', marginTop: isMobED ? '14px' : '20px', overflowX:'auto', WebkitOverflowScrolling:'touch' }}>
@@ -29060,6 +29522,8 @@ function TimelistePage() {
   const [selectedWeek, setSelectedWeek] = useState(getWeekNumber(new Date()))
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [selectedEmployee, setSelectedEmployee] = useState(null)
+  const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null })
+  const nettStatusNaa = useTilkobling()
   // Tripletex-modell: ingen separat "rediger"-side lenger. Dagene er direkte
   // klikkbare i ukeoversikten. (Tidligere fantes editingSheet-state for en
   // egen TimesheetEditor-side; den ble fjernet til fordel for inline editor.)
@@ -29084,13 +29548,20 @@ function TimelistePage() {
 
   const load = async () => {
     try {
+      // Alle tre går gjennom datalaget, som selv faller tilbake til disk når
+      // nettet ikke svarer. Ingen av dem kaster, så Promise.all er trygg:
+      // en modul som mangler skal ikke ta med seg de to andre i fallet.
       const [emp, proj, ts] = await Promise.all([
-        supabase.from('employees').select('id,first_name,last_name,hourly_rate,user_id,email').eq('status','Aktiv').order('last_name').then(r=>r.data||[]),
-        supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name').then(r=>r.data||[]),
-        supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}).then(r=>r.data||[])
+        hentTimelisteAnsatte(),
+        lesMedCache('projects:nav', () => supabase.from('projects').select('id,name,parent_id,depth,project_number').order('name')).then(r => r.data || []),
+        lesMedCache('timelister:alle',
+          () => supabase.from('timesheets').select('*, timesheet_entries(*)').order('year',{ascending:false}).order('week_number',{ascending:false}),
+          undefined, { tilDisk: timelisterTilDisk }),
       ])
-      setEmployees(emp); setProjects(proj); setTimesheets(ts)
-      setEntries(ts.flatMap(t=>t.timesheet_entries||[]))
+      const rader = ts.data || []
+      setEmployees(emp); setProjects(proj); setTimesheets(rader)
+      setEntries(rader.flatMap(t=>t.timesheet_entries||[]))
+      setCacheInfo({ fraCache: !!ts.fraCache, lagretAt: ts.lagretAt || null })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -29106,6 +29577,33 @@ function TimelistePage() {
     t.week_number===selectedWeek && t.year===selectedYear &&
     t.employee_id===effektivAnsatt
   )
+
+  // ── UKEPEKER OFFLINE ──────────────────────────────────────────────────────
+  // Modulen åpner alltid på inneværende uke. Står man uten dekning på en mandag
+  // og forrige uke er det siste som rakk å bli lagret, viser skjermen 0 timer —
+  // og en tømrer leser det som at timene hans er borte. De er ikke det.
+  //
+  // Vi hopper IKKE automatisk til uka med timer. Uka man ser på avgjør hvor nye
+  // timer føres, og timelister er lønnsgrunnlag: et stille ukebytte er en verre
+  // feil enn en tom uke. I stedet sier vi hvilken uke som faktisk ligger lagret,
+  // og lar ham gå dit med ett trykk.
+  const sisteLagredeUke = timesheets
+    .filter(t => t.employee_id === effektivAnsatt && (t.timesheet_entries || []).length > 0)
+    .map(t => ({ ar: t.year, uke: t.week_number }))
+    .sort((a, b) => (b.ar - a.ar) || (b.uke - a.uke))[0] || null
+  //
+  // GATEN: «viser vi lagret data NÅ», ikke «gikk lasten mot disk». De to er
+  // ikke det samme, og forskjellen er hele grunnen til at pekeren manglet på
+  // mobil: lastes siden mens man har dekning og dekningen ryker etterpå, kom
+  // dataene fra nettet — fraCache er false — men brukeren står like fullt uten
+  // nett og ser 0 timer. Samme feilform som lønnsgrunnlag-sperren hadde:
+  // jeg gjettet på en egenskap ved lastingen i stedet for å spørre om
+  // tilstanden akkurat nå.
+  const viserLagretData = nettStatusNaa === NETT_AV || !!cacheInfo.fraCache
+  const visUkepeker = viserLagretData
+    && !((currentSheet && currentSheet.timesheet_entries) || []).length
+    && !!sisteLagredeUke
+    && !(sisteLagredeUke.ar === selectedYear && sisteLagredeUke.uke === selectedWeek)
 
   // Filtrer entries basert på godkjennings-tilgang:
   //   - Admin ser ALLE entries med status 'Til godkjenning'
@@ -29135,6 +29633,11 @@ function TimelistePage() {
           <div>
             <h1 style={{ fontSize: isMobTL ? '18px' : '22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>⏱️ Timelister</h1>
             {!isMobTL && <p style={{ color:'#64748b', marginTop:'4px', fontSize:'14px', marginBottom:0 }}>Registrer, godkjenn og eksporter timer</p>}
+            {viserLagretData && cacheInfo.lagretAt && (
+              <div style={{ marginTop:'6px' }}>
+                <SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache />
+              </div>
+            )}
           </div>
           {pendingApprovalCount>0 && (
             <div style={{ background:'#fffbeb', borderRadius:'10px', padding: isMobTL ? '6px 10px' : '8px 14px', border:'1px solid #fde68a', fontSize: isMobTL ? '11px' : '13px', color:'#92400e', fontWeight:'600', cursor:'pointer' }} onClick={()=>setView('godkjenn')}>
@@ -29184,6 +29687,22 @@ function TimelistePage() {
                 <button onClick={()=>{ setSelectedWeek(getWeekNumber(new Date())); setSelectedYear(new Date().getFullYear()) }} style={{ padding:'7px 14px',border:'1px solid #e2e8f0',borderRadius:'8px',background:'white',cursor:'pointer',fontSize:'12px',color:'#64748b' }}>I dag</button>
               </div>
             </div>
+
+            {visUkepeker && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding: isMobTL ? '11px 13px' : '13px 18px', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
+                <span style={{ fontSize:'18px', flexShrink:0 }}>📅</span>
+                <div style={{ fontSize:'13px', color:'#78350f', lineHeight:1.5, flex:'1 1 220px', minWidth:0 }}>
+                  Ingen timer i uke {selectedWeek} i de lagrede dataene. Siste uke med lagrede timer er{' '}
+                  <strong>uke {sisteLagredeUke.uke}, {sisteLagredeUke.ar}</strong>.
+                </div>
+                <button
+                  onClick={() => { setSelectedWeek(sisteLagredeUke.uke); setSelectedYear(sisteLagredeUke.ar) }}
+                  style={{ background:'white', color:'#78350f', border:'1px solid #fcd34d', borderRadius:'9px', padding:'8px 14px', fontSize:'13px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap' }}
+                >
+                  Gå til uke {sisteLagredeUke.uke}
+                </button>
+              </div>
+            )}
 
             {/* Kompakt total + status-rad — erstatter WeekSheet sin status-card.
                 Viser timer + entry-statussummering. Editoren under tar direkte klikk
@@ -29914,6 +30433,26 @@ function TimesheetEditor({ sheet: initData, projects, employees, user, onBack, i
 // ── STATS VIEW ────────────────────────────────────────────────────────────────
 function TimesheetStats({ entries, timesheets, employees, projects, selectedEmployee, statsView }) {
   const alert = useAppAlert()
+  // Timeprisen caches ikke (se hentTimelisteAnsatte). Uten den blir hver
+  // lønnslinje 0 kr — og en .xlsx med kolonnen «Timepris» fylt med nuller ser
+  // ut som et ekte lønnsgrunnlag. Tomt er trygt; feil tall er ikke.
+  //
+  // Sjekken er på om NØKKELEN finnes, ikke på om den har en verdi. Offline er
+  // hourly_rate ikke med i projeksjonen i det hele tatt; online er den med og
+  // kan være null fordi ingen har fylt den ut. Det andre er et helt vanlig
+  // tilfelle som skal kunne eksporteres — det gir bare 0 kr, og det er sant.
+  //
+  // MEN dette alene er ikke nok, og første versjon slapp gjennom to hull:
+  //  1) En tom ansattliste ga fritt leide. Ingen ansatte betyr ikke «trygt å
+  //     eksportere», det betyr en fil uten linjer som ser ferdig ut.
+  //  2) Går man offline UTEN å laste siden på nytt, ligger de fulle radene —
+  //     med timepris — fortsatt i minne-cachen fra da man var på nett. Feltet
+  //     finnes altså, men tallene under kan være foreldet.
+  // Derfor står tilkoblingen ved siden av: et lønnsgrunnlag er et dokument
+  // noen betaler folk etter, og det skal bygges på ferske tall.
+  const nettStatusNaa = useTilkobling()
+  const harTimepris = employees.some(e => Object.prototype.hasOwnProperty.call(e, 'hourly_rate'))
+  const kanLonnsgrunnlag = harTimepris && nettStatusNaa !== NETT_AV
   const [reportType, setReportType] = useState('oversikt') // 'oversikt'|'ansatt'|'prosjekt'
   const [periodFrom, setPeriodFrom] = useState(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01` })
   const [periodTo, setPeriodTo] = useState(() => new Date().toISOString().split('T')[0])
@@ -30349,6 +30888,15 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
   // Trigger valgt format
   const handleExport = async () => {
     const kind = showExportModal
+    if (kind === 'lonnsgrunnlag' && !kanLonnsgrunnlag) {
+      setShowExportModal(null)
+      alert({
+        message: 'Lønnsgrunnlag krever nett',
+        subMessage: 'Timeprisene lagres ikke på telefonen, så et lønnsgrunnlag laget nå ville hatt 0 kr på hver linje. Timelister-eksporten virker som vanlig — den viser timer, ikke kroner.',
+        kind: 'warn',
+      })
+      return
+    }
     setShowExportModal(null)
     if (exportFormat === 'excel') await exportToExcel(kind)
     else await exportToPdf(kind)
@@ -30424,7 +30972,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
                     <td style={{ padding:'10px', textAlign:'right', color:'#7c3aed' }}>{e.diet>0?e.diet+' kr':'—'}</td>
                     <td style={{ padding:'10px', textAlign:'right', color:'#374151' }}>{e.expenses>0?e.expenses+' kr':'—'}</td>
                     <td style={{ padding:'10px', textAlign:'right', color:'#0891b2' }}>{e.absence>0?e.absence+'d':'—'}</td>
-                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#059669' }}>{e.cost>0?Math.round(e.cost).toLocaleString('nb-NO')+' kr':'—'}</td>
+                    <td style={{ padding:'10px', textAlign:'right', fontWeight:'700', color:'#059669' }}>{kanLonnsgrunnlag && e.cost>0?Math.round(e.cost).toLocaleString('nb-NO')+' kr':'—'}</td>
                   </tr>
                 ))}
                 <tr style={{ background:'#f0fdf4', fontWeight:'700' }}>
@@ -30437,7 +30985,7 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
                   <td style={{ padding:'10px', textAlign:'right' }}>{totalDiet} kr</td>
                   <td style={{ padding:'10px', textAlign:'right' }}>{totalExpenses} kr</td>
                   <td style={{ padding:'10px', textAlign:'right' }}>{absenceDays}d</td>
-                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO')} kr</td>
+                  <td style={{ padding:'10px', textAlign:'right', color:'#059669' }}>{kanLonnsgrunnlag ? Math.round(byEmployee.reduce((s,e)=>s+e.cost,0)).toLocaleString('nb-NO') + ' kr' : '—'}</td>
                 </tr>
               </tbody>
             </table>
@@ -30598,15 +31146,33 @@ function TimesheetStats({ entries, timesheets, employees, projects, selectedEmpl
               </>
             )}
 
+            {/* Sperren står BÅDE her og i handleExport. Her fordi en knapp man
+                ikke kan trykke er en bedre forklaring enn en feilmelding etterpå;
+                i handleExport fordi en sperre som kun finnes i en knapp er ingen
+                sperre — det var nettopp slik den forrige slapp gjennom. */}
+            {showExportModal === 'lonnsgrunnlag' && !kanLonnsgrunnlag && (
+              <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'11px 13px', marginBottom:'12px', fontSize:'13px', color:'#78350f', lineHeight:1.55 }}>
+                <strong>Lønnsgrunnlag krever nett.</strong> Timeprisene lagres ikke på telefonen,
+                så et lønnsgrunnlag laget nå ville hatt 0 kr på hver linje. Timelister-eksporten
+                virker som vanlig — den viser timer, ikke kroner.
+              </div>
+            )}
+
             <div style={{ display:'flex', gap:'8px' }}>
               <button onClick={() => setShowExportModal(null)} disabled={exporting}
                 style={{ flex:1, padding:'12px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'10px', fontWeight:'600', fontSize:'14px', cursor:'pointer' }}>
                 Avbryt
               </button>
-              <button onClick={handleExport} disabled={exporting || (showExportModal === 'timelister' && eksportKolonner.size === 0)}
-                style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: exporting ? 'wait' : 'pointer', opacity: (showExportModal === 'timelister' && eksportKolonner.size === 0) ? 0.5 : 1 }}>
-                {exporting ? 'Eksporterer...' : `Last ned ${exportFormat === 'excel' ? 'Excel' : 'PDF'}`}
-              </button>
+              {(() => {
+                const sperret = (showExportModal === 'timelister' && eksportKolonner.size === 0)
+                  || (showExportModal === 'lonnsgrunnlag' && !kanLonnsgrunnlag)
+                return (
+                  <button onClick={handleExport} disabled={exporting || sperret}
+                    style={{ flex:2, padding:'12px', background:exporting ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', fontWeight:'700', fontSize:'14px', cursor: (exporting || sperret) ? 'not-allowed' : 'pointer', opacity: sperret ? 0.5 : 1 }}>
+                    {exporting ? 'Eksporterer...' : `Last ned ${exportFormat === 'excel' ? 'Excel' : 'PDF'}`}
+                  </button>
+                )
+              })()}
             </div>
           </div>
         </div>
@@ -38901,6 +39467,9 @@ function KunderPage() {
   const { user } = useAuth()
   const confirm = useConfirm()
   const appAlert = useAppAlert()
+  // Gate på TILSTAND, ikke på hvordan lasten gikk — samme lærdom som i
+  // Timelister og Ansatte.
+  const frakobletK = useTilkobling() === NETT_AV
   const [kunder, setKunder] = useState([])
   const [prosjekter, setProsjekter] = useState([])
   const [tilbud, setTilbud] = useState([])
@@ -38982,9 +39551,26 @@ function KunderPage() {
   const load = async () => {
     setLoading(true)
     try {
-      const [k, p, q, inv] = await Promise.all([
+      // hentEgneKunder(), IKKE getCachedCustomers(). Forskjellen er avgjørende:
+      // hentEgneKunder er uavhengig av bedriftskonteksten — RLS scoper den
+      // serverside — mens getCachedCustomers nøkler på _aktivBedriftId.
+      //
+      // da31878 byttet dem for å få offline-lesing, og brøt kald sidelast
+      // online: Kundeoversikt sto på «0 kunder» etter Ctrl+R. Diagnosen viste
+      // hvorfor, og det er verdt å huske: companyId når denne komponenten FØR
+      // AuthProvider sin egen effekt har satt _aktivBedriftId. React kjører
+      // barns effekter før foreldrenes. Å vente på companyId hjelper altså
+      // ikke — de to settes ikke samtidig, og cachen svarte tomt.
+      //
+      // Skal denne skjermen virke offline, må fallbacken ligge INNE i
+      // hentEgneKunder(), ikke i et bytte av kallet her. Det er nettopp det
+      // diskReserve gjør: samme funksjon, samme kallsted, reserven på innsiden.
+      //
+      // allSettled beholdes: det er en ekte forbedring, og den var ikke
+      // årsaken. Én feilende spørring skal ikke ta med seg kundelista.
+      const [k, p, q, inv] = await Promise.allSettled([
         // Kun egne kunder. CRM-leads har er_kunde = false og hører hjemme i CRM.
-        hentEgneKunder(),
+        hentEgneKunder({ diskReserve: true }),
         supabase.from('projects').select('id,name,status,customer_id,parent_id,depth,project_number').order('name').then(r => r.data || []),
         // Ingen total_amount: den vedlikeholdes ikke. Beløp regnes fra chapters
         // i KundeDetaljer, og kun for den valgte kundens tilbud — chapters er
@@ -38992,7 +39578,10 @@ function KunderPage() {
         supabase.from('quotes').select('id,title,status,customer_id,customer_name,created_at').order('created_at',{ascending:false}).then(r => r.data || []),
         supabase.from('invoices').select('id,invoice_number,title,status,customer_id,customer_name,lines,partial_percent,created_at,invoice_date,due_date,paid_at').order('created_at',{ascending:false}).then(r => r.data || []),
       ])
-      setKunder(k); setProsjekter(p); setTilbud(q); setFakturaer(inv)
+      setKunder(k.status === 'fulfilled' ? (k.value || []) : [])
+      setProsjekter(p.status === 'fulfilled' ? (p.value || []) : [])
+      setTilbud(q.status === 'fulfilled' ? (q.value || []) : [])
+      setFakturaer(inv.status === 'fulfilled' ? (inv.value || []) : [])
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
   }
@@ -39046,6 +39635,12 @@ function KunderPage() {
           <div>
             <h1 style={{ margin:0, fontSize: isMobK ? '18px' : '22px', fontWeight:'bold', color:'#0f172a' }}>Kundeoversikt</h1>
             <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b' }}>{kunder.length} kunder</p>
+            {frakobletK && (
+              <div style={{ marginTop:'6px', display:'inline-flex', alignItems:'center', gap:'6px', fontSize:'12px', color:'#92400e', background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:'8px', padding:'4px 10px', fontWeight:500 }}>
+                <span style={{ width:'7px', height:'7px', borderRadius:'50%', background:'#f59e0b', flexShrink:0 }} />
+                Frakoblet – viser lagret data uten org.nr og adresse
+              </div>
+            )}
           </div>
           <button data-tour="kunde-ny" onClick={() => setShowNew(true)}
             style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobK ? '8px 12px' : '10px 20px', fontSize: isMobK ? '12px' : '14px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap', flexShrink:0 }}>
@@ -39233,6 +39828,21 @@ const CRM_ORDRE_GRENSE = 100
 function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, onBack, onRefresh }) {
   const confirm = useConfirm()
   const appAlert = useAppAlert()
+  // Kortet er redusert offline: org.nr og adresse ligger ikke på disk, og
+  // prosjekter, tilbud og fakturaer har ingen cache i det hele tatt. Tomme
+  // faner uten forklaring ville lest som «kunden har ingen prosjekter».
+  const frakobletKD = useTilkobling() === NETT_AV
+  // Synk-knappen som manglet siden 22. august. UI-omarbeidingen la inn markupen
+  // her, men hooken havnet i prosjektskjemaet — «synk» sto udefinert og
+  // Kundeoversikt krasjet. Nå har kortet sin egen, og alleredeSynket kommer fra
+  // external_links i stedet for customers.tripletex_customer_id.
+  const kundeKobling = useKobling('customer', kunde?.id)
+  const synk = useIntegrasjonSynk({
+    entitet: 'customer',
+    radId: { customerId: kunde?.id },
+    alleredeSynket: kundeKobling?.external_id,
+    onFerdig: () => { if (onRefresh) onRefresh() },
+  })
   const [editing, setEditing] = useState(false)
   const [kontakter, setKontakter] = useState([])
   const [notater, setNotater] = useState([])
@@ -39357,6 +39967,12 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
       {/* Header */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: isMobKD ? '14px' : '20px 32px' }}>
         <button onClick={onBack} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', marginBottom:'10px', display:'flex', alignItems:'center', gap:'6px', padding:0 }}>← Tilbake til kunder</button>
+        {frakobletKD && (
+          <div style={{ marginBottom:'12px', background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 13px', fontSize:'13px', color:'#78350f', lineHeight:1.55 }}>
+            <strong>Frakoblet – viser lagret data.</strong> Org.nr og adresse lagres ikke på telefonen.
+            Prosjekter, tilbud og fakturaer er heller ikke lagret og vises som tomme.
+          </div>
+        )}
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap: isMobKD ? '8px' : '12px' }}>
           <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '10px' : '14px', flex:1, minWidth:0 }}>
             {!isMobKD && <div style={{ width:'52px', height:'52px', borderRadius:'14px', background:type.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'24px' }}>{type.emoji}</div>}
@@ -39364,6 +39980,7 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               <div style={{ display:'flex', alignItems:'center', gap: isMobKD ? '6px' : '10px', flexWrap:'wrap' }}>
                 <h1 style={{ margin:0, fontSize: isMobKD ? '16px' : '20px', fontWeight:'800', color:'#0f172a' }}>{kunde.name}</h1>
                 <span style={{ background:type.bg, color:type.color, borderRadius:'999px', fontSize:'12px', fontWeight:'700', padding:'2px 10px' }}>{type.label}</span>
+                <SynkMerke synk={synk} />
               </div>
               <div style={{ fontSize:'13px', color:'#64748b', marginTop:'3px' }}>
                 {kunde.orgnr && <span>Org.nr: {kunde.orgnr}  </span>}
@@ -39371,22 +39988,18 @@ function KundeDetaljer({ kunde, prosjekter, tilbud = [], fakturaer = [], user, o
               </div>
             </div>
           </div>
-          {/* INGEN SYNK-KNAPP HER ENNÅ — og det er med vilje.
-              UI-omarbeidingen (b9553b0, 22. august) la inn SynkMerke, SynkKnapp
-              og SynkFeil i dette kortet, men bare ETT useIntegrasjonSynk-kall,
-              og det havnet i prosjektskjemaet. Her sto «synk» udefinert, og
-              Kundeoversikt krasjet med «synk is not defined» så snart man åpnet
-              en kunde. Sto i produksjon fra 22. august.
-              Markupen er fjernet i stedet for å gjette på hooken: alleredeSynket
-              skal hentes fra external_links, og den lesingen flyttes i DEL 2.
-              Knappen settes inn igjen der — komplett, med sin egen hook. */}
+          {/* Sekundærhandling til venstre for primærknappen, samme mønster som
+              prosjektkortet. Rediger forblir den grønne. */}
           <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+            <SynkKnapp synk={synk} isMob={isMobKD} />
             <button onClick={() => setEditing(true)}
               style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding: isMobKD ? '7px 12px' : '9px 20px', cursor:'pointer', fontSize: isMobKD ? '12px' : '14px', fontWeight:'600', flexShrink:0 }}>
               ✏️{!isMobKD && ' Rediger'}
             </button>
           </div>
         </div>
+
+        <SynkFeil synk={synk} />
 
         {/* Tabs */}
         <div style={{ display:'flex', gap:'0', marginTop:'16px', borderBottom:'1px solid #f1f5f9', marginLeft: isMobKD ? '-14px' : '-32px', marginRight: isMobKD ? '-14px' : '-32px', paddingLeft: isMobKD ? '14px' : '32px', overflowX:'auto' }}>
@@ -46893,8 +47506,7 @@ function BildedokPage() {
           successCount++
         } catch (e) {
           // Nettverksfeil midt i → fall tilbake til offline-kø for denne fila.
-          const nettFeil = (typeof navigator !== 'undefined' && navigator.onLine === false)
-            || /fetch|network|load failed|timeout|err_internet|err_network/i.test(String((e && e.message) || e))
+          const nettFeil = erNettverksfeil(e)
           if (nettFeil) { await lagreEnOffline(file) } else { throw e }
         }
       }
@@ -51873,13 +52485,6 @@ const REGNSKAPSSYSTEM = {
   visma:       { navn: 'Visma' },
 }
 
-// MIDLERTIDIG: den gamle RPC-en tripletex_integration_status() returnerer ikke
-// hvilket system som er koblet til. Til integration_status() er kjørt i begge
-// prosjekter antar vi tripletex når svaret mangler provider.
-// NÅR STATUSEN SVARER MED PROVIDER OVERALT: slett denne ÉNE linjen og
-// «|| REGNSKAP_ANTATT» i useRegnskapssystem under. Ingenting annet.
-const REGNSKAP_ANTATT = 'tripletex'
-
 // Status hentes ÉN gang per sidelast og deles av alle kort. Uten cachen ville hvert
 // kunde- og prosjektkort gjort sitt eget RPC-kall bare for å avgjøre om en knapp vises.
 // Cachen er NØKLET PÅ BEDRIFT. Uten nøkkelen ville statusen fra én bedrift blitt
@@ -51903,13 +52508,40 @@ function useRegnskapssystem() {
         // App.jsx lastes opp før eller etter at SQL-en er kjørt.
         let st = null
         try { const r = await supabase.rpc('integration_status'); if (!r.error) st = r.data } catch (_) {}
-        if (!st) { try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) st = r.data } catch (_) {} }
-        st = st || { connection_status: 'not_configured' }
-        const provider = st.provider || REGNSKAP_ANTATT
-        _regnskapCache[companyId] = {
-          tilkoblet: st.connection_status === 'connected',
-          provider,
-          navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
+        // Gammel RPC som reserve. Den filtrerer SELV på provider = 'tripletex',
+        // så svarer den 'connected', ER systemet Tripletex. Det er et faktum fra
+        // spørringen, ikke en antakelse om hva bedriften sannsynligvis bruker.
+        // Svarer den noe annet, blir provider null — og da vises ingenting
+        // regnskapsrelatert uansett, fordi alle kortene sjekker tilkoblet først.
+        let fraTripletexRpc = false
+        if (!st) {
+          try { const r = await supabase.rpc('tripletex_integration_status'); if (!r.error) { st = r.data; fraTripletexRpc = true } } catch (_) {}
+        }
+        // Svarte ingen av dem, er vi trolig uten nett. Da er sist BEKREFTEDE
+        // status et ærligere svar enn «ikke satt opp»: det siste ville skjult
+        // Tripletex-merket på kunder vi VET er synket, fordi alle synk-kortene
+        // sjekker tilkoblet først. Nøkkelen er prefikset på bedrift som alle
+        // andre, så en støtteøkt kan ikke arve vår status.
+        if (!st) {
+          const lagret = await idbHent('regnskap:status')
+          if (lagret && lagret.data && lagret.data.navn !== undefined) {
+            _regnskapCache[companyId] = lagret.data
+          }
+        }
+        if (!_regnskapCache[companyId]) {
+          const svarte = !!st
+          st = st || { connection_status: 'not_configured' }
+          const tilkoblet = st.connection_status === 'connected'
+          const provider = st.provider || (fraTripletexRpc && tilkoblet ? 'tripletex' : null)
+          const verdi = {
+            tilkoblet,
+            provider,
+            navn: (REGNSKAPSSYSTEM[provider] || {}).navn || 'regnskapssystemet',
+          }
+          _regnskapCache[companyId] = verdi
+          // Lagres KUN når databasen faktisk svarte. Ellers ville et
+          // nettverksavbrudd skrevet «ikke satt opp» over en ekte tilkobling.
+          if (svarte) idbSett('regnskap:status', verdi)
         }
       }
       if (!avbrutt) setInfo(_regnskapCache[companyId])
@@ -51923,6 +52555,20 @@ function useRegnskapssystem() {
 // forståelig norsk tekst i «error» og en teknisk detalj i «detail» — vi viser den
 // første i klartekst og gjemmer den andre bak «Vis teknisk detalj», så brukeren ikke
 // møter rå JSON, men vi ikke mister den heller.
+// Unik-skranken external_links_ekstern_uniq hindrer at to av VÅRE rader peker
+// på samme objekt hos regnskapssystemet. Den gjør nytte, men Postgres sin egen
+// tekst — «duplicate key value violates unique constraint» — sier ingenting til
+// en tømrer. Her oversettes den til hva som faktisk skjedde.
+function lesKoblingsfeil(melding, alleredeKobletNavn) {
+  const raa = String(melding || '')
+  if (/external_links_ekstern_uniq|duplicate key value violates unique constraint/i.test(raa)) {
+    return alleredeKobletNavn
+      ? `Den personen er allerede koblet til ${alleredeKobletNavn}. Én person i regnskapssystemet kan bare kobles til én ansatt hos dere. Fjern den andre koblingen først.`
+      : 'Den personen er allerede koblet til en annen ansatt. Én person i regnskapssystemet kan bare kobles til én ansatt hos dere. Fjern den andre koblingen først.'
+  }
+  return raa
+}
+
 async function lesIntegrasjonsfeil(error, data) {
   if (data && data.error) return { melding: String(data.error), detalj: data.detail ? String(data.detail) : '', reason: data.reason || '' }
   let melding = (error && error.message) || 'Ukjent feil'
@@ -51960,6 +52606,11 @@ function useIntegrasjonSynk({ entitet, radId, alleredeSynket, forhaandssjekk, on
       if (error || (data && data.error)) { setFeil(await lesIntegrasjonsfeil(error, data)); return }
       const nyId = (data && (data.tripletexCustomerId ?? data.tripletexProjectId ?? data.externalId)) || null
       if (nyId) setSynketId(nyId)
+      // Synken skrev en ny rad i external_links. Frisk opp koblingene, ellers
+      // står merkene i ANDRE visninger igjen til neste sidelast — knappen her
+      // oppdaterer bare sin egen synketId.
+      invalidateKoblingCache()
+      getCachedKoblinger()
       const h = (data && data.action) || 'ok'
       appAlert({
         message: h === 'created' ? `Opprettet i ${navn}`
@@ -51980,16 +52631,19 @@ function useIntegrasjonSynk({ entitet, radId, alleredeSynket, forhaandssjekk, on
 // Knappen. Samme visuelle vekt som «Rediger»: nøytral grå ramme, hvit bakgrunn,
 // fontWeight 500. Synk er en sjelden handling og skal ikke rope høyere enn naboene.
 function SynkKnapp({ synk, isMob }) {
+  // Hook FØR enhver retur. Statusen kan være hentet fra disk under en kald
+  // offline-start, og da er knappen synlig selv om ingenting kan synkes.
+  const frakoblet = useTilkobling() === NETT_AV
   if (!synk.tilkoblet) return null
   return (
     <button
       onClick={synk.synk}
-      disabled={synk.jobber}
-      title={synk.synketId ? `Synk til ${synk.navn} på nytt` : `Synk til ${synk.navn}`}
+      disabled={synk.jobber || frakoblet}
+      title={frakoblet ? 'Synk krever nett' : (synk.synketId ? `Synk til ${synk.navn} på nytt` : `Synk til ${synk.navn}`)}
       style={{
         padding: isMob ? '8px 10px' : '9px 16px', border: '1px solid #e2e8f0', borderRadius: '10px',
-        background: 'white', cursor: synk.jobber ? 'default' : 'pointer',
-        fontSize: isMob ? '12px' : '14px', fontWeight: '500',
+        background: 'white', cursor: (synk.jobber || frakoblet) ? 'default' : 'pointer',
+        fontSize: isMob ? '12px' : '14px', fontWeight: '500', opacity: frakoblet ? 0.45 : 1,
         color: synk.jobber ? '#94a3b8' : 'inherit', whiteSpace: 'nowrap', flexShrink: 0,
       }}
     >
@@ -52071,6 +52725,10 @@ async function sendEnTime(provider, companyId, entryId) {
       const f = await lesIntegrasjonsfeil(error, data)
       return { ok: false, ...f }
     }
+    // Samme grunn som i useIntegrasjonSynk: timesynken skriver external_links,
+    // og både radmerket og samleknappens telling leser derfra.
+    invalidateKoblingCache()
+    getCachedKoblinger()
     return { ok: true, action: (data && data.action) || 'created', eksternId: (data && data.tripletexEntryId) || null }
   } catch (e) {
     return { ok: false, melding: (e && e.message) || String(e), detalj: '', reason: '' }
@@ -52084,8 +52742,10 @@ function TimeSynkRad({ entry, isMob, onFerdig }) {
   const { tilkoblet, provider, navn } = useRegnskapssystem()
   const [jobber, setJobber] = useState(false)
   const [feil, setFeil] = useState(null)
-  const [sendtId, setSendtId] = useState(entry?.tripletex_entry_id || null)
-  useEffect(() => { setSendtId(entry?.tripletex_entry_id || null) }, [entry?.tripletex_entry_id])
+  // Fra external_links, ikke fra timesheet_entries.tripletex_entry_id.
+  const kobling = useKobling('timesheet_entry', entry?.id)
+  const [sendtId, setSendtId] = useState(kobling?.external_id || null)
+  useEffect(() => { setSendtId(kobling?.external_id || null) }, [kobling?.external_id])
 
   const godkjent = (entry?.status || '') === 'Godkjent'
   if (!tilkoblet || !godkjent) return null
@@ -52098,7 +52758,7 @@ function TimeSynkRad({ entry, isMob, onFerdig }) {
     else setFeil(r)
   }
 
-  const lagretFeil = !sendtId && !feil && entry?.tripletex_sync_error ? { melding: entry.tripletex_sync_error, detalj: '', reason: '' } : null
+  const lagretFeil = !sendtId && !feil && kobling?.sync_error ? { melding: kobling.sync_error, detalj: '', reason: '' } : null
   const vist = feil || lagretFeil
 
   return (
@@ -52141,6 +52801,7 @@ function TimeSynkRad({ entry, isMob, onFerdig }) {
 // skal ikke stoppe de andre.
 function SendGodkjenteTimer({ entries, isMob, onFerdig }) {
   const { companyId } = useAuth()
+  const koblinger = useEksterneKoblinger()
   const appAlert = useAppAlert()
   const confirm = useConfirm()
   const { tilkoblet, provider, navn } = useRegnskapssystem()
@@ -52150,9 +52811,16 @@ function SendGodkjenteTimer({ entries, isMob, onFerdig }) {
 
   // Kun godkjente timer som ikke alt er sendt. Overtid og fravær filtreres bort
   // her også, så tellingen stemmer med det som faktisk kan sendes.
+  // Allerede sendte timer plukkes ut av external_links i stedet for av en
+  // kolonne på hver rad. Ett oppslag for hele uka, ikke ett felt per time.
+  const sendte = new Set(
+    (koblinger || [])
+      .filter(k => k.entity_type === 'timesheet_entry' && k.external_id)
+      .map(k => k.entity_id)
+  )
   const kandidater = (entries || []).filter(e =>
     (e.status || '') === 'Godkjent' &&
-    !e.tripletex_entry_id &&
+    !sendte.has(e.id) &&
     !e.absence_type &&
     (Number(e.overtime_50) || 0) === 0 &&
     (Number(e.overtime_100) || 0) === 0 &&
@@ -52324,7 +52992,7 @@ function KobleKunde({ project, isMob, variant = 'lenke', onFerdig }) {
       if (siffer.length >= 9) betingelser.push(`orgnr.eq.${siffer}`)
       const { data, error } = await supabase
         .from('customers')
-        .select('id, name, orgnr, tripletex_customer_id')
+        .select('id, name, orgnr')
         .eq('er_kunde', true)
         .or(betingelser.join(','))
         .order('name', { ascending: true })
@@ -52442,6 +53110,16 @@ function KobleKunde({ project, isMob, variant = 'lenke', onFerdig }) {
 // Standardaktivitet lagres per bedrift. Tripletex krever en aktivitet på hver time, og
 // vårt eget aktivitetsfelt er fritekst som ikke kan mappes trygt.
 function TripletexOppsett({ companyId, isMob }) {
+  // Ansattkoblingen leses nå fra external_links. lokalKobling er en optimistisk
+  // overstyring så nedtrekket svarer med én gang, før RPC-en og den nye
+  // hentingen er tilbake. Nøkkelen ryddes når serveren har bekreftet.
+  const koblinger = useEksterneKoblinger()
+  const [lokalKobling, setLokalKobling] = useState({})
+  const eksternIdFor = (ansattId) => (
+    Object.prototype.hasOwnProperty.call(lokalKobling, ansattId)
+      ? lokalKobling[ansattId]
+      : (finnKobling(koblinger, 'employee', ansattId)?.external_id || null)
+  )
   const appAlert = useAppAlert()
   const [laster, setLaster] = useState(true)
   const [feil, setFeil] = useState(null)          // { melding, detalj }
@@ -52468,7 +53146,7 @@ function TripletexOppsett({ companyId, isMob }) {
       // Egne ansatte: sortert i DATABASEN, ikke i frontend.
       const { data: egne, error: eErr } = await supabase
         .from('employees')
-        .select('id, first_name, last_name, tripletex_employee_id')
+        .select('id, first_name, last_name')
         .order('first_name', { ascending: true })
         .order('last_name', { ascending: true })
         .limit(1000)
@@ -52519,9 +53197,8 @@ function TripletexOppsett({ companyId, isMob }) {
   }
 
   const koble = async (ansattId, verdi) => {
-    const forrige = ansatte
     const ny = verdi === '' ? null : Number(verdi)
-    setAnsatte(rader => rader.map(r => (r.id === ansattId ? { ...r, tripletex_employee_id: ny } : r)))
+    setLokalKobling(o => ({ ...o, [ansattId]: ny }))
     setLagrerAnsatt(ansattId)
     try {
       // Går via RPC, ikke rett på tabellen. Dette var det ENESTE stedet
@@ -52533,15 +53210,28 @@ function TripletexOppsett({ companyId, isMob }) {
         p_employee_id: ansattId,
         p_external_id: ny == null ? null : String(ny),
       })
-      if (error) throw new Error(error.message)
+      if (error) {
+        // Hvem er det som allerede har denne personen? Uten navnet blir
+        // meldingen «noen andre», og da må brukeren lete selv.
+        const opptattAv = ny == null ? null : (koblinger || []).find(
+          k => k.entity_type === 'employee' && String(k.external_id) === String(ny) && k.entity_id !== ansattId
+        )
+        const opptattNavn = opptattAv ? (ansatte.find(a => a.id === opptattAv.entity_id) || null) : null
+        throw new Error(lesKoblingsfeil(error.message, opptattNavn ? navn(opptattNavn) : null))
+      }
+      // Hent koblingene på nytt, og slipp den optimistiske overstyringen når
+      // serveren har svart. Da er det ÉN kilde igjen, ikke to som kan sprike.
+      invalidateKoblingCache()
+      await getCachedKoblinger()
+      setLokalKobling(o => { const k = { ...o }; delete k[ansattId]; return k })
     } catch (e) {
-      setAnsatte(forrige)
+      setLokalKobling(o => { const k = { ...o }; delete k[ansattId]; return k })
       appAlert({ message: 'Kunne ikke lagre koblingen', subMessage: (e && e.message) || String(e), kind: 'error' })
     } finally { setLagrerAnsatt(null) }
   }
 
   const navn = (a) => `${a.first_name || ''} ${a.last_name || ''}`.trim() || '(uten navn)'
-  const antallKoblet = ansatte.filter(a => a.tripletex_employee_id).length
+  const antallKoblet = ansatte.filter(a => eksternIdFor(a.id)).length
   const antallMangler = ansatte.length - antallKoblet
 
   const ramme = { marginTop: '18px', paddingTop: '18px', borderTop: '1px solid #e2e8f0' }
@@ -52617,14 +53307,14 @@ function TripletexOppsett({ companyId, isMob }) {
               {ansatte.map(a => (
                 <div key={a.id} style={rad}>
                   <div style={radNavn}>
-                    <span style={prikk(!!a.tripletex_employee_id)} />
+                    <span style={prikk(!!eksternIdFor(a.id))} />
                     <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{navn(a)}</span>
-                    {!a.tripletex_employee_id && (
+                    {!eksternIdFor(a.id) && (
                       <span style={{ fontSize: '11px', fontWeight: '700', color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: '999px', padding: '2px 8px', flexShrink: 0 }}>Ikke koblet</span>
                     )}
                   </div>
                   <select
-                    value={a.tripletex_employee_id ? String(a.tripletex_employee_id) : ''}
+                    value={eksternIdFor(a.id) ? String(eksternIdFor(a.id)) : ''}
                     disabled={lagrerAnsatt === a.id || ttAnsatte.length === 0}
                     onChange={e => koble(a.id, e.target.value)}
                     style={{ ...velger, flex: '1 1 auto' }}
@@ -84348,18 +85038,23 @@ function BefaringViewObsDetail({ observation, token, email, resolverName, onClos
 // ─── END BEFARING VIEW PAGE ────────────────────────────────────────────────────
 
 // ─── TILKOBLINGSINDIKATOR (Offline Lag 1) ──────────────────────────────────────
-// Sporer om enheten er på nett. Lytter på nettleserens online/offline-hendelser.
-// I Lag 2 kan denne også mates fra faktiske Supabase-kall som feiler.
+// Sporer om vi faktisk når Supabase. Mates av ekte kallresultater (meldNett),
+// ikke av navigator.onLine alene — den lyver ved kald start uten dekning.
+// Returnerer 'ukjent' | 'paa' | 'av' — IKKE en boolsk. «Vet ikke» er en egen
+// tilstand, og kallstedene skal måtte ta stilling til den. Se den lange
+// forklaringen ved meldNett.
+//
+// Browser-hendelsene lyttes på modulnivå, ikke her: tilstanden skal være
+// riktig uavhengig av hva som er montert. Hooken abonnerer bare.
 function useTilkobling() {
-  const [online, setOnline] = React.useState(typeof navigator !== 'undefined' ? navigator.onLine : true)
+  const [status, setStatus] = React.useState(nettStatus)
   React.useEffect(() => {
-    const paaNett = () => setOnline(true)
-    const avNett = () => setOnline(false)
-    window.addEventListener('online', paaNett)
-    window.addEventListener('offline', avNett)
-    return () => { window.removeEventListener('online', paaNett); window.removeEventListener('offline', avNett) }
+    const oppdater = () => setStatus(nettStatus())
+    oppdater()                       // kan ha rukket å endre seg før effekten kjørte
+    window.addEventListener('ep-nett-endret', oppdater)
+    return () => window.removeEventListener('ep-nett-endret', oppdater)
   }, [])
-  return online
+  return status
 }
 
 // Tilkoblingsmarkør nederst til venstre.
@@ -84368,24 +85063,32 @@ function useTilkobling() {
 // Desktop: full pille med tekst (god plass).
 // Skjules helt når mobilmenyen er åpen, så den aldri ligger oppå menyinnhold.
 function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
-  const online = useTilkobling()
+  const status = useTilkobling()
   const koAntall = useKoAntall()
   const [nyligTilkoblet, setNyligTilkoblet] = React.useState(false)
-  const forrige = React.useRef(online)
+  // Sporer STATUS, ikke den boolske. «Tilkoblet igjen» skal kun vises ved en
+  // ekte gjenoppkobling, 'av' → 'paa'. Sporet vi den boolske, ville
+  // 'ukjent' → 'paa' — altså hver eneste normale sidelast — sett ut som en
+  // gjenoppkobling og blinket grønt i hjørnet hver gang.
+  const forrige = React.useRef(status)
   React.useEffect(() => {
-    if (online && forrige.current === false) {
+    if (status === NETT_PAA && forrige.current === NETT_AV) {
       setNyligTilkoblet(true)
       const t = setTimeout(() => setNyligTilkoblet(false), 3000)
-      forrige.current = online
+      forrige.current = status
       return () => clearTimeout(t)
     }
-    forrige.current = online
-  }, [online])
+    forrige.current = status
+  }, [status])
 
   // Ikke vis oppå den åpne mobilmenyen
   if (isMobile && mobileMenuOpen) return null
+  // Ingen rundtur forsøkt ennå: vi VET ikke, så vi påstår ikke. Vinduet varer
+  // ett nettkall. Å vise «Tilkoblet» her var hele feilen; å vise «Frakoblet»
+  // ville blinket gult ved hver normale sidelast og lært brukeren å overse gult.
+  if (status === NETT_UKJENT) return null
 
-  const offline = !online
+  const offline = status === NETT_AV
   const venter = koAntall > 0
 
   // Mobil + på nett + ingenting i kø → kun en liten prikk, ingen tekst
