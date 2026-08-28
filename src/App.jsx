@@ -78248,6 +78248,8 @@ function KalkFaktorerPage({ onBack }) {
 function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) {
   const { user } = useAuth()
   const appAlert = useAppAlert()
+  const confirm = useConfirm()
+  const isMobKE = typeof window !== 'undefined' && window.innerWidth < 480
   const isEdit = !!initial
   const [form, setForm] = useState({
     title: initial?.title || '',
@@ -78287,6 +78289,39 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
     setSelectedFag(f => f.includes(fagId) ? f.filter(x => x !== fagId) : [...f, fagId])
   }
 
+  // Hva hver faggruppe i kalkylen faktisk inneholder. Brukes to steder: som tall
+  // i faggruppevelgeren, så man ser hva som står på spill FØR man huker vekk,
+  // og som grunnlag for bekreftelsesdialogen ved lagring.
+  // Kronebeløpet kommer fra beregnKalkyle() — samme helper som «Per faggruppe»
+  // i prosjektsammendraget bruker, så tallene ikke kan sprike.
+  const innholdPerFag = React.useMemo(() => {
+    const ut = {}
+    ;(initial?.kalkyler || []).forEach(kl => {
+      const bygningsdeler = kl.bygningsdeler || []
+      const fakt = (initial?.faktorer || {})[kl.fag] || getDefaultFaktorer(kl.fag)
+      ut[kl.fag] = {
+        navn: kl.name || getFaggruppe(kl.fag).name,
+        emoji: getFaggruppe(kl.fag).emoji,
+        bygningsdeler: bygningsdeler.length,
+        arbeidsarter: bygningsdeler.reduce((s, bd) => s + (bd.arbeidsarter || []).length, 0),
+        materialer: bygningsdeler.reduce((s, bd) => s + (bd.materialer || []).length, 0),
+        belop: beregnKalkyle(kl, fakt).totMedFortjeneste,
+      }
+    })
+    return ut
+  }, [initial])
+
+  // Faggruppene som fjernes ved lagring OG som faktisk mister data. Er alt null,
+  // skal lagringen gå rett gjennom — en dialog som bekrefter at ingenting
+  // slettes er bare støy, og lærer brukeren å klikke forbi den.
+  const fjernedeMedInnhold = () => {
+    if (!isEdit) return []
+    return (initial?.kalkyler || [])
+      .filter(kl => !selectedFag.includes(kl.fag))
+      .map(kl => innholdPerFag[kl.fag])
+      .filter(i => i && (i.bygningsdeler > 0 || i.arbeidsarter > 0 || i.materialer > 0))
+  }
+
   // Gå fra steg 1 → steg 2: hent bedriftens standardfaktorer og lag en justerbar kopi
   const gaaTilFaktorer = async () => {
     if (!form.title.trim()) { await appAlert({ message: 'Prosjektnavn er påkrevd', kind: 'warn' }); return }
@@ -78315,6 +78350,47 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
   const handleSave = async () => {
     if (!form.title.trim()) { await appAlert({ message: 'Prosjektnavn er påkrevd', kind: 'warn' }); return }
     if (!isEdit && selectedFag.length === 0) { await appAlert({ message: 'Velg minst én faggruppe', kind: 'warn' }); return }
+
+    // ── Bekreftelse før permanent sletting ──────────────────────────────────
+    // Fjernes en faggruppe, forsvinner hele kalkyle-objektet med alle
+    // bygningsdeler, arbeidsarter og materialer ut av kalkyler-kolonnen. Det
+    // finnes ingen papirkurv og ingen angre. Kjøres FØR setSaving(true), så
+    // knappen ikke står som «Lagrer …» mens dialogen er oppe.
+    const mister = fjernedeMedInnhold()
+    if (mister.length > 0) {
+      const ok = await confirm({
+        message: mister.length === 1
+          ? `Fjerne ${mister[0].navn} fra kalkylen?`
+          : `${mister.length} faggrupper mister alt innholdet`,
+        subMessage: mister.length === 1
+          ? 'Faggruppen har innhold. Alt under den slettes permanent når du lagrer.'
+          : 'Disse faggruppene har innhold. Alt under dem slettes permanent når du lagrer.',
+        // Én blokk per faggruppe. `stats` rendres som ren tekst — i motsetning
+        // til `notes`, som går gjennom dangerouslySetInnerHTML. Prosjektnavn er
+        // brukerredigert tekst og skal derfor stå her, ikke i en note.
+        details: {
+          stats: mister.map(i => ({
+            title: `${i.emoji} ${i.navn}`,
+            subtitle: fmt(i.belop),
+            items: [
+              { label: 'Bygningsdeler', value: i.bygningsdeler },
+              { label: 'Arbeidsarter', value: i.arbeidsarter },
+              { label: 'Materialer', value: i.materialer },
+            ],
+          })),
+          notes: [{
+            kind: 'error',
+            icon: '⚠️',
+            text: 'Det finnes ingen angre og ingen papirkurv. Huker du faggruppen på igjen etterpå, kommer den tilbake tom.',
+          }],
+        },
+        danger: true,
+        confirmLabel: mister.length === 1 ? 'Fjern faggruppen' : 'Fjern faggruppene',
+      })
+      // Avbryt: avhukingen står urørt i skjemaet, ingenting skrives.
+      if (!ok) return
+    }
+
     setSaving(true)
     try {
       // Load bedrift faktorer
@@ -78324,8 +78400,16 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
         bedriftFaktorer = data?.kalk_faktorer || {}
       } catch(e) {}
 
-      let kalkyler = initial?.kalkyler || []
-      let faktorer = initial?.faktorer || {}
+      // KOPIER, ikke referanser. medReparerteKalkyleIder() returnerer samme
+      // objekt når det ikke er noe å reparere, så `initial.kalkyler` og
+      // `initial.faktorer` ER de samme objektene som KalkProsjektView har i
+      // state. Med de gamle referansene skrev push() og faktorer[fagId]=…
+      // rett inn i visningens levende state — derfor så «legg til faggruppe»
+      // ut som om den virket, mens «fjern» ikke gjorde det: fjerningen laget et
+      // nytt array, tillegget muterte det gamle. Feilet lagringen, satt
+      // visningen igjen med en faggruppe som aldri ble lagret.
+      let kalkyler = [...(initial?.kalkyler || [])]
+      let faktorer = { ...(initial?.faktorer || {}) }
 
       if (!isEdit) {
         // Create kalkyler for each selected fag
@@ -78351,6 +78435,12 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
         // Remove deselected
         kalkyler = kalkyler.filter(k => selectedFag.includes(k.fag))
       }
+
+      // `faktorer` ryddes sammen med kalkylene. Uten dette ble satsene for en
+      // fjernet faggruppe liggende igjen som foreldreløse nøkler, og de ble
+      // likevel overskrevet med bedriftens standard hvis faggruppen ble huket
+      // på igjen — de hadde ingen verdi, bare vekst i JSON-en.
+      faktorer = Object.fromEntries(Object.entries(faktorer).filter(([fagId]) => selectedFag.includes(fagId)))
 
       const totals = beregnProsjektTotal(kalkyler, faktorer)
       // Felles kunde-oppløsning for kalkyle: finner/oppretter kunde i customers-tabellen
@@ -78432,15 +78522,36 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
           {/* Faggrupper */}
           <div>
             <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginBottom:'10px' }}>Velg faggrupper som skal inngå</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'6px' }}>
+            {/* Én kolonne på telefon. I to kolonner blir cellen ~142 px, og lange
+                navn som «Betongarbeider» brekker midt i ordet. Innholdslisten
+                under navnet gjør cellen enda trangere. Modalen scroller alt
+                (maxHeight 70vh), så den doble høyden koster ingenting. */}
+            <div style={{ display:'grid', gridTemplateColumns: isMobKE ? '1fr' : 'repeat(2, 1fr)', gap:'6px' }}>
               {FAGGRUPPER.map(fag => {
                 const isSelected = selectedFag.includes(fag.id)
+                // Innholdet i faggruppen slik den ligger lagret. Vises i
+                // redigering, så man ser hva som ryker FØR man huker vekk — ikke
+                // først i en dialog etterpå. Navn og tall står i hver sin linje;
+                // rutenettet er to kolonner, og på telefon blir cellen så smal at
+                // «Betongarbeider · 4 bygningsdeler» på én linje ville brukket.
+                const innhold = isEdit ? innholdPerFag[fag.id] : null
+                const mister = innhold && isSelected === false && (innhold.bygningsdeler > 0 || innhold.arbeidsarter > 0 || innhold.materialer > 0)
                 return (
                   <button key={fag.id} onClick={() => toggleFag(fag.id)}
-                    style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 12px', borderRadius:'10px', border: isSelected ? '2px solid #059669' : '1px solid #f1f5f9', background: isSelected ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
-                    <span style={{ fontSize:'15px' }}>{fag.emoji}</span>
-                    <span style={{ flex:1, fontWeight: isSelected ? '600' : '400', color: isSelected ? '#059669' : '#475569' }}>{fag.name}</span>
-                    <span style={{ fontSize:'15px', color: isSelected ? '#059669' : '#e2e8f0' }}>{isSelected ? '✓' : '○'}</span>
+                    style={{ display:'flex', alignItems:'center', gap:'8px', padding:'10px 12px', borderRadius:'10px', border: mister ? '2px solid #fecaca' : isSelected ? '2px solid #059669' : '1px solid #f1f5f9', background: mister ? '#fef2f2' : isSelected ? '#f0fdf4' : 'white', cursor:'pointer', textAlign:'left', fontSize:'13px' }}>
+                    <span style={{ fontSize:'15px', flexShrink:0 }}>{fag.emoji}</span>
+                    <span style={{ flex:1, minWidth:0 }}>
+                      <span style={{ display:'block', fontWeight: isSelected ? '600' : '400', color: isSelected ? '#059669' : '#475569', wordBreak:'break-word' }}>{fag.name}</span>
+                      {innhold && (
+                        <span style={{ display:'block', fontSize:'10px', marginTop:'2px', lineHeight:1.35, color: mister ? '#dc2626' : '#94a3b8', fontWeight: mister ? '700' : '400' }}>
+                          {innhold.bygningsdeler === 0
+                            ? 'tom'
+                            : `${innhold.bygningsdeler} bygningsdel${innhold.bygningsdeler === 1 ? '' : 'er'}`}
+                          {mister ? ' slettes' : ''}
+                        </span>
+                      )}
+                    </span>
+                    <span style={{ fontSize:'15px', flexShrink:0, color: isSelected ? '#059669' : '#e2e8f0' }}>{isSelected ? '✓' : '○'}</span>
                   </button>
                 )
               })}
@@ -78742,6 +78853,29 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   // rakk å rendre. Uten dette kan to raske valg overskrive hverandre.
   const kRef = React.useRef(k)
   kRef.current = k
+
+  // Re-synk når forelderen leverer et NYTT datasett. useState-initializeren
+  // over kjøres bare ved mount, så uten dette fortsatte visningen å vise den
+  // gamle kopien etter at «Rediger prosjekt» hadde lagret — en fjernet
+  // faggruppe ble stående til man forlot modulen og kom inn igjen.
+  //
+  // Betingelsen er id + updated_at, ikke referanselikhet på `init`. Grunnen:
+  // visningens egne skrivinger går gjennom saveProject(), som setter `k` lokalt
+  // og skriver til basen etter 800 ms — den rører aldri `init`. Signaturen står
+  // dermed stille gjennom hele redigeringen, og en refetch som ennå ikke
+  // inneholder den ulagrede endringen har samme updated_at som den vi alt står
+  // på, altså ingen synk og ingenting overskrevet. Først når noen faktisk har
+  // skrevet en ny versjon til basen endrer updated_at seg, og da SKAL vi ta den.
+  const synkSignaturRef = React.useRef(`${init?.id}|${init?.updated_at || ''}`)
+  useEffect(() => {
+    const signatur = `${init?.id}|${init?.updated_at || ''}`
+    if (signatur === synkSignaturRef.current) return
+    synkSignaturRef.current = signatur
+    const ferskt = medReparerteKalkyleIder(init)
+    kRef.current = ferskt
+    setK(ferskt)
+  }, [init])
+
   const [activeKalkId, setActiveKalkId] = useState(null)
   const [expandedBd, setExpandedBd] = useState(null)
   const [showBibliotekPicker, setShowBibliotekPicker] = useState(null)
