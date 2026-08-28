@@ -31620,6 +31620,57 @@ function RessursGanttGrid({
   // Custom tooltip state — styrer rik hover-popup for bookinger
   const [hoveredBar, setHoveredBar] = useState(null) // { bar, x, y } eller null
   const hoverTimeoutRef = React.useRef(null)
+  // Visningsforsinkelse: uten den fikk man ett detaljvindu per bjelke man
+  // sveipet over. Skjulingen har hatt 100 ms hele tiden; det var kun visningen
+  // som manglet.
+  const visTimeoutRef = React.useRef(null)
+  const ventendeBarRef = React.useRef(null)
+  // Målt høyde på detaljvinduet. Plasseringen brukte tidligere et hardkodet
+  // anslag på 240 px, og det var FOR LAVT i alle reelle tilfeller (målt 255–381
+  // px). Når vinduet ble flippet over bjelken, ble toppen satt til
+  // `rect.top - 240 - 8`, og de overskytende pikslene la seg rett oppå bjelken
+  // brukeren pekte på. Nå måles den ekte høyden.
+  const tooltipRef = React.useRef(null)
+  const [tooltipH, setTooltipH] = useState(null)
+
+  // Avbryt en planlagt visning (bytte av bjelke, drag, klikk, musen ut).
+  const avbrytVisning = () => {
+    if (visTimeoutRef.current) { clearTimeout(visTimeoutRef.current); visTimeoutRef.current = null }
+    ventendeBarRef.current = null
+  }
+  // Planlegg visning av detaljvinduet. Er den samme bjelken alt planlagt eller
+  // synlig, gjør vi ingenting — ellers ville hver mousemove nullstilt klokka og
+  // vinduet aldri kommet fram mens musen beveger seg over bjelken.
+  const planleggVisning = (bar, proj, rect) => {
+    if (ventendeBarRef.current === bar.id) return
+    if (hoveredBar && hoveredBar.bar.id === bar.id) return
+    avbrytVisning()
+    ventendeBarRef.current = bar.id
+    visTimeoutRef.current = setTimeout(() => {
+      visTimeoutRef.current = null
+      ventendeBarRef.current = null
+      setHoveredBar({ bar, proj, rect })
+    }, 180)
+  }
+
+  // Mål vinduet FØR nettleseren tegner. useLayoutEffect, ikke useEffect: med
+  // useEffect ville første frame blitt tegnet på gjettet posisjon og vinduet
+  // hoppet synlig på plass. scrollHeight, ikke offsetHeight — vi setter
+  // maxHeight på elementet, og offsetHeight ville da målt vår egen klemming og
+  // svingt fram og tilbake mellom to verdier.
+  React.useLayoutEffect(() => {
+    if (!hoveredBar) return
+    const el = tooltipRef.current
+    if (!el) return
+    const h = el.scrollHeight
+    if (h > 0) setTooltipH(prev => (prev === h ? prev : h))
+  }, [hoveredBar])
+
+  // Rydd opp timere når komponenten forsvinner.
+  React.useEffect(() => () => {
+    if (visTimeoutRef.current) clearTimeout(visTimeoutRef.current)
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+  }, [])
   const [matDagAapen, setMatDagAapen] = useState(null) // { date, leveranser, x, y } — velg-liste når flere leveranser samme dag
 
   // Hover state for ressurs-kort (viser rik info-popover)
@@ -32045,6 +32096,7 @@ function RessursGanttGrid({
     }
     dragBarRef.current = info
     setDragBar(info)
+    avbrytVisning()
     setHoveredBar(null)
   }
 
@@ -32160,6 +32212,7 @@ function RessursGanttGrid({
       <div ref={gridScrollRef}
         onPointerDown={(e) => { if (spaceHeldRef.current) { e.preventDefault(); beginPan(e) } }}
         onMouseLeave={() => {
+          avbrytVisning()
           if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
           hoverTimeoutRef.current = setTimeout(() => { setHoveredBar(null); hoverTimeoutRef.current = null }, 100)
         }}
@@ -32591,6 +32644,8 @@ function RessursGanttGrid({
                     const firstPlan = bar.plans[0]
                     const lastPlan = bar.plans[bar.plans.length - 1]
                     const isDraggingThis = dragBar?.barId === bar.id
+                    // Er det denne bjelken detaljvinduet står oppe for?
+                    const erAktivBjelke = !!hoveredBar && hoveredBar.bar.id === bar.id && !dragging && !resizing && !dragBar
                     const showCode = width > 34
                     const showName = width > 66
                     const showHours = width > 52
@@ -32618,18 +32673,17 @@ function RessursGanttGrid({
                         onMouseEnter={(e) => {
                           if (dragging || resizing || dragBar) return
                           if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null }
-                          const rect = e.currentTarget.getBoundingClientRect()
-                          setHoveredBar({ bar, proj, rect })
+                          planleggVisning(bar, proj, e.currentTarget.getBoundingClientRect())
                         }}
                         onMouseMove={(e) => {
                           if (dragging || resizing || dragBar) return
                           if (!hoveredBar || hoveredBar.bar.id !== bar.id) {
                             if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null }
-                            const rect = e.currentTarget.getBoundingClientRect()
-                            setHoveredBar({ bar, proj, rect })
+                            planleggVisning(bar, proj, e.currentTarget.getBoundingClientRect())
                           }
                         }}
                         onMouseLeave={() => {
+                          avbrytVisning()
                           if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
                           hoverTimeoutRef.current = setTimeout(() => { setHoveredBar(null); hoverTimeoutRef.current = null }, 100)
                         }}
@@ -32637,6 +32691,7 @@ function RessursGanttGrid({
                           e.stopPropagation()
                           // Hvis dette klikket kom rett etter en dra-operasjon, ikke åpne modalen.
                           if (justDraggedBarRef.current) { justDraggedBarRef.current = false; return }
+                          avbrytVisning()
                           setHoveredBar(null)
                           if (!kanRedigere) return
                           if (onOpenFase) {
@@ -32675,7 +32730,16 @@ function RessursGanttGrid({
                           pointerEvents: dragBar?.hasMoved ? 'none' : 'auto',
                           display:'flex', flexDirection:'column',
                           padding: '4px 10px',
-                          zIndex: isDraggingThis ? 1 : 3,
+                          // Ring rundt bjelken detaljvinduet gjelder. Vinduet er 300 px bredt og
+                          // havner ofte over nabo-aktiviteter — uten denne ringen er det ikke til
+                          // å se hvilken bjelke tallene tilhører.
+                          // `outline` og ikke `boxShadow`: skyggen settes imperativt av
+                          // onMouseOver/onMouseOut lenger ned, og de to ville overskrevet hverandre.
+                          // outlineOffset gir en luftspalte mot radbakgrunnen, så ringen er synlig
+                          // også på mørke bjelkefarger. Outline påvirker ikke layout.
+                          outline: erAktivBjelke ? '2px solid #0f172a' : 'none',
+                          outlineOffset: erAktivBjelke ? '2px' : '0',
+                          zIndex: isDraggingThis ? 1 : (erAktivBjelke ? 5 : 3),
                           boxShadow: isDraggingThis
                             ? 'none'
                             : bar.hasConflict
@@ -32972,25 +33036,57 @@ function RessursGanttGrid({
           statusEmoji = '⏱️'
         }
 
-        // Posisjoner tooltipen nær bjelken; juster hvis nær viewport-kant
+        // ── Plassering ──────────────────────────────────────────────────────
+        // Under bjelken hvis det er plass, ellers over.
+        //
+        // Feilen som ble rettet: koden regnet over-plasseringen som
+        // `rect.top - 240 - 8`, der 240 var et hardkodet anslag på høyden. Det
+        // anslaget lå UNDER den faktiske høyden i alle tilfeller (målt 255–381
+        // px alt etter innhold), og differansen la seg rett oppå bjelken
+        // brukeren pekte på. Panelet med materialleveranser er det som dytter
+        // bjelkene så langt ned at over-grenen i det hele tatt utløses — derfor
+        // så det ut som panelet var årsaken.
+        //
+        // 300 er kun startverdien for aller første render av en ny bjelke;
+        // useLayoutEffect måler og retter før nettleseren tegner.
         const tooltipWidth = 300
-        const tooltipEstHeight = 240
+        const MARG = 10, LUFT = 8
+        const h = tooltipH || 300
+
         let left = rect.left + rect.width / 2 - tooltipWidth / 2
-        let top = rect.bottom + 8
-        // Juster horisontalt for å holde i viewport
-        if (left < 10) left = 10
-        if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10
-        // Hvis ikke plass under, vis over
-        if (top + tooltipEstHeight > window.innerHeight - 10) {
-          top = rect.top - tooltipEstHeight - 8
-        }
+        if (left < MARG) left = MARG
+        if (left + tooltipWidth > window.innerWidth - MARG) left = window.innerWidth - tooltipWidth - MARG
+
+        const plassUnder = window.innerHeight - rect.bottom - LUFT - MARG
+        const plassOver = rect.top - LUFT - MARG
+
+        // Høyden avgjør BARE hvilken side vi foretrekker. Selve plasseringen er
+        // geometrisk låst til bjelkekanten: under forankres på `top`, over
+        // forankres på `bottom`. Da kan vinduet ikke overlappe bjelken uansett
+        // hva målingen sier — en for lav måling gir i verste fall et klemt
+        // vindu, aldri et som legger seg oppå. Regnet vi «over» ut fra
+        // `rect.top - h` ville hver piksel feil i h blitt en piksel overlapp.
+        let under
+        if (h <= plassUnder) under = true
+        else if (h <= plassOver) under = false
+        else under = plassUnder >= plassOver          // trangt begge veier: velg romsligste side
+
+        // maxHoyde klemmer innholdet i stedet for å la vinduet vokse ut av
+        // viewporten. Vinduet har pointerEvents:'none' og kan ikke scrolles —
+        // derfor hidden, ikke auto.
+        const maxHoyde = Math.max(120, under ? plassUnder : plassOver)
+        const vertikal = under
+          ? { top: `${rect.bottom + LUFT}px` }
+          : { bottom: `${window.innerHeight - rect.top + LUFT}px` }
 
         return (
-          <div style={{
+          <div ref={tooltipRef} style={{
             position:'fixed',
             left: `${left}px`,
-            top: `${top}px`,
+            ...vertikal,
             width: `${tooltipWidth}px`,
+            maxHeight: `${maxHoyde}px`,
+            overflow:'hidden',
             background:'white',
             borderRadius:'12px',
             boxShadow:'0 12px 32px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.06)',
