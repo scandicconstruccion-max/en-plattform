@@ -74546,7 +74546,9 @@ const KALK_STATUS_ERSTATTET = 'Erstattet'
 //
 // Originalen settes til «Erstattet». Revisjonen beholder SAMME kalk_number —
 // det er revision_number som skiller dem, akkurat som i Tilbud.
-async function opprettKalkyleRevisjon({ k, nyeKalkyler, note, totals, userId }) {
+// `nyeFaktorer` settes når revisjonen skal ha andre satser enn originalen —
+// f.eks. ny timelønn fra «Oppdater timepris». Utelates den, arves originalens.
+async function opprettKalkyleRevisjon({ k, nyeKalkyler, nyeFaktorer, note, totals, userId }) {
   if (!k?.id) return { data: null, error: new Error('Mangler kalkyle.') }
   const rotId = k.parent_calculation_id || k.id
 
@@ -74568,6 +74570,7 @@ async function opprettKalkyleRevisjon({ k, nyeKalkyler, note, totals, userId }) 
     parent_calculation_id: rotId,
     revision_note: (note || '').trim() || null,
     kalkyler: kalkylerForRev,
+    faktorer: nyeFaktorer || k.faktorer || {},
     status: 'Aktiv',
     total_cost: totals?.total_cost ?? k.total_cost,
     total_ex_mva: totals?.total_ex_mva ?? k.total_ex_mva,
@@ -75188,6 +75191,373 @@ function OppdaterPriserModal({ tittel, undertittel, poster, userId, companyId, k
   )
 }
 
+// Setter ny produksjonslønn på de fagene brukeren krysset av for. RØRER
+// INGENTING ANNET — sosiale, faste, fortjeneste og tidsjustering står som de er.
+// Det er et bevisst valg: lønn er en markedspris som endrer seg årlig, mens de
+// øvrige faktorene er bedriftens egne marginvalg. Oppdaterte man dem i samme
+// slengen, ville marginen flyttet seg uten at brukeren skjønte hvorfor.
+function faktorerMedNyTimepris(faktorer, valgte) {
+  const ut = { ...(faktorer || {}) }
+  ;(valgte || []).forEach(v => {
+    const naa = ut[v.fagId] || getDefaultFaktorer(v.fagId)
+    ut[v.fagId] = { ...naa, produksjonslonn: v.ny }
+  })
+  return ut
+}
+
+// ─── OPPDATER TIMEPRIS — DIALOG ──────────────────────────────────────────────
+// Søsteren til OppdaterPriserModal, men for arbeid i stedet for materialer.
+// Reviderer man et tilbud et år senere, hadde materialprisene «Oppdater priser»,
+// mens timelønnen ikke hadde noen tilsvarende vei — den måtte skrives inn for
+// hånd per fag under «Prosjektsatser».
+//
+// Kilden er bedriftens standardsatser (company_settings.kalk_faktorer), samme
+// tall som Faktorer-siden redigerer. Dialogen viser gammel mot ny lønn per fag,
+// hva det gjør med fagets sum, og lar brukeren velge bort enkeltfag.
+//
+// Omfanget er BEVISST kun produksjonslønn — se faktorerMedNyTimepris().
+function OppdaterTimeprisModal({ tittel, undertittel, kalkyler, alleFaktorer, sendtStatus, onSkriv, onLagRevisjon, onClose }) {
+  const [laster, setLaster] = useState(true)
+  const [rader, setRader] = useState([])
+  const [feil, setFeil] = useState(null)
+  const [valgt, setValgt] = useState(() => new Set())
+  const [skriver, setSkriver] = useState(false)
+  const [resultat, setResultat] = useState(null)
+  const [steg, setSteg] = useState('liste')
+  const [forstatt, setForstatt] = useState(false)
+  const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  useEffect(() => {
+    let avbrutt = false
+    ;(async () => {
+      let bedriftF = null
+      try {
+        const { data, error } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+        if (error) throw error
+        bedriftF = data?.kalk_faktorer || {}
+      } catch (e) {
+        if (!avbrutt) { setFeil('Kunne ikke lese bedriftens standardsatser. Prøv igjen, eller sett satsene under Faktorer først.'); setLaster(false) }
+        return
+      }
+      if (avbrutt) return
+      // Flere fagkalkyler kan dele samme fag. Timelønnen ligger PER FAG, ikke per
+      // kalkyle, så radene slås sammen — ellers ville samme sats stått to ganger
+      // med hver sin avkryssing, og den ene ville overstyrt den andre.
+      const perFag = new Map()
+      ;(kalkyler || []).forEach(kl => {
+        const fagId = kl.fag
+        const fakt = (alleFaktorer || {})[fagId] || getDefaultFaktorer(fagId)
+        const raaNy = (bedriftF[fagId] || {}).produksjonslonn
+        const harBedriftsats = raaNy !== undefined && raaNy !== null && String(raaNy).trim() !== '' && isFinite(parseFloat(raaNy))
+        const ny = harBedriftsats ? parseFloat(raaNy) : null
+        const f = beregnKalkyle(kl, fakt)
+        const e = (ny === null) ? f : beregnKalkyle(kl, { ...fakt, produksjonslonn: ny })
+        const rad = perFag.get(fagId) || {
+          fagId, fag: getFaggruppe(fagId), navn: [],
+          gammel: parseFloat(fakt.produksjonslonn) || 0, ny, harBedriftsats,
+          timer: 0, totalFor: 0, totalEtter: 0,
+        }
+        rad.navn.push(kl.name || rad.fag.name)
+        rad.timer += f.totTimer
+        rad.totalFor += f.totMedFortjeneste
+        rad.totalEtter += e.totMedFortjeneste
+        perFag.set(fagId, rad)
+      })
+      const ut = [...perFag.values()].map(r => ({ ...r, diff: r.ny === null ? 0 : r.ny - r.gammel }))
+      setRader(ut)
+      // Alle fag med ny sats huket av som standard — brukeren kan velge bort.
+      setValgt(new Set(ut.filter(r => r.harBedriftsats && Math.abs(r.diff) >= 0.005).map(r => r.fagId)))
+      setLaster(false)
+    })()
+    return () => { avbrutt = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const endret = rader.filter(r => r.harBedriftsats && Math.abs(r.diff) >= 0.005)
+  const uendret = rader.filter(r => r.harBedriftsats && Math.abs(r.diff) < 0.005)
+  const mangler = rader.filter(r => !r.harBedriftsats)
+
+  const veksle = (fagId) => setValgt(s => { const n = new Set(s); n.has(fagId) ? n.delete(fagId) : n.add(fagId); return n })
+  const alleValgt = endret.length > 0 && valgt.size === endret.length
+  const veksleAlle = () => setValgt(alleValgt ? new Set() : new Set(endret.map(r => r.fagId)))
+  const valgtePoster = () => endret.filter(r => valgt.has(r.fagId))
+
+  const gaaVidere = () => {
+    if (valgt.size === 0 || skriver) return
+    if (sendtStatus && steg === 'liste') { setSteg(onLagRevisjon ? 'velgVei' : 'bekreft'); return }
+    skriv()
+  }
+
+  const skriv = async () => {
+    if (valgt.size === 0 || skriver) return
+    setSkriver(true)
+    try {
+      const poster = valgtePoster()
+      const res = await onSkriv(poster)
+      setResultat(res || { antall: poster.length })
+    } finally { setSkriver(false) }
+  }
+
+  const kr = (n) => (n > 0 ? '+' : '') + fmtKr2(n)
+  const pst = (p) => p === null ? '—' : (p > 0 ? '+' : '') + p.toFixed(1) + ' %'
+  const seksjon = (tekst, farge) => (
+    <div style={{ fontSize:'11px', fontWeight:'700', color: farge || '#94a3b8', margin:'14px 0 7px', letterSpacing:'0.02em' }}>{tekst}</div>
+  )
+
+  // Står nederst i listen: brukeren skal aldri lure på om marginen ble rørt.
+  const omfangsNotis = (
+    <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 13px', marginTop:'14px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+      <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>🔒</span>
+      <div style={{ fontSize:'12px', color:'#475569', lineHeight:1.55 }}>
+        <strong>Bare timelønnen endres.</strong> Sosiale og faste kostnader, fortjenestepåslag og
+        tidsjustering står som de er — de er bedriftens egne valg, ikke markedspriser. Skal du endre
+        dem, gjør det under «Prosjektsatser».
+      </div>
+    </div>
+  )
+
+  const tegnRad = (r) => {
+    const paa = valgt.has(r.fagId)
+    const opp = r.diff > 0
+    const sumDiff = r.totalEtter - r.totalFor
+    return (
+      <label key={r.fagId} style={{ display:'flex', gap:'10px', alignItems:'flex-start', background:'white', border:'1px solid ' + (paa ? '#bfdbfe' : '#e2e8f0'), borderRadius:'12px', padding:'11px 13px', marginBottom:'7px', cursor:'pointer' }}>
+        <input type="checkbox" checked={paa} onChange={() => veksle(r.fagId)} style={{ marginTop:'2px', width:'17px', height:'17px', flexShrink:0, cursor:'pointer' }} />
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word' }}>{r.fag.emoji} {r.navn.join(' · ')}</div>
+          <div style={{ display:'flex', gap:'8px', alignItems:'baseline', flexWrap:'wrap', marginTop:'6px', fontSize:'13px' }}>
+            <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(r.gammel)}</span>
+            <span style={{ color:'#94a3b8' }}>→</span>
+            <strong style={{ color:'#0f172a' }}>{fmtKr2(r.ny)}</strong>
+            <span style={{ fontSize:'12px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', background: opp ? '#fff7ed' : '#f0fdf4', color: opp ? '#c2410c' : '#15803d', border:'1px solid ' + (opp ? '#fed7aa' : '#bbf7d0') }}>
+              {kr(r.diff)} · {pst(r.gammel > 0 ? (r.diff / r.gammel) * 100 : null)}
+            </span>
+            <span style={{ fontSize:'11px', color:'#94a3b8' }}>per time</span>
+          </div>
+          <div style={{ fontSize:'11px', color:'#64748b', marginTop:'6px', lineHeight:1.5 }}>
+            {fmtTall(r.timer)} timer i dette faget · fagsum {fmtKr2(r.totalFor)} → <strong style={{ color:'#0f172a' }}>{fmtKr2(r.totalEtter)}</strong>
+            {' '}<span style={{ fontWeight:'700', color: sumDiff > 0 ? '#c2410c' : '#15803d' }}>({kr(sumDiff)})</span>
+          </div>
+        </div>
+      </label>
+    )
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:150, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? 0 : '16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.55)' }} onMouseDown={(e) => { if (e.target === e.currentTarget && !skriver) onClose() }} />
+      <div style={{ position:'relative', background:'#f8fafc', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '720px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', fontFamily:'system-ui,sans-serif', overflow:'hidden' }}>
+
+        <div style={{ background:'white', padding:'14px 16px', borderBottom:'1px solid #e2e8f0', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexShrink:0 }}>
+          <div style={{ minWidth:0 }}>
+            <h3 style={{ margin:0, fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🕐 {tittel || 'Oppdater timepris'}</h3>
+            <p style={{ margin:'3px 0 0', fontSize:'12px', color:'#64748b', wordBreak:'break-word' }}>{undertittel}</p>
+          </div>
+          <button onClick={onClose} disabled={skriver} aria-label="Lukk" style={{ background:'none', border:'none', fontSize:'24px', lineHeight:1, cursor: skriver ? 'default' : 'pointer', color:'#94a3b8', padding:'0 4px', flexShrink:0 }}>×</button>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'14px 16px', WebkitOverflowScrolling:'touch' }}>
+          {laster && <div style={{ textAlign:'center', padding:'28px', fontSize:'13px', color:'#2563eb' }}>Henter bedriftens standardsatser …</div>}
+
+          {!laster && feil && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', fontSize:'13px', color:'#991b1b', lineHeight:1.55 }}>{feil}</div>
+          )}
+
+          {resultat && (
+            <div style={{ background:'white', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'16px', textAlign:'center' }}>
+              <div style={{ fontSize:'34px', marginBottom:'8px' }}>✅</div>
+              <p style={{ margin:'0 0 6px', fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>
+                Ny timepris satt i {resultat.antall} fag
+              </p>
+              {typeof resultat.totalFor === 'number' && typeof resultat.totalEtter === 'number' && (
+                <p style={{ margin:0, fontSize:'13px', color:'#64748b', lineHeight:1.6 }}>
+                  {resultat.totalLabel || 'Total'}: {fmtKr2(resultat.totalFor)} → <strong style={{ color:'#0f172a' }}>{fmtKr2(resultat.totalEtter)}</strong>
+                  <br />
+                  <span style={{ fontWeight:'700', color: resultat.totalEtter > resultat.totalFor ? '#c2410c' : '#15803d' }}>
+                    {kr(resultat.totalEtter - resultat.totalFor)}
+                    {resultat.totalFor > 0 ? ' (' + pst(((resultat.totalEtter - resultat.totalFor) / resultat.totalFor) * 100) + ')' : ''}
+                  </span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {!laster && !feil && !resultat && steg === 'velgVei' && sendtStatus && (
+            <div>
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', fontSize:'13px', color:'#991b1b', lineHeight:1.6 }}>
+                <strong>Kalkylen har status «{sendtStatus}».</strong> Kunden har fått tallene. Hva vil du gjøre med
+                {valgt.size === 1 ? ' det ene faget' : ' de ' + valgt.size + ' fagene'} som har ny timepris?
+              </div>
+
+              <button onClick={() => onLagRevisjon(valgtePoster())}
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'2px solid #059669', borderRadius:'12px', padding:'14px 16px', marginBottom:'10px', cursor:'pointer', boxSizing:'border-box' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'5px', flexWrap:'wrap' }}>
+                  <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a' }}>🔄 Lag en revisjon</span>
+                  <span style={{ fontSize:'10px', fontWeight:'700', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', padding:'2px 7px', borderRadius:'999px' }}>ANBEFALT</span>
+                </div>
+                <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
+                  Den nye timeprisen går i en ny versjon. Denne kalkylen står urørt med satsene kunden
+                  faktisk fikk, og du har begge å vise til.
+                </div>
+              </button>
+
+              <button onClick={() => setSteg('bekreft')}
+                style={{ display:'block', width:'100%', textAlign:'left', background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'14px 16px', cursor:'pointer', boxSizing:'border-box' }}>
+                <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', marginBottom:'5px' }}>✏️ Rett denne kalkylen</div>
+                <div style={{ fontSize:'12px', color:'#64748b', lineHeight:1.6 }}>
+                  Satsene skrives inn her. Det som sto før er borte, og kalkylen stemmer ikke lenger med
+                  tilbudet kunden har. Du må bekrefte i neste steg.
+                </div>
+              </button>
+            </div>
+          )}
+
+          {!laster && !feil && !resultat && steg === 'bekreft' && sendtStatus && (
+            <div style={{ background:'white', border:'2px solid #fecaca', borderRadius:'14px', padding:'18px 16px' }}>
+              <div style={{ fontSize:'34px', marginBottom:'10px', textAlign:'center' }}>⚠️</div>
+              <h4 style={{ margin:'0 0 8px', fontSize:'16px', fontWeight:'700', color:'#991b1b', textAlign:'center', lineHeight:1.35 }}>
+                Dette tilbudet er sendt til kunden
+              </h4>
+              <p style={{ margin:'0 0 12px', fontSize:'13px', color:'#7f1d1d', lineHeight:1.6, textAlign:'center' }}>
+                Kalkylen har status «{sendtStatus}». Endrer du timeprisen nå, endres tallene i kalkylen din —
+                <strong> men kunden får ingen beskjed</strong>. Tilbudet han har fått, og en eventuell
+                signert godkjenning, viser fortsatt de gamle satsene.
+              </p>
+              <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
+                <div style={{ fontSize:'12px', color:'#7f1d1d', lineHeight:1.6 }}>
+                  {valgt.size} fag får ny timepris.
+                  {(() => {
+                    const p = valgtePoster()
+                    const sumFor = p.reduce((a, r) => a + r.totalFor, 0)
+                    const sumEtter = p.reduce((a, r) => a + r.totalEtter, 0)
+                    return ' Summen for disse fagene går fra ' + fmtKr2(sumFor) + ' til ' + fmtKr2(sumEtter) + '.'
+                  })()}
+                  <br />
+                  Skal kunden ha den nye prisen, lag en revisjon og send et nytt tilbud i stedet.
+                </div>
+              </div>
+              <label style={{ display:'flex', gap:'10px', alignItems:'flex-start', cursor:'pointer', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'12px 14px' }}>
+                <input type="checkbox" checked={forstatt} onChange={e => setForstatt(e.target.checked)}
+                  style={{ marginTop:'1px', width:'18px', height:'18px', flexShrink:0, cursor:'pointer' }} />
+                <span style={{ fontSize:'13px', color:'#0f172a', fontWeight:'600', lineHeight:1.5 }}>
+                  Jeg vet at kunden ikke får beskjed om endringen
+                </span>
+              </label>
+            </div>
+          )}
+
+          {!laster && !feil && !resultat && steg === 'liste' && (
+            <>
+              <div style={{ background:'white', border:'2px solid #bfdbfe', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', gap:'11px', alignItems:'flex-start' }}>
+                <span style={{ fontSize:'20px', flexShrink:0, lineHeight:1.2 }}>⚙️</span>
+                <div style={{ minWidth:0, flex:1 }}>
+                  <div style={{ fontSize:'10px', fontWeight:'700', color:'#1d4ed8', letterSpacing:'0.04em', marginBottom:'3px' }}>SATSENE HENTES FRA</div>
+                  <div style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>Bedriftens standardsatser</div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'5px', lineHeight:1.5 }}>
+                    Samme tall som står under Faktorer. Er de utdaterte, avbryt og oppdater dem der først.
+                  </div>
+                </div>
+              </div>
+
+              {sendtStatus && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'12px', padding:'11px 13px', marginBottom:'12px', display:'flex', gap:'9px', alignItems:'flex-start' }}>
+                  <span style={{ fontSize:'15px', flexShrink:0, lineHeight:1.4 }}>⚠️</span>
+                  <div style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.55 }}>
+                    <strong>Status: {sendtStatus}.</strong> Kunden har fått tallene.
+                    {onLagRevisjon
+                      ? ' I neste steg kan du legge den nye timeprisen i en revisjon, slik at denne kalkylen står urørt.'
+                      : ' Du blir bedt om å bekrefte før noe skrives.'}
+                  </div>
+                </div>
+              )}
+
+              {endret.length > 0 ? (
+                <>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'8px', flexWrap:'wrap' }}>
+                    {seksjon(endret.length + ' FAG HAR NY TIMEPRIS', '#0f172a')}
+                    <button onClick={veksleAlle} style={{ background:'none', border:'none', fontSize:'12px', color:'#059669', fontWeight:'600', cursor:'pointer', padding:'4px 0' }}>
+                      {alleValgt ? 'Fjern alle' : 'Velg alle'}
+                    </button>
+                  </div>
+                  {endret.map(tegnRad)}
+                </>
+              ) : (
+                <div style={{ background:'white', border:'1px solid ' + (mangler.length > 0 ? '#fde68a' : '#bbf7d0'), borderRadius:'12px', padding:'14px', fontSize:'13px', color: mangler.length > 0 ? '#a16207' : '#15803d', fontWeight:'600' }}>
+                  {mangler.length > 0
+                    ? '⚠ Ingen timepriser å oppdatere. Se listen under — noen fag har ingen lagret bedriftssats.'
+                    : '✅ Alle fag har allerede timeprisen som står i bedriftens standardsatser.'}
+                </div>
+              )}
+
+              {uendret.length > 0 && (
+                <>
+                  {seksjon(uendret.length + ' FAG — UENDRET', '#94a3b8')}
+                  <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'11px 13px' }}>
+                    {uendret.map(r => (
+                      <div key={r.fagId} style={{ fontSize:'12px', color:'#64748b', padding:'3px 0' }}>
+                        {r.fag.emoji} {r.navn.join(' · ')} <span style={{ color:'#cbd5e1' }}>·</span> {fmtKr2(r.gammel)} per time
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {mangler.length > 0 && (
+                <>
+                  {seksjon(mangler.length + ' FAG — INGEN LAGRET BEDRIFTSSATS', '#a16207')}
+                  <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'11px 13px' }}>
+                    <div style={{ fontSize:'12px', color:'#92400e', lineHeight:1.55, marginBottom:'8px' }}>
+                      Bedriften har ingen lagret timelønn for disse fagene, så det finnes ingenting å oppdatere
+                      mot. Satsen på kalkylen står urørt. Sett bedriftssatsen under Faktorer først.
+                    </div>
+                    {mangler.map(r => (
+                      <div key={r.fagId} style={{ fontSize:'12px', color:'#78350f', padding:'3px 0' }}>
+                        {r.fag.emoji} {r.navn.join(' · ')} · står med {fmtKr2(r.gammel)} per time
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              {omfangsNotis}
+            </>
+          )}
+        </div>
+
+        <div style={{ background:'white', borderTop:'1px solid #e2e8f0', padding:'12px 16px', display:'flex', gap:'10px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(12px + env(safe-area-inset-bottom))' : '12px' }}>
+          {resultat ? (
+            <button onClick={onClose} style={{ flex:1, background:'#059669', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor:'pointer' }}>Lukk</button>
+          ) : steg === 'velgVei' ? (
+            <button onClick={() => setSteg('liste')} disabled={skriver}
+              style={{ flex:1, background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
+              ← Tilbake til listen
+            </button>
+          ) : steg === 'bekreft' ? (
+            <>
+              <button onClick={() => { setSteg(onLagRevisjon ? 'velgVei' : 'liste'); setForstatt(false) }} disabled={skriver}
+                style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>
+                ← Tilbake
+              </button>
+              <button onClick={skriv} disabled={!forstatt || skriver}
+                style={{ flex:'1 1 210px', background: (forstatt && !skriver) ? '#dc2626' : '#fca5a5', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (forstatt && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : 'Oppdater likevel'}
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={onClose} disabled={skriver} style={{ flex:'1 1 110px', background:'white', color:'#374151', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'600', cursor: skriver ? 'default' : 'pointer' }}>Avbryt</button>
+              <button onClick={gaaVidere} disabled={laster || skriver || valgt.size === 0}
+                style={{ flex:'1 1 190px', background: (valgt.size > 0 && !skriver) ? (sendtStatus ? '#c2410c' : '#059669') : '#a7f3d0', color:'white', border:'none', borderRadius:'12px', padding:'13px', fontSize:'14px', fontWeight:'700', cursor: (valgt.size > 0 && !skriver) ? 'pointer' : 'default' }}>
+                {skriver ? 'Oppdaterer …' : 'Oppdater ' + valgt.size + ' fag' + (sendtStatus ? ' →' : '')}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── OPPSUMMERING ETTER AUTOMATISK BIBLIOTEKSOPPDATERING ─────────────────────
 // Vises etter at en prisliste er importert eller satt aktiv. Oppdateringen har
 // alt skjedd — dette er kvitteringen, med detaljene og muligheten til å angre alt.
@@ -75353,13 +75723,14 @@ function BibliotekPrisResultatModal({ resultat, prislisteNavn, onAngret, onClose
 // Brukes fra to steder: «🔄 Ny revisjon» i Mer-menyen, og fra «Oppdater priser»
 // når kalkylen er sendt til kunde. `prisendringer` er satt i det andre tilfellet,
 // og viser hva revisjonen kommer til å inneholde av nye priser.
-function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
+function NyKalkyleRevisjonModal({ k, prisendringer, timeprisendringer, onOpprett, onClose }) {
   const [note, setNote] = useState('')
   const [jobber, setJobber] = useState(false)
   const isMob = typeof window !== 'undefined' && window.innerWidth < 640
   const nyEtikett = kalkRevLabel((k?.revision_number || 1) + 1)
   const nyttNr = `${k?.kalk_number || ''} ${nyEtikett}`.trim()
   const antall = (prisendringer || []).length
+  const timepriser = timeprisendringer || []
 
   const opprett = async () => {
     if (jobber) return
@@ -75409,6 +75780,28 @@ function NyKalkyleRevisjonModal({ k, prisendringer, onOpprett, onClose }) {
                 </div>
               ))}
               {antall > 8 && <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'5px' }}>… og {antall - 8} til</div>}
+            </div>
+          )}
+
+          {timepriser.length > 0 && (
+            <div style={{ background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', marginBottom:'14px' }}>
+              <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', marginBottom:'8px' }}>
+                REVISJONEN FÅR NY TIMEPRIS I {timepriser.length} FAG
+              </div>
+              {timepriser.map((t, i) => (
+                <div key={i} style={{ fontSize:'12px', color:'#374151', padding:'3px 0', display:'flex', gap:'6px', alignItems:'baseline', flexWrap:'wrap' }}>
+                  <span style={{ minWidth:0 }}>{t.fag?.emoji} {(t.navn || []).join(' · ')}</span>
+                  <span style={{ color:'#94a3b8', textDecoration:'line-through' }}>{fmtKr2(t.gammel)}</span>
+                  <span style={{ color:'#94a3b8' }}>→</span>
+                  <strong>{fmtKr2(t.ny)}</strong>
+                  <span style={{ fontSize:'11px', fontWeight:'700', color: t.diff > 0 ? '#c2410c' : '#15803d' }}>
+                    {t.diff > 0 ? '+' : ''}{fmtKr2(t.diff)} per time
+                  </span>
+                </div>
+              ))}
+              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'7px', lineHeight:1.5 }}>
+                Bare timelønnen endres — sosiale, faste, fortjeneste og tidsjustering arves uendret fra {kalkNrMedRev(k)}.
+              </div>
             </div>
           )}
 
@@ -78246,6 +78639,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const [showLagreBd, setShowLagreBd] = useState(null)
   // «Oppdater priser»-dialogen. true når den er åpen for hele kalkylen.
   const [showOppdaterPriser, setShowOppdaterPriser] = useState(false)
+  const [showOppdaterTimepris, setShowOppdaterTimepris] = useState(false)
   // Ny revisjon: { prisendringer } når den er åpen. prisendringer er tom når
   // revisjonen startes fra Mer-menyen uten prisoppdatering.
   const [showNyRevisjon, setShowNyRevisjon] = useState(null)
@@ -78711,13 +79105,17 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
 
   // Oppretter revisjonen. `prisendringer` er de avkryssede linjene fra
   // «Oppdater priser» — er de med, får revisjonen de nye prisene med én gang,
-  // og originalen beholder de gamle.
+  // og originalen beholder de gamle. `timeprisendringer` gjør det samme for
+  // timelønnen fra «Oppdater timepris»: den ligger i faktorer, ikke i linjene.
   const opprettRevisjon = async (note) => {
     const ctx = showNyRevisjon
     const naa = kRef.current
     if (!naa) return
     const valgte = (ctx && ctx.prisendringer) || []
-    const faktorer = naa.faktorer || {}
+    const timepriser = (ctx && ctx.timeprisendringer) || []
+    const faktorer = timepriser.length > 0
+      ? faktorerMedNyTimepris(naa.faktorer || {}, timepriser)
+      : (naa.faktorer || {})
 
     let nyeKalkyler = naa.kalkyler || []
     if (valgte.length > 0) {
@@ -78736,7 +79134,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     }
     const t = beregnProsjektTotal(nyeKalkyler, faktorer)
     const { data, error } = await opprettKalkyleRevisjon({
-      k: naa, nyeKalkyler, note, userId: user?.id,
+      k: naa, nyeKalkyler, nyeFaktorer: faktorer, note, userId: user?.id,
       totals: { total_cost: t.totSelvkost, total_ex_mva: t.totMedFortjeneste, profit_percent: t.fortjenesteProsent },
     })
     if (error) {
@@ -78745,6 +79143,7 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     }
     setShowNyRevisjon(null)
     setShowOppdaterPriser(false)
+    setShowOppdaterTimepris(false)
     // Bytt til revisjonen. Den er nå den gjeldende versjonen.
     const oppdatert = medReparerteKalkyleIder(data)
     kRef.current = oppdatert
@@ -78789,6 +79188,23 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     const totalEtter = beregnProsjektTotal(nyeKalkyler, faktorer).totMedFortjeneste
     setUndoStack(prev => [...prev.slice(-9), naa.kalkyler || []])
     const oppdatert = { ...naa, kalkyler: nyeKalkyler }
+    kRef.current = oppdatert
+    saveProject(oppdatert)
+    return { antall: valgte.length, totalFor, totalEtter, totalLabel: 'Kalkylens totalsum' }
+  }
+
+  // Skriver ny timelønn på de fagene brukeren krysset av for. Rører kun
+  // produksjonslønn — se faktorerMedNyTimepris(). Kalkylelinjene er urørt;
+  // det er faktorene som endres, og de ligger utenfor angrestakken (samme som
+  // for «Prosjektsatser»-feltene).
+  const skrivTimeprisoppdatering = async (valgte) => {
+    const naa = kRef.current
+    if (!naa || !valgte || valgte.length === 0) return { antall: 0 }
+    const faktorer = naa.faktorer || {}
+    const totalFor = beregnProsjektTotal(naa.kalkyler || [], faktorer).totMedFortjeneste
+    const nyeFaktorer = faktorerMedNyTimepris(faktorer, valgte)
+    const totalEtter = beregnProsjektTotal(naa.kalkyler || [], nyeFaktorer).totMedFortjeneste
+    const oppdatert = { ...naa, faktorer: nyeFaktorer }
     kRef.current = oppdatert
     saveProject(oppdatert)
     return { antall: valgte.length, totalFor, totalEtter, totalLabel: 'Kalkylens totalsum' }
@@ -79582,6 +79998,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       sendt til kunde — brukeren skal se hva som endres. */}
                   <button onClick={() => { setShowOppdaterPriser(true); setShowMoreMenu(false) }}
                     style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🔄 Oppdater priser</button>
+                  {/* Søsteren til «Oppdater priser», for arbeid. Materialprisene
+                      kunne oppdateres ved revidering, timelønnen kunne ikke. */}
+                  <button onClick={() => { setShowOppdaterTimepris(true); setShowMoreMenu(false) }}
+                    title="Henter bedriftens gjeldende timelønn per fag. Rører ikke sosiale, faste, fortjeneste eller tidsjustering."
+                    style={{ display:'block', width:'100%', padding:'8px 12px', borderRadius:'8px', border:'none', background:'transparent', cursor:'pointer', textAlign:'left', fontSize:'13px', color:'#0f172a' }}>🕐 Oppdater timepris</button>
                   {/* Man reviderer av flere grunner enn nye priser — kunden vil ha
                       to etasjer i stedet for én, mengdene er justert. Derfor egen
                       inngang, ikke bare via «Oppdater priser». */}
@@ -82421,11 +82842,27 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
         />
       )}
 
+      {/* Oppdater timepris fra bedriftens standardsatser — samme mønster som
+          «Oppdater priser», men for arbeid. Kun produksjonslønn. */}
+      {showOppdaterTimepris && (
+        <OppdaterTimeprisModal
+          tittel="Oppdater timepris"
+          undertittel={`${k.kalk_number ? k.kalk_number + ' · ' : ''}${k.title || 'Kalkyle'}`}
+          kalkyler={kalkyler}
+          alleFaktorer={alleFaktorer}
+          sendtStatus={KALK_SENDT_STATUS.has(k.status) ? k.status : null}
+          onSkriv={skrivTimeprisoppdatering}
+          onLagRevisjon={KALK_SENDT_STATUS.has(k.status) ? ((valgte) => setShowNyRevisjon({ timeprisendringer: valgte })) : undefined}
+          onClose={() => setShowOppdaterTimepris(false)}
+        />
+      )}
+
       {/* Ny revisjon — fra Mer-menyen, eller som anbefalt vei fra «Oppdater priser» */}
       {showNyRevisjon && (
         <NyKalkyleRevisjonModal
           k={k}
           prisendringer={showNyRevisjon.prisendringer}
+          timeprisendringer={showNyRevisjon.timeprisendringer}
           onOpprett={opprettRevisjon}
           onClose={() => setShowNyRevisjon(null)}
         />
@@ -83187,10 +83624,12 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
         ${ci.logo_url ? `<img src="${ci.logo_url}" alt="${ci.name || ''}" height="50" style="height:50px;width:auto;max-width:200px;display:block;border:0;outline:none;text-decoration:none" />` : `<div style="font-size:18px;font-weight:bold;color:#0f172a">${ci.name || 'Bedrift'}</div>`}
       </td></tr>
 
-      <!-- Tittel + ref -->
+      <!-- Tittel + ref. Er dette en revisjon, skal kunden se det i selve
+           e-posten — ikke først når han åpner vedlegget. -->
       <tr><td style="padding:0 28px 8px 28px">
         <div style="font-size:20px;font-weight:bold;color:#0f172a;line-height:1.3">Tilbud: ${kalk.title || ''}</div>
-        <div style="font-size:13px;color:#64748b;margin-top:6px">Ref: ${kalk.kalk_number || ''} · ${dato}</div>
+        <div style="font-size:13px;color:#64748b;margin-top:6px">Ref: ${kalkNrMedRev(kalk)} · ${dato}</div>
+        ${(parseInt(kalk.revision_number, 10) || 1) > 1 ? `<div style="margin-top:8px"><span style="display:inline-block;background:#f5f3ff;color:#6d28d9;border:1px solid #ddd6fe;border-radius:4px;padding:3px 9px;font-size:12px;font-weight:bold">${kalkRevLabel(kalk.revision_number)} — erstatter forrige versjon</span></div>` : ''}
       </td></tr>
 
       ${message ? `<tr><td style="padding:16px 28px 0 28px">
@@ -83239,7 +83678,9 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
         const pdfDataUri = pdfDoc.output('datauristring')
         const pdfBase64 = pdfDataUri.split(',')[1] // strippet bort "data:application/pdf;base64,"
         const safeTitle = (kalk.title || 'Tilbud').replace(/[^a-zA-Z0-9æøåÆØÅ \-_.]/g, '').trim()
-        const filename = `Tilbud ${kalk.kalk_number || ''} – ${safeTitle}.pdf`.replace(/\s+/g, ' ').trim()
+        // kalkNrMedRev gir «KALK-0001 Rev. 1». Punktumet er tillatt i filnavn på
+        // alle plattformene vi sender til, og originalen får ingen suffiks.
+        const filename = `Tilbud ${kalkNrMedRev(kalk)} – ${safeTitle}.pdf`.replace(/\s+/g, ' ').trim()
         pdfAttachment = { filename, content: pdfBase64 }
       } catch (pdfErr) {
         console.warn('Kunne ikke generere PDF-vedlegg:', pdfErr)
@@ -83248,7 +83689,7 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
 
       const fnRes = await sendEpost({
           to: email,
-          subject: `Tilbud ${kalk.kalk_number} – ${kalk.title}`,
+          subject: `Tilbud ${kalkNrMedRev(kalk)} – ${kalk.title}`,
           html: emailHtml,
           attachments: pdfAttachment ? [pdfAttachment] : [],
           ...epostCtx_auto
