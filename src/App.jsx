@@ -80376,26 +80376,33 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                 {(bd.apningstillegg||[]).length > 0 && (
                                   <div style={{ marginTop:'10px', borderTop: (bd.flatetillegg||[]).length === 0 ? '1px dashed #e2e8f0' : 'none', paddingTop: (bd.flatetillegg||[]).length === 0 ? '8px' : '4px' }}>
                                     <div style={{ fontSize:'10px', fontWeight:'700', color:'#dc2626', marginBottom:'4px' }}>🚪 ÅPNINGSTILLEGG <span style={{ fontWeight:'400', color:'#94a3b8', fontStyle:'italic' }}>(mertid rundt dører, vinduer, gjennomføringer)</span></div>
+                                    {/* Feltet ble lest som et antall, ikke som kvadratmeter — en dør på
+                                        1,1 m² og et vindu på 2,0 m² havner i samme trinn og gir samme sum,
+                                        og det ser ut som en feil når man ikke vet hva tallet er. Derfor en
+                                        setning som sier hva som fylles inn, før selve trappetrinnene. */}
                                     <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'3px 6px', borderRadius:'4px' }}>
-                                      Telleregel: 0,5–2,5 m² = 1 stk · 2,5–4,5 m² = 2 stk · 4,5–6,5 m² = 3 stk · &gt;6,5 m² = 4 stk · bærende +1
+                                      Fyll inn arealet til hver åpning i m². Systemet regner om til mertid etter denne regelen: 0,5–2,5 m² = 1 · 2,5–4,5 m² = 2 · 4,5–6,5 m² = 3 · &gt;6,5 m² = 4 · bærende +1
                                     </div>
                                     <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
-                                    <div style={{ minWidth: isMobKV ? '560px' : 'auto' }}>
+                                    {/* 586 = summen av de faste kolonnene (439) + samme 147 px til
+                                        beskrivelsen som før. Areal- og tid-kolonnene er utvidet fordi
+                                        «m² per åpning» og «teller som 2» er lengre enn det de erstattet. */}
+                                    <div style={{ minWidth: isMobKV ? '586px' : 'auto' }}>
                                     <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
                                       <colgroup>
                                         <col style={{ width:'auto' }} />
                                         <col style={{ width:'58px' }} />
-                                        <col style={{ width:'65px' }} />
+                                        <col style={{ width:'82px' }} />
                                         <col style={{ width:'40px' }} />
                                         <col style={{ width:'78px' }} />
-                                        <col style={{ width:'70px' }} />
+                                        <col style={{ width:'78px' }} />
                                         <col style={{ width:'75px' }} />
                                         <col style={{ width:'28px' }} />
                                       </colgroup>
                                       <thead><tr>
                                         <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Type åpning</th>
                                         <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Antall</th>
-                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Areal/stk</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc', whiteSpace:'nowrap' }}>m² per åpning</th>
                                         <th style={{ padding:'3px 4px', textAlign:'center', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Bær.</th>
                                         <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/tillegg</th>
                                         <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Faktisk tid</th>
@@ -80427,12 +80434,24 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                             <tr key={at.id}>
                                               <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Vindu, Dør" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Gir ${tilleggPerAapning} stk åpningstillegg`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Arealet til ÉN åpning i m². Teller som ${tilleggPerAapning}${baerende && tilleggPerAapning > 0 ? ' (bærende +1)' : ''}.`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 2px', textAlign:'center' }}><input type="checkbox" checked={baerende} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'baerende', e.target.checked)} title="+1 ekstra tillegg per åpning" style={{ cursor:'pointer' }} /></td>
                                               <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.timer_per_tillegg||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'timer_per_tillegg', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>
                                                 <div>{faktiskTid.toFixed(2)} t</div>
-                                                {totaltTillegg > 0 && <div style={{ fontSize:'9px', color:'#94a3b8' }}>{totaltTillegg} stk</div>}
+                                                {/* «teller som N» i stedet for «N stk»: knytter arealet
+                                                    brukeren skrev inn til det telleregelen gjorde med det.
+                                                    Tallet er PER ÅPNING (tilleggPerAapning), ikke totalen —
+                                                    det er arealet i kolonnen ved siden av som skal forklares.
+                                                    Totalen er uansett synlig som Antall × dette × Timer/tillegg.
+                                                    «(bærende +1)» står på egen linje — inline ble for trangt
+                                                    i denne kolonnen, se bredden i colgroup over. */}
+                                                {tilleggPerAapning > 0 && (
+                                                  <div style={{ fontSize:'9px', color:'#94a3b8', lineHeight:1.35 }}>
+                                                    <div>teller som {tilleggPerAapning}</div>
+                                                    {baerende && <div>(bærende +1)</div>}
+                                                  </div>
+                                                )}
                                               </td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', fontWeight:'600', color:'#059669' }}>{fmt(kostMedFortj)}</td>
                                               <td style={{ padding:'3px 2px', textAlign:'center' }}><button onClick={() => removeApningstillegg(kalk.id, bd.id, at.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px' }}>×</button></td>
