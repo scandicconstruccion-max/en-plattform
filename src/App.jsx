@@ -55909,6 +55909,22 @@ const BIM_DEFAULTS = {
   port_default: 0,            // ingen port som default (settes til 1 for garasje)
 }
 
+// Åpningsarealet kan skrives fritt, ELLER utledes av bredde × høyde i METER
+// (1,2 × 1,2 → 1,44 m²). Er begge målene satt og positive, eier de arealet og
+// feltet låses. Tømmes ett av dem, står arealet fritt igjen — med den verdien
+// det sist hadde. Returnerer null når målene ikke gir et areal.
+//
+// MERK: dette er kun en inndatahjelp. Selve `areal` på raden er fortsatt den
+// eneste kilden både beregnBygningsdel() og tabellen leser, slik at summen og
+// det brukeren ser aldri kan komme i utakt. Målene skrives derfor alltid
+// sammen med arealet de gir — se updateApningsMaal().
+function utledtApningsareal(bredde, hoyde) {
+  const b = parseFloat(bredde)
+  const h = parseFloat(hoyde)
+  if (!isFinite(b) || !isFinite(h) || b <= 0 || h <= 0) return null
+  return Math.round(b * h * 100) / 100
+}
+
 // Beregn antall åpningstillegg per tømrertariffen (samme regler som beregnBygningsdel)
 //   0,5–2,5 m² = 1 stk, 2,5–4,5 m² = 2 stk, 4,5–6,5 m² = 3 stk, >6,5 m² = 4 stk
 //   + 1 ekstra hvis bærende bindingsverk
@@ -79253,6 +79269,19 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const updateApningstillegg = (kalId, bdId, atId, field, value) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).map(at => at.id === atId ? { ...at, [field]: value } : at) } : b) } : kl))
   }
+  // Bredde/høyde skrives ALLTID sammen med arealet de gir, i én og samme
+  // oppdatering. To separate kall ville lest samme foreldede `kalkyler`, og det
+  // ene ville overskrevet det andre. Er målene ufullstendige, står arealet igjen
+  // med sin forrige verdi — vi nuller det aldri bort under brukeren.
+  const updateApningsMaal = (kalId, bdId, atId, felt, verdi) => {
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, apningstillegg: (b.apningstillegg||[]).map(at => {
+      if (at.id !== atId) return at
+      const ny = { ...at, [felt]: verdi }
+      const utledt = utledtApningsareal(ny.bredde, ny.hoyde)
+      if (utledt !== null) ny.areal = utledt
+      return ny
+    }) } : b) } : kl))
+  }
   const addApningstillegg = (kalId, bdId) => {
     const kal = kalkyler.find(k => k.id === kalId)
     const fakt = alleFaktorer[kal?.fag] || getDefaultFaktorer(kal?.fag)
@@ -80380,18 +80409,21 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         1,1 m² og et vindu på 2,0 m² havner i samme trinn og gir samme sum,
                                         og det ser ut som en feil når man ikke vet hva tallet er. Derfor en
                                         setning som sier hva som fylles inn, før selve trappetrinnene. */}
-                                    <div style={{ fontSize:'9px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'3px 6px', borderRadius:'4px' }}>
-                                      Fyll inn arealet til hver åpning i m². Systemet regner om til mertid etter denne regelen: 0,5–2,5 m² = 1 · 2,5–4,5 m² = 2 · 4,5–6,5 m² = 3 · &gt;6,5 m² = 4 · bærende +1
+                                    <div style={{ fontSize:'10px', color:'#94a3b8', marginBottom:'4px', background:'#f8fafc', padding:'4px 6px', borderRadius:'4px', lineHeight:1.45 }}>
+                                      Fyll inn bredde og høyde i meter, så regnes arealet ut — eller skriv arealet direkte i m². Systemet regner om til mertid etter denne regelen: 0,5–2,5 m² = 1 · 2,5–4,5 m² = 2 · 4,5–6,5 m² = 3 · &gt;6,5 m² = 4 · bærende +1
                                     </div>
                                     <div style={{ overflowX: isMobKV ? 'auto' : 'visible', WebkitOverflowScrolling:'touch', marginLeft: isMobKV ? '-14px' : 0, marginRight: isMobKV ? '-14px' : 0, paddingLeft: isMobKV ? '14px' : 0, paddingRight: isMobKV ? '14px' : 0 }}>
-                                    {/* 586 = summen av de faste kolonnene (439) + samme 147 px til
-                                        beskrivelsen som før. Areal- og tid-kolonnene er utvidet fordi
-                                        «m² per åpning» og «teller som 2» er lengre enn det de erstattet. */}
-                                    <div style={{ minWidth: isMobKV ? '586px' : 'auto' }}>
+                                    {/* 722 = summen av de faste kolonnene (575) + samme 147 px til
+                                        beskrivelsen som før. Tabellen scroller sideveis på smal skjerm;
+                                        kalkulasjon gjøres på skjerm, så det er akseptabelt så lenge
+                                        ingenting brekker. */}
+                                    <div style={{ minWidth: isMobKV ? '722px' : 'auto' }}>
                                     <table style={{ width:'100%', borderCollapse:'collapse', marginBottom:'4px', tableLayout:'fixed' }}>
                                       <colgroup>
                                         <col style={{ width:'auto' }} />
                                         <col style={{ width:'58px' }} />
+                                        <col style={{ width:'68px' }} />
+                                        <col style={{ width:'68px' }} />
                                         <col style={{ width:'82px' }} />
                                         <col style={{ width:'40px' }} />
                                         <col style={{ width:'78px' }} />
@@ -80402,6 +80434,8 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                       <thead><tr>
                                         <th style={{ padding:'3px 4px', textAlign:'left', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Type åpning</th>
                                         <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Antall</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc', whiteSpace:'nowrap' }}>Bredde (m)</th>
+                                        <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc', whiteSpace:'nowrap' }}>Høyde (m)</th>
                                         <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc', whiteSpace:'nowrap' }}>m² per åpning</th>
                                         <th style={{ padding:'3px 4px', textAlign:'center', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Bær.</th>
                                         <th style={{ padding:'3px 4px', textAlign:'right', fontSize:'10px', fontWeight:'600', color:'#94a3b8', borderBottom:'1px solid #f8fafc' }}>Timer/tillegg</th>
@@ -80412,7 +80446,12 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                       <tbody>
                                         {(bd.apningstillegg||[]).map(at => {
                                           const antall = parseFloat(at.antall) || 0
+                                          // `areal` er fortsatt eneste kilde til både summen og visningen.
+                                          // Målene styrer kun om feltet er låst — de skrives sammen med
+                                          // arealet, så de to kan ikke komme i utakt. Rader uten mål
+                                          // (alt som finnes i dag, og alt BIM lager) treffer aldri dette.
                                           const areal = parseFloat(at.areal) || 0
+                                          const arealLaast = utledtApningsareal(at.bredde, at.hoyde) !== null
                                           const baerende = at.baerende === true || at.baerende === 'true'
                                           const timerPerTillegg = parseFloat(at.timer_per_tillegg) || 0
                                           let tilleggPerAapning = 0
@@ -80434,7 +80473,25 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                             <tr key={at.id}>
                                               <td style={{ padding:'3px 2px' }}><input value={at.beskrivelse||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'beskrivelse', e.target.value)} placeholder="F.eks. Vindu, Dør" style={{ ...qInp, width:'100%', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 2px' }}><input type="number" min="0" value={at.antall||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'antall', e.target.value)} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
-                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Arealet til ÉN åpning i m². Teller som ${tilleggPerAapning}${baerende && tilleggPerAapning > 0 ? ' (bærende +1)' : ''}.`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.bredde ?? ''} onChange={e => updateApningsMaal(kalk.id, bd.id, at.id, 'bredde', e.target.value)} placeholder="m" title="Bredden på ÉN åpning, i meter. Fylles begge målene, regnes arealet ut." style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              <td style={{ padding:'3px 2px' }}><input type="number" step="0.1" min="0" value={at.hoyde ?? ''} onChange={e => updateApningsMaal(kalk.id, bd.id, at.id, 'hoyde', e.target.value)} placeholder="m" title="Høyden på ÉN åpning, i meter. Fylles begge målene, regnes arealet ut." style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
+                                              {/* Er arealet utledet, skal det ikke bare være grått — det skal
+                                                  stå hvorfor. Hengelåsen og regnestykket under feltet sier at
+                                                  det kommer fra målene, og hva man gjør for å få det tilbake. */}
+                                              <td style={{ padding:'3px 2px' }}>
+                                                {arealLaast ? (
+                                                  <>
+                                                    <input type="number" value={areal} readOnly tabIndex={-1}
+                                                      title={`Regnes ut fra ${fmtTall(at.bredde)} × ${fmtTall(at.hoyde)} m. Tøm bredde eller høyde for å skrive arealet fritt.`}
+                                                      style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box', background:'#f1f5f9', color:'#475569', borderStyle:'dashed', cursor:'not-allowed' }} />
+                                                    <div style={{ fontSize:'9px', color:'#94a3b8', textAlign:'right', marginTop:'1px', lineHeight:1.3, whiteSpace:'nowrap' }}>
+                                                      🔒 {fmtTall(at.bredde)} × {fmtTall(at.hoyde)}
+                                                    </div>
+                                                  </>
+                                                ) : (
+                                                  <input type="number" step="0.1" min="0" value={at.areal||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'areal', e.target.value)} placeholder="m²" title={`Arealet til ÉN åpning i m². Teller som ${tilleggPerAapning}${baerende && tilleggPerAapning > 0 ? ' (bærende +1)' : ''}.`} style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} />
+                                                )}
+                                              </td>
                                               <td style={{ padding:'3px 2px', textAlign:'center' }}><input type="checkbox" checked={baerende} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'baerende', e.target.checked)} title="+1 ekstra tillegg per åpning" style={{ cursor:'pointer' }} /></td>
                                               <td style={{ padding:'3px 2px' }}><input type="number" step="0.25" min="0" value={at.timer_per_tillegg||''} onChange={e => updateApningstillegg(kalk.id, bd.id, at.id, 'timer_per_tillegg', e.target.value)} placeholder="0.5" style={{ ...qInp, width:'100%', textAlign:'right', fontSize:'12px', padding:'6px 8px', boxSizing:'border-box' }} /></td>
                                               <td style={{ padding:'3px 4px', textAlign:'right', fontSize:'11px', color:'#64748b' }}>
