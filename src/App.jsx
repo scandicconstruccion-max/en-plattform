@@ -62350,7 +62350,7 @@ function enhetsAvvik(linjeEnhet, vareEnhet) {
 // prislisten er delvis utdaterte (7-sifrede gamle numre gir ofte null treff),
 // mens et navnesøk alltid finner den aktive varen med gyldig dokumentasjon.
 // Renser bort pakningsdetaljer (f.eks. "95 PAK") som gjør søket for strengt.
-function aapneNobbSok(varenavn) {
+function nobbSokUrl(varenavn) {
   const rensket = String(varenavn || '')
     .replace(/\b\d+\s*(PAK|PK|STK|PALL|BUNT)\b/gi, '') // dropp "95 PAK" o.l.
     .trim()
@@ -62358,28 +62358,34 @@ function aapneNobbSok(varenavn) {
     .slice(0, 5)          // merke + hoveddimensjon holder for et treff
     .join(' ')
     .trim()
-  if (!rensket) return
-  const term = encodeURIComponent(rensket)
-  window.open(`https://nobb.no/items/search?searchTerm=${term}`, '_blank', 'noopener')
+  if (!rensket) return null
+  return `https://nobb.no/items/search?searchTerm=${encodeURIComponent(rensket)}`
 }
 
 // Liten knapp som slår opp et materiale i NOBB (produktinfo, datablad, FDV).
+// Bevisst en ekte <a target="_blank">, ikke window.open(): med feature-streng
+// ble oppslaget blokkert eller gjenbrukte samme fane i PWA-/mobilmodus, og da
+// forsvant popupen brukeren sto i. Nettleseren åpner ny fane selv.
 function NobbKnapp({ varenavn, isMob, style }) {
-  if (!varenavn || !String(varenavn).trim()) return null
+  const url = nobbSokUrl(varenavn)
+  if (!url) return null
   return (
-    <button
-      type="button"
+    <a
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
       title="Slå opp produktinfo og dokumentasjon i NOBB"
-      onClick={(e) => { e.stopPropagation(); aapneNobbSok(varenavn) }}
+      onClick={(e) => e.stopPropagation()}
       style={{
         flexShrink: 0, border: '1px solid #bbf7d0', background: '#f0fdf4', color: '#059669',
         borderRadius: isMob ? '8px' : '6px', cursor: 'pointer', fontWeight: '700',
         fontSize: isMob ? '12px' : '10px', padding: isMob ? '6px 10px' : '3px 7px',
         display: 'inline-flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap',
+        textDecoration: 'none',
         ...style,
       }}>
       🔍 NOBB
-    </button>
+    </a>
   )
 }
 
@@ -76229,11 +76235,19 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
   // NOBB-materialer fikk GAMLE PRISER uten at noe sa fra. Ingen krasj, ingen
   // melding, bare feil tall i tilbudet. Innført 8f18592, 18. august.
   const { kanStyrePrisgrunnlag, companyId, user } = useAuth()
-  const [mengde, setMengde] = useState(1)
-  const [selectedBd, setSelectedBd] = useState(null)
+  // Flervalg: valgte er [{ id, bd, mengde }] i den rekkefølgen brukeren huket av.
+  // Velger man bare én, ser og oppfører det seg som før.
+  const [valgte, setValgte] = useState([])
+  const [jobber, setJobber] = useState(false)
   const [expandedKat, setExpandedKat] = useState(null)
   const { perFag, laster, last } = useBedriftsbibliotek()
   const isMob = typeof window !== 'undefined' && window.innerWidth < 640
+
+  const erValgt = (id) => valgte.some(v => v.id === id)
+  const toggleValgt = (bd) => setValgte(prev => prev.some(v => v.id === bd.id)
+    ? prev.filter(v => v.id !== bd.id)
+    : [...prev, { id: bd.id, bd, mengde: 1 }])
+  const settMengde = (id, m) => setValgte(prev => prev.map(v => v.id === id ? { ...v, mengde: m } : v))
 
   // Slett bedriftens egen bygningsdel. Sletter den en ERSTATNING, kommer den
   // innebygde tilbake av seg selv — den har ligget i koden hele tiden.
@@ -76260,8 +76274,61 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
     })
     if (!ok) return
     await supabase.from('bruker_bibliotek').delete().eq('id', bd.id)
-    if (selectedBd?.id === bd.id) setSelectedBd(null)
+    setValgte(prev => prev.filter(v => v.id !== bd.id))
     await last()
+  }
+
+  // Legger de valgte bygningsdelene inn i kalkylen — alle i én operasjon.
+  // Prisoppslaget mot aktiv prisliste gjøres som ÉN spørring for alle NOBB-
+  // numrene samlet, ikke én per bygningsdel.
+  const leggTilValgte = async () => {
+    if (jobber || valgte.length === 0) return
+    setJobber(true)
+    try {
+      const nye = valgte.map(v => bibliotekTilBygningsdel(v.bd, v.mengde))
+      const alleNobb = [...new Set(nye.flatMap(b => (b.materialer || []).filter(m => m.nobb).map(m => String(m.nobb))))]
+      if (alleNobb.length > 0) {
+        try {
+          const pl = await hentAktivPrisliste(companyId, user?.id, 'id')
+          if (pl) {
+            const { data: priser } = await supabase.from('prisbok')
+              .select('varenummer, varenavn, pris_per_enhet, enhet')
+              .eq('prisliste_id', pl.id).in('varenummer', alleNobb)
+            if (priser) {
+              const prisMap = {}; priser.forEach(p => { prisMap[p.varenummer] = p })
+              // Enheten prisen gjelder i lagres her også. Uten den ville en
+              // rull-pris kunne havne på en m²-linje uten at varselet kunne
+              // se det — linjen er hentet fra biblioteket, ikke koblet av en
+              // bruker, så ingen dialog har vært innom.
+              //
+              // Er linjen alt omregnet (_omregning fra biblioteket), skal den
+              // nye leveranseprisen deles på det SAMME arealet — ellers ville
+              // en omregnet m²-pris blitt overskrevet med rullprisen.
+              nye.forEach(b => {
+                b.materialer = (b.materialer || []).map(m => {
+                  const vare = m.nobb ? prisMap[m.nobb] : null
+                  if (!vare) return m
+                  const omr = m._omregning
+                  const raa = parseFloat(vare.pris_per_enhet)
+                  const pris = (omr && parseFloat(omr.areal) > 0 && isFinite(raa))
+                    ? Math.round((raa / parseFloat(omr.areal)) * 100) / 100
+                    : vare.pris_per_enhet
+                  return {
+                    ...m,
+                    enhetspris: pris,
+                    varenavn: vare.varenavn || m.varenavn,
+                    ...(vare.enhet ? { _prisEnhet: vare.enhet } : {}),
+                    ...(omr && parseFloat(omr.areal) > 0 && isFinite(raa) ? { _omregning: { ...omr, fraPris: raa } } : {}),
+                  }
+                })
+              })
+            }
+          }
+        } catch(e) {}
+      }
+      onSelect(nye)
+      onClose()
+    } finally { setJobber(false) }
   }
 
   const fagBibliotek = perFag[fagId] || {}
@@ -76274,10 +76341,11 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
       <div style={{ position:'relative', background:'white', borderRadius: isMob ? 0 : '20px', width:'100%', maxWidth: isMob ? '100%' : '700px', height: isMob ? '100%' : 'auto', maxHeight: isMob ? '100%' : '80vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', fontFamily:'system-ui,sans-serif' }}>
         <div style={{ padding:'18px 24px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:'10px' }}>
           <div style={{ minWidth:0 }}>
-            <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700' }}>📚 Velg bygningsdel</h3>
+            <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700' }}>📚 Velg bygningsdeler</h3>
             <p style={{ margin:'4px 0 0', fontSize:'13px', color:'#64748b' }}>
               {fag.emoji} {fag.name}
               {antallEgne > 0 && <span style={{ color:'#ca8a04' }}> · {antallEgne} egne</span>}
+              {valgte.length > 0 && <span style={{ color:'#059669', fontWeight:'700' }}> · {valgte.length} valgt</span>}
             </p>
           </div>
           <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8', flexShrink:0 }}>×</button>
@@ -76297,14 +76365,21 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
                   <span style={{ marginLeft:'auto', fontSize:'12px', color:'#94a3b8', fontWeight:'400', flexShrink:0 }}>{items.length}</span>
                 </button>
                 {expandedKat === kat && items.map(bd => {
-                  const valgt = selectedBd?.id === bd.id
+                  const valgt = erValgt(bd.id)
                   const kob = bdKoblingsStatus(bd)
                   return (
-                    <div key={bd.id} onClick={() => setSelectedBd(valgt ? null : bd)}
+                    <div key={bd.id} onClick={() => toggleValgt(bd)}
                       style={{ margin:'4px 0 4px 16px', padding:'10px 14px', borderRadius:'10px', cursor:'pointer',
                         border: valgt ? '2px solid #059669' : `1px solid ${bd._egen ? '#fef9c3' : '#f1f5f9'}`,
                         background: valgt ? '#f0fdf4' : (bd._egen ? '#fffef7' : 'white'),
                         display:'flex', alignItems:'flex-start', gap:'8px' }}>
+                      {/* Avkryssingsrute — gjør det tydelig at flere kan velges.
+                          Selve raden er trykkflaten, så ruta er ren pynt. */}
+                      <div aria-hidden="true" style={{ flexShrink:0, width:'18px', height:'18px', marginTop:'1px', borderRadius:'5px',
+                        border: valgt ? '2px solid #059669' : '2px solid #cbd5e1', background: valgt ? '#059669' : 'white',
+                        color:'white', fontSize:'12px', fontWeight:'800', lineHeight:'14px', textAlign:'center' }}>
+                        {valgt ? '✓' : ''}
+                      </div>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontWeight:'600', fontSize:'13px', color:'#0f172a', marginBottom:'2px', display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap' }}>
                           <span style={{ wordBreak:'break-word' }}>{bd.name}</span>
@@ -76340,55 +76415,35 @@ function BibliotekPickerModal({ fagId, onSelect, onClose }) {
           )}
         </div>
 
-        {selectedBd && (
-          <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center', gap:'12px', flexShrink:0, flexWrap:'wrap', paddingBottom: isMob ? 'calc(14px + env(safe-area-inset-bottom))' : '14px' }}>
-            <span style={{ fontSize:'13px', color:'#374151', fontWeight:'600' }}>Mengde ({selectedBd.enhet}):</span>
-            <input type="number" value={mengde} onChange={e => setMengde(e.target.value)} min="0.1" step="0.1" style={{ ...qInp, width:'100px', textAlign:'right' }} />
-            <button onClick={async () => {
-              const bd = bibliotekTilBygningsdel(selectedBd, mengde)
-              // Auto-oppdater priser fra aktiv prisliste for materialer med NOBB
-              const nobbMats = bd.materialer.filter(m => m.nobb)
-              if (nobbMats.length > 0) {
-                try {
-                  const pl = await hentAktivPrisliste(companyId, user?.id, 'id')
-                  if (pl) {
-                    const nobbs = nobbMats.map(m => m.nobb)
-                    const { data: priser } = await supabase.from('prisbok').select('varenummer, varenavn, pris_per_enhet, enhet').eq('prisliste_id', pl.id).in('varenummer', nobbs)
-                    if (priser) {
-                      const prisMap = {}; priser.forEach(p => { prisMap[p.varenummer] = p })
-                      // Enheten prisen gjelder i lagres her også. Uten den ville en
-                      // rull-pris kunne havne på en m²-linje uten at varselet kunne
-                      // se det — linjen er hentet fra biblioteket, ikke koblet av en
-                      // bruker, så ingen dialog har vært innom.
-                      //
-                      // Er linjen alt omregnet (_omregning fra biblioteket), skal den
-                      // nye leveranseprisen deles på det SAMME arealet — ellers ville
-                      // en omregnet m²-pris blitt overskrevet med rullprisen.
-                      bd.materialer = bd.materialer.map(m => {
-                        const vare = m.nobb ? prisMap[m.nobb] : null
-                        if (!vare) return m
-                        const omr = m._omregning
-                        const raa = parseFloat(vare.pris_per_enhet)
-                        const pris = (omr && parseFloat(omr.areal) > 0 && isFinite(raa))
-                          ? Math.round((raa / parseFloat(omr.areal)) * 100) / 100
-                          : vare.pris_per_enhet
-                        return {
-                          ...m,
-                          enhetspris: pris,
-                          varenavn: vare.varenavn || m.varenavn,
-                          ...(vare.enhet ? { _prisEnhet: vare.enhet } : {}),
-                          ...(omr && parseFloat(omr.areal) > 0 && isFinite(raa) ? { _omregning: { ...omr, fraPris: raa } } : {}),
-                        }
-                      })
-                    }
-                  }
-                } catch(e) {}
-              }
-              onSelect(bd); onClose()
-            }}
-              style={{ marginLeft: isMob ? 0 : 'auto', flex: isMob ? '1 1 100%' : '0 0 auto', background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor:'pointer' }}>
-              Legg til bygningsdel →
-            </button>
+        {valgte.length > 0 && (
+          <div style={{ borderTop:'1px solid #f1f5f9', flexShrink:0, background:'#fafffe', paddingBottom: isMob ? 'env(safe-area-inset-bottom)' : 0 }}>
+            {/* Én rad per valgt bygningsdel med egen mengde. Enhetene er ulike
+                (m², lm, stk), så mengden kan ikke deles på tvers. */}
+            <div style={{ maxHeight: isMob ? '34vh' : '190px', overflowY:'auto', padding:'10px 24px 4px', WebkitOverflowScrolling:'touch' }}>
+              {valgte.map(v => (
+                <div key={v.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'6px 0', flexWrap:'wrap' }}>
+                  <div style={{ flex:'1 1 140px', minWidth:0, fontSize:'13px', fontWeight:'600', color:'#0f172a', wordBreak:'break-word' }}>{v.bd.name}</div>
+                  <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+                    <input type="number" value={v.mengde} onChange={e => settMengde(v.id, e.target.value)} min="0.1" step="0.1"
+                      style={{ ...qInp, width: isMob ? '84px' : '92px', textAlign:'right', padding: isMob ? '9px 8px' : '7px 8px', fontSize: isMob ? '16px' : '13px' }} />
+                    <span style={{ fontSize:'12px', color:'#64748b', minWidth:'26px' }}>{v.bd.enhet}</span>
+                    <button onClick={() => toggleValgt(v.bd)} title="Fjern fra utvalget"
+                      style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'16px', padding:'2px 4px', lineHeight:1 }}>×</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding:'10px 24px 14px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+              <span style={{ fontSize:'12px', color:'#64748b' }}>
+                {valgte.length === 1 ? '1 bygningsdel valgt' : `${valgte.length} bygningsdeler valgt`}
+              </span>
+              <button onClick={() => setValgte([])}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'#94a3b8', fontSize:'12px', fontWeight:'600', padding:0, textDecoration:'underline' }}>Tøm utvalget</button>
+              <button onClick={leggTilValgte} disabled={jobber}
+                style={{ marginLeft: isMob ? 0 : 'auto', flex: isMob ? '1 1 100%' : '0 0 auto', background: jobber ? '#94a3b8' : '#059669', color:'white', border:'none', borderRadius:'10px', padding:'10px 24px', fontSize:'14px', fontWeight:'600', cursor: jobber ? 'default' : 'pointer' }}>
+                {jobber ? 'Legger til …' : (valgte.length === 1 ? 'Legg til bygningsdel →' : `Legg til ${valgte.length} bygningsdeler →`)}
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -77994,6 +78049,176 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
   )
 }
 
+// ─── PRODUKTSØK I PRISLISTE (modal) ──────────────────────────────────────────
+// Lå tidligere som en komponent DEFINERT INNE i render-treet til
+// KalkProsjektView. Da fikk React en ny komponenttype ved hver render av
+// foreldrekomponenten, og monterte modalen på nytt — søketekst og treff ble
+// nullstilt. Nå ligger den på modulnivå, så tilstanden overlever at forelderen
+// rendrer (f.eks. når fanen får fokus igjen etter et NOBB-oppslag).
+const PRODUKT_SOK_KATEGORIER = [
+  { id: 'isolasjon', label: 'Isolasjon', emoji: '🧱', keywords: ['ISOLASJON','EPS','XPS','GLAVA','ROCKWOOL','FLEXI','SUNDOLITT','JACKO','MINERALULL'] },
+  { id: 'treverk', label: 'Treverk', emoji: '🪵', keywords: ['GRAN ','FURU ','VIRKE','STENDER','BJELKE','LEKT','SLØYFE'] },
+  { id: 'plater', label: 'Plater', emoji: '📋', keywords: ['GIPSPL','SPONPL','OSB','FIBERPL','MDF','KRYSSF'] },
+  { id: 'tekking', label: 'Tekking/Membran', emoji: '🛡️', keywords: ['DAMPSP','VINDSP','UNDERTAK','TYVEK','RADON','MEMBRAN','PLATON'] },
+  { id: 'kledning', label: 'Kledning/Panel', emoji: '🏠', keywords: ['KLEDNING','PANEL FURU','PANEL GRAN','FASADEKLED'] },
+  { id: 'betong', label: 'Betong/Mur', emoji: '🏗️', keywords: ['BETONG','SEMENT','MØRTEL','LECA','BLOKK','ARMERING'] },
+  { id: 'flismur', label: 'Flis/Sparkel', emoji: '🔲', keywords: ['FLIS','FLISLIM','SPARKEL','AVRETTING','FUGEMASSE','WEBER'] },
+  { id: 'maling', label: 'Maling/Beis', emoji: '🎨', keywords: ['MALING','BEIS','GRUNNING','PRIMER','LAKK','JOTUN'] },
+  { id: 'tak', label: 'Tak/Renner', emoji: '🏠', keywords: ['TAKSTEIN','TAKPANNE','TAKRENNE','NEDLØP','MØNE'] },
+  { id: 'ror', label: 'Rør/VVS', emoji: '🔧', keywords: ['PEX','AVLØP','DRENS','SLUK','VANNRØR'] },
+]
+
+function ProduktSokModal({ companyId, userId, onVelg, onClose }) {
+  const [q, setQ] = useState('')
+  const [res, setRes] = useState([])
+  const [searching, setSearching] = useState(false)
+  const [hasSearched, setHasSearched] = useState(false)
+  const [activeKat, setActiveKat] = useState(null)
+  const [plId, setPlId] = useState(null)
+  const [velger, setVelger] = useState(false)
+  const searchRef = React.useRef(0)
+  const { sok: prisbokSok, kanSePriser } = usePrisbokSoek()
+
+  // Load prisliste ID once on mount (for category-only search fallback)
+  useEffect(() => {
+    hentAktivPrisliste(companyId, userId, 'id')
+      .then(data => { if (data) setPlId(data.id) })
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const doSearch = async (searchTerm, katId) => {
+    const term = (searchTerm || '').trim()
+    if (term.length < 2 && !katId) { setRes([]); setHasSearched(false); return }
+
+    const searchId = ++searchRef.current
+    setSearching(true)
+    setHasSearched(true)
+
+    try {
+      // Hvis brukeren har skrevet tekst → bruk smart usePrisbokSoek
+      // (med eventuell ekstra kategori-filter i etterkant)
+      if (term.length >= 2) {
+        const treff = await prisbokSok(term, { maxResultater: 40 })
+        if (searchRef.current !== searchId) return
+
+        let resultater = treff
+        // Hvis kategori er valgt, filtrer på kategori-keywords i tillegg
+        if (katId) {
+          const katObj = PRODUKT_SOK_KATEGORIER.find(k => k.id === katId)
+          const kw = (katObj?.keywords || []).map(k => k.trim().toUpperCase())
+          resultater = resultater.filter(r => {
+            const navn = (r.varenavn || '').toUpperCase()
+            return kw.some(k => navn.includes(k))
+          })
+        }
+        setRes(resultater)
+      } else if (katId) {
+        // Kategori-bare-søk: dette er en spesialcase som vi ikke kan bruke
+        // hook'en til (siden den krever søketerm). Direkt spørring her.
+        let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
+        if (plId) query = query.eq('prisliste_id', plId)
+        else query = query.eq('user_id', userId)
+        const katObj = PRODUKT_SOK_KATEGORIER.find(k => k.id === katId)
+        const kw = katObj?.keywords || []
+        const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
+        if (catFilters) query = query.or(catFilters)
+        const { data, error } = await query.order('varenavn').limit(40)
+        if (searchRef.current !== searchId) return
+        if (!error) setRes(data || [])
+        else setRes([])
+      }
+    } catch(e) {
+      if (searchRef.current === searchId) setRes([])
+    }
+    if (searchRef.current === searchId) setSearching(false)
+  }
+
+  // Debounced search
+  useEffect(() => {
+    if (q.trim().length < 2 && !activeKat) { setRes([]); setHasSearched(false); return }
+    const timer = setTimeout(() => doSearch(q, activeKat), 500)
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [q, activeKat])
+
+  // Velger varen på linjen. Forelderen går gjennom beregnVareFelter, som kan
+  // spørre om rull→m²-omregning før noe skrives.
+  const selectProduct = async (p) => {
+    if (velger) return
+    setVelger(true)
+    try { await onVelg(p) } finally { setVelger(false) }
+    onClose()
+  }
+
+  const handleKatClick = (katId) => {
+    setActiveKat(activeKat === katId ? null : katId)
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
+        <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
+            <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>🔍 Søk i prisliste</h3>
+            <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
+          </div>
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Søk varenavn eller NOBB-nummer..." style={{ ...qInp, width:'100%', padding:'11px 16px', fontSize:'14px', boxSizing:'border-box', marginBottom:'10px' }} />
+          <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
+            {PRODUKT_SOK_KATEGORIER.map(kat => (
+              <button key={kat.id} onClick={() => handleKatClick(kat.id)}
+                style={{ padding:'4px 10px', borderRadius:'8px', fontSize:'11px', fontWeight:'600', cursor:'pointer', border: activeKat === kat.id ? '2px solid #059669' : '1px solid #e2e8f0', background: activeKat === kat.id ? '#f0fdf4' : 'white', color: activeKat === kat.id ? '#059669' : '#475569', whiteSpace:'nowrap', transition:'all 0.1s' }}>
+                {kat.emoji} {kat.label}
+              </button>
+            ))}
+          </div>
+          {searching && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker...</div>}
+        </div>
+        <div style={{ overflowY:'auto', flex:1, padding:'4px 8px' }}>
+          {!hasSearched && q.length < 2 && !activeKat && (
+            <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv søketekst eller velg en kategori</div>
+          )}
+          {hasSearched && res.length === 0 && !searching && (
+            kanSePriser
+              ? <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_SOK_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
+              : <div style={{ padding:'16px' }}><PrisTilgangNotis /></div>
+          )}
+          {res.map(p => (
+            // Raden er en div (ikke button) fordi den inneholder NOBB-lenken.
+            // En <a> inne i en <button> er ugyldig HTML og oppfører seg
+            // uforutsigbart på tvers av nettlesere.
+            <div key={p.id} role="button" tabIndex={0}
+              onClick={() => selectProduct(p)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectProduct(p) } }}
+              style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'8px 10px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'1px', transition:'background 0.1s', boxSizing:'border-box' }}
+              onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
+              onMouseLeave={e => e.currentTarget.style.background='white'}>
+              <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'55px', flexShrink:0 }}>{p.varenummer}</span>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:'12px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
+                <div style={{ fontSize:'10px', color:'#94a3b8' }}>{p.kategori}</div>
+              </div>
+              <span style={{ fontSize:'11px', color:'#64748b', flexShrink:0, width:'28px', textAlign:'center' }}>{p.enhet}</span>
+              <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
+              {/* Ekte lenke med target="_blank": nettleseren åpner ny fane selv.
+                  window.open() med feature-streng ble blokkert/gjenbrukte fanen i
+                  PWA-modus, og da forsvant hele prislistepopupen. */}
+              <a href={nobbSokUrl(p.varenavn)} target="_blank" rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                title="Slå opp produktinfo og dokumentasjon i NOBB"
+                style={{ flexShrink:0, border:'1px solid #bbf7d0', background:'#f0fdf4', color:'#059669', borderRadius:'6px', fontSize:'10px', fontWeight:'700', padding:'4px 8px', whiteSpace:'nowrap', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px', textDecoration:'none' }}>
+                🔍 NOBB
+              </a>
+            </div>
+          ))}
+          {res.length >= 40 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 40 treff — skriv mer spesifikt</div>}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── PROSJEKT VISNING (Read-only detaljer) ───────────────────────────────────
 
 function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim }) {
@@ -78472,6 +78697,18 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     saveProject(oppdatert)
   }
 
+  // Callback fra ProduktSokModal: skriver den valgte varen på linjen modalen
+  // ble åpnet for. Ligger her fordi modalen selv er på modulnivå.
+  const velgProduktFraSok = async (ctx, p) => {
+    if (!ctx) return
+    const linje = finnMatLinje(ctx.kalkId, ctx.bdId, ctx.matId)
+    const haddeNavn = !!(linje?.varenavn && String(linje.varenavn).trim())
+    const vType = linje && !linje._varselVist ? ((linje._ny || !haddeNavn) ? 'lagt_til' : 'byttet') : null
+    const felter = await beregnVareFelterLokal(p, linje)
+    skrivVarePaaLinje(ctx.kalkId, ctx.bdId, ctx.matId, felter)
+    if (vType) setMaterialVarsel({ type: vType })
+  }
+
   // Oppretter revisjonen. `prisendringer` er de avkryssede linjene fra
   // «Oppdater priser» — er de med, får revisjonen de nye prisene med én gang,
   // og originalen beholder de gamle.
@@ -78795,8 +79032,12 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   }
 
   // Add bygningsdel from library to a specific kalkyle
+  // Tar imot én bygningsdel eller flere. Flervalg skrives i ÉN operasjon, ellers
+  // ville hvert kall lest samme foreldede `kalkyler` og bare siste blitt lagret.
   const addBdFromBibliotek = (kalId, bd) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), bd] } : kl))
+    const nye = Array.isArray(bd) ? bd : [bd]
+    if (nye.length === 0) return
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: [...(kl.bygningsdeler||[]), ...nye] } : kl))
   }
 
   // Add empty bygningsdel
@@ -79937,7 +80178,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                                 }} placeholder="NOBB" style={{ ...qInp, width:'58px', fontSize:'11px', padding:'5px 4px', fontFamily:'monospace' }} />
                                                 <button onClick={() => setShowProduktSok({ kalkId: kalk.id, bdId: bd.id, matId: m.id })} title="Søk i prisliste" style={{ background:'#eff6ff', border:'1px solid #bfdbfe', borderRadius:'4px', width:'22px', height:'22px', cursor:'pointer', fontSize:'11px', padding:0, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>🔍</button>
                                                 {m.varenavn && String(m.varenavn).trim() && (
-                                                  <button onClick={() => aapneNobbSok(m.varenavn)} title="Slå opp produktinfo og dokumentasjon i NOBB" style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'4px', height:'22px', cursor:'pointer', fontSize:'9px', fontWeight:'700', padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, whiteSpace:'nowrap' }}>NOBB</button>
+                                                  <a href={nobbSokUrl(m.varenavn)} target="_blank" rel="noopener noreferrer" title="Slå opp produktinfo og dokumentasjon i NOBB" style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'4px', height:'22px', cursor:'pointer', fontSize:'9px', fontWeight:'700', padding:'0 6px', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, whiteSpace:'nowrap', textDecoration:'none', boxSizing:'border-box' }}>NOBB</a>
                                                 )}
                                               </div>
                                             </td>
@@ -82148,171 +82389,15 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
       )}
 
       {/* Produktsøk i prisliste modal */}
-      {showProduktSok && (() => {
-        const PS = ({ ctx, onClose }) => {
-          const [q, setQ] = useState('')
-          const [res, setRes] = useState([])
-          const [searching, setSearching] = useState(false)
-          const [hasSearched, setHasSearched] = useState(false)
-          const [activeKat, setActiveKat] = useState(null)
-          const [plId, setPlId] = useState(null)
-          const [velger, setVelger] = useState(false)
-          const searchRef = React.useRef(0)
-          const { sok: prisbokSok, kanSePriser } = usePrisbokSoek()
-
-          const PRODUKT_KATEGORIER = [
-            { id: 'isolasjon', label: 'Isolasjon', emoji: '🧱', keywords: ['ISOLASJON','EPS','XPS','GLAVA','ROCKWOOL','FLEXI','SUNDOLITT','JACKO','MINERALULL'] },
-            { id: 'treverk', label: 'Treverk', emoji: '🪵', keywords: ['GRAN ','FURU ','VIRKE','STENDER','BJELKE','LEKT','SLØYFE'] },
-            { id: 'plater', label: 'Plater', emoji: '📋', keywords: ['GIPSPL','SPONPL','OSB','FIBERPL','MDF','KRYSSF'] },
-            { id: 'tekking', label: 'Tekking/Membran', emoji: '🛡️', keywords: ['DAMPSP','VINDSP','UNDERTAK','TYVEK','RADON','MEMBRAN','PLATON'] },
-            { id: 'kledning', label: 'Kledning/Panel', emoji: '🏠', keywords: ['KLEDNING','PANEL FURU','PANEL GRAN','FASADEKLED'] },
-            { id: 'betong', label: 'Betong/Mur', emoji: '🏗️', keywords: ['BETONG','SEMENT','MØRTEL','LECA','BLOKK','ARMERING'] },
-            { id: 'flismur', label: 'Flis/Sparkel', emoji: '🔲', keywords: ['FLIS','FLISLIM','SPARKEL','AVRETTING','FUGEMASSE','WEBER'] },
-            { id: 'maling', label: 'Maling/Beis', emoji: '🎨', keywords: ['MALING','BEIS','GRUNNING','PRIMER','LAKK','JOTUN'] },
-            { id: 'tak', label: 'Tak/Renner', emoji: '🏠', keywords: ['TAKSTEIN','TAKPANNE','TAKRENNE','NEDLØP','MØNE'] },
-            { id: 'ror', label: 'Rør/VVS', emoji: '🔧', keywords: ['PEX','AVLØP','DRENS','SLUK','VANNRØR'] },
-          ]
-
-          // Load prisliste ID once on mount (for category-only search fallback)
-          useEffect(() => {
-            hentAktivPrisliste(companyId, user?.id, 'id')
-              .then(data => { if (data) setPlId(data.id) })
-              .catch(() => {})
-          }, [])
-
-          const doSearch = async (searchTerm, katId) => {
-            const term = (searchTerm || '').trim()
-            if (term.length < 2 && !katId) { setRes([]); setHasSearched(false); return }
-
-            const searchId = ++searchRef.current
-            setSearching(true)
-            setHasSearched(true)
-
-            try {
-              // Hvis brukeren har skrevet tekst → bruk smart usePrisbokSoek
-              // (med eventuell ekstra kategori-filter i etterkant)
-              if (term.length >= 2) {
-                const treff = await prisbokSok(term, { maxResultater: 40 })
-                if (searchRef.current !== searchId) return
-
-                let resultater = treff
-                // Hvis kategori er valgt, filtrer på kategori-keywords i tillegg
-                if (katId) {
-                  const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                  const kw = (katObj?.keywords || []).map(k => k.trim().toUpperCase())
-                  resultater = resultater.filter(r => {
-                    const navn = (r.varenavn || '').toUpperCase()
-                    return kw.some(k => navn.includes(k))
-                  })
-                }
-                setRes(resultater)
-              } else if (katId) {
-                // Kategori-bare-søk: dette er en spesialcase som vi ikke kan bruke
-                // hook'en til (siden den krever søketerm). Direkt spørring her.
-                let query = supabase.from('prisbok').select('id,varenummer,varenavn,enhet,pris_per_enhet,kategori')
-                if (plId) query = query.eq('prisliste_id', plId)
-                else query = query.eq('user_id', user?.id)
-                const katObj = PRODUKT_KATEGORIER.find(k => k.id === katId)
-                const kw = katObj?.keywords || []
-                const catFilters = kw.map(k => `varenavn.ilike.%${k.trim()}%`).join(',')
-                if (catFilters) query = query.or(catFilters)
-                const { data, error } = await query.order('varenavn').limit(40)
-                if (searchRef.current !== searchId) return
-                if (!error) setRes(data || [])
-                else setRes([])
-              }
-            } catch(e) {
-              if (searchRef.current === searchId) setRes([])
-            }
-            if (searchRef.current === searchId) setSearching(false)
-          }
-
-          // Debounced search
-          useEffect(() => {
-            if (q.trim().length < 2 && !activeKat) { setRes([]); setHasSearched(false); return }
-            const timer = setTimeout(() => doSearch(q, activeKat), 500)
-            return () => clearTimeout(timer)
-          }, [q, activeKat])
-
-          // Velger varen på linjen. Går gjennom beregnVareFelter, som kan spørre
-          // om rull→m²-omregning før noe skrives.
-          const selectProduct = async (p) => {
-            if (velger) return
-            setVelger(true)
-            try {
-              const linje = finnMatLinje(ctx.kalkId, ctx.bdId, ctx.matId)
-              const haddeNavn = !!(linje?.varenavn && String(linje.varenavn).trim())
-              const vType = linje && !linje._varselVist ? ((linje._ny || !haddeNavn) ? 'lagt_til' : 'byttet') : null
-              const felter = await beregnVareFelterLokal(p, linje)
-              skrivVarePaaLinje(ctx.kalkId, ctx.bdId, ctx.matId, felter)
-              if (vType && typeof setMaterialVarsel === 'function') setMaterialVarsel({ type: vType })
-            } finally { setVelger(false) }
-            onClose()
-          }
-
-          const handleKatClick = (katId) => {
-            const newKat = activeKat === katId ? null : katId
-            setActiveKat(newKat)
-          }
-
-          return (
-            <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
-              <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
-              <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'720px', maxHeight:'85vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.25)' }}>
-                <div style={{ padding:'16px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
-                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
-                    <h3 style={{ margin:0, fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>🔍 Søk i prisliste</h3>
-                    <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'20px', cursor:'pointer', color:'#94a3b8' }}>×</button>
-                  </div>
-                  <input value={q} onChange={e => setQ(e.target.value)} autoFocus placeholder="Søk varenavn eller NOBB-nummer..." style={{ ...qInp, width:'100%', padding:'11px 16px', fontSize:'14px', boxSizing:'border-box', marginBottom:'10px' }} />
-                  <div style={{ display:'flex', gap:'4px', flexWrap:'wrap' }}>
-                    {PRODUKT_KATEGORIER.map(kat => (
-                      <button key={kat.id} onClick={() => handleKatClick(kat.id)}
-                        style={{ padding:'4px 10px', borderRadius:'8px', fontSize:'11px', fontWeight:'600', cursor:'pointer', border: activeKat === kat.id ? '2px solid #059669' : '1px solid #e2e8f0', background: activeKat === kat.id ? '#f0fdf4' : 'white', color: activeKat === kat.id ? '#059669' : '#475569', whiteSpace:'nowrap', transition:'all 0.1s' }}>
-                        {kat.emoji} {kat.label}
-                      </button>
-                    ))}
-                  </div>
-                  {searching && <div style={{ fontSize:'12px', color:'#2563eb', marginTop:'6px' }}>Søker...</div>}
-                </div>
-                <div style={{ overflowY:'auto', flex:1, padding:'4px 8px' }}>
-                  {!hasSearched && q.length < 2 && !activeKat && (
-                    <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8', fontSize:'14px' }}>Skriv søketekst eller velg en kategori</div>
-                  )}
-                  {hasSearched && res.length === 0 && !searching && (
-                    kanSePriser
-                      ? <div style={{ textAlign:'center', padding:'30px', color:'#94a3b8' }}>Ingen treff{q ? ` for "${q}"` : ''}{activeKat ? ` i ${PRODUKT_KATEGORIER.find(k=>k.id===activeKat)?.label}` : ''}</div>
-                      : <div style={{ padding:'16px' }}><PrisTilgangNotis /></div>
-                  )}
-                  {res.map(p => (
-                    <button key={p.id} onClick={() => selectProduct(p)}
-                      style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'8px 10px', border:'none', borderRadius:'8px', background:'white', cursor:'pointer', textAlign:'left', marginBottom:'1px', transition:'background 0.1s' }}
-                      onMouseEnter={e => e.currentTarget.style.background='#f0fdf4'}
-                      onMouseLeave={e => e.currentTarget.style.background='white'}>
-                      <span style={{ fontFamily:'monospace', fontSize:'11px', color:'#94a3b8', width:'55px', flexShrink:0 }}>{p.varenummer}</span>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:'12px', fontWeight:'500', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.varenavn}</div>
-                        <div style={{ fontSize:'10px', color:'#94a3b8' }}>{p.kategori}</div>
-                      </div>
-                      <span style={{ fontSize:'11px', color:'#64748b', flexShrink:0, width:'28px', textAlign:'center' }}>{p.enhet}</span>
-                      <span style={{ fontSize:'13px', fontWeight:'700', color:'#059669', flexShrink:0, width:'80px', textAlign:'right' }}>{fmt(p.pris_per_enhet)}</span>
-                      <span role="button" tabIndex={0}
-                        onClick={(e) => { e.stopPropagation(); aapneNobbSok(p.varenavn) }}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); aapneNobbSok(p.varenavn) } }}
-                        title="Slå opp produktinfo og dokumentasjon i NOBB"
-                        style={{ flexShrink:0, border:'1px solid #bbf7d0', background:'#f0fdf4', color:'#059669', borderRadius:'6px', fontSize:'10px', fontWeight:'700', padding:'4px 8px', whiteSpace:'nowrap', cursor:'pointer', display:'inline-flex', alignItems:'center', gap:'3px' }}>
-                        🔍 NOBB
-                      </span>
-                    </button>
-                  ))}
-                  {res.length >= 40 && <div style={{ textAlign:'center', padding:'8px', fontSize:'12px', color:'#94a3b8' }}>Viser 40 treff — skriv mer spesifikt</div>}
-                </div>
-              </div>
-            </div>
-          )
-        }
-        return <PS ctx={showProduktSok} onClose={() => setShowProduktSok(null)} />
-      })()}
+      {/* Produktsøk i prisliste — modal på modulnivå (se ProduktSokModal) */}
+      {showProduktSok && (
+        <ProduktSokModal
+          companyId={companyId}
+          userId={user?.id}
+          onVelg={(p) => velgProduktFraSok(showProduktSok, p)}
+          onClose={() => setShowProduktSok(null)}
+        />
+      )}
 
       {/* Oppdater priser fra aktiv prisliste — viser hva som endres før skriving */}
       {showOppdaterPriser && (
@@ -82572,10 +82657,13 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       const fag = getFaggruppe(kl.fag)
       const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
       const kt = beregnKalkyle(kl, fakt)
+      // «Detaljert uten priser» (bygningsdel) og «Detaljert med priser»
+      // (detaljert) har NØYAKTIG samme innhold — arbeidsarter og materialer per
+      // bygningsdel. Forskjellen ligger bare i om prisen per linje skrives ut.
       const bdLines = (visning === 'bygningsdel' || visning === 'detaljert') ? (kl.bygningsdeler || []).map(bd => {
         const bdt = beregnBygningsdel(bd, fakt)
         const mengde = parseFloat(bd.mengde) || 1
-        const detailLines = visning === 'detaljert' ? [
+        const detailLines = [
           ...(bd.arbeidsarter || []).map(a => {
             const r = beregnArbeidskostnad(a, fakt)
             return { type: 'detail', text: a.beskrivelse, mengde: parseFloat((r.faktiskTid * mengde).toFixed(1)), enhet: 't', amount: r.medFortjeneste * mengde }
@@ -82584,7 +82672,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
             const r = beregnMaterialkostnad(m, fakt)
             return { type: 'detail', text: m.varenavn, mengde: parseFloat(((parseFloat(m.mengde)||0) * mengde).toFixed(1)), enhet: fmtEnhet(m.enhet), amount: r.medFortjeneste * mengde }
           }),
-        ] : []
+        ]
         return { type: 'bd', name: bd.name || 'Bygningsdel', mengde, enhet: fmtEnhet(bd.enhet), amount: bdt.totalMedFortjeneste, details: detailLines }
       }) : []
       return { fag, name: kl.name, amount: kt.totMedFortjeneste, bdLines }
@@ -82629,9 +82717,25 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     }
 
     // ══ TILBUD-tittel (mørk, luftig) ══
+    // Er dette en revisjon, skal revisjonsnummeret være umulig å overse: en
+    // merket brikke ved siden av TILBUD-tittelen, og i tillegg i referanselinjen
+    // sammen med tilbudsnummeret og datoen.
+    const revNr = parseInt(kalk.revision_number, 10) || 1
+    const erRevisjon = revNr > 1
     y = 44
     setC(hex('#0f172a')); doc.setFontSize(22); doc.setFont('helvetica', 'bold')
     doc.text('TILBUD', ml, y)
+    if (erRevisjon) {
+      const revTekst = kalkRevLabel(revNr).toUpperCase()   // «REV. 1»
+      const tittelBredde = doc.getTextWidth('TILBUD')
+      doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      const brikkeBredde = doc.getTextWidth(revTekst) + 8
+      const bx = ml + tittelBredde + 6
+      setF(hex('#f5f3ff')); setD(hex('#ddd6fe')); doc.setLineWidth(0.4)
+      doc.roundedRect(bx, y - 5.5, brikkeBredde, 7.5, 1.5, 1.5, 'FD')
+      setC(hex('#6d28d9')); doc.setFontSize(9); doc.setFont('helvetica', 'bold')
+      doc.text(revTekst, bx + 4, y - 0.5)
+    }
     y += 9
     if (kalk.title) {
       setC(hex('#0f172a')); doc.setFontSize(12); doc.setFont('helvetica', 'normal')
@@ -82639,7 +82743,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       doc.text(tl[0] || '', ml, y); y += 6
     }
     setC(hex('#94a3b8')); doc.setFontSize(9); doc.setFont('helvetica', 'normal')
-    doc.text(`${kalk.kalk_number || ''} · ${dato}`, ml, y)
+    doc.text(`${kalkNrMedRev(kalk)} · ${dato}`, ml, y)
     y += 10
 
     // ══ KONTAKTINFO-GRID (kunde + bedrift) ══
@@ -82661,7 +82765,11 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
     if (email && kY < y + 26) doc.text(email, ml + 4, kY)
 
     // Bedrift-boks (høyre)
+    // MÅ sette fyll/kantfarge på nytt: jsPDF skriver tekstfargen inn i samme
+    // grafikktilstand som fyllfargen, så teksten i kunde-boksen over har alt
+    // overskrevet fyllet. Uten disse to linjene ble boksen tegnet mørk.
     const rX = ml + colW + 6
+    setF(hex('#f8fafc')); setD(hex('#e2e8f0')); doc.setLineWidth(0.3)
     doc.roundedRect(rX, y, colW, 28, 2, 2, 'FD')
     setC(hex('#94a3b8')); doc.setFontSize(7); doc.setFont('helvetica', 'bold')
     doc.text('TILBUDET ER FRA', rX + 4, y + 5)
@@ -82781,7 +82889,7 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
         y += 6  // litt luft mellom sammendrag og detaljside
       }
       setC(hex('#0f172a')); doc.setFontSize(14); doc.setFont('helvetica', 'bold')
-      doc.text(visning === 'detaljert' ? 'Detaljert spesifikasjon' : 'Spesifikasjon per fag', ml, y)
+      doc.text('Detaljert spesifikasjon', ml, y)
       y += 8
 
       // Kolonne-layout (faste kolonner, beregnet fra sidebredde)
@@ -82862,19 +82970,18 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
           }
           y += lineH + 1
 
-          // Detalj-linjer (arbeidsarter + materialer) — kun i 'detaljert'
-          if (visning === 'detaljert') {
-            bd.details.forEach(d => {
-              if (y > ph - 20) { doc.addPage(); y = 14; y = drawTableHeader(y) }
-              setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
-              const detailText = doc.splitTextToSize(d.text || '', descMaxX - ml - 12)[0] || ''
-              doc.text(detailText, ml + 8, y)
-              doc.text(String(d.mengde || ''), colMengde, y, { align: 'right' })
-              doc.text(String(d.enhet || ''), colEnhet, y)
-              doc.text(fmtKr(d.amount), colPris, y, { align: 'right' })
-              y += 4
-            })
-          }
+          // Detalj-linjer (arbeidsarter + materialer). Vises i BEGGE detalj-
+          // modusene — «uten priser» dropper kun beløpskolonnen.
+          ;(bd.details || []).forEach(d => {
+            if (y > ph - 20) { doc.addPage(); y = 14; y = drawTableHeader(y) }
+            setC(hex('#64748b')); doc.setFontSize(8); doc.setFont('helvetica', 'normal')
+            const detailText = doc.splitTextToSize(d.text || '', descMaxX - ml - 12)[0] || ''
+            doc.text(detailText, ml + 8, y)
+            doc.text(String(d.mengde || ''), colMengde, y, { align: 'right' })
+            doc.text(String(d.enhet || ''), colEnhet, y)
+            if (showPrice) doc.text(fmtKr(d.amount), colPris, y, { align: 'right' })
+            y += 4
+          })
           y += 2
 
           // Tynne skillelinje mellom bygningsdeler
@@ -83158,8 +83265,8 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
   const VISNING_OPTIONS = [
     { id: 'total', name: 'Kun totalsum', desc: 'Bare total eks/ink mva', emoji: '💰' },
     { id: 'faggruppe', name: 'Per fag', desc: 'Sammendrag per fag-gruppe', emoji: '🗂️' },
-    { id: 'bygningsdel', name: 'Detaljert uten priser', desc: 'Alle bygningsdeler, uten enhetspriser', emoji: '📄' },
-    { id: 'detaljert', name: 'Detaljert med priser', desc: 'Alle arbeidsarter og materialer', emoji: '📋' },
+    { id: 'bygningsdel', name: 'Detaljert uten priser', desc: 'Alle arbeidsarter og materialer, uten pris per linje', emoji: '📄' },
+    { id: 'detaljert', name: 'Detaljert med priser', desc: 'Alle arbeidsarter og materialer, med pris per linje', emoji: '📋' },
   ]
 
   return (
