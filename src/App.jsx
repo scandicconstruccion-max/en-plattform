@@ -42327,7 +42327,7 @@ function MineOppgaver({ user, startAapen, onOpenKunde, onBack }) {
   const lastTellere = async () => {
     setLoading(true)
     try {
-      const svar = await Promise.all(synligeIder.map(id => bucketQuery(id, 'id', true)))
+      const svar = await Promise.all(synligeIder.map(id => bucketQuery(id, 'oppgave_id', true)))
       const nye = { overdue: 0, idag: 0, kommende: 0 }
       synligeIder.forEach((id, i) => { nye[id] = svar[i].count || 0 })
       setTellere(nye)
@@ -42345,7 +42345,7 @@ function MineOppgaver({ user, startAapen, onOpenKunde, onBack }) {
     setLaster(l => ({ ...l, [id]: true }))
     try {
       const { data, error } = await bucketQuery(id, '*', false)
-        .order('neste_oppfolging', { ascending: true })
+        .order('forfaller', { ascending: true })
         .limit(CRM_OPPGAVE_RADGRENSE)
       if (error) throw error
       setRader(r => ({ ...r, [id]: data || [] }))
