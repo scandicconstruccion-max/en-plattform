@@ -40960,7 +40960,7 @@ function CRMPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [debSearch, setDebSearch] = useState('')       // debouncet søk (går til DB)
   const [listCount, setListCount] = useState(0)        // antall rader som matcher filteret (DB count)
-  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, oppfolging:0 })
+  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, oppfolging:0, forfalt:0 })
   const idag = new Date().toISOString().split('T')[0] // for oppfølging ≤ i dag
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 100
@@ -41016,14 +41016,20 @@ function CRMPage() {
   const loadKpis = async () => {
     try {
       const base = () => supabase.from('customers').select('id', { count:'exact', head:true })
-      const [tot, lead, akt, vun, oppf] = await Promise.all([
+      const [tot, lead, akt, vun, oppf, forf] = await Promise.all([
         base(),
         base().eq('status', 'lead'),
         base().in('status', ['kontaktet', 'tilbud_sendt']),
         base().eq('status', 'vunnet'),
         base().not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag), // forfalt eller i dag
+        // Forfalt-banneren. STRENGT før i dag — nøyaktig samme avgrensning som
+        // «Forfalt»-seksjonen i Mine oppgaver, så de to tallene ikke kan sprike.
+        // Banneren regnet tidligere på crm_activities (type='task'), en helt
+        // annen datakilde, og filtrerte dessuten klientside over et usortert
+        // uttrekk som PostgREST kappet på 1000 rader.
+        base().not('neste_oppfolging', 'is', null).lt('neste_oppfolging', idag),
       ])
-      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, oppfolging: oppf.count||0 })
+      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, oppfolging: oppf.count||0, forfalt: forf.count||0 })
     } catch(e) { console.error('[CRM] loadKpis', e) }
   }
 
@@ -41101,7 +41107,6 @@ function CRMPage() {
   },[activities])
 
   const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !visOppfolging
-  const overdueTasks = activities.filter(a=>a.type==='task'&&!a.completed&&a.due_date&&a.due_date<new Date().toISOString().split('T')[0])
 
   const exportCSV = async () => {
     // Eksporterer HELE det filtrerte datasettet (paginert henting), ikke bare det som er lastet i lista.
@@ -41131,7 +41136,8 @@ function CRMPage() {
   // og «Tilbake» derfra returnerer til undervisningen (som fortsatt er aktiv under).
   if (selected) return <CRMDetaljer customer={selected} contacts={contacts.filter(c=>c.customer_id===selected.id)} activities={activities.filter(a=>a.customer_id===selected.id)} projects={projects} quotes={quotes} invoices={invoices} user={user} onBack={()=>{if(window.__enterDetailView)try{window.__enterDetailView(null)}catch(e){};setSelected(null);refreshAll()}} />
   if (visAssistent) return <KontaktAssistent user={user} kilder={kilder} kommuner={kommuner} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisAssistent(false); refreshAll() }} />
-  if (visOppgaver) return <MineOppgaver user={user} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
+  // visOppgaver er true fra knappen, eller { apne:'overdue' } fra forfalt-banneren
+  if (visOppgaver) return <MineOppgaver user={user} startAapen={visOppgaver?.apne || null} onOpenKunde={(c)=>setSelected(c)} onBack={()=>{ setVisOppgaver(false); refreshAll() }} />
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
@@ -41182,12 +41188,20 @@ function CRMPage() {
       </div>
 
       <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        {/* Overdue tasks warning */}
-        {overdueTasks.length>0&&(
-          <div style={{ background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px' }}>
-            <span style={{ fontSize:'18px' }}>🚨</span>
-            <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626' }}>{overdueTasks.length} forfalt oppgave{overdueTasks.length>1?'r':''} krever oppfølging</span>
-          </div>
+        {/* Forfalt-banner — inngang til Mine oppgaver med Forfalt-seksjonen åpen.
+            Ekte <button>: gir tastaturfokus, og Enter/mellomrom uten egen
+            tastaturhåndtering. Vises ikke i det hele tatt når tallet er 0. */}
+        {kpi.forfalt>0&&(
+          <button type="button"
+            onClick={()=>setVisOppgaver({ apne:'overdue' })}
+            title="Åpne Mine oppgaver med forfalte oppgaver"
+            style={{ width:'100%', textAlign:'left', font:'inherit', background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', transition:'background 0.12s, border-color 0.12s' }}
+            onMouseEnter={e=>{ e.currentTarget.style.background='#fee2e2'; e.currentTarget.style.borderColor='#fca5a5' }}
+            onMouseLeave={e=>{ e.currentTarget.style.background='#fef2f2'; e.currentTarget.style.borderColor='#fecaca' }}>
+            <span style={{ fontSize:'18px', flexShrink:0 }}>🚨</span>
+            <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626', flex:1, minWidth:0 }}>{kpi.forfalt} forfalt oppgave{kpi.forfalt>1?'r':''} krever oppfølging</span>
+            <span style={{ fontSize:'13px', fontWeight:'700', color:'#dc2626', flexShrink:0, whiteSpace:'nowrap' }}>Se dem →</span>
+          </button>
         )}
 
         {/* Controls */}
@@ -42242,36 +42256,122 @@ function CRMHurtigRedigerModal({ customer, user, onClose, onSaved }) {
   )
 }
 
-// «Mine oppgaver»: alle leads med neste_oppfolging satt, gruppert overdue / i dag / kommende (7 dager)
-function MineOppgaver({ user, onOpenKunde, onBack }) {
+// «Mine oppgaver»: kunder med neste_oppfolging satt, gruppert forfalt / i dag / kommende.
+//
+// Alt telles og filtreres DB-side. Den gamle versjonen hentet inntil 500 rader
+// i én spørring og delte dem i tre med .filter() i klienten — med 15 300 kunder
+// betyr det at både tellerne og listene ble stille avkortet. Nå:
+//   · tre count-spørringer (head:true) gir tallene i overskriftene, uavhengig av
+//     hvor mange rader som faktisk vises
+//   · radene hentes PER SEKSJON, og først når seksjonen åpnes
+// Siden alle seksjoner er lukket ved inngang, koster åpningen av siden tre
+// count-spørringer og ingen raddata.
+//
+// `startAapen` settes til 'overdue' når man kommer fra forfalt-banneren på
+// CRM-hovedsiden. Ellers er alt lukket.
+const CRM_OPPGAVE_RADGRENSE = 200
+
+function MineOppgaver({ user, startAapen, onOpenKunde, onBack }) {
   const alert = useAppAlert()
   const mob = typeof window !== 'undefined' && window.innerWidth < 768
-  const [oppgaver, setOppgaver] = useState([])
+  const [tellere, setTellere] = useState({ overdue: 0, idag: 0, kommende: 0 })
+  const [rader, setRader] = useState({ overdue: [], idag: [], kommende: [] })
+  const [laster, setLaster] = useState({})
+  // Ref-speil av «er hentet» / «henter nå». Effekten som kjører ved bytte av
+  // tidsvindu nullstiller lastet og kaller lastSeksjon() i samme omgang — leste
+  // vakten bare state, ville den sett den GAMLE verdien fra closuren og hoppet
+  // over hentingen, slik at en åpen seksjon ble stående med rader fra det
+  // forrige vinduet. Refen er alltid fersk.
+  const lastetRef = React.useRef({})
+  const jobbRef = React.useRef({})
+  const [apen, setApen] = useState(() => (startAapen ? { [startAapen]: true } : {}))
   const [loading, setLoading] = useState(true)
   const [behandler, setBehandler] = useState({})
   const [hurtig, setHurtig] = useState(null)
   const [vindu, setVindu] = useState(crmLesOppgaveVindu) // dager frem (0 = kun i dag)
   const idag = new Date().toISOString().split('T')[0]
 
-  const load = async () => {
+  // Én definisjon av hva hver bøtte ER. Både tellingen og raduthentingen går
+  // gjennom denne, så en teller aldri kan avgrense annerledes enn lista under.
+  const bucketQuery = (id, kolonner, kunTelling) => {
+    let q = kunTelling
+      ? supabase.from('customers').select(kolonner, { count: 'exact', head: true })
+      : supabase.from('customers').select(kolonner)
+    q = q.not('neste_oppfolging', 'is', null)
+    if (id === 'overdue') q = q.lt('neste_oppfolging', idag)
+    else if (id === 'idag') q = q.eq('neste_oppfolging', idag)
+    else q = q.gt('neste_oppfolging', idag).lte('neste_oppfolging', crmDatoPlussDager(vindu))
+    return q
+  }
+
+  const synligeIder = vindu > 0 ? ['overdue', 'idag', 'kommende'] : ['overdue', 'idag']
+
+  const lastTellere = async () => {
     setLoading(true)
     try {
-      // DB-side: leads med oppfølging satt, t.o.m. valgt vindu frem. Overdue (< i dag) er
-      // alltid inkludert siden grensen ≥ i dag. Eldste først.
-      const { data, error } = await supabase.from('customers').select('*')
-        .not('neste_oppfolging', 'is', null)
-        .lte('neste_oppfolging', crmDatoPlussDager(vindu))
-        .order('neste_oppfolging', { ascending: true })
-        .limit(500)
-      if (error) throw error
-      setOppgaver(data || [])
-    } catch (e) { console.error('[CRM-oppgaver] load', e); alert({ message:'Kunne ikke hente oppgaver: '+e.message, kind:'error' }); setOppgaver([]) }
-    finally { setLoading(false) }
+      const svar = await Promise.all(synligeIder.map(id => bucketQuery(id, 'id', true)))
+      const nye = { overdue: 0, idag: 0, kommende: 0 }
+      synligeIder.forEach((id, i) => { nye[id] = svar[i].count || 0 })
+      setTellere(nye)
+    } catch (e) {
+      console.error('[CRM-oppgaver] tellere', e)
+      alert({ message: 'Kunne ikke hente oppgaver: ' + e.message, kind: 'error' })
+      setTellere({ overdue: 0, idag: 0, kommende: 0 })
+    } finally { setLoading(false) }
   }
-  useEffect(() => { load() }, [vindu])
+
+  const lastSeksjon = async (id, tving = false) => {
+    if (jobbRef.current[id]) return
+    if (!tving && lastetRef.current[id]) return
+    jobbRef.current[id] = true
+    setLaster(l => ({ ...l, [id]: true }))
+    try {
+      const { data, error } = await bucketQuery(id, '*', false)
+        .order('neste_oppfolging', { ascending: true })
+        .limit(CRM_OPPGAVE_RADGRENSE)
+      if (error) throw error
+      setRader(r => ({ ...r, [id]: data || [] }))
+      lastetRef.current[id] = true
+    } catch (e) {
+      console.error('[CRM-oppgaver] lastSeksjon', e)
+      alert({ message: 'Kunne ikke hente oppgaver: ' + e.message, kind: 'error' })
+    } finally {
+      delete jobbRef.current[id]
+      setLaster(l => { const n = { ...l }; delete n[id]; return n })
+    }
+  }
+
+  // Kast alt hentet raddata og hent på nytt for de seksjonene som står åpne.
+  const friskOpp = async () => {
+    lastetRef.current = {}
+    setRader({ overdue: [], idag: [], kommende: [] })
+    await lastTellere()
+    // Kun seksjoner som faktisk vises i gjeldende tidsvindu. Bytter man til
+    // «I dag» mens Kommende sto åpen, finnes ikke den seksjonen lenger, og en
+    // henting for den ville vært et bortkastet kall mot basen.
+    synligeIder.forEach(id => { if (apen[id]) lastSeksjon(id, true) })
+  }
+
+  // Tidsvinduet endrer avgrensningen for «Kommende», så alt hentes på nytt.
+  // Seksjoner som står åpne lastes om med én gang; lukkede venter til de åpnes.
+  useEffect(() => {
+    friskOpp()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vindu])
+
+  const veksle = (id) => {
+    if ((tellere[id] || 0) === 0) return          // tomme seksjoner kan ikke åpnes
+    const skalAapne = !apen[id]
+    setApen(a => { const n = { ...a }; if (skalAapne) n[id] = true; else delete n[id]; return n })
+    if (skalAapne) lastSeksjon(id)
+  }
 
   const apneMail = (c) => { if (!c.email) { alert({ message:'Kontakten mangler e-postadresse', kind:'warning' }); return } const a=document.createElement('a'); a.href='mailto:'+encodeURIComponent(c.email); a.click() }
   const ring = (c) => { if (!c.phone) { alert({ message:'Kontakten mangler telefonnummer', kind:'warning' }); return } const a=document.createElement('a'); a.href='tel:'+String(c.phone).replace(/\s/g,''); a.click() }
+
+  // Hvilken bøtte en kunde hører hjemme i — brukes til å telle ned riktig
+  // seksjon når en oppgave fullføres.
+  const bucketFor = (c) => c.neste_oppfolging < idag ? 'overdue' : c.neste_oppfolging === idag ? 'idag' : 'kommende'
 
   const fullfor = async (c) => {
     setBehandler(b => ({ ...b, [c.id]: true }))
@@ -42288,16 +42388,13 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
       if (cErr) throw cErr
       invalidateCustomerCache()
       crmVarsleOppfolging()
-      setOppgaver(o => o.filter(x => x.id !== c.id))
+      const boette = bucketFor(c)
+      setRader(r => ({ ...r, [boette]: (r[boette] || []).filter(x => x.id !== c.id) }))
+      setTellere(t2 => ({ ...t2, [boette]: Math.max(0, (t2[boette] || 0) - 1) }))
     } catch (e) { console.error('[CRM-oppgaver] fullfor', e); alert({ message:'Kunne ikke fullføre: '+e.message, kind:'error' }) }
     finally { setBehandler(b => { const n={...b}; delete n[c.id]; return n }) }
   }
 
-  const grupper = {
-    overdue: oppgaver.filter(o => o.neste_oppfolging < idag),
-    idag:    oppgaver.filter(o => o.neste_oppfolging === idag),
-    kommende: oppgaver.filter(o => o.neste_oppfolging > idag),
-  }
   const knapp = { padding:'7px 11px', borderRadius:'9px', border:'none', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap' }
 
   const rad = (c, forfalt) => {
@@ -42329,39 +42426,70 @@ function MineOppgaver({ user, onOpenKunde, onBack }) {
       </div>
     )
   }
-  const seksjon = (tittel, emoji, liste, forfalt, tomtekst) => (
-    <div>
-      <div style={{ display:'flex', alignItems:'center', gap:'8px', margin:'0 0 8px' }}>
-        <h3 style={{ margin:0, fontSize:'14px', fontWeight:'800', color: forfalt?'#dc2626':'#0f172a' }}>{emoji} {tittel}</h3>
-        <span style={{ fontSize:'12px', fontWeight:'700', color:'white', background: forfalt?'#dc2626':'#64748b', borderRadius:'999px', padding:'1px 9px' }}>{liste.length}</span>
+
+  // Sammenleggbar seksjon. Overskriften er en ekte <button> med aria-expanded,
+  // så skjermleser og tastatur får den samme tilstanden som pilen viser.
+  // Tomme seksjoner vises fortsatt — men tonet ned og disabled, siden det ikke
+  // finnes noe å folde ut.
+  const seksjon = (id, tittel, emoji, forfalt, tomtekst) => {
+    const antall = tellere[id] || 0
+    const tom = antall === 0
+    const erApen = !!apen[id] && !tom
+    const liste = rader[id] || []
+    const lasterNaa = !!laster[id]
+    return (
+      <div key={id}>
+        <button type="button"
+          onClick={()=>veksle(id)}
+          disabled={tom}
+          aria-expanded={tom ? undefined : erApen}
+          title={tom ? tomtekst : (erApen ? 'Skjul' : 'Vis')}
+          style={{ width:'100%', display:'flex', alignItems:'center', gap:'8px', padding: mob?'12px 12px':'10px 12px', minHeight: mob?'48px':undefined, background: erApen ? '#f8fafc' : 'white', border:'1px solid #e2e8f0', borderRadius:'12px', cursor: tom ? 'default' : 'pointer', textAlign:'left', font:'inherit', opacity: tom ? 0.55 : 1, transition:'background 0.12s' }}>
+          <span aria-hidden="true" style={{ fontSize:'12px', width:'12px', flexShrink:0, color: tom ? '#cbd5e1' : '#94a3b8', transform: erApen ? 'rotate(90deg)' : 'none', transition:'transform 0.15s' }}>▶</span>
+          <span style={{ fontSize:'14px', fontWeight:'800', color: tom ? '#94a3b8' : (forfalt ? '#dc2626' : '#0f172a'), minWidth:0, wordBreak:'break-word' }}>{emoji} {tittel}</span>
+          <span style={{ fontSize:'12px', fontWeight:'700', color:'white', background: tom ? '#cbd5e1' : (forfalt ? '#dc2626' : '#64748b'), borderRadius:'999px', padding:'1px 9px', flexShrink:0 }}>{antall}</span>
+        </button>
+        {erApen && (
+          <div style={{ marginTop:'8px' }}>
+            {lasterNaa && liste.length === 0
+              ? <p style={{ margin:0, fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>Laster…</p>
+              : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(c=>rad(c, forfalt))}</div>}
+            {antall > liste.length && !lasterNaa && (
+              <p style={{ margin:'8px 0 0', fontSize:'12px', color:'#94a3b8' }}>
+                Viser {liste.length} av {antall}. Fullfør noen, eller snevre inn tidsvinduet.
+              </p>
+            )}
+          </div>
+        )}
       </div>
-      {liste.length===0 ? <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#94a3b8', fontStyle:'italic' }}>{tomtekst}</p> : <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{liste.map(c=>rad(c, forfalt))}</div>}
-    </div>
-  )
+    )
+  }
+
+  const totalt = synligeIder.reduce((s, id) => s + (tellere[id] || 0), 0)
 
   return (
     <div style={{ fontFamily:'system-ui,sans-serif' }}>
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: mob?'14px':'20px 32px', display:'flex', alignItems:'center', gap:'12px' }}>
-        <button onClick={onBack} style={{ padding:'8px 12px', borderRadius:'10px', border:'none', background:'#f1f5f9', color:'#64748b', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>← Tilbake</button>
-        <div>
+      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', padding: mob?'14px':'20px 32px', display:'flex', alignItems:'center', gap:'12px', flexWrap: mob?'wrap':'nowrap' }}>
+        <button onClick={onBack} style={{ padding:'8px 12px', borderRadius:'10px', border:'none', background:'#f1f5f9', color:'#64748b', cursor:'pointer', fontSize:'13px', fontWeight:'700', flexShrink:0 }}>← Tilbake</button>
+        <div style={{ minWidth:0 }}>
           <h1 style={{ fontSize: mob?'18px':'22px', fontWeight:'bold', color:'#0f172a', margin:0 }}>✅ Mine oppgaver</h1>
-          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Forfalte vises alltid øverst.</p>
+          <p style={{ color:'#64748b', marginTop:'2px', fontSize:'13px', marginBottom:0 }}>Avtalte oppfølginger. Trykk på en overskrift for å åpne den.</p>
         </div>
-        <div style={{ marginLeft:'auto', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap' }}>
-          <select value={vindu} onChange={e=>{ const v=parseInt(e.target.value,10); setVindu(v); try{ window.localStorage.setItem('crm_oppgave_vindu', String(v)) }catch(_){} }} title="Tidsvindu" style={{ ...crmInp, maxWidth:'170px' }}>
+        <div style={{ marginLeft: mob?0:'auto', display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', width: mob?'100%':'auto' }}>
+          <select value={vindu} onChange={e=>{ const v=parseInt(e.target.value,10); setVindu(v); try{ window.localStorage.setItem('crm_oppgave_vindu', String(v)) }catch(_){} }} title="Tidsvindu" style={{ ...crmInp, maxWidth: mob?'none':'170px', flex: mob?'1 1 auto':'none' }}>
             {CRM_OPPGAVE_VINDUER.map(o=><option key={o.dager} value={o.dager}>{o.label}</option>)}
           </select>
-          <span style={{ fontSize:'13px', color:'#94a3b8' }}>{loading?'Laster…':`${oppgaver.length} oppgaver`}</span>
+          <span style={{ fontSize:'13px', color:'#94a3b8', flexShrink:0 }}>{loading?'Laster…':`${totalt} oppgaver`}</span>
         </div>
       </div>
-      <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'22px' }}>
+      <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'12px' }}>
         {loading ? <div style={{ textAlign:'center', padding:'50px', color:'#94a3b8' }}>Laster…</div> : (<>
-          {seksjon('Forfalt', '🚨', grupper.overdue, true, 'Ingen forfalte oppgaver.')}
-          {seksjon('I dag', '📅', grupper.idag, false, 'Ingen oppgaver i dag.')}
-          {vindu > 0 && seksjon(`Kommende (${vindu} dager)`, '🗓️', grupper.kommende, false, 'Ingen kommende oppgaver i valgt vindu.')}
+          {seksjon('overdue', 'Forfalt', '🚨', true, 'Ingen forfalte oppgaver.')}
+          {seksjon('idag', 'I dag', '📅', false, 'Ingen oppgaver i dag.')}
+          {vindu > 0 && seksjon('kommende', `Kommende (${vindu} dager)`, '🗓️', false, 'Ingen kommende oppgaver i valgt vindu.')}
         </>)}
       </div>
-      {hurtig&&<CRMHurtigRedigerModal customer={hurtig} user={user} onClose={()=>setHurtig(null)} onSaved={()=>{ setHurtig(null); load() }} />}
+      {hurtig&&<CRMHurtigRedigerModal customer={hurtig} user={user} onClose={()=>setHurtig(null)} onSaved={()=>{ setHurtig(null); friskOpp() }} />}
     </div>
   )
 }
