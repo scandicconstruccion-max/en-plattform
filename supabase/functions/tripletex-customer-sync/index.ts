@@ -18,18 +18,265 @@
 // Hemmeligheter (delt på prosjektnivå med tripletex-session):
 //   TRIPLETEX_ENC_KEY   – hovednøkkel for å lese cachet sesjonstoken
 //   TRIPLETEX_API_BASE  – valgfri; default https://api-test.tripletex.tech
-// SUPABASE_URL og SUPABASE_SERVICE_ROLE_KEY leveres automatisk av Supabase.
+// SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY og SUPABASE_ANON_KEY leveres
+// automatisk av Supabase.
 // (Trenger IKKE consumer-token — sesjonen skaffes via tripletex-session.)
+//
+// ÉN FIL, MED VILJE. Autorisasjonsblokken under hører logisk hjemme i en egen
+// fil, men Supabase-dashbordets Code-fane er vår eneste deployvei, og den kan
+// ikke opprette nye filer. Alt som skal deployes må stå i index.ts. Blokken er
+// derfor kopiert inn i hver funksjon, og skal holdes identisk mellom dem.
 // ============================================================
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient, SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const TRIPLETEX_BASE = Deno.env.get('TRIPLETEX_API_BASE') ?? 'https://api-test.tripletex.tech'
 const ENC_KEY = Deno.env.get('TRIPLETEX_ENC_KEY') ?? ''
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+
+// ── HVEM SPØR, OG HVILKEN BEDRIFT GJELDER KALLET? ──────────────────────────
+// ------------------------------------------------------------
+// Bakgrunnen, kort: alle Tripletex-funksjonene tok imot companyId i request-
+// body og kjørte med service_role. Da bestemmer kalleren selv hvilken bedrift
+// han opererer i, og RLS gjelder ikke. tripletex-session kunne på den måten
+// skrive en annen bedrifts Tripletex-nøkkel.
+//
+// «Verify JWT»-bryteren i dashbordet stopper ikke dette. Den er «verify with
+// legacy secret», og den OFFENTLIGE anon-nøkkelen tilfredsstiller den. Hele
+// kontrollen må derfor ligge her, i koden.
+//
+// TO ULIKE TING, HOLDT FRA HVERANDRE:
+//   · HVEM SPØR      → alltid kallerens bruker-JWT. Aldri body, aldri en
+//                       delt hemmelighet, aldri service-role-nøkkelen.
+//   · HVILKE RETTIGHETER spørringen kjører med → service_role, men FØRST
+//                       etter at kontrollen har passert.
+//
+// STØTTEØKT TRENGER INGEN UNNTAK. auth_company_id() er en coalesce som
+// returnerer target_company_id fra en aktiv support_sessions-rad. Under en
+// støtteøkt svarer den derfor med KUNDENS bedrift helt av seg selv, og en
+// riktig kontroll slipper plattformeieren inn uten en eneste særregel.
+// Trenger noen et unntak for støtteøkt her, er kontrollen bygget feil.
+
+type Avsender = {
+  userId: string
+  companyId: string
+  jwt: string
+}
+
+// Kastes av kontrollene under. Bæreren av en HTTP-status og en tekst som er
+// trygg å vise til kalleren — aldri noe om hva som finnes på innsiden.
+class AvvistFeil extends Error {
+  status: number
+  constructor(melding: string, status: number) {
+    super(melding)
+    this.name = 'AvvistFeil'
+    this.status = status
+  }
+}
+
+// Sikkerhetshendelser logges til funksjonsloggen med nok til å etterforske,
+// og ingenting av det kalleren ikke allerede kjenner. Aldri tokens.
+function loggSikkerhet(hendelse: string, detaljer: Record<string, unknown>): void {
+  try {
+    console.warn('[SIKKERHET] ' + hendelse + ' ' + JSON.stringify(detaljer))
+  } catch (_) {
+    console.warn('[SIKKERHET] ' + hendelse)
+  }
+}
+
+// Leser rollen ut av JWT-ens payload UTEN å verifisere signaturen. Det er
+// trygt her fordi verdien kun brukes til å AVVISE og til å skrive en
+// loggmelding — aldri til å slippe noen inn. Et forfalsket token med
+// role=authenticated kommer ikke lenger enn til getUser under.
+//
+// Grunnen til at den finnes: sammenligning mot nøkkelstrengen alene er ikke
+// nok. Roteres service-role-nøkkelen, eller kommer den fra et annet prosjekt,
+// treffer ikke strengsammenligningen — og da ville avvisningen sett ut som et
+// helt vanlig utløpt token i loggen. Rollen står i tokenet uansett.
+function lesRolleFraJwt(jwt: string): string {
+  try {
+    const del = jwt.split('.')[1]
+    if (!del) return ''
+    const b64 = del.replace(/-/g, '+').replace(/_/g, '/')
+    const pad = b64 + '='.repeat((4 - (b64.length % 4)) % 4)
+    const payload = JSON.parse(atob(pad))
+    return String(payload?.role ?? '')
+  } catch (_) {
+    return ''
+  }
+}
+
+/**
+ * Fastslår hvem som spør, og hvilken bedrift kallet gjelder.
+ *
+ * Rekkefølgen er bevisst: de billige avvisningene først, oppslaget sist.
+ */
+async function hentAvsender(req: Request): Promise<Avsender> {
+  const authHeader = req.headers.get('Authorization') || ''
+  const jwt = authHeader.replace(/^Bearer\s+/i, '').trim()
+  if (!jwt) throw new AvvistFeil('Mangler Authorization', 401)
+
+  let sti = ''
+  try { sti = new URL(req.url).pathname } catch (_) { /* url skal aldri velte en avvisning */ }
+  const rolle = lesRolleFraJwt(jwt)
+
+  // Service-role-nøkkelen er IKKE en avsender. Den identifiserer ingen, og en
+  // funksjon som godtar den kan kalles på vegne av hvem som helst. Interne
+  // kall mellom funksjoner skal videresende brukerens JWT i stedet.
+  //
+  // BEGGE sjekkene står med vilje: strengen fanger vår egen nøkkel, rollen
+  // fanger en rotert eller fremmed. Uten den andre ville avvisningen blitt
+  // liggende i loggen som et hvilket som helst utløpt token.
+  if ((SERVICE_ROLE && jwt === SERVICE_ROLE) || rolle === 'service_role') {
+    loggSikkerhet('service_role brukt som avsender', { sti, rolle })
+    throw new AvvistFeil('Ugyldig sesjon', 401)
+  }
+  // Anon-nøkkelen er offentlig og identifiserer heller ingen. Den er nøkkelen
+  // «Verify JWT»-bryteren slipper gjennom, så den skal ikke komme lenger — og
+  // den skal være synlig i loggen når noen prøver.
+  if ((ANON_KEY && jwt === ANON_KEY) || rolle === 'anon') {
+    loggSikkerhet('anon-nøkkel brukt som avsender', { sti, rolle })
+    throw new AvvistFeil('Ugyldig sesjon', 401)
+  }
+
+  // Uten anon-nøkkelen kan vi ikke kalle auth_company_id() SOM brukeren, og da
+  // ville vi stått igjen med body-verdien — altså hullet vi lukker. Da er det
+  // riktigere å svare 500 enn å slippe kallet gjennom.
+  if (!SUPABASE_URL || !SERVICE_ROLE || !ANON_KEY) {
+    throw new AvvistFeil('Server mangler oppsett for autorisasjon', 500)
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
+  const { data: userData, error: userErr } = await admin.auth.getUser(jwt)
+  if (userErr || !userData?.user) throw new AvvistFeil('Ugyldig sesjon', 401)
+  const userId = userData.user.id
+
+  // auth_company_id() MÅ kalles som brukeren, ikke som service_role: den leser
+  // auth.uid(). Kalt med admin-klienten ville den svart null for alle.
+  const somBruker = createClient(SUPABASE_URL, ANON_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: 'Bearer ' + jwt } },
+  })
+  const { data: companyId, error: cErr } = await somBruker.rpc('auth_company_id')
+  if (cErr) throw new AvvistFeil('Kunne ikke avgjøre bedrift', 500)
+  if (!companyId) throw new AvvistFeil('Brukeren hører ikke til en bedrift', 403)
+
+  return { userId, companyId: String(companyId), jwt }
+}
+
+/**
+ * Godtar en companyId fra request-body BARE hvis den er identisk med den
+ * utledede. Feltet skal fjernes fra body i en senere runde; til da er dette
+ * det som hindrer at en gammel klient stille opererer i feil bedrift.
+ */
+function krevSammeBedrift(avsender: Avsender, oppgitt: unknown, sti: string): void {
+  if (oppgitt == null || oppgitt === '') return
+  if (String(oppgitt) === avsender.companyId) return
+  loggSikkerhet('companyId i body avvek fra auth_company_id()', {
+    sti,
+    userId: avsender.userId,
+    oppgitt: String(oppgitt),
+    utledet: avsender.companyId,
+  })
+  throw new AvvistFeil('Ikke tilgang', 403)
+}
+
+/**
+ * Henter én rad på id og krever at den hører til avsenderens bedrift.
+ *
+ * SVARET ER LIKT i begge feilretninger — «finnes ikke» og «hører til en annen
+ * bedrift» gir samme tekst og samme status. Ulike svar ville gjort endepunktet
+ * til et oppslagsverk: en angriper kunne prøvd uuid-er og fått bekreftet
+ * hvilke som finnes hos andre. Skillet finnes kun i loggen.
+ */
+async function hentEgenRad<T extends Record<string, unknown>>(
+  admin: SupabaseClient,
+  avsender: Avsender,
+  tabell: string,
+  kolonner: string,
+  id: string,
+  ikkeFunnetTekst: string,
+): Promise<T> {
+  const felter = kolonner.includes('company_id') ? kolonner : kolonner + ', company_id'
+  const { data, error } = await admin.from(tabell).select(felter).eq('id', id).maybeSingle()
+  if (error || !data) throw new AvvistFeil(ikkeFunnetTekst, 404)
+  const rad = data as unknown as T & { company_id?: string | null }
+  if (String(rad.company_id ?? '') !== avsender.companyId) {
+    loggSikkerhet('rad tilhører en annen bedrift', {
+      tabell,
+      radId: id,
+      userId: avsender.userId,
+      radBedrift: String(rad.company_id ?? ''),
+      avsenderBedrift: avsender.companyId,
+    })
+    throw new AvvistFeil(ikkeFunnetTekst, 404)   // samme svar som «finnes ikke»
+  }
+  return rad as T
+}
+
+// Interne kall mellom funksjoner. Brukerens JWT videresendes — mottakeren
+// avviser service-role-nøkkelen med vilje, så supabase.functions.invoke() kan
+// ikke brukes: den ville sendt admin-klientens nøkkel. Derfor rå fetch, så vi
+// styrer Authorization selv.
+//
+// MERK for den som sammenligner blokkene: tripletex-session har IKKE denne
+// funksjonen, fordi den ikke kaller noen andre. Alt over dette punktet skal
+// være identisk i alle fem filene.
+async function kallFunksjon(navn: string, kropp: unknown, avsender: Avsender): Promise<{ ok: boolean; status: number; data: any }> {
+  const res = await fetch(`${SUPABASE_URL}/functions/v1/${navn}`, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + avsender.jwt,
+      apikey: ANON_KEY,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(kropp ?? {}),
+  })
+  const tekst = await res.text()
+  let data: any = null
+  try { data = JSON.parse(tekst) } catch (_) { data = { error: tekst.slice(0, 300) } }
+  return { ok: res.ok, status: res.status, data }
+}
 
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE, { auth: { persistSession: false } })
+
+// ─── DOBBELTSKRIVING TIL external_links (overgangen) ────────────────────────
+// Vi skriver BÅDE den nye tabellen og den gamle kolonnen mens lesingen fortsatt
+// går mot kolonnene. Da kan app og database ikke komme i utakt underveis:
+// leser appen gammelt, finner den det; leser den nytt, finner den det også.
+// Lesingen flyttes i DEL 2, og kolonnene droppes først etter det.
+//
+// Feiler ALDRI kallet. Er tabellen ikke opprettet ennå — rekkefølgen i
+// utrullingen er funksjon før SQL i verste fall — logges det og synken går
+// videre nøyaktig som før.
+async function skrivEksternKobling(o: {
+  companyId: string
+  entityType: string
+  entityId: string
+  externalId?: string | number | null
+  syncedAt?: string | null
+  syncError?: string | null
+  metadata?: Record<string, unknown> | null
+  provider?: string
+}) {
+  try {
+    await admin.from('external_links').upsert({
+      company_id:  o.companyId,
+      provider:    o.provider ?? 'tripletex',
+      entity_type: o.entityType,
+      entity_id:   o.entityId,
+      external_id: o.externalId === undefined || o.externalId === null ? null : String(o.externalId),
+      synced_at:   o.syncedAt ?? null,
+      sync_error:  o.syncError ?? null,
+      metadata:    o.metadata ?? null,
+      updated_at:  new Date().toISOString(),
+    }, { onConflict: 'company_id,provider,entity_type,entity_id' })
+  } catch (e) {
+    console.error('[external_links] skriving feilet (synken fortsetter):', e)
+  }
+}
 
 // CORS. Uten disse kan funksjonen ikke kalles fra nettleseren i det hele tatt:
 // supabase.functions.invoke() sender authorization, x-client-info, apikey og
@@ -90,14 +337,24 @@ function basicAuth(sessionToken: string): string {
   return 'Basic ' + btoa('0:' + sessionToken)
 }
 
-// Skaffer et gyldig sesjonstoken: bruk cachet hvis mulig, ellers be tripletex-session lage ett.
-async function getSession(companyId: string): Promise<string> {
+// Skaffer et gyldig sesjonstoken for AVSENDERENS EGEN bedrift: bruk cachet hvis
+// mulig, ellers be tripletex-session lage ett.
+//
+// Det cachede tokenet leses FØR tripletex-session kalles. Det er derfor
+// kontrollen må stå i denne fila også, og ikke bare i tripletex-session: med et
+// gyldig cachet token ville det kallet aldri skjedd, og fiksen der ville ikke
+// beskyttet noe her.
+async function getSession(avsender: Avsender): Promise<string> {
+  const companyId = avsender.companyId
   const first = await admin.rpc('tripletex_get_cached_session', { p_company_id: companyId, p_key: ENC_KEY })
   if (first.error) throw new Error(`DB-feil (les sesjon): ${first.error.message}`)
   if (first.data) return first.data as string
 
-  const inv = await admin.functions.invoke('tripletex-session', { body: { companyId } })
-  if (inv.error) throw new Error(`Kunne ikke opprette sesjon (er bedriften satt opp med employee-token?): ${inv.error.message}`)
+  const inv = await kallFunksjon('tripletex-session', { companyId }, avsender)
+  if (!inv.ok) {
+    const detalj = (inv.data && inv.data.error) ? String(inv.data.error) : `HTTP ${inv.status}`
+    throw new Error(`Kunne ikke opprette sesjon (er bedriften satt opp med employee-token?): ${detalj}`)
+  }
 
   const second = await admin.rpc('tripletex_get_cached_session', { p_company_id: companyId, p_key: ENC_KEY })
   if (second.error) throw new Error(`DB-feil (les sesjon): ${second.error.message}`)
@@ -119,25 +376,47 @@ Deno.serve(async (req: Request): Promise<Response> => {
     if (req.method !== 'POST') return json({ error: 'Bruk POST' }, 405)
     if (!ENC_KEY) return json({ error: 'Server mangler TRIPLETEX_ENC_KEY' }, 500)
 
+    // ── HVEM SPØR ────────────────────────────────────────────────────────
+    // TO HULL, ikke ett. Begge må lukkes, og det ene lukker ikke det andre:
+    //   1) companyId kom fra request-body → kalleren valgte selv hvilken
+    //      bedrifts Tripletex-konto han skrev til.
+    //   2) kunden ble hentet på .eq('id', customerId) ALENE, med service_role,
+    //      altså uten RLS. Med egen companyId og en ANNEN bedrifts customerId
+    //      passerte man enhver avsenderkontroll og fikk likevel lest kundens
+    //      navn, org.nr, e-post og telefon — og skrevet tripletex_customer_id
+    //      tilbake på deres rad.
+    const avsender = await hentAvsender(req)
+
     const body = await req.json().catch(() => ({}))
-    const companyId = body?.companyId
+    // companyId i body styrer INGENTING lenger. Den godtas kun hvis den er
+    // identisk med den utledede. Feltet fjernes fra body i en senere runde.
+    krevSammeBedrift(avsender, body?.companyId, '/tripletex-customer-sync')
+    const companyId = avsender.companyId
     const customerId = body?.customerId
-    if (!companyId || !customerId) return json({ error: 'companyId og customerId er påkrevd' }, 400)
+    if (!customerId) return json({ error: 'customerId er påkrevd' }, 400)
 
     logBase = {
       company_id: companyId, provider: 'tripletex', operation: 'customer_sync',
       entity_type: 'customer', entity_id: customerId,
     }
 
-    // 1) Hent vår kunde.
-    const { data: cust, error: cErr } = await admin
-      .from('customers')
-      .select('id, name, orgnr, email, phone, type, tripletex_customer_id')
-      .eq('id', customerId)
-      .single()
-    if (cErr || !cust) {
-      await log({ ...logBase, action: 'failed', error: 'Fant ikke kunden' })
-      return json({ error: 'Fant ikke kunden' }, 404)
+    // 1) Hent vår kunde — og bare VÅR. hentEgenRad svarer likt på «finnes ikke»
+    //    og «hører til en annen bedrift»; skillet står kun i [SIKKERHET]-loggen.
+    //    Ulike svar ville gjort endepunktet til et oppslagsverk der uuid-er kan
+    //    testes mot andre bedrifter.
+    let cust: Record<string, any>
+    try {
+      cust = await hentEgenRad<Record<string, any>>(
+        admin, avsender, 'customers',
+        'id, name, orgnr, email, phone, type, tripletex_customer_id',
+        customerId, 'Fant ikke kunden',
+      )
+    } catch (e) {
+      if (e instanceof AvvistFeil) {
+        await log({ ...logBase, action: 'failed', error: e.message })
+        return json({ error: e.message }, e.status)
+      }
+      throw e
     }
 
     const name = String(cust.name ?? '').trim()
@@ -154,7 +433,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
     // 2) Skaff sesjon. Registrer tokenet (og dets Basic-auth-form) som hemmeligheter
     //    som ALLTID skal fjernes fra alt vi logger.
-    const session = await getSession(companyId)
+    const session = await getSession(avsender)
     secrets.push(session, btoa('0:' + session))
     const authHeader = basicAuth(session)
 
@@ -182,6 +461,10 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ error: melding, action: 'skipped', reason: 'missing_orgnr' }, 400)
     }
 
+    // Skrivingene under bærer .eq('company_id', companyId) i tillegg til id-en.
+    // hentEgenRad har allerede bevist at kunden er vår, så det er belte i
+    // tillegg til seler — men det koster ingenting, og det betyr at en senere
+    // omskriving som flytter kontrollen ikke stille kan skrive i feil bedrift.
     // 4) Bedrift/UE med org.nr: match på org.nr (kun gyldig 9-sifret nummer).
     if (!isPrivat && hasOrg) {
       const q = new URL(`${TRIPLETEX_BASE}/v2/customer`)
@@ -195,7 +478,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       }
       const found = safeJson(sText)?.values?.[0]
       if (found?.id) {
-        await admin.from('customers').update({ tripletex_customer_id: found.id }).eq('id', customerId)
+        await admin.from('customers').update({ tripletex_customer_id: found.id }).eq('id', customerId).eq('company_id', companyId)
+        await skrivEksternKobling({ companyId, entityType: 'customer', entityId: customerId, externalId: found.id, syncedAt: new Date().toISOString() })
         await log({ ...logBase, external_id: found.id, action: 'linked_existing', http_status: sRes.status, response_summary: { matchedOn: 'organizationNumber', name: found.name } })
         return json({ ok: true, action: 'linked_existing', tripletexCustomerId: found.id })
       }
@@ -225,12 +509,20 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return json({ error: 'Uventet svar fra Tripletex (mangler id)', detail: cText.slice(0, 400) }, 502)
     }
 
-    await admin.from('customers').update({ tripletex_customer_id: created.id }).eq('id', customerId)
+    await admin.from('customers').update({ tripletex_customer_id: created.id }).eq('id', customerId).eq('company_id', companyId)
+    await skrivEksternKobling({ companyId, entityType: 'customer', entityId: customerId, externalId: created.id, syncedAt: new Date().toISOString() })
     // matchBasis + customerType gjør det lett å finne igjen kunder opprettet UTEN org.nr-match (mulige duplikater).
     await log({ ...logBase, external_id: created.id, action: 'created', http_status: cRes.status, request_payload: payload, response_summary: { name: created.name, customerType: type || null, matchBasis: isPrivat ? 'privat' : 'organizationNumber_not_found' } })
     return json({ ok: true, action: 'created', tripletexCustomerId: created.id })
   } catch (e) {
-    await log({ ...logBase, action: 'failed', error: (e as Error)?.message ?? String(e) })
-    return json({ error: (e as Error)?.message ?? String(e) }, 500)
+    // Avvisninger fra kontrollen bærer sin egen status og en tekst som er trygg
+    // å vise. logBase er tom hvis kontrollen avviste FØR vi visste hvilken
+    // bedrift og hvilken kunde det gjaldt — da har vi ingenting meningsfullt å
+    // skrive i integration_sync_log, og [SIKKERHET]-linja i funksjonsloggen
+    // står der allerede.
+    const melding = (e as Error)?.message ?? String(e)
+    if (logBase.company_id) await log({ ...logBase, action: 'failed', error: melding })
+    if (e instanceof AvvistFeil) return json({ error: melding }, e.status)
+    return json({ error: melding }, 500)
   }
 })

@@ -28,7 +28,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `bim-sesjon-rydd` | ✅ | `functions.invoke` | Ikke deployet i Utvikling |
 | `tripletex-session` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-lookup` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
-| `tripletex-customer-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
+| `tripletex-customer-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `tripletex-hours-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
 | `tripletex-project-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
 | `anbud-uttrekk` | ❌ | `functions.invoke` | |
@@ -50,8 +50,8 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 
 ## Kjent avvik: Tripletex-filene er utdaterte
 
-Gjelder de tre som fortsatt står som ⚠️ i tabellen over:
-`tripletex-customer-sync`, `tripletex-hours-sync`, `tripletex-project-sync`.
+Gjelder de to som fortsatt står som ⚠️ i tabellen over:
+`tripletex-hours-sync` og `tripletex-project-sync`.
 De blir erstattet med prod-versjonen etter hvert.
 
 Kopiene mangler autorisasjonsblokken (`hentAvsender`, `AvvistFeil`,
