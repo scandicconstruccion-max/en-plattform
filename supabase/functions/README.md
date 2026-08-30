@@ -41,7 +41,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `send-materialliste` | ❌ | `functions.invoke` | |
 | `send-quote` | ❌ | `fetch /functions/v1/` (`sendEpost`) | All utgående e-post |
 | `stripe-checkout-ts` | ✅ | `functions.invoke` | Slug har `-ts`, se under. Fra prod |
-| `stripe-portal` | ❌ | `functions.invoke` | |
+| `stripe-portal` | ✅ | `functions.invoke` | Fra prod |
 | `stripe-sync-amount` | ❌ | `functions.invoke` | |
 | `stripe-webhook` | ❌ | — | Kalles av Stripe, ikke av appen |
 | `send-ue-fdv-invitation` | ❌ | — | Ikke funnet kalt fra koden. Arkiveres likevel |
