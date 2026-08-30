@@ -38,7 +38,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `befaring-view-resolve` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `befaring-view-upload-url` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `delete-user` | ❌ | `functions.invoke` | |
-| `send-materialliste` | ❌ | `functions.invoke` | |
+| `send-materialliste` | ✅ | `functions.invoke` | Fra prod. Ingen kontroll i koden, kun «Verify JWT» |
 | `send-quote` | ✅ | `fetch /functions/v1/` (`sendEpost`) | Fra prod. v5 krever innlogget bruker |
 | `stripe-checkout-ts` | ✅ | `functions.invoke` | Slug har `-ts`, se under. Fra prod |
 | `stripe-portal` | ✅ | `functions.invoke` | Fra prod |
@@ -71,6 +71,36 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 `kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
+
+## Tre ulike avsenderadresser
+
+Standardverdien for `FROM_EMAIL` er ikke den samme i alle funksjonene:
+
+| Funksjon | Default hvis `FROM_EMAIL` mangler |
+|---|---|
+| `send-quote` | `noreply@enplattform.no` |
+| `send-materialliste` | `ikke.svar@enplattform.no` |
+| `befaring-notify-resolver`, `befaring-notify-assignment` | `tilbud@enplattform.no` |
+
+Er `FROM_EMAIL` satt som secret, brukes den overalt og forskjellen spiller ingen
+rolle. Er den ikke satt, sender de samme systemet e-post fra tre adresser — noe
+som betyr tre domener å holde SPF/DKIM i orden for, og tre avsendere kunden ser.
+
+Ikke rettet. Sjekk om `FROM_EMAIL` faktisk er satt i begge prosjektene før du
+konkluderer med at det er et problem.
+
+## send-materialliste har ingen kontroll i koden
+
+Funksjonen leser aldri `req.headers` og oppretter ingen Supabase-klient. Hele
+beskyttelsen er «Verify JWT»-toggelen i dashbordet — som kommentaren øverst i
+fila også sier at den stoler på.
+
+Den toggelen slipper gjennom den **offentlige anon-nøkkelen**. Det er nøyaktig
+det `send-quote` v5 og Tripletex-blokken beskriver som utilstrekkelig, hver for
+seg og med samme begrunnelse. Funksjonen sender e-post med vedlegg til en
+mottaker oppgitt i body.
+
+Ikke rettet — arkivet skal speile det som kjører.
 
 ## Sannsynlig brutt varsel: befaring-view-resolve → send-quote
 
