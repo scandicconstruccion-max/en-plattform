@@ -51052,9 +51052,17 @@ function byggLaasInfo(innst) {
   return {
     innst,                                   // hele raden — beregnBedriftMrr trenger id og num_users
     utloptDato: innst.trial_ends_at || null,
-    moduler: ids.map(id => {
-      const m = MODULE_CATALOG.find(x => x.id === id)
-      return { id, navn: m?.name || id, perCompany: !!m?.perCompany, pris: m?.price ?? m?.pricePerUser ?? 0 }
+    // Nøklene normaliseres til katalogens egne FØR visning, pris og
+    // avhengighetssjekk. Uten det ble 'kalkulasjon' vist som rå nøkkel til
+    // 0 kr, og «BIM-Kalkyle krever Kalkulasjon» sperret knappen for godt —
+    // kravet peker på 'kalkulator', som ikke sto i lista.
+    // Dedupliserer: står begge nøklene i basen, blir det én rad.
+    moduler: [...new Set(ids.map(modulKanonisk))].map(id => {
+      const m = finnModul(id)
+      // Ukjent modul: vi VET ikke prisen. Da skal den verken vises som gratis
+      // eller sperre kunden — den skal synes, så vi oppdager den.
+      if (!m) return { id, navn: id, ukjent: true, perCompany: false, pris: null }
+      return { id, navn: m.name, ukjent: false, perCompany: !!m.perCompany, pris: m.price ?? m.pricePerUser ?? 0 }
     }),
   }
 }
@@ -51063,6 +51071,14 @@ function byggLaasInfo(innst) {
 // bruker i toggleModule og i setelagringen — ikke en egen variant.
 const LAAS_FRITTSTAENDE = ['grunnpakke', 'kalkulator', 'bim_kalkyle']
 
+// Nøkler som finnes i active_modules ute i data, men som katalogen ikke kjenner.
+// 'kalkulasjon' er en gammel variant av 'kalkulator' — koden har aldri brukt den
+// (0 treff i fila), så en bedrift som står med den får i praksis IKKE tilgang til
+// Kalkulasjon: harModul() slår opp 'kalkulator'. Kartlagt, se rapport.
+const MODUL_ALIAS = { kalkulasjon: 'kalkulator' }
+const modulKanonisk = (id) => MODUL_ALIAS[id] || id
+const finnModul = (id) => MODULE_CATALOG.find(m => m.id === modulKanonisk(id)) || null
+
 // Validerer et modulutvalg mot de samme avhengighetsreglene som resten av appen:
 //   · Grunnpakke, Kalkulasjon og BIM-Kalkyle kan stå alene
 //   · alt annet krever Grunnpakke
@@ -51070,18 +51086,20 @@ const LAAS_FRITTSTAENDE = ['grunnpakke', 'kalkulator', 'bim_kalkyle']
 // Returnerer en liste med feiltekster; tom liste betyr gyldig utvalg.
 function laasModulfeil(valgte) {
   const feil = []
-  const navn = (id) => MODULE_CATALOG.find(m => m.id === id)?.name || id
+  const navn = (id) => finnModul(id)?.name || id
   if (valgte.length === 0) return ['Velg minst én modul for å gå videre.']
-  if (!valgte.includes('grunnpakke')) {
-    const avhengige = valgte.filter(id => !LAAS_FRITTSTAENDE.includes(id))
+  // Ukjente nøkler holdes UTENFOR reglene. Vi kjenner ikke modulen, og kan
+  // derfor ikke påstå at den krever noe — den skal aldri sperre kunden ute.
+  const kjente = valgte.filter(id => !!finnModul(id))
+  if (!kjente.includes('grunnpakke')) {
+    const avhengige = kjente.filter(id => !LAAS_FRITTSTAENDE.includes(id))
     if (avhengige.length > 0) {
       feil.push(`${avhengige.map(navn).join(', ')} bygger på Grunnpakken og kan ikke stå alene. Huk på Grunnpakke igjen, eller ta bort ${avhengige.length === 1 ? 'modulen' : 'modulene'}.`)
     }
   }
-  valgte.forEach(id => {
-    const m = MODULE_CATALOG.find(x => x.id === id)
-    ;(m?.requires || []).forEach(req => {
-      if (!valgte.includes(req)) feil.push(`${navn(id)} krever ${navn(req)}. Huk på ${navn(req)}, eller ta bort ${navn(id)}.`)
+  kjente.forEach(id => {
+    ;(finnModul(id)?.requires || []).forEach(req => {
+      if (!kjente.includes(req)) feil.push(`${navn(id)} krever ${navn(req)}. Huk på ${navn(req)}, eller ta bort ${navn(id)}.`)
     })
   })
   return feil
@@ -87408,10 +87426,12 @@ function AppContent() {
                             style={{ width:'18px', height:'18px', marginTop:'1px', flexShrink:0, cursor:'pointer', accentColor:'#059669' }} />
                           <span style={{ flex:1, minWidth:0 }}>
                             <span style={{ display:'block', fontSize:'13px', fontWeight:'600', color: paa ? '#0f172a' : '#94a3b8', wordBreak:'break-word' }}>{m.navn}</span>
-                            <span style={{ display:'block', fontSize:'11px', color:'#94a3b8', marginTop:'1px' }}>
-                              {m.perCompany
-                                ? `${(m.pris || 0).toLocaleString('nb-NO')} kr/mnd · per bedrift`
-                                : `${(m.pris || 0).toLocaleString('nb-NO')} kr/mnd · per bruker`}
+                            <span style={{ display:'block', fontSize:'11px', marginTop:'1px', color: m.ukjent ? '#b45309' : '#94a3b8', fontWeight: m.ukjent ? '600' : '400' }}>
+                              {m.ukjent
+                                ? '⚠️ Pris ikke satt — kontakt support'
+                                : m.perCompany
+                                  ? `${(m.pris || 0).toLocaleString('nb-NO')} kr/mnd · per bedrift`
+                                  : `${(m.pris || 0).toLocaleString('nb-NO')} kr/mnd · per bruker`}
                             </span>
                           </span>
                         </label>
