@@ -51071,6 +51071,43 @@ function byggLaasInfo(innst) {
 // bruker i toggleModule og i setelagringen — ikke en egen variant.
 const LAAS_FRITTSTAENDE = ['grunnpakke', 'kalkulator', 'bim_kalkyle']
 
+// Regnestykket bak totalen, én linje per modul — slik at kunden kan følge
+// summen selv. SPEILER beregnBedriftMrr(), som er og blir fasiten: samme tre
+// regler, samme rekkefølge, ingen egen matematikk.
+//   · Grunnpakke      → pris × ALLE brukere
+//   · per bedrift     → flat pris
+//   · øvrige per bruker → pris × antall som har fått tilgang til nettopp den
+// Ukjente nøkler får en linje uten beløp; de teller heller ikke i
+// beregnBedriftMrr, som bare går gjennom katalogen.
+function byggPrislinjer(innst, brukere, valgte) {
+  if (!innst) return []
+  const alle = (brukere || []).filter(u => u.company_id === innst.id)
+  const antallBrukere = alle.length || innst.num_users || 0
+  const linjer = []
+  const leggTil = (id) => {
+    const m = finnModul(id)
+    if (!m) { linjer.push({ id, navn: id, ukjent: true, sum: 0 }); return }
+    if (m.id === 'grunnpakke') {
+      const pris = m.pricePerUser || 239
+      linjer.push({ id, navn: m.name, enhetspris: pris, antall: antallBrukere, enhet: 'bruker', sum: pris * antallBrukere })
+    } else if (m.perCompany) {
+      linjer.push({ id, navn: m.name, enhetspris: m.price || 0, perBedrift: true, sum: m.price || 0 })
+    } else {
+      const medTilgang = alle.filter(u => u.role !== 'les' && (u.module_access || []).includes(m.id)).length
+      linjer.push({ id, navn: m.name, enhetspris: m.price || 0, antall: medTilgang, enhet: 'tilgang', sum: (m.price || 0) * medTilgang })
+    }
+  }
+  // Grunnpakke først, så øvrige per bruker, så per bedrift, ukjente sist.
+  const rang = (id) => {
+    const m = finnModul(id)
+    if (!m) return 3
+    if (m.id === 'grunnpakke') return 0
+    return m.perCompany ? 2 : 1
+  }
+  ;[...valgte].sort((a, b) => rang(a) - rang(b)).forEach(leggTil)
+  return linjer
+}
+
 // Nøkler som finnes i active_modules ute i data, men som katalogen ikke kjenner.
 // 'kalkulasjon' er en gammel variant av 'kalkulator' — koden har aldri brukt den
 // (0 treff i fila), så en bedrift som står med den får i praksis IKKE tilgang til
@@ -87379,9 +87416,8 @@ function AppContent() {
           // seter, Kalkulasjon flatt per bedrift.
           const prisFor = (ider) => laasInfo?.innst ? beregnBedriftMrr({ ...laasInfo.innst, active_modules: ider }, laasBrukere) : 0
           const total = prisFor(valgte)
-          const perBedrift = valgte.filter(id => (laasInfo?.moduler || []).find(m => m.id === id)?.perCompany)
-          const perBedriftSum = prisFor(perBedrift)
-          const perBrukerSum = Math.max(0, total - perBedriftSum)
+          const prislinjer = byggPrislinjer(laasInfo?.innst, laasBrukere, valgte)
+          const harUtenTilgang = prislinjer.some(l => l.enhet === 'tilgang' && l.antall === 0)
           const veksle = (id) => setLaasValgte(valgte.includes(id) ? valgte.filter(x => x !== id) : [...valgte, id])
           return (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:500, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMobile ? '0' : '20px', overflowY:'auto' }}>
@@ -87450,27 +87486,43 @@ function AppContent() {
                 </div>
               )}
 
-              {/* Totalen, delt i per bruker og per bedrift */}
+              {/* Regnestykket, linje for linje. Kunden skal kunne følge summen
+                  selv — «per bruker · 2 brukere» ble lest som at alle modulene
+                  ganges med 2, og det er ikke slik prisen regnes. */}
               {feil.length === 0 && (
                 <div style={{ background:'white', border:'2px solid #bbf7d0', borderRadius:'14px', padding:'14px 16px', marginBottom:'18px' }}>
-                  {perBrukerSum > 0 && (
-                    <div style={{ display:'flex', justifyContent:'space-between', gap:'10px', fontSize:'13px', color:'#475569', marginBottom:'4px' }}>
-                      <span>Per bruker{laasBrukere.length > 0 ? ` · ${laasBrukere.length} bruker${laasBrukere.length === 1 ? '' : 'e'}` : ''}</span>
-                      <span style={{ fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{Math.round(perBrukerSum).toLocaleString('nb-NO')} kr</span>
+                  {prislinjer.map(l => (
+                    <div key={l.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'10px', padding:'5px 0' }}>
+                      <span style={{ flex:1, minWidth:0 }}>
+                        <span style={{ display:'block', fontSize:'13px', color:'#0f172a', wordBreak:'break-word' }}>{l.navn}</span>
+                        <span style={{ display:'block', fontSize:'11px', marginTop:'1px', color: l.ukjent || l.antall === 0 ? '#b45309' : '#94a3b8' }}>
+                          {l.ukjent
+                            ? 'pris ikke satt — kontakt support'
+                            : l.perBedrift
+                              ? `${l.enhetspris.toLocaleString('nb-NO')} kr · fast pris for hele bedriften`
+                              : l.enhet === 'bruker'
+                                ? `${l.enhetspris.toLocaleString('nb-NO')} kr × ${l.antall} bruker${l.antall === 1 ? '' : 'e'}`
+                                : l.antall === 0
+                                  ? `${l.enhetspris.toLocaleString('nb-NO')} kr per person — ingen har fått tilgang ennå`
+                                  : `${l.enhetspris.toLocaleString('nb-NO')} kr × ${l.antall} med tilgang`}
+                        </span>
+                      </span>
+                      <span style={{ fontSize:'13px', fontWeight:'700', color: l.sum > 0 ? '#0f172a' : '#94a3b8', whiteSpace:'nowrap', paddingTop:'1px' }}>
+                        {l.ukjent ? '—' : `${Math.round(l.sum).toLocaleString('nb-NO')} kr`}
+                      </span>
                     </div>
-                  )}
-                  {perBedriftSum > 0 && (
-                    <div style={{ display:'flex', justifyContent:'space-between', gap:'10px', fontSize:'13px', color:'#475569', marginBottom:'4px' }}>
-                      <span>Per bedrift</span>
-                      <span style={{ fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{Math.round(perBedriftSum).toLocaleString('nb-NO')} kr</span>
-                    </div>
-                  )}
-                  <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'10px', marginTop:'6px', flexWrap:'wrap' }}>
+                  ))}
+                  <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'10px', borderTop:'1px solid #e2e8f0', paddingTop:'10px', marginTop:'8px', flexWrap:'wrap' }}>
                     <span style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Totalt</span>
                     <span style={{ fontSize:'20px', fontWeight:'800', color:'#059669', whiteSpace:'nowrap' }}>
                       {Math.round(total).toLocaleString('nb-NO')} kr<span style={{ fontSize:'12px', fontWeight:'600', color:'#64748b' }}>/mnd</span>
                     </span>
                   </div>
+                  {harUtenTilgang && (
+                    <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 12px', marginTop:'10px', fontSize:'11px', color:'#92400e', lineHeight:1.6 }}>
+                      Noen moduler koster ingenting nå fordi ingen har fått tilgang til dem ennå. Prisen følger hvor mange i bedriften som skal bruke modulen, og du gir folk tilgang under «Min bedrift» når dere er i gang.
+                    </div>
+                  )}
                   <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'8px', lineHeight:1.5 }}>
                     Eks. mva. Du kan endre modulene når som helst etterpå i «Min bedrift».
                   </div>
