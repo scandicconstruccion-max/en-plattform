@@ -31,7 +31,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `tripletex-customer-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `tripletex-hours-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `tripletex-project-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
-| `anbud-uttrekk` | ❌ | `functions.invoke` | |
+| `anbud-uttrekk` | ✅ | `functions.invoke` | Fra prod. Se «faggruppe-lista spriker» |
 | `befaring-notify-assignment` | ✅ | `fetch /functions/v1/` | Fra prod. Ingen avsenderkontroll, se under |
 | `befaring-notify-resolver` | ✅ | `fetch /functions/v1/` | Fra prod. Ingen avsenderkontroll, se under |
 | `befaring-view-fetch` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
@@ -71,6 +71,30 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 `kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
+
+## Faggruppe-lista spriker: anbud-uttrekk mot App.jsx
+
+Kommentaren over `FAG` i `anbud-uttrekk` sier «må matche FAGGRUPPER i App.jsx».
+Begge lister har 18 id-er, men de er ikke de samme:
+
+| | |
+|---|---|
+| Kun i `App.jsx` | `ue` (Underleverandør) |
+| Kun i edge-funksjonen | `annet` |
+
+Systemprompten instruerer modellen eksplisitt: **«Uklart = annet»**. Valideringen
+i funksjonen (`FAG.includes(...)`) slipper `annet` gjennom, fordi den står i
+funksjonens egen liste.
+
+I App.jsx faller `getFaggruppe('annet')` tilbake på `FAGGRUPPER[0]`
+(`src/App.jsx` linje 56069), som er **tomrer**. En post modellen var usikker på
+blir dermed stille til Tømrer — med tømrerens timepris — i stedet for å bli
+markert som uavklart.
+
+Funksjonen kan heller aldri foreslå `ue`, siden den id-en ikke finnes i `FAG`.
+
+Ikke rettet. Dette er en ren datafeil, ikke sikkerhet, men den gir feil pris i
+kalkylen og bør sees i sammenheng med Kalkulasjon-arbeidet.
 
 ## Mønsteret som løser problemet: ue-svar-notify og ue-melding-notify
 
