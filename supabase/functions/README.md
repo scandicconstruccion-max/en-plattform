@@ -26,7 +26,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | Funksjon | I repo | Kalles fra App.jsx | Merknad |
 |---|---|---|---|
 | `bim-sesjon-rydd` | ✅ | `functions.invoke` | Ikke deployet i Utvikling |
-| `tripletex-session` | ⚠️ utdatert | `functions.invoke` | Se «Kjent avvik» |
+| `tripletex-session` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-lookup` | ⚠️ utdatert | `functions.invoke` | Se «Kjent avvik» |
 | `tripletex-customer-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
 | `tripletex-hours-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
@@ -48,16 +48,20 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
 | `ue-svar-notify` | ❌ | `functions.invoke` | |
 
-## Kjent avvik: de fem Tripletex-filene er utdaterte
+## Kjent avvik: Tripletex-filene er utdaterte
 
-Kopiene her mangler autorisasjonsblokken (`hentAvsender`, `AvvistFeil`,
-`krevSammeBedrift`, `lesRolleFraJwt`, `hentEgenRad`) som ligger i den deployede
-versjonen i Utvikling. Blokken utleder bedriften fra kallerens JWT via
-`auth_company_id()` i stedet for å stole på `companyId` i request-body, og avviser
-service-role- og anon-nøkkelen som avsender.
+Gjelder de fire som fortsatt står som ⚠️ i tabellen over: `tripletex-lookup`,
+`tripletex-customer-sync`, `tripletex-hours-sync`, `tripletex-project-sync`.
+De blir erstattet med prod-versjonen etter hvert.
+
+Kopiene mangler autorisasjonsblokken (`hentAvsender`, `AvvistFeil`,
+`krevSammeBedrift`, `lesRolleFraJwt`, `hentEgenRad`). Blokken utleder bedriften
+fra kallerens JWT via `auth_company_id()` i stedet for å stole på `companyId` i
+request-body, og avviser service-role- og anon-nøkkelen som avsender.
 
 Sist commit som rørte filene er `2b52c21` (CORS-fiks). Sikkerhetsarbeidet ble
-aldri merget inn på main.
+aldri merget inn på main — men det ER deployet: `tripletex-session` hentet fra
+produksjon har blokken. Repoet lå altså bak drift, ikke omvendt.
 
 **Ikke lim disse inn i dashbordet.** De er eldre enn det som kjører.
 
