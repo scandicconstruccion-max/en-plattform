@@ -43,7 +43,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `stripe-checkout-ts` | ✅ | `functions.invoke` | Slug har `-ts`, se under. Fra prod |
 | `stripe-portal` | ✅ | `functions.invoke` | Fra prod |
 | `stripe-sync-amount` | ✅ | `functions.invoke` | Fra prod. Se «Varsel som ikke når fram» |
-| `stripe-webhook` | ❌ | — | Kalles av Stripe, ikke av appen |
+| `stripe-webhook` | ✅ | — | Kalles av Stripe. «Verify JWT» må være AV |
 | `send-ue-fdv-invitation` | ❌ | — | Ikke funnet kalt fra koden. Arkiveres likevel |
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
 | `ue-svar-notify` | ❌ | `functions.invoke` | |
