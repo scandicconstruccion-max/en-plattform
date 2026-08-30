@@ -40,11 +40,11 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `delete-user` | ❌ | `functions.invoke` | |
 | `send-materialliste` | ❌ | `functions.invoke` | |
 | `send-quote` | ❌ | `fetch /functions/v1/` (`sendEpost`) | All utgående e-post |
-| `stripe-checkout-ts` | ❌ | `functions.invoke` | Navnet har `-ts`, se under |
+| `stripe-checkout-ts` | ❌ | `functions.invoke` | Slug har `-ts`, se under |
 | `stripe-portal` | ❌ | `functions.invoke` | |
 | `stripe-sync-amount` | ❌ | `functions.invoke` | |
 | `stripe-webhook` | ❌ | — | Kalles av Stripe, ikke av appen |
-| `send-ue-fdv-invitation` | ❌ | — | Sto i dashbordlista, ikke funnet i koden |
+| `send-ue-fdv-invitation` | ❌ | — | Ikke funnet kalt fra koden. Arkiveres likevel |
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
 | `ue-svar-notify` | ❌ | `functions.invoke` | |
 
@@ -61,12 +61,24 @@ aldri merget inn på main.
 
 **Ikke lim disse inn i dashbordet.** De er eldre enn det som kjører.
 
-## Navneavvik: `stripe-checkout-ts`
+## Slug mot visningsnavn: `stripe-checkout-ts`
 
-Frontend kaller `stripe-checkout-ts` (App.jsx, to steder: «Start abonnement» i
-Min bedrift og betalingsknappen på låseskjermen). Dashbordlista oppgir
-`stripe-checkout`. Enten er lista forkortet, eller så peker koden på et navn som
-ikke finnes — og da feiler begge betalingsknappene. Må bekreftes mot dashbordet.
+Dashbordet viser funksjonen som **`stripe-checkout`**, men slugen — den som
+faktisk ligger i URL-en — er **`stripe-checkout-ts`**:
+
+```
+https://zffzvvtuycjbrdybajwu.supabase.co/functions/v1/stripe-checkout-ts
+```
+
+App.jsx kaller `stripe-checkout-ts` to steder («Start abonnement» i Min bedrift
+og betalingsknappen på låseskjermen), og det er riktig. Bekreftet i drift:
+Byggkompaniet AS trekkes månedlig gjennom denne flyten.
+
+Står det her fordi visningsnavnet og slugen spriker, og det ser ut som en feil
+neste gang noen leser lista. **Ikke «rett» kallstedene i App.jsx.**
+
+Mappenavnet her følger slugen, ikke visningsnavnet — det er slugen som må stemme
+for at kallet skal treffe.
 
 ## Når du legger til en funksjon her
 
