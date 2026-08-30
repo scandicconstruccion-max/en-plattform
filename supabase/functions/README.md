@@ -42,7 +42,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `send-quote` | ❌ | `fetch /functions/v1/` (`sendEpost`) | All utgående e-post |
 | `stripe-checkout-ts` | ✅ | `functions.invoke` | Slug har `-ts`, se under. Fra prod |
 | `stripe-portal` | ✅ | `functions.invoke` | Fra prod |
-| `stripe-sync-amount` | ❌ | `functions.invoke` | |
+| `stripe-sync-amount` | ✅ | `functions.invoke` | Fra prod. Se «Varsel som ikke når fram» |
 | `stripe-webhook` | ❌ | — | Kalles av Stripe, ikke av appen |
 | `send-ue-fdv-invitation` | ❌ | — | Ikke funnet kalt fra koden. Arkiveres likevel |
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
@@ -79,6 +79,22 @@ neste gang noen leser lista. **Ikke «rett» kallstedene i App.jsx.**
 
 Mappenavnet her følger slugen, ikke visningsnavnet — det er slugen som må stemme
 for at kallet skal treffe.
+
+## Varsel som ikke når fram: stripe-sync-amount
+
+`meldFeil()` skal varsle plattformeier når en beløpssynk feiler, og henter
+mottakerne med `.eq('role', 'platform_owner')`. Plattformeier ligger i kolonnen
+`platform_role`, ikke `role` — `role` inneholder bare admin/leder/ansatt/les.
+Spørringen treffer null rader, og løkka under sender ingenting.
+
+Timeline-skrivingen på bedriften virker som den skal, så feilen er ikke usynlig —
+men den må oppdages ved å åpne bedriften i Kontrollpanelet.
+
+Samme forveksling står i rollesjekken øverst i alle tre Stripe-funksjonene
+(`['admin', 'leder', 'platform_owner'].includes(profile.role)`). Der er den
+harmløs: plattformeier har `role = 'admin'` og slipper gjennom uansett.
+
+Ikke rettet — arkivet skal speile det som kjører.
 
 ## Når du legger til en funksjon her
 
