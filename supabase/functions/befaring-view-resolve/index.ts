@@ -131,6 +131,29 @@ serve(async (req) => {
     })
 
     // 6) Send varsel-epost til byggleder
+    //
+    // SENDES DIREKTE VIA RESEND. Tidligere gikk dette via send-quote, med
+    // service-role-nøkkelen som Authorization. send-quote v5 krever en
+    // INNLOGGET BRUKER (auth.getUser()), og service-role-nøkkelen er ingen
+    // bruker — den har ingen sub-claim. Kallet fikk 401.
+    //
+    // Og siden en 401 er et gyldig HTTP-svar og ikke en nettverksfeil, utløste
+    // .catch() aldri. Svaret ble heller aldri lest. Varselet forsvant uten et
+    // eneste spor i loggen.
+    //
+    // Bekreftet i produksjon: utbedring 15.08.2026 kl. 10:10:04, ingen rad i
+    // sent_emails etter 10:08:57 samme dag.
+    //
+    // UE-en er ikke innlogget, så det finnes ingen bruker-JWT å videresende til
+    // send-quote. Funksjonen sender derfor selv, som befaring-notify-resolver,
+    // befaring-notify-assignment og ue-svar-notify allerede gjør. Mottaker og
+    // innhold bygges server-side — kalleren kan ikke styre noe av det.
+    //
+    // varselSendt/varselFeil følger med ut i svaret og i loggen, så en feil
+    // her aldri kan bli usynlig igjen.
+    let varselSendt = false
+    let varselFeil: string | null = null
+
     try {
       let builderEmail: string | null = null
       let builderName: string | null = null
@@ -146,7 +169,14 @@ serve(async (req) => {
         }
       }
 
-      if (builderEmail) {
+      if (!builderEmail) {
+        // Ikke en teknisk feil, men varselet nådde ingen — det skal stå i loggen.
+        varselFeil = 'ingen_mottaker'
+        console.error(
+          '[befaring-view-resolve] VARSEL IKKE SENDT: fant ingen e-postadresse for den som opprettet befaringen',
+          { inspection_id: inspection.id, created_by: inspection.created_by ?? null },
+        )
+      } else {
         const appUrl = Deno.env.get('APP_URL') ?? 'https://en-plattform.vercel.app'
         const html = `
           <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -166,18 +196,63 @@ serve(async (req) => {
           </div>
         `
 
-        await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/send-quote`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
-          },
-          body: JSON.stringify({
-            to: builderEmail,
-            subject: `✅ Punkt utbedret: ${observation.title || ''} (#${observation.sequence_number})`,
-            html,
-          }),
-        }).catch(e => console.warn('E-post-varsel feilet:', e))
+        const resendApiKey = Deno.env.get('RESEND_API_KEY') ?? ''
+        // Samme default som befaring-notify-resolver og -assignment, slik at
+        // alle befaring-varsler kommer fra samme avsender hvis secreten mangler.
+        const fromEmail = Deno.env.get('FROM_EMAIL') ?? 'tilbud@enplattform.no'
+
+        if (!resendApiKey) {
+          varselFeil = 'mangler_api_nokkel'
+          console.error('[befaring-view-resolve] VARSEL IKKE SENDT: RESEND_API_KEY mangler i Edge Function secrets')
+        } else {
+          const res = await fetch('https://api.resend.com/emails', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              from: fromEmail,
+              to: [builderEmail],
+              subject: `✅ Punkt utbedret: ${observation.title || ''} (#${observation.sequence_number})`,
+              html,
+            }),
+          })
+          const resendData = await res.json().catch(() => ({}))
+
+          if (res.ok) {
+            varselSendt = true
+            console.log(
+              '[befaring-view-resolve] varsel sendt til byggleder - Resend ID:',
+              resendData?.id || '(ingen)',
+              { inspection_id: inspection.id, observation_id },
+            )
+            // Bounce-fangst, samme tabell som send-quote skriver til. Best
+            // effort — skal aldri velte kallet.
+            try {
+              if (resendData?.id) {
+                await supabase.from('sent_emails').insert({
+                  resend_email_id: resendData.id,
+                  sender_user_id: inspection.created_by ?? null,
+                  recipient_email: builderEmail,
+                  subject: `✅ Punkt utbedret: ${observation.title || ''} (#${observation.sequence_number})`,
+                })
+              }
+            } catch (logErr) {
+              console.warn('[befaring-view-resolve] kunne ikke lagre sent_emails (e-post ble likevel sendt):', logErr)
+            }
+          } else {
+            // HELE Resend-svaret i loggen. Det var mangelen på nettopp dette
+            // som gjorde at feilen kunne stå uoppdaget i to uker.
+            varselFeil = 'resend_avviste'
+            console.error(
+              '[befaring-view-resolve] VARSEL IKKE SENDT: Resend svarte',
+              res.status,
+              resendData?.message || JSON.stringify(resendData).slice(0, 300),
+              { inspection_id: inspection.id, observation_id },
+            )
+          }
+        }
       }
 
       // Også in-app notification
@@ -191,10 +266,32 @@ serve(async (req) => {
         }).then(r => r).catch(e => console.warn('Notification insert feilet:', e))
       }
     } catch (notifyErr) {
-      console.warn('Varsling feilet (men oppdatering OK):', notifyErr)
+      // Var e-posten allerede sendt, er dette en feil i in-app-varselet og
+      // ikke i e-posten — da skal ikke varselFeil overskrives.
+      if (!varselSendt && !varselFeil) varselFeil = 'uventet_feil'
+      console.error('[befaring-view-resolve] VARSLING FEILET (utbedringen er lagret):', notifyErr)
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // Utbedringen er lagret uansett — UE-en skal ikke få en feil fordi VÅRT
+    // varsel ikke gikk. Men statusen følger med ut, så en feil er synlig både
+    // i funksjonsloggen og for kallstedet.
+    //
+    // varselFeil er en kort kategori, aldri Resend-teksten: UE-en er ekstern,
+    // og bygglederens e-postadresse skal ikke kunne lekke via en feilmelding.
+    // Den fulle detaljen står i loggen.
+    if (!varselSendt) {
+      console.error('[befaring-view-resolve] OPPSUMMERING: utbedring lagret, men byggleder ble IKKE varslet', {
+        inspection_id: inspection.id,
+        observation_id,
+        aarsak: varselFeil ?? 'ukjent',
+      })
+    }
+
+    return new Response(JSON.stringify({
+      success: true,
+      varsel_sendt: varselSendt,
+      varsel_feil: varselFeil,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (e) {
