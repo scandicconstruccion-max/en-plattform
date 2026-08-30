@@ -37,7 +37,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `befaring-view-fetch` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `befaring-view-resolve` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `befaring-view-upload-url` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
-| `delete-user` | ❌ | `functions.invoke` | |
+| `delete-user` | ✅ | `functions.invoke` | Fra prod. Reell rollesjekk, bruker `platform_role` |
 | `send-materialliste` | ✅ | `functions.invoke` | Fra prod. Ingen kontroll i koden, kun «Verify JWT» |
 | `send-quote` | ✅ | `fetch /functions/v1/` (`sendEpost`) | Fra prod. v5 krever innlogget bruker |
 | `stripe-checkout-ts` | ✅ | `functions.invoke` | Slug har `-ts`, se under. Fra prod |
@@ -136,8 +136,10 @@ Standardverdien for `FROM_EMAIL` er ikke den samme i alle funksjonene:
 | Funksjon | Default hvis `FROM_EMAIL` mangler |
 |---|---|
 | `send-quote` | `noreply@enplattform.no` |
-| `send-materialliste` | `ikke.svar@enplattform.no` |
+| `send-materialliste`, `send-ue-fdv-invitation` | `ikke.svar@enplattform.no` |
 | `befaring-notify-resolver`, `befaring-notify-assignment` | `tilbud@enplattform.no` |
+| `ue-svar-notify` | `noreply@enplattform.no` |
+| `ue-melding-notify` | `En Plattform AS <ikke.svar@enplattform.no>` |
 
 Er `FROM_EMAIL` satt som secret, brukes den overalt og forskjellen spiller ingen
 rolle. Er den ikke satt, sender de samme systemet e-post fra tre adresser — noe
@@ -245,6 +247,9 @@ men den må oppdages ved å åpne bedriften i Kontrollpanelet.
 Samme forveksling står i rollesjekken øverst i alle tre Stripe-funksjonene
 (`['admin', 'leder', 'platform_owner'].includes(profile.role)`). Der er den
 harmløs: plattformeier har `role = 'admin'` og slipper gjennom uansett.
+
+`delete-user` gjør det derimot riktig — `platform_role === 'platform_owner'`.
+Den er fasiten hvis noen skal rydde i de andre.
 
 Ikke rettet — arkivet skal speile det som kjører.
 
