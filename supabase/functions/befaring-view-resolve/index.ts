@@ -182,7 +182,7 @@ serve(async (req) => {
           <div style="font-family: system-ui, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: #ecfdf5; border-left: 4px solid #059669; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
               <h2 style="margin: 0 0 8px; color: #064e3b; font-size: 18px;">✅ Punkt markert som utbedret</h2>
-              <p style="margin: 0; color: #065f46; font-size: 14px;">${resolver_name || normalizedEmail} har lagt inn dokumentasjon på et befaringspunkt.</p>
+              <p style="margin: 0; color: #065f46; font-size: 14px;">${escapeHtml(resolver_name || normalizedEmail)} har lagt inn dokumentasjon på et befaringspunkt.</p>
             </div>
             <table style="width:100%; border-collapse: collapse; margin-bottom: 20px;">
               <tr><td style="padding: 6px 0; color: #64748b; font-size: 13px;">Befaring:</td><td style="padding: 6px 0; font-size: 13px; font-weight: 600;">${escapeHtml(inspection.title || '')}</td></tr>
