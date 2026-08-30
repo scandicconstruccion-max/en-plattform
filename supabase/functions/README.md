@@ -36,7 +36,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `befaring-notify-resolver` | ❌ | `fetch /functions/v1/` | |
 | `befaring-view-fetch` | ❌ | `fetch /functions/v1/` | |
 | `befaring-view-resolve` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
-| `befaring-view-upload-url` | ❌ | `fetch /functions/v1/` | |
+| `befaring-view-upload-url` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `delete-user` | ❌ | `functions.invoke` | |
 | `send-materialliste` | ❌ | `functions.invoke` | |
 | `send-quote` | ❌ | `fetch /functions/v1/` (`sendEpost`) | All utgående e-post |
