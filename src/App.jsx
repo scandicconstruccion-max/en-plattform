@@ -2267,9 +2267,17 @@ function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
+  // Er IDENTITETEN avklart? Ikke det samme som `loading`: den settes false rett
+  // etter at loadProfile() er KALT, ikke etter at den har svart. Alt som tar en
+  // avgjørelse ut fra HVEM brukeren er — abonnementssperren først og fremst —
+  // må vente på denne. Uten den avgjøres det på profile === null, og en
+  // plattformeier ble målt som om han ikke var det.
+  // Settes true når loadProfile er ferdig, uansett om den fant en profil eller
+  // ikke: «vi har spurt og dette er svaret» er også et avklart svar.
+  const [profilKlar, setProfilKlar] = useState(false)
 
   const loadProfile = async (authUser) => {
-    if (!authUser) { setProfile(null); return }
+    if (!authUser) { setProfile(null); setProfilKlar(true); return }
     try {
       let prof = null
       const { data, error } = await supabase.from('user_profiles').select('full_name, avatar_url, role, platform_role, created_at, feedback_prompt_disabled, feedback_prompt_last_shown, company_id, module_access, seen_tours').eq('id', authUser.id).maybeSingle()
@@ -2338,6 +2346,7 @@ function AuthProvider({ children }) {
         } catch (e) { /* ignorer feil - ikke kritisk */ }
       }
     } catch(e) { setProfile(null) }
+    finally { setProfilKlar(true) }   // spurt og svart — også når det feilet
   }
 
   useEffect(() => {
@@ -2349,6 +2358,7 @@ function AuthProvider({ children }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       // Tøm minne-cachen ved utlogging, så neste bruker i samme fane ikke ser cachede data
       if (_event === 'SIGNED_OUT') { try { tomDataCache() } catch (_) {} }
+      setProfilKlar(false)            // ny bruker → identiteten er uavklart igjen
       setUser(session?.user ?? null)
       loadProfile(session?.user ?? null)
     })
@@ -2423,7 +2433,7 @@ function AuthProvider({ children }) {
     try { await supabase.from('user_profiles').update({ seen_tours: merged }).eq('id', user.id) } catch (_) {}
   }
 
-  return <AuthContext.Provider value={{ user, profile, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, kanSePriser, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ user, profile, profilKlar, displayName, isPlatformOwner, companyId, role, moduleAccess, kanRedigere, erAdmin, kanSlette, kanStyreProsjekt, kanStyrePrisgrunnlag, kanSePriser, loading, supabase, markTourSeen }}>{children}</AuthContext.Provider>
 }
 
 const useAuth = () => useContext(AuthContext)
@@ -26736,10 +26746,11 @@ function ModulUpsellPopup({ navId, onClose, onModulAktivert }) {
       }
       console.log('[Bestill] Nye moduler å lagre:', newModules)
 
+      // Tredje sted som flippet subscription_status til 'active' ved modulvalg.
+      // Samme feil som i toggleModule og setelagringen: en bestilling her er
+      // ikke en betaling, og statusen skal eies av Stripe eller «Registrer
+      // betaling». Skriver nå kun active_modules.
       const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
-      if (settings.subscription_status === 'trial') {
-        updates.subscription_status = 'active'
-      }
 
       const { error: updateErr } = await supabase.from('company_settings').update(updates).eq('id', settings.id)
       if (updateErr) {
@@ -51039,13 +51050,41 @@ function byggLaasInfo(innst) {
   if (!innst) return null
   const ids = innst.active_modules || []
   return {
+    innst,                                   // hele raden — beregnBedriftMrr trenger id og num_users
     utloptDato: innst.trial_ends_at || null,
     moduler: ids.map(id => {
       const m = MODULE_CATALOG.find(x => x.id === id)
-      return { id, navn: m?.name || id }
+      return { id, navn: m?.name || id, perCompany: !!m?.perCompany, pris: m?.price ?? m?.pricePerUser ?? 0 }
     }),
-    manedspris: beregnBedriftMrr(innst, []),
   }
+}
+
+// Modulene som kan stå alene, uten Grunnpakke. Samme liste som «Min bedrift»
+// bruker i toggleModule og i setelagringen — ikke en egen variant.
+const LAAS_FRITTSTAENDE = ['grunnpakke', 'kalkulator', 'bim_kalkyle']
+
+// Validerer et modulutvalg mot de samme avhengighetsreglene som resten av appen:
+//   · Grunnpakke, Kalkulasjon og BIM-Kalkyle kan stå alene
+//   · alt annet krever Grunnpakke
+//   · i tillegg gjelder MODULE_CATALOG.requires — BIM-Kalkyle krever Kalkulasjon
+// Returnerer en liste med feiltekster; tom liste betyr gyldig utvalg.
+function laasModulfeil(valgte) {
+  const feil = []
+  const navn = (id) => MODULE_CATALOG.find(m => m.id === id)?.name || id
+  if (valgte.length === 0) return ['Velg minst én modul for å gå videre.']
+  if (!valgte.includes('grunnpakke')) {
+    const avhengige = valgte.filter(id => !LAAS_FRITTSTAENDE.includes(id))
+    if (avhengige.length > 0) {
+      feil.push(`${avhengige.map(navn).join(', ')} bygger på Grunnpakken og kan ikke stå alene. Huk på Grunnpakke igjen, eller ta bort ${avhengige.length === 1 ? 'modulen' : 'modulene'}.`)
+    }
+  }
+  valgte.forEach(id => {
+    const m = MODULE_CATALOG.find(x => x.id === id)
+    ;(m?.requires || []).forEach(req => {
+      if (!valgte.includes(req)) feil.push(`${navn(id)} krever ${navn(req)}. Huk på ${navn(req)}, eller ta bort ${navn(id)}.`)
+    })
+  })
+  return feil
 }
 
 // modulId: én streng, eller en liste der ALLE må være aktive.
@@ -86263,7 +86302,7 @@ function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
 }
 
 function AppContent() {
-  const { user, loading, supabase, displayName, isPlatformOwner, profile, companyId, role, moduleAccess, kanRedigere, erAdmin } = useAuth()
+  const { user, loading, supabase, displayName, isPlatformOwner, profilKlar, profile, companyId, role, moduleAccess, kanRedigere, erAdmin } = useAuth()
   const appAlert = useAppAlert()   // låseskjermen melder fra hvis Stripe ikke svarer
   // Husk om sidemenyen er sammenslått på tvers av økter (brukerens eget valg)
   const [collapsed, setCollapsed] = useState(() => {
@@ -86369,16 +86408,46 @@ function AppContent() {
   // Det låseskjermen trenger for å være konkret: dato, moduler og månedspris.
   const [laasInfo, setLaasInfo] = React.useState(null)
   const [starterAboLaas, setStarterAboLaas] = React.useState(false)
+  // null = ikke rørt ennå, da gjelder det bedriften alt har aktivert.
+  const [laasValgte, setLaasValgte] = React.useState(null)
+  // Bedriftens brukere. beregnBedriftMrr priser per-sete-moduler på faktiske
+  // seter, så uten denne lista ville totalen blitt lavere enn den kunden ser i
+  // Kontrollpanelet. Hentes kun når låseskjermen faktisk er oppe.
+  const [laasBrukere, setLaasBrukere] = React.useState([])
+  React.useEffect(() => {
+    if (!showTrialExpired) return
+    let levende = true
+    supabase.from('user_profiles').select('id, company_id, role, module_access')
+      .then(({ data }) => { if (levende && data) setLaasBrukere(data) })
+      .catch(() => {})
+    return () => { levende = false }
+  }, [showTrialExpired])
   // Settes KUN for plattformeier: bedriften han står i er sperret, men han
   // skal inn likevel. Vises i støttebanneret, ikke som en egen skjerm.
   const [sperretBedrift, setSperretBedrift] = React.useState(null) // 'prove' | 'betaling' | 'suspendert' | null
   // Samme edge-funksjon som «Start abonnement» i Min bedrift bruker. Låseskjermen
   // kan ikke sende brukeren dit — Min bedrift ligger bak låsen.
-  const startAbonnementFraLaas = async () => {
+  const startAbonnementFraLaas = async (valgteModuler) => {
     if (starterAboLaas) return
     setStarterAboLaas(true)
     try {
-      const { data, error } = await supabase.functions.invoke('stripe-checkout-ts', { body: { origin: window.location.origin } })
+      // Utvalget MÅ ligge i active_modules før checkout. stripe-checkout-ts
+      // ligger ikke i repoet, og det eneste kallstedet i dag sender bare
+      // { origin } — funksjonen leser altså nesten sikkert beløpet fra
+      // databasen, slik stripe-sync-amount gjør. Sender vi ikke utvalget dit
+      // først, ville kunden blitt belastet for det han nettopp huket AV.
+      // `moduler` i body-en er i tillegg, i tilfelle funksjonen tar imot den —
+      // den er ufarlig om den ignoreres.
+      if (Array.isArray(valgteModuler) && valgteModuler.length > 0) {
+        const { data: cs } = await supabase.from('company_settings').select('id').limit(1).single()
+        if (cs?.id) {
+          const { error: lagreFeil } = await supabase.from('company_settings')
+            .update({ active_modules: valgteModuler, updated_at: new Date().toISOString() })
+            .eq('id', cs.id)
+          if (lagreFeil) throw new Error('Kunne ikke lagre modulvalget: ' + lagreFeil.message)
+        }
+      }
+      const { data, error } = await supabase.functions.invoke('stripe-checkout-ts', { body: { origin: window.location.origin, moduler: valgteModuler } })
       if (error) {
         let detalj = error.message || 'Ukjent feil'
         try { const b = await error.context.json(); if (b?.error) detalj = b.error } catch(_) {}
@@ -86527,6 +86596,14 @@ function AppContent() {
 
   React.useEffect(() => {
     if (!user) return
+    // Vent til vi VET hvem som er innlogget. Uten denne vakten kjørte effekten
+    // før loadProfile() hadde svart, avgjorde på profile === null, og viste
+    // låseskjermen et øyeblikk for plattformeier under en støtte-økt før den
+    // ryddet seg selv bort. Glimtet var synlig og så ut som en feil.
+    // Vakten går BEGGE veier: en vanlig bruker hos en sperret bedrift får
+    // heller ikke se appen først og låseskjermen etterpå — ingenting avgjøres
+    // før identiteten er avklart, og til da står den ordinære lastetilstanden.
+    if (!profilKlar) return
     supabase.from('company_settings').select('*').limit(1).single()
       .then(({ data, error }) => {
         // Svarte ikke spørringen — typisk uten nett — VET vi ikke hvilke moduler
@@ -86604,11 +86681,11 @@ function AppContent() {
     // isPlatformOwner MÅ være med: den er false til loadProfile() har svart, og
     // uten den ble avgjørelsen tatt på en identitet som ikke var kjent ennå —
     // og aldri tatt om igjen.
-  }, [user, isPlatformOwner])
+  }, [user, profilKlar, isPlatformOwner])
 
   // Løpende sjekk: blir bedriften sperret mens brukeren er innlogget, låses de ut umiddelbart
   React.useEffect(() => {
-    if (!user || isPlatformOwner) return
+    if (!user || !profilKlar || isPlatformOwner) return   // samme identitetsvakt som ved innlogging
     const sjekk = async () => {
       try {
         // Leste tidligere BARE subscription_status, og sammenlignet mot
@@ -86632,7 +86709,7 @@ function AppContent() {
     }
     const id = setInterval(sjekk, 60000) // hvert minutt
     return () => clearInterval(id)
-  }, [user, isPlatformOwner])
+  }, [user, profilKlar, isPlatformOwner])
 
   // Map nav item IDs to module IDs they require
   const navToModule = {
@@ -87273,7 +87350,22 @@ function AppContent() {
             likevel». Eneste utganger er å legge inn kort eller logge ut.
             Det viktigste avsnittet er at dataene er intakte — uten det tror
             folk at alt er slettet. */}
-        {showTrialExpired && (
+        {showTrialExpired && (() => {
+          // Utvalget starter på det bedriften ALLEREDE har aktivert — ingenting
+          // forsvinner av seg selv. Kunden huker av det de ikke vil betale for.
+          const alleIder = (laasInfo?.moduler || []).map(m => m.id)
+          const valgte = laasValgte === null ? alleIder : laasValgte
+          const feil = laasModulfeil(valgte)
+          // Samme prisberegning som Kontrollpanelet og Min bedrift: beregnBedriftMrr
+          // med bedriftens faktiske brukere. Per-sete-moduler prises på tildelte
+          // seter, Kalkulasjon flatt per bedrift.
+          const prisFor = (ider) => laasInfo?.innst ? beregnBedriftMrr({ ...laasInfo.innst, active_modules: ider }, laasBrukere) : 0
+          const total = prisFor(valgte)
+          const perBedrift = valgte.filter(id => (laasInfo?.moduler || []).find(m => m.id === id)?.perCompany)
+          const perBedriftSum = prisFor(perBedrift)
+          const perBrukerSum = Math.max(0, total - perBedriftSum)
+          const veksle = (id) => setLaasValgte(valgte.includes(id) ? valgte.filter(x => x !== id) : [...valgte, id])
+          return (
           <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:500, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMobile ? '0' : '20px', overflowY:'auto' }}>
             <div style={{ background:'white', borderRadius: isMobile ? '0' : '24px', padding: isMobile ? '28px 20px 32px' : '36px 40px', maxWidth:'520px', width:'100%', minHeight: isMobile ? '100%' : undefined, boxShadow:'0 20px 60px rgba(0,0,0,0.3)', fontFamily:'system-ui,sans-serif', margin: isMobile ? '0' : 'auto' }}>
               <div style={{ width:'72px', height:'72px', borderRadius:'50%', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px', fontSize:'32px' }}>🔒</div>
@@ -87286,45 +87378,87 @@ function AppContent() {
                 {laasAarsak === 'betaling'
                   ? 'Vi fikk ikke gjennomført den månedlige betalingen. Legg inn et nytt kort, så er du i gang igjen med én gang.'
                   : <>
-                      Den gratis perioden{laasInfo?.utloptDato ? <> gikk ut <strong>{new Date(laasInfo.utloptDato).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}</strong></> : ' er over'}. For å bruke En Plattform videre må du starte abonnementet.
+                      Den gratis perioden{laasInfo?.utloptDato ? <> gikk ut <strong>{new Date(laasInfo.utloptDato).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}</strong></> : ' er over'}. Velg hva dere vil ha videre, så starter vi abonnementet.
                     </>}
               </p>
 
-              {/* Det folk faktisk lurer på først. Skal stå høyt og tydelig. */}
+              {/* Det folk lurer på først. Skal stå høyt og tydelig. */}
               <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'14px', padding:'14px 16px', marginBottom:'18px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
                 <span style={{ fontSize:'18px', flexShrink:0, lineHeight:1.4 }}>💚</span>
                 <div style={{ fontSize:'13px', color:'#15803d', lineHeight:1.6 }}>
-                  <strong>Alt du har lagt inn er trygt.</strong> Prosjekter, timer, kalkyler, bilder og dokumenter ligger urørt. Ingenting er slettet, og alt er på plass igjen i samme øyeblikk som abonnementet er aktivert.
+                  <strong>Alt du har lagt inn er trygt.</strong> Prosjekter, timer, kalkyler, bilder og dokumenter ligger urørt. Tar du bort en modul her, slettes ingenting i den — innholdet står der om dere tar modulen inn igjen senere.
                 </div>
               </div>
 
-              {/* Hva de har slått på, og hva det koster */}
+              {/* Avhukbart modulvalg */}
               {laasInfo && laasInfo.moduler.length > 0 && (
-                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'14px', padding:'14px 16px', marginBottom:'18px' }}>
-                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'10px' }}>
-                    Dette har dere aktivert
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'14px', padding:'14px 16px', marginBottom:'14px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'4px' }}>
+                    Velg hva dere skal ha
                   </div>
-                  <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom: laasInfo.manedspris > 0 ? '12px' : 0 }}>
-                    {laasInfo.moduler.map(m => (
-                      <span key={m.id} style={{ fontSize:'12px', fontWeight:'600', color:'#334155', background:'white', border:'1px solid #e2e8f0', borderRadius:'999px', padding:'3px 10px' }}>{m.navn}</span>
-                    ))}
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginBottom:'10px', lineHeight:1.5 }}>
+                    Alt dere aktiverte i prøveperioden er huket på. Ta bort det dere ikke trenger.
                   </div>
-                  {laasInfo.manedspris > 0 && (
-                    <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'10px', borderTop:'1px solid #e2e8f0', paddingTop:'10px', flexWrap:'wrap' }}>
-                      <span style={{ fontSize:'13px', color:'#475569' }}>Månedspris for dette</span>
-                      <span style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a', whiteSpace:'nowrap' }}>
-                        {Math.round(laasInfo.manedspris).toLocaleString('nb-NO')} kr<span style={{ fontSize:'12px', fontWeight:'600', color:'#64748b' }}>/mnd</span>
-                      </span>
-                    </div>
-                  )}
-                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'8px', lineHeight:1.5 }}>
-                    Eks. mva. Du kan endre hvilke moduler dere har når som helst etterpå.
+                  <div style={{ display:'flex', flexDirection:'column', gap:'2px' }}>
+                    {laasInfo.moduler.map(m => {
+                      const paa = valgte.includes(m.id)
+                      return (
+                        <label key={m.id} style={{ display:'flex', alignItems:'flex-start', gap:'10px', padding:'9px 8px', borderRadius:'10px', cursor:'pointer', background: paa ? 'white' : 'transparent', border:`1px solid ${paa ? '#e2e8f0' : 'transparent'}`, minHeight:'44px' }}>
+                          <input type="checkbox" checked={paa} onChange={()=>veksle(m.id)}
+                            style={{ width:'18px', height:'18px', marginTop:'1px', flexShrink:0, cursor:'pointer', accentColor:'#059669' }} />
+                          <span style={{ flex:1, minWidth:0 }}>
+                            <span style={{ display:'block', fontSize:'13px', fontWeight:'600', color: paa ? '#0f172a' : '#94a3b8', wordBreak:'break-word' }}>{m.navn}</span>
+                            <span style={{ display:'block', fontSize:'11px', color:'#94a3b8', marginTop:'1px' }}>
+                              {m.perCompany
+                                ? `${(m.pris || 0).toLocaleString('nb-NO')} kr/mnd · per bedrift`
+                                : `${(m.pris || 0).toLocaleString('nb-NO')} kr/mnd · per bruker`}
+                            </span>
+                          </span>
+                        </label>
+                      )
+                    })}
                   </div>
                 </div>
               )}
 
-              <button onClick={startAbonnementFraLaas} disabled={starterAboLaas}
-                style={{ width:'100%', padding: isMobile ? '16px' : '14px', minHeight:'52px', background: starterAboLaas ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor: starterAboLaas ? 'wait' : 'pointer', marginBottom:'10px' }}>
+              {/* Ugyldig kombinasjon — sagt i klartekst, og knappen er sperret */}
+              {feil.length > 0 && (
+                <div style={{ background:'#fef2f2', border:'1px solid #fecaca', borderRadius:'14px', padding:'12px 14px', marginBottom:'14px' }}>
+                  {feil.map((t, i) => (
+                    <div key={i} style={{ fontSize:'12px', color:'#991b1b', lineHeight:1.6, marginTop: i > 0 ? '6px' : 0 }}>⚠️ {t}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* Totalen, delt i per bruker og per bedrift */}
+              {feil.length === 0 && (
+                <div style={{ background:'white', border:'2px solid #bbf7d0', borderRadius:'14px', padding:'14px 16px', marginBottom:'18px' }}>
+                  {perBrukerSum > 0 && (
+                    <div style={{ display:'flex', justifyContent:'space-between', gap:'10px', fontSize:'13px', color:'#475569', marginBottom:'4px' }}>
+                      <span>Per bruker{laasBrukere.length > 0 ? ` · ${laasBrukere.length} bruker${laasBrukere.length === 1 ? '' : 'e'}` : ''}</span>
+                      <span style={{ fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{Math.round(perBrukerSum).toLocaleString('nb-NO')} kr</span>
+                    </div>
+                  )}
+                  {perBedriftSum > 0 && (
+                    <div style={{ display:'flex', justifyContent:'space-between', gap:'10px', fontSize:'13px', color:'#475569', marginBottom:'4px' }}>
+                      <span>Per bedrift</span>
+                      <span style={{ fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{Math.round(perBedriftSum).toLocaleString('nb-NO')} kr</span>
+                    </div>
+                  )}
+                  <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'10px', borderTop:'1px solid #f1f5f9', paddingTop:'10px', marginTop:'6px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>Totalt</span>
+                    <span style={{ fontSize:'20px', fontWeight:'800', color:'#059669', whiteSpace:'nowrap' }}>
+                      {Math.round(total).toLocaleString('nb-NO')} kr<span style={{ fontSize:'12px', fontWeight:'600', color:'#64748b' }}>/mnd</span>
+                    </span>
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'8px', lineHeight:1.5 }}>
+                    Eks. mva. Du kan endre modulene når som helst etterpå i «Min bedrift».
+                  </div>
+                </div>
+              )}
+
+              <button onClick={()=>startAbonnementFraLaas(valgte)} disabled={starterAboLaas || feil.length > 0}
+                style={{ width:'100%', padding: isMobile ? '16px' : '14px', minHeight:'52px', background: (starterAboLaas || feil.length > 0) ? '#a7f3d0' : '#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor: (starterAboLaas || feil.length > 0) ? 'default' : 'pointer', marginBottom:'10px' }}>
                 {starterAboLaas ? 'Åpner betaling …' : '💳 Legg inn betalingskort'}
               </button>
 
@@ -87339,7 +87473,8 @@ function AppContent() {
               </div>
             </div>
           </div>
-        )}
+          )
+        })()}
 
         {/* Kontormodul-tips på mobil */}
         {showDesktopTip && (
