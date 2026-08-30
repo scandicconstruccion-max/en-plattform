@@ -27,7 +27,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 |---|---|---|---|
 | `bim-sesjon-rydd` | ✅ | `functions.invoke` | Ikke deployet i Utvikling |
 | `tripletex-session` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
-| `tripletex-lookup` | ⚠️ utdatert | `functions.invoke` | Se «Kjent avvik» |
+| `tripletex-lookup` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-customer-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
 | `tripletex-hours-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
 | `tripletex-project-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
@@ -50,7 +50,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 
 ## Kjent avvik: Tripletex-filene er utdaterte
 
-Gjelder de fire som fortsatt står som ⚠️ i tabellen over: `tripletex-lookup`,
+Gjelder de tre som fortsatt står som ⚠️ i tabellen over:
 `tripletex-customer-sync`, `tripletex-hours-sync`, `tripletex-project-sync`.
 De blir erstattet med prod-versjonen etter hvert.
 
