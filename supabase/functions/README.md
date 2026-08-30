@@ -29,7 +29,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `tripletex-session` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-lookup` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-customer-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
-| `tripletex-hours-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
+| `tripletex-hours-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `tripletex-project-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
 | `anbud-uttrekk` | ❌ | `functions.invoke` | |
 | `befaring-notify-assignment` | ❌ | `fetch /functions/v1/` | |
@@ -50,9 +50,8 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 
 ## Kjent avvik: Tripletex-filene er utdaterte
 
-Gjelder de to som fortsatt står som ⚠️ i tabellen over:
-`tripletex-hours-sync` og `tripletex-project-sync`.
-De blir erstattet med prod-versjonen etter hvert.
+Gjelder den ene som fortsatt står som ⚠️ i tabellen over:
+`tripletex-project-sync`. Den blir erstattet med prod-versjonen.
 
 Kopiene mangler autorisasjonsblokken (`hentAvsender`, `AvvistFeil`,
 `krevSammeBedrift`, `lesRolleFraJwt`, `hentEgenRad`). Blokken utleder bedriften
