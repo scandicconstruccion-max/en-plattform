@@ -45,7 +45,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `stripe-sync-amount` | ✅ | `functions.invoke` | Fra prod. Se «Varsel som ikke når fram» |
 | `stripe-webhook` | ✅ | — | Kalles av Stripe. «Verify JWT» må være AV |
 | `send-ue-fdv-invitation` | ✅ | — | Fra prod. Ikke funnet kalt fra App.jsx. Se «origin fra body» |
-| `ue-melding-notify` | ❌ | `functions.invoke` | |
+| `ue-melding-notify` | ✅ | `functions.invoke` | Fra prod. Samme mønster som `ue-svar-notify` |
 | `ue-svar-notify` | ✅ | `functions.invoke` | Fra prod. Mønsteret å kopiere, se under |
 
 ## Tripletex: autorisasjonsblokken
@@ -72,7 +72,7 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
 
-## Mønsteret som løser problemet: ue-svar-notify
+## Mønsteret som løser problemet: ue-svar-notify og ue-melding-notify
 
 Flere av e-postfunksjonene sliter med det samme: en **uinnlogget** part skal
 utløse en e-post, og da finnes det ingen bruker-JWT å kontrollere.
@@ -87,8 +87,19 @@ i utgangspunktet.
 Mottakeradressen hentes fra `auth.admin.getUserById()` — autoritativt, ikke fra
 en profiltabell som kan være utdatert.
 
+`ue-melding-notify` gjør det samme, og legger til to ting: den sender bare hvis
+siste melding er fra UE-en og er under 10 minutter gammel, slik at en gammel
+melding ikke kan spilles av på nytt i en løkke. Kommentaren dokumenterer også
+en mangel den ikke løser — funksjonen husker ikke om den alt har varslet om
+meldingen, så den med et gyldig token kan kalle gjentatte ganger innenfor
+vinduet. Det er notert i kilden som noe som tas sammen med historikk-saken.
+
+At mangelen står skrevet i fila er verdt å merke seg: det er forskjell på en
+kjent, avgrenset svakhet og en kommentar som påstår en kontroll som ikke finnes
+(se `befaring-notify-resolver`).
+
 Dette er malen for `send-ue-fdv-invitation`, der `origin` i dag kommer fra body
-(se under). Samme problem, løst to ulike steder — den ene riktig.
+(se under). Samme problem, løst tre steder — to riktig.
 
 ## origin fra body: send-ue-fdv-invitation
 
