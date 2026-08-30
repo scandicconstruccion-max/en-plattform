@@ -46,7 +46,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `stripe-webhook` | ✅ | — | Kalles av Stripe. «Verify JWT» må være AV |
 | `send-ue-fdv-invitation` | ✅ | — | Fra prod. Ikke funnet kalt fra App.jsx. Se «origin fra body» |
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
-| `ue-svar-notify` | ❌ | `functions.invoke` | |
+| `ue-svar-notify` | ✅ | `functions.invoke` | Fra prod. Mønsteret å kopiere, se under |
 
 ## Tripletex: autorisasjonsblokken
 
@@ -71,6 +71,24 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 `kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
+
+## Mønsteret som løser problemet: ue-svar-notify
+
+Flere av e-postfunksjonene sliter med det samme: en **uinnlogget** part skal
+utløse en e-post, og da finnes det ingen bruker-JWT å kontrollere.
+`ue-svar-notify` løser det, og kommentaren øverst i fila forklarer hvordan:
+
+Klienten sender **kun et token**. Mottaker, emne og HTML bygges server-side fra
+den lagrede raden. Da finnes det ingenting kalleren kan velge — ingen
+åpen-relé-egenskap, uansett hvem som treffer endepunktet. Sikkerheten ligger i
+at tokenet er hemmelig, og det er samme token som kreves for å se forespørselen
+i utgangspunktet.
+
+Mottakeradressen hentes fra `auth.admin.getUserById()` — autoritativt, ikke fra
+en profiltabell som kan være utdatert.
+
+Dette er malen for `send-ue-fdv-invitation`, der `origin` i dag kommer fra body
+(se under). Samme problem, løst to ulike steder — den ene riktig.
 
 ## origin fra body: send-ue-fdv-invitation
 
