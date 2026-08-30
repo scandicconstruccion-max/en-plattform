@@ -39,7 +39,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `befaring-view-upload-url` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `delete-user` | ❌ | `functions.invoke` | |
 | `send-materialliste` | ❌ | `functions.invoke` | |
-| `send-quote` | ❌ | `fetch /functions/v1/` (`sendEpost`) | All utgående e-post |
+| `send-quote` | ✅ | `fetch /functions/v1/` (`sendEpost`) | Fra prod. v5 krever innlogget bruker |
 | `stripe-checkout-ts` | ✅ | `functions.invoke` | Slug har `-ts`, se under. Fra prod |
 | `stripe-portal` | ✅ | `functions.invoke` | Fra prod |
 | `stripe-sync-amount` | ✅ | `functions.invoke` | Fra prod. Se «Varsel som ikke når fram» |
@@ -71,6 +71,32 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 `kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
+
+## Sannsynlig brutt varsel: befaring-view-resolve → send-quote
+
+`send-quote` v5 avviser alle som ikke er en **innlogget bruker**: den kaller
+`auth.getUser()` og svarer 401 hvis den ikke får en bruker tilbake.
+
+`befaring-view-resolve` sender «punkt utbedret»-varselet til bygglederen ved å
+kalle `send-quote` med **service-role-nøkkelen** som `Authorization`
+(`befaring-view-resolve/index.ts` linje 173). Service-role-nøkkelen er ikke en
+bruker — den har ingen `sub`-claim — så `getUser()` gir ingen bruker, og
+`send-quote` svarer etter alt å dømme 401.
+
+Kallstedet har `.catch()`, men en 401 er et gyldig HTTP-svar og ikke en
+nettverksfeil, så `.catch()` utløses ikke. Svaret leses aldri. **Feiler dette,
+feiler det stille** — UE-en får «lagret», og bygglederen får ingen e-post.
+
+Dette er utledet fra kildekoden, ikke observert i drift. Verifiser før du
+konkluderer: send en utbedring på en testbefaring og se om `sent_emails` får en
+rad, eller les funksjonsloggen for `send-quote`.
+
+Det er trolig grunnen til at `befaring-notify-resolver` og
+`befaring-notify-assignment` går **direkte til Resend** i stedet. Kommentaren
+deres sier akkurat det: funksjon-til-funksjon-kall krever JWT som er upraktisk å
+håndtere. `befaring-view-resolve` ble tilsynelatende ikke lagt om.
+
+Ikke rettet — arkivet skal speile det som kjører.
 
 ## De to befaring-notify-funksjonene har ingen avsenderkontroll
 
