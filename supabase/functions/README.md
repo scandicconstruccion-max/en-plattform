@@ -30,7 +30,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `tripletex-lookup` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-customer-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `tripletex-hours-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
-| `tripletex-project-sync` | ⚠️ utdatert | — | Se «Kjent avvik» |
+| `tripletex-project-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `anbud-uttrekk` | ❌ | `functions.invoke` | |
 | `befaring-notify-assignment` | ❌ | `fetch /functions/v1/` | |
 | `befaring-notify-resolver` | ❌ | `fetch /functions/v1/` | |
@@ -48,21 +48,29 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
 | `ue-svar-notify` | ❌ | `functions.invoke` | |
 
-## Kjent avvik: Tripletex-filene er utdaterte
+## Tripletex: autorisasjonsblokken
 
-Gjelder den ene som fortsatt står som ⚠️ i tabellen over:
-`tripletex-project-sync`. Den blir erstattet med prod-versjonen.
+Alle fem Tripletex-funksjonene bærer den samme autorisasjonsblokken
+(`hentAvsender`, `AvvistFeil`, `krevSammeBedrift`, `lesRolleFraJwt`,
+`hentEgenRad`). Den utleder bedriften fra kallerens JWT via `auth_company_id()`
+i stedet for å stole på `companyId` i request-body, og avviser service-role- og
+anon-nøkkelen som avsender.
 
-Kopiene mangler autorisasjonsblokken (`hentAvsender`, `AvvistFeil`,
-`krevSammeBedrift`, `lesRolleFraJwt`, `hentEgenRad`). Blokken utleder bedriften
-fra kallerens JWT via `auth_company_id()` i stedet for å stole på `companyId` i
-request-body, og avviser service-role- og anon-nøkkelen som avsender.
+Blokken skal holdes **identisk** mellom filene — det står som et krav i
+kommentaren øverst i hver av dem. Ved arkivering ble den maskindiffet: 155
+linjer, samme sjekksum i alle fem. Gjør du noe med den, gjør det i alle fem.
 
-Sist commit som rørte filene er `2b52c21` (CORS-fiks). Sikkerhetsarbeidet ble
-aldri merget inn på main — men det ER deployet: `tripletex-session` hentet fra
-produksjon har blokken. Repoet lå altså bak drift, ikke omvendt.
+Den ligger inline i hver fil fordi dashbordets Code-fane ikke kan opprette flere
+filer (se nederst).
 
-**Ikke lim disse inn i dashbordet.** De er eldre enn det som kjører.
+Historikk, for den som leser gammel git: fram til august 2026 lå det utdaterte
+kopier her, uten blokken. Siste commit som rørte dem var `2b52c21` (CORS-fiks) —
+sikkerhetsarbeidet ble deployet, men aldri merget inn på main. Repoet lå bak
+drift, ikke omvendt. Filene her er nå hentet fra produksjon.
+
+`kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
+samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
+funksjoner og skriver ingen ekstern kobling.
 
 ## Slug mot visningsnavn: `stripe-checkout-ts`
 
