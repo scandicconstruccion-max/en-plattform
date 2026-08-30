@@ -44,7 +44,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `stripe-portal` | ✅ | `functions.invoke` | Fra prod |
 | `stripe-sync-amount` | ✅ | `functions.invoke` | Fra prod. Se «Varsel som ikke når fram» |
 | `stripe-webhook` | ✅ | — | Kalles av Stripe. «Verify JWT» må være AV |
-| `send-ue-fdv-invitation` | ❌ | — | Ikke funnet kalt fra koden. Arkiveres likevel |
+| `send-ue-fdv-invitation` | ✅ | — | Fra prod. Ikke funnet kalt fra App.jsx. Se «origin fra body» |
 | `ue-melding-notify` | ❌ | `functions.invoke` | |
 | `ue-svar-notify` | ❌ | `functions.invoke` | |
 
@@ -71,6 +71,34 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 `kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
+
+## origin fra body: send-ue-fdv-invitation
+
+Funksjonen bygger opplastingslenka slik (linje 60–61):
+
+```
+const base = (origin || "https://app.enplattform.no").replace(/\/$/, "")
+const lenke = `${base}/#fdv_ue_levering?token=${r.token}`
+```
+
+`origin` kommer fra **request-body**, og `r.token` er UE-ens ekte
+opplastingstoken. Funksjonen har ingen avsenderkontroll: den leser aldri
+`req.headers`, kjører service_role og henter forespørselen på `.eq('id',
+requestId)` alene.
+
+Det betyr at et kall utenfra kan få systemet til å sende en ekte
+En Plattform-e-post, fra vår avsenderadresse, til UE-ens registrerte adresse —
+med en knapp som peker hvor som helst, og som bærer det ekte tokenet i URL-en.
+`lenke` settes inn i `href` uten escaping, og `esc()` dekker uansett bare
+`< > &`, ikke anførselstegn.
+
+Dempende: mottakeradressen tas fra databasen (`r.ue_contact_email`), ikke fra
+body, så e-posten kan ikke omdirigeres til en angriper. Tokenet returneres
+heller ikke i svaret. Funksjonen er ikke funnet kalt fra App.jsx, så
+endepunktet må treffes direkte.
+
+Ikke rettet — arkivet skal speile det som kjører. Dette er den av de arkiverte
+funksjonene jeg vil se på først hvis vi tar en sikkerhetsrunde.
 
 ## Tre ulike avsenderadresser
 
