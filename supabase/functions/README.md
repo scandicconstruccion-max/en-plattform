@@ -32,8 +32,8 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `tripletex-hours-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `tripletex-project-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
 | `anbud-uttrekk` | ❌ | `functions.invoke` | |
-| `befaring-notify-assignment` | ❌ | `fetch /functions/v1/` | |
-| `befaring-notify-resolver` | ✅ | `fetch /functions/v1/` | Fra prod. Se «Kommentar som ikke stemmer» |
+| `befaring-notify-assignment` | ✅ | `fetch /functions/v1/` | Fra prod. Ingen avsenderkontroll, se under |
+| `befaring-notify-resolver` | ✅ | `fetch /functions/v1/` | Fra prod. Ingen avsenderkontroll, se under |
 | `befaring-view-fetch` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `befaring-view-resolve` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
 | `befaring-view-upload-url` | ✅ | `fetch /functions/v1/` | Fra prod. Token-autentisert, ingen JWT |
@@ -72,27 +72,33 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
 
-## Kommentar som ikke stemmer: befaring-notify-resolver
+## De to befaring-notify-funksjonene har ingen avsenderkontroll
 
-Kommentaren øverst i fila sier:
+Gjelder `befaring-notify-resolver` og `befaring-notify-assignment`.
+
+Ingen av dem leser `req.headers`. Begge oppretter en service-role-klient og
+henter observasjonen på `.eq('id', observation_id)` alene — uten RLS og uten
+noen kontroll av hvem som spør eller hvilken bedrift observasjonen hører til.
+`observation_id` kommer fra request-body.
+
+I `befaring-notify-resolver` sier kommentaren øverst i fila det motsatte:
 
 > Bruker authenticated bruker (byggleder) sin JWT for å validere RLS.
 
-**Det gjør den ikke.** Funksjonen leser aldri `req.headers`, oppretter en
-service-role-klient og henter observasjonen på `.eq('id', observation_id)` alene
-— uten RLS og uten noen kontroll av hvem som spør eller hvilken bedrift
-observasjonen hører til. `observation_id` kommer fra request-body.
+Den setningen beskriver ikke koden.
 
-Det er samme mønster som ble lukket i Tripletex-funksjonene. Konsekvensen her er
-mindre — man kan utløse en e-post til den som utbedret et punkt, og få
-e-postadressen deres tilbake i svaret (`sent_to`) — men kontrollen mangler.
+Det er samme mønster som ble lukket i Tripletex-funksjonene. Konsekvensen er
+mindre her — ingen skriving av forretningsdata — men et kall med en fremmed
+`observation_id` gir e-postadressen til mottakeren tilbake i svaret (`sent_to`),
+og sender en e-post til dem. `assignment` skriver i tillegg til `sent_log`, som
+kan brukes til å undertrykke et framtidig varsel: `alreadyNotified` gjør at
+neste ekte tildelingsvarsel til samme adresse hoppes over.
 
 De tre `befaring-view-*`-funksjonene har derimot en reell kontroll: view_token,
 utløpsdato, at observasjonen hører til befaringen, og at `assigned_email`
 matcher.
 
-Ikke rettet — arkivet skal speile det som kjører. Notert her fordi kommentaren
-ellers ville få neste leser til å tro at kontrollen finnes.
+Ikke rettet — arkivet skal speile det som kjører.
 
 ## Slug mot visningsnavn: `stripe-checkout-ts`
 
