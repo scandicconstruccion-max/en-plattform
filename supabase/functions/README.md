@@ -25,7 +25,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 
 | Funksjon | I repo | Kalles fra App.jsx | Merknad |
 |---|---|---|---|
-| `bim-sesjon-rydd` | ✅ | `functions.invoke` | Ikke deployet i Utvikling |
+| `bim-sesjon-rydd` | ✅ | `functions.invoke` | **Ikke deployet noe sted.** Se under |
 | `tripletex-session` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-lookup` | ✅ | `functions.invoke` | Fra prod. Har autorisasjonsblokken |
 | `tripletex-customer-sync` | ✅ | — | Fra prod. Har autorisasjonsblokken |
@@ -71,6 +71,30 @@ drift, ikke omvendt. Filene her er nå hentet fra produksjon.
 `kallFunksjon()` og `skrivEksternKobling()` er også felles, og ble diffet på
 samme måte. `tripletex-session` har ingen av dem: den kaller ingen andre
 funksjoner og skriver ingen ekstern kobling.
+
+## bim-sesjon-rydd er ikke deployet noe sted
+
+Funksjonen ligger i repoet, og App.jsx kaller den to steder — men den finnes
+ikke i Edge Functions-lista i **produksjon** (verifisert i dashbordet 30. august
+2026: 21 funksjoner, `bim-sesjon-rydd` er ikke blant dem) og heller ikke i
+Utvikling.
+
+Kallstedene i `src/App.jsx`:
+
+| Linje | Funksjon | Hva skjer når kallet feiler |
+|---|---|---|
+| 69930 | `slettLagretSesjon()` | `onAlert('Kunne ikke slette sesjonen: …')` — synlig for brukeren |
+| 73893 | `bimHentIfcSignertUrl()` | returnerer `{ url: null, error }` — håndteres av kalleren |
+
+Sletting av en lagret BIM-sesjon og henting av signert URL til IFC-filer går
+altså begge mot et endepunkt som ikke svarer. Kommentaren i kilden sier at
+funksjonen finnes for å omgå en RLS-quirk på Storage `.remove()` og signerte
+URL-er — så den direkte veien var ikke god nok da den ble skrevet.
+
+Fila her er den eneste kopien som finnes. **Slett den ikke.**
+
+Å deploye den er en egen beslutning, ikke en del av arkiveringen: koden er aldri
+kjørt i noen av prosjektene, og bør leses gjennom først.
 
 ## Faggruppe-lista spriker: anbud-uttrekk mot App.jsx
 
