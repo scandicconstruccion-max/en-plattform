@@ -86369,6 +86369,9 @@ function AppContent() {
   // Det låseskjermen trenger for å være konkret: dato, moduler og månedspris.
   const [laasInfo, setLaasInfo] = React.useState(null)
   const [starterAboLaas, setStarterAboLaas] = React.useState(false)
+  // Settes KUN for plattformeier: bedriften han står i er sperret, men han
+  // skal inn likevel. Vises i støttebanneret, ikke som en egen skjerm.
+  const [sperretBedrift, setSperretBedrift] = React.useState(null) // 'prove' | 'betaling' | 'suspendert' | null
   // Samme edge-funksjon som «Start abonnement» i Min bedrift bruker. Låseskjermen
   // kan ikke sende brukeren dit — Min bedrift ligger bak låsen.
   const startAbonnementFraLaas = async () => {
@@ -86548,17 +86551,45 @@ function AppContent() {
         
         setTrialInfo({ daysLeft, isExpired: utloptUtenBetaling, status, trialEnd, deletionAt, deletionDaysLeft, harAktivtAbo: !!data.stripe_subscription_id || !!data.last_payment_date })
 
-        // Betalingssperre: logg ut og send til innlogging med melding (eier er unntatt)
-        if (status === 'suspended' && !isPlatformOwner) {
+        // ── Plattformeier stenges ALDRI ute ────────────────────────────────
+        // Denne effekten hadde `[user]` som eneste avhengighet, og fyrte av så
+        // snart brukeren var kjent — ofte FØR loadProfile() hadde svart. Da var
+        // profile null, isPlatformOwner false, og vakten `&& !isPlatformOwner`
+        // på hver enkelt gren så en identitet som ennå ikke fantes.
+        // Under en støtte-økt leser spørringen dessuten MÅLBEDRIFTENS rad
+        // (RLS bruker auth_company_id(), som peker på kunden), så eieren ble
+        // vurdert mot kundens abonnement. Låseskjermen kom opp, og siden
+        // effekten aldri kjørte på nytt ble den stående for godt.
+        // Nå: isPlatformOwner er med i avhengighetene, og eier-unntaket er ett
+        // eksplisitt punkt før grenene i stedet for en gjentatt vakt i hver av
+        // dem. Identiteten leses fra profile.platform_role — den innloggede
+        // brukeren — aldri fra bedriften økten peker på.
+        if (isPlatformOwner) {
+          setShowSuspended(false)
+          setShowTrialExpired(false)
+          setActiveModules(data.active_modules || ['grunnpakke'])
+          // Men eieren skal SE at bedriften han står i er sperret.
+          setSperretBedrift(
+            status === 'suspended' ? 'suspendert'
+            : utloptUtenBetaling ? 'prove'
+            : (status === 'past_due' || status === 'canceled') ? 'betaling'
+            : null
+          )
+          return
+        }
+        setSperretBedrift(null)
+
+        // Betalingssperre: logg ut og send til innlogging med melding
+        if (status === 'suspended') {
           try { localStorage.setItem('ep-login-sperret', '1') } catch(_) {}
           supabase.auth.signOut()
           return
-        } else if (utloptUtenBetaling && !isPlatformOwner) {
+        } else if (utloptUtenBetaling) {
           setActiveModules([])
           setLaasAarsak(status === 'gratis' ? 'gratis' : 'prove')
           setLaasInfo(byggLaasInfo(data))
           setShowTrialExpired(true)
-        } else if ((status === 'past_due' || status === 'canceled') && !isPlatformOwner) {
+        } else if (status === 'past_due' || status === 'canceled') {
           setActiveModules([])
           setLaasAarsak('betaling')
           setLaasInfo(byggLaasInfo(data))
@@ -86570,7 +86601,10 @@ function AppContent() {
         }
       })
       .catch(() => setActiveModules(null))   // samme som over: ukjent, ikke «bare grunnpakke»
-  }, [user])
+    // isPlatformOwner MÅ være med: den er false til loadProfile() har svart, og
+    // uten den ble avgjørelsen tatt på en identitet som ikke var kjent ennå —
+    // og aldri tatt om igjen.
+  }, [user, isPlatformOwner])
 
   // Løpende sjekk: blir bedriften sperret mens brukeren er innlogget, låses de ut umiddelbart
   React.useEffect(() => {
@@ -87200,6 +87234,18 @@ function AppContent() {
               <span style={{ fontSize:'16px' }}>🔓</span>
               <span style={{ fontSize:'13px', fontWeight:'700', color:'white' }}>
                 Support-økt aktiv: du er logget inn hos <span style={{ textDecoration:'underline' }}>{supportSession.company_name || 'kunde'}</span>. Endringer du gjør, skjer i kundens konto.
+                {/* Bedriften er sperret for sine egne brukere. Du slipper inn
+                    fordi du er plattformeier — det skal stå her, ikke som en
+                    modal du må klikke deg forbi. */}
+                {sperretBedrift && (
+                  <span style={{ display:'block', marginTop:'3px', fontWeight:'600', color:'#fed7aa' }}>
+                    ⚠️ Bedriften er sperret for sine egne brukere — {
+                      sperretBedrift === 'suspendert' ? 'kontoen er manuelt sperret'
+                      : sperretBedrift === 'betaling' ? 'betalingen har feilet'
+                      : 'prøveperioden er utløpt uten betaling'
+                    }. Du kommer inn fordi du er plattformeier.
+                  </span>
+                )}
               </span>
             </div>
             <button onClick={avsluttSupportOkt} style={{ padding:'6px 14px', background:'white', color:'#9a3412', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'800', whiteSpace:'nowrap' }}>Avslutt økt</button>
