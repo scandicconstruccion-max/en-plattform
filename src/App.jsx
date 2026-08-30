@@ -51006,6 +51006,48 @@ function proveperiodeAktiv(innst) {
   return !isNaN(slutt.getTime()) && new Date() < slutt
 }
 
+// Kolonnene sperresjekken trenger. Egen konstant fordi den leses to steder:
+// ved innlogging og i minutt-pollingen, og de to må spørre om det samme.
+const TRIAL_SPERRE_KOLONNER = 'subscription_status, trial_ends_at, stripe_subscription_id, last_payment_date, active_modules, num_users, name'
+
+// Skal denne bedriften møte låseskjermen?
+//
+// Kriteriet ser BEVISST ikke på subscription_status. Den gamle sjekken var
+// `status === 'trial' && now > trialEnd`, og siden «aktiver modul» flippet
+// statusen til 'active' ved første modulvalg, slapp nettopp de bedriftene som
+// hadde tatt systemet i bruk rett forbi. Kriteriet er nå det som faktisk betyr
+// noe: prøveperioden er passert, og det finnes ingen betaling — verken et
+// Stripe-abonnement eller en betaling registrert i kontrollpanelet.
+//
+// Returnerer false når vi ikke VET (innst er null, typisk uten nett eller før
+// data er lastet). Vi stenger ingen ute på et ubesvart spørsmål.
+function trialUtloptUtenBetaling(innst) {
+  if (!innst) return false
+  if (innst.subscription_status === 'intern') return false      // interne bedrifter aldri
+  if (innst.stripe_subscription_id) return false                // har abonnement
+  if (innst.last_payment_date) return false                     // betaling registrert manuelt
+  if (!innst.trial_ends_at) return false
+  const slutt = new Date(innst.trial_ends_at)
+  if (isNaN(slutt.getTime())) return false
+  return new Date() >= slutt
+}
+
+// Det låseskjermen viser: når prøveperioden gikk ut, hvilke moduler bedriften
+// faktisk har slått på, og hva de koster samlet per måned. beregnBedriftMrr
+// faller tilbake på num_users når vi ikke har brukerlista — som her.
+function byggLaasInfo(innst) {
+  if (!innst) return null
+  const ids = innst.active_modules || []
+  return {
+    utloptDato: innst.trial_ends_at || null,
+    moduler: ids.map(id => {
+      const m = MODULE_CATALOG.find(x => x.id === id)
+      return { id, navn: m?.name || id }
+    }),
+    manedspris: beregnBedriftMrr(innst, []),
+  }
+}
+
 // modulId: én streng, eller en liste der ALLE må være aktive.
 // BIM-Kalkyle er ['kalkulator', 'bim_kalkyle'] — tillegget krever basis.
 function harModul(innst, modulId) {
@@ -53971,11 +54013,14 @@ function MinBedriftPage() {
 
     setActiveModules(newModules)
     try {
-      // If first module purchase during trial, upgrade to active
+      // Å huke på en modul endrer IKKE abonnementsstatusen. Den gamle linjen
+      // her satte subscription_status = 'active' ved første modulvalg i
+      // prøveperioden — uten at det hadde skjedd noen betaling. Det slo
+      // samtidig av utestengelsen ved utløp, som krevde status === 'trial'.
+      // Resultatet var full tilgang på ubestemt tid uten å betale.
+      // Statusen eies nå av betalingen: Stripe-webhooken eller «Registrer
+      // betaling» i kontrollpanelet. Modulvalg skriver kun active_modules.
       const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
-      if (settings.subscription_status === 'trial' && action === 'add') {
-        updates.subscription_status = 'active'
-      }
       await supabase.from('company_settings').update(updates).eq('id', settings.id)
       synkStripeBelop()
       // Notify platform owner about purchase
@@ -54028,8 +54073,9 @@ function MinBedriftPage() {
       if (!skalVaereAktiv && activeModules.includes(mod.id)) newModules = activeModules.filter(m => m !== mod.id)
       if (newModules !== activeModules) {
         setActiveModules(newModules)
+        // Se kommentaren i toggleModule: tildeling av seter skal heller ikke
+        // kunne flippe abonnementsstatusen til 'active'.
         const updates = { active_modules: newModules, updated_at: new Date().toISOString() }
-        if (settings.subscription_status === 'trial' && skalVaereAktiv) updates.subscription_status = 'active'
         await supabase.from('company_settings').update(updates).eq('id', settings.id)
       }
       // Varsle plattform-eier ved nye seter (best-effort)
@@ -86218,6 +86264,7 @@ function TilkoblingsIndikator({ isMobile, mobileMenuOpen }) {
 
 function AppContent() {
   const { user, loading, supabase, displayName, isPlatformOwner, profile, companyId, role, moduleAccess, kanRedigere, erAdmin } = useAuth()
+  const appAlert = useAppAlert()   // låseskjermen melder fra hvis Stripe ikke svarer
   // Husk om sidemenyen er sammenslått på tvers av økter (brukerens eget valg)
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem('ep_sidebar_collapsed') === '1' } catch { return false }
@@ -86319,6 +86366,32 @@ function AppContent() {
   const [trialInfo, setTrialInfo] = React.useState(null) // { daysLeft, isExpired, status }
   const [showTrialExpired, setShowTrialExpired] = React.useState(false)
   const [laasAarsak, setLaasAarsak] = React.useState('prove') // 'prove' = prøve utløpt, 'betaling' = betaling feilet
+  // Det låseskjermen trenger for å være konkret: dato, moduler og månedspris.
+  const [laasInfo, setLaasInfo] = React.useState(null)
+  const [starterAboLaas, setStarterAboLaas] = React.useState(false)
+  // Samme edge-funksjon som «Start abonnement» i Min bedrift bruker. Låseskjermen
+  // kan ikke sende brukeren dit — Min bedrift ligger bak låsen.
+  const startAbonnementFraLaas = async () => {
+    if (starterAboLaas) return
+    setStarterAboLaas(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-checkout-ts', { body: { origin: window.location.origin } })
+      if (error) {
+        let detalj = error.message || 'Ukjent feil'
+        try { const b = await error.context.json(); if (b?.error) detalj = b.error } catch(_) {}
+        throw new Error(detalj)
+      }
+      if (data?.url) { window.location.href = data.url; return }
+      throw new Error(data?.error || 'Fikk ingen betalingslenke fra Stripe')
+    } catch (e) {
+      setStarterAboLaas(false)
+      appAlert({
+        message: 'Kunne ikke åpne betalingen',
+        subMessage: ((e && e.message) || String(e)) + ' — ta kontakt på support@enplattform.no, så ordner vi det.',
+        kind: 'error',
+      })
+    }
+  }
   const [showSuspended, setShowSuspended] = React.useState(false)
   const [supportSession, setSupportSession] = React.useState(null)
 
@@ -86465,29 +86538,30 @@ function AppContent() {
         const trialEnd = data.trial_ends_at ? new Date(data.trial_ends_at) : null
         const now = new Date()
         const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / (1000*60*60*24)) : null
-        const isExpired = status === 'trial' && trialEnd && now > trialEnd
-        const gaveUtlopt = status === 'gratis' && trialEnd && now > trialEnd
+        // Ett kriterium for utestengelse, uavhengig av subscription_status.
+        // Se trialUtloptUtenBetaling(): den gamle `status === 'trial'`-vakten
+        // gjorde at bedrifter som hadde fått status 'active' ved modulvalg
+        // aldri ble stengt ute.
+        const utloptUtenBetaling = trialUtloptUtenBetaling(data)
         const deletionAt = data.deletion_scheduled_at ? new Date(data.deletion_scheduled_at) : null
         const deletionDaysLeft = deletionAt ? Math.ceil((deletionAt - now) / (1000*60*60*24)) : null
         
-        setTrialInfo({ daysLeft, isExpired, status, trialEnd, deletionAt, deletionDaysLeft, harAktivtAbo: status === 'active' && !!data.stripe_subscription_id })
-        
+        setTrialInfo({ daysLeft, isExpired: utloptUtenBetaling, status, trialEnd, deletionAt, deletionDaysLeft, harAktivtAbo: !!data.stripe_subscription_id || !!data.last_payment_date })
+
         // Betalingssperre: logg ut og send til innlogging med melding (eier er unntatt)
         if (status === 'suspended' && !isPlatformOwner) {
           try { localStorage.setItem('ep-login-sperret', '1') } catch(_) {}
           supabase.auth.signOut()
           return
-        } else if (isExpired && !isPlatformOwner) {
+        } else if (utloptUtenBetaling && !isPlatformOwner) {
           setActiveModules([])
-          setLaasAarsak('prove')
-          setShowTrialExpired(true)
-        } else if (gaveUtlopt && !isPlatformOwner) {
-          setActiveModules([])
-          setLaasAarsak('gratis')
+          setLaasAarsak(status === 'gratis' ? 'gratis' : 'prove')
+          setLaasInfo(byggLaasInfo(data))
           setShowTrialExpired(true)
         } else if ((status === 'past_due' || status === 'canceled') && !isPlatformOwner) {
           setActiveModules([])
           setLaasAarsak('betaling')
+          setLaasInfo(byggLaasInfo(data))
           setShowTrialExpired(true)
         } else {
           setShowSuspended(false)
@@ -86503,10 +86577,22 @@ function AppContent() {
     if (!user || isPlatformOwner) return
     const sjekk = async () => {
       try {
-        const { data } = await supabase.from('company_settings').select('subscription_status').limit(1).single()
-        if (data?.subscription_status === 'suspended') {
+        // Leste tidligere BARE subscription_status, og sammenlignet mot
+        // 'suspended'. Den hentet ikke engang trial_ends_at, så en økt som sto
+        // åpen når prøveperioden gikk ut fortsatte urørt til neste innlogging.
+        // Nå kjøres samme kriterium som ved innlogging.
+        const { data } = await supabase.from('company_settings').select(TRIAL_SPERRE_KOLONNER).limit(1).single()
+        if (!data) return
+        if (data.subscription_status === 'suspended') {
           try { localStorage.setItem('ep-login-sperret', '1') } catch(_) {}
           supabase.auth.signOut()
+          return
+        }
+        if (trialUtloptUtenBetaling(data)) {
+          setActiveModules([])
+          setLaasAarsak(data.subscription_status === 'gratis' ? 'gratis' : 'prove')
+          setLaasInfo(byggLaasInfo(data))
+          setShowTrialExpired(true)
         }
       } catch (_) {}
     }
@@ -87136,43 +87222,77 @@ function AppContent() {
         )}
 
         {/* Trial expired lockout */}
+        {/* Låseskjerm — prøveperioden er utløpt uten betaling, eller betalingen
+            har feilet. Ingen vei forbi: ingen lukk-knapp, ingen «fortsett
+            likevel». Eneste utganger er å legge inn kort eller logge ut.
+            Det viktigste avsnittet er at dataene er intakte — uten det tror
+            folk at alt er slettet. */}
         {showTrialExpired && (
-          <>
-            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:500, display:'flex', alignItems:'center', justifyContent:'center', padding:'20px' }}>
-              <div style={{ background:'white', borderRadius:'24px', padding:'40px', maxWidth:'480px', width:'100%', textAlign:'center', boxShadow:'0 20px 60px rgba(0,0,0,0.3)', fontFamily:'system-ui,sans-serif' }}>
-                <div style={{ width:'80px', height:'80px', borderRadius:'50%', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 20px', fontSize:'36px' }}>🔒</div>
-                <h2 style={{ margin:'0 0 8px', fontSize:'22px', fontWeight:'800', color:'#0f172a' }}>{laasAarsak === 'betaling' ? 'Betaling feilet' : laasAarsak === 'gratis' ? 'Gratis tilgang er utløpt' : 'Prøveperioden er utløpt'}</h2>
-                <p style={{ margin:'0 0 24px', fontSize:'14px', color:'#64748b', lineHeight:1.6 }}>
-                  {laasAarsak === 'betaling'
-                    ? 'Vi fikk ikke gjennomført den månedlige betalingen for abonnementet ditt. Oppdater betalingskortet eller start abonnementet på nytt for å fortsette å bruke En Plattform.'
-                    : laasAarsak === 'gratis'
-                    ? 'Den gratis tilgangen din til En Plattform er utløpt. For å fortsette, velg og bestill modulene du trenger.'
-                    : 'Din 15-dagers gratis prøveperiode er dessverre over. For å fortsette å bruke En Plattform, velg og bestill modulene du trenger.'}
-                </p>
-                <div style={{ background:'#f8fafc', borderRadius:'16px', padding:'20px', marginBottom:'24px', textAlign:'left' }}>
-                  <div style={{ fontWeight:'700', fontSize:'14px', color:'#0f172a', marginBottom:'12px' }}>Velg din plan:</div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#f0fdf4', borderRadius:'10px', border:'1px solid #bbf7d0' }}>
-                      <span style={{ fontSize:'18px' }}>🔹</span>
-                      <div style={{ flex:1 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#059669' }}>Grunnpakke</div><div style={{ fontSize:'11px', color:'#64748b' }}>10 moduler · 239 kr/bruker/mnd</div></div>
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:500, display:'flex', alignItems:'flex-start', justifyContent:'center', padding: isMobile ? '0' : '20px', overflowY:'auto' }}>
+            <div style={{ background:'white', borderRadius: isMobile ? '0' : '24px', padding: isMobile ? '28px 20px 32px' : '36px 40px', maxWidth:'520px', width:'100%', minHeight: isMobile ? '100%' : undefined, boxShadow:'0 20px 60px rgba(0,0,0,0.3)', fontFamily:'system-ui,sans-serif', margin: isMobile ? '0' : 'auto' }}>
+              <div style={{ width:'72px', height:'72px', borderRadius:'50%', background:'#fef2f2', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 18px', fontSize:'32px' }}>🔒</div>
+
+              <h2 style={{ margin:'0 0 10px', fontSize: isMobile ? '20px' : '22px', fontWeight:'800', color:'#0f172a', textAlign:'center', lineHeight:1.3 }}>
+                {laasAarsak === 'betaling' ? 'Betalingen gikk ikke gjennom' : laasAarsak === 'gratis' ? 'Den gratis tilgangen er utløpt' : 'Prøveperioden er utløpt'}
+              </h2>
+
+              <p style={{ margin:'0 0 18px', fontSize:'14px', color:'#475569', lineHeight:1.65, textAlign:'center' }}>
+                {laasAarsak === 'betaling'
+                  ? 'Vi fikk ikke gjennomført den månedlige betalingen. Legg inn et nytt kort, så er du i gang igjen med én gang.'
+                  : <>
+                      Den gratis perioden{laasInfo?.utloptDato ? <> gikk ut <strong>{new Date(laasInfo.utloptDato).toLocaleDateString('nb-NO', { day:'numeric', month:'long', year:'numeric' })}</strong></> : ' er over'}. For å bruke En Plattform videre må du starte abonnementet.
+                    </>}
+              </p>
+
+              {/* Det folk faktisk lurer på først. Skal stå høyt og tydelig. */}
+              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'14px', padding:'14px 16px', marginBottom:'18px', display:'flex', gap:'10px', alignItems:'flex-start' }}>
+                <span style={{ fontSize:'18px', flexShrink:0, lineHeight:1.4 }}>💚</span>
+                <div style={{ fontSize:'13px', color:'#15803d', lineHeight:1.6 }}>
+                  <strong>Alt du har lagt inn er trygt.</strong> Prosjekter, timer, kalkyler, bilder og dokumenter ligger urørt. Ingenting er slettet, og alt er på plass igjen i samme øyeblikk som abonnementet er aktivert.
+                </div>
+              </div>
+
+              {/* Hva de har slått på, og hva det koster */}
+              {laasInfo && laasInfo.moduler.length > 0 && (
+                <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'14px', padding:'14px 16px', marginBottom:'18px' }}>
+                  <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.04em', marginBottom:'10px' }}>
+                    Dette har dere aktivert
+                  </div>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'6px', marginBottom: laasInfo.manedspris > 0 ? '12px' : 0 }}>
+                    {laasInfo.moduler.map(m => (
+                      <span key={m.id} style={{ fontSize:'12px', fontWeight:'600', color:'#334155', background:'white', border:'1px solid #e2e8f0', borderRadius:'999px', padding:'3px 10px' }}>{m.navn}</span>
+                    ))}
+                  </div>
+                  {laasInfo.manedspris > 0 && (
+                    <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'10px', borderTop:'1px solid #e2e8f0', paddingTop:'10px', flexWrap:'wrap' }}>
+                      <span style={{ fontSize:'13px', color:'#475569' }}>Månedspris for dette</span>
+                      <span style={{ fontSize:'18px', fontWeight:'800', color:'#0f172a', whiteSpace:'nowrap' }}>
+                        {Math.round(laasInfo.manedspris).toLocaleString('nb-NO')} kr<span style={{ fontSize:'12px', fontWeight:'600', color:'#64748b' }}>/mnd</span>
+                      </span>
                     </div>
-                    <div style={{ display:'flex', alignItems:'center', gap:'10px', padding:'10px 12px', background:'#eff6ff', borderRadius:'10px', border:'1px solid #bfdbfe' }}>
-                      <span style={{ fontSize:'18px' }}>🧮</span>
-                      <div style={{ flex:1 }}><div style={{ fontWeight:'700', fontSize:'13px', color:'#2563eb' }}>Kun Kalkulasjon</div><div style={{ fontSize:'11px', color:'#64748b' }}>Kalkulasjonsmodul · 1 499 kr/mnd per bedrift</div></div>
-                    </div>
+                  )}
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'8px', lineHeight:1.5 }}>
+                    Eks. mva. Du kan endre hvilke moduler dere har når som helst etterpå.
                   </div>
                 </div>
-                <button onClick={()=>{setShowTrialExpired(false);navigate('minbedrift')}}
-                  style={{ width:'100%', padding:'14px', background:'#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor:'pointer', marginBottom:'10px' }}>
-                  {laasAarsak === 'betaling' ? '💳 Oppdater betaling' : '📦 Velg plan og fortsett'}
-                </button>
-                <button onClick={async()=>{await supabase.auth.signOut()}}
-                  style={{ width:'100%', padding:'10px', background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', color:'#64748b', cursor:'pointer' }}>
-                  Logg ut
-                </button>
+              )}
+
+              <button onClick={startAbonnementFraLaas} disabled={starterAboLaas}
+                style={{ width:'100%', padding: isMobile ? '16px' : '14px', minHeight:'52px', background: starterAboLaas ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'12px', fontSize:'16px', fontWeight:'700', cursor: starterAboLaas ? 'wait' : 'pointer', marginBottom:'10px' }}>
+                {starterAboLaas ? 'Åpner betaling …' : '💳 Legg inn betalingskort'}
+              </button>
+
+              <button onClick={async()=>{await supabase.auth.signOut()}}
+                style={{ width:'100%', padding:'12px', minHeight:'44px', background:'none', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'13px', color:'#64748b', cursor:'pointer', marginBottom:'16px' }}>
+                Logg ut
+              </button>
+
+              <div style={{ borderTop:'1px solid #f1f5f9', paddingTop:'14px', textAlign:'center', fontSize:'12px', color:'#64748b', lineHeight:1.7 }}>
+                Spørsmål, eller trenger du faktura i stedet for kort?<br />
+                <a href="mailto:support@enplattform.no" style={{ color:'#059669', fontWeight:'700', textDecoration:'none' }}>support@enplattform.no</a>
               </div>
             </div>
-          </>
+          </div>
         )}
 
         {/* Kontormodul-tips på mobil */}
