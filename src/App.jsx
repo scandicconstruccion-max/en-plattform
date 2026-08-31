@@ -2972,7 +2972,10 @@ function Registrer() {
       const { data, error: suErr } = await supabase.auth.signUp({
         email: epost.trim(),
         password: passord,
-        options: { data: { full_name: navn.trim(), company_name: bedrift.trim(), org_number: orgnr.trim() || null, plan } }
+        // phone og address MÅ ligge i metadata: databasetriggeren
+        // on_auth_user_created har ingen annen kilde til dem når brukeren
+        // registrerer seg uten session (e-postbekreftelse PÅ).
+        options: { data: { full_name: navn.trim(), company_name: bedrift.trim(), org_number: orgnr.trim() || null, plan, phone: telefon.trim(), address: adresse.trim() } }
       })
       if (suErr) { setError(/already registered|already been registered/i.test(suErr.message) ? 'Denne e-posten har allerede vært registrert. Har du et aktivt abonnement, logg inn. Har prøveperioden din gått ut, kan du ikke starte en ny på samme innlogging — ta kontakt med support@enplattform.no for ny tilgang.' : suErr.message); setSaving(false); return }
       if (data.session && data.user) {
@@ -2984,7 +2987,12 @@ function Registrer() {
           p_phone: telefon.trim(),
           p_address: adresse.trim()
         })
-        if (rpcErr) { setError('Konto opprettet, men oppsett av bedrift feilet: ' + rpcErr.message + '. Logg inn og prøv igjen.'); setSaving(false); return }
+        if (rpcErr) {
+          // Ikke svelg: feilen skal finnes igjen i signup_feil med bruker-id,
+          // e-post og melding, ikke bare i en rød boks brukeren lukker.
+          try { await supabase.rpc('logg_signup_feil', { p_kontekst: 'frontend:Registrer', p_feilmelding: rpcErr.message }) } catch (_) {}
+          setError('Konto opprettet, men oppsett av bedrift feilet: ' + rpcErr.message + '. Logg inn og prøv igjen.'); setSaving(false); return
+        }
         // Fabrikklisten settes i gang, men vi venter IKKE på den: brukeren skal
         // rett inn. Blir kallet avbrutt av omlastingen under, oppretter
         // sikkerhetsnettet i Prisbok/Kalkulasjon listen ved første besøk.
@@ -3120,7 +3128,10 @@ function FullforRegistrering() {
         p_org_number: user?.user_metadata?.org_number || null,
         p_full_name: user?.user_metadata?.full_name || null
       })
-      if (rpcErr) { setError(rpcErr.message); setBusy(false); return }
+      if (rpcErr) {
+        try { await supabase.rpc('logg_signup_feil', { p_kontekst: 'frontend:FullforRegistrering', p_feilmelding: rpcErr.message }) } catch (_) {}
+        setError(rpcErr.message); setBusy(false); return
+      }
       // Samme som i Registrer: settes i gang, ventes ikke på.
       if (user?.id) startStandardPrislisteIBakgrunnen(user.id)
       window.location.reload()
@@ -87024,7 +87035,15 @@ function AppContent() {
 
   // Innlogget, men ingen bedrift ennå (selvbetjent registrering med e-postbekreftelse på,
   // eller halvferdig oppsett). Plattform-eier er unntatt (kan operere uten egen bedrift).
-  if (!loading && profile && !companyId && !isPlatformOwner) return <FullforRegistrering />
+  //
+  // Vilkåret var `profile &&`, og det gjorde skjermen uoppnåelig for nøyaktig
+  // de brukerne den er laget for: mangler profilraden helt, er profile null,
+  // og gaten traff aldri. Da falt brukeren rett inn i appen uten bedrift og
+  // uten rettigheter — det var dette Kim Bjarthe satt med i tre uker.
+  // profilKlar er det riktige vilkåret: «vi HAR spurt databasen», uavhengig av
+  // om svaret ble en rad eller ingenting. Uten den ville vi tatt avgjørelsen
+  // før spørringen var besvart og sendt hver innlogging innom denne skjermen.
+  if (!loading && profilKlar && !companyId && !isPlatformOwner) return <FullforRegistrering />
 
   const sidebarWidth = isMobile ? 0 : (collapsed ? 60 : 220)
   const activePage = page === 'prosjekt_detaljer' ? 'prosjekter' : page === 'avvik_detaljer' ? 'avvik' : page

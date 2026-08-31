@@ -47,6 +47,7 @@ frontend funksjonen brukes, slik at det er mulig å se hva som faktisk er i bruk
 | `send-ue-fdv-invitation` | ✅ | — | Fra prod. Ikke funnet kalt fra App.jsx. Se «origin fra body» |
 | `ue-melding-notify` | ✅ | `functions.invoke` | Fra prod. Samme mønster som `ue-svar-notify` |
 | `ue-svar-notify` | ✅ | `functions.invoke` | Fra prod. Mønsteret å kopiere, se under |
+| `foreldrelose-varsel` | ✅ | — (planlagt kjøring hvert 5. min) | **Ikke deployet ennå.** Se under |
 
 ## Tripletex: autorisasjonsblokken
 
@@ -312,3 +313,26 @@ Ikke rettet — arkivet skal speile det som kjører.
 neste lagring), så alt som skal deployes må stå i `index.ts`. Det er grunnen til
 at Tripletex-funksjonene har hjelpefunksjonene sine inline i stedet for i en
 delt modul.
+
+## `foreldrelose-varsel`: ikke deployet ennå
+
+Funksjonen varsler support@enplattform.no når en auth-bruker har stått uten rad
+i `public.user_profiles` i mer enn fem minutter. Den er skrevet etter hendelsen
+12.08.2026, der to selvregistrerte brukere falt gjennom uten at noe system sa
+fra — den ene en ekte kunde som satt tre uker med en konto som ikke virket.
+
+Den er **ikke limt inn i noen av prosjektene ennå**. Før den virker:
+
+1. Kjør `supabase/sql/signup_profil_trigger.sql` i prosjektet — funksjonen er
+   avhengig av RPC-en `foreldrelose_auth_brukere` og tabellen
+   `signup_varsel_sendt` som opprettes der.
+2. Lim inn `index.ts` i Code-fanen og deploy.
+3. Sett secrets: `RESEND_API_KEY` (finnes fra før), eventuelt `VARSEL_TIL`
+   (default `support@enplattform.no`) og `FROM_EMAIL` (default
+   `tilbud@enplattform.no`).
+4. Legg på en plan: hvert 5. minutt, `*/5 * * * *`, med
+   `Authorization: Bearer <service_role_key>`. Funksjonen avviser alle andre
+   kallere — svaret inneholder e-postadressene til nyregistrerte.
+
+Den reparerer bevisst ingenting selv. Å gjette på hvilken bedrift en
+foreldreløs bruker hører til er verre enn å la et menneske se på det.
