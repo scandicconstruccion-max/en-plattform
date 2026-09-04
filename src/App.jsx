@@ -7261,11 +7261,13 @@ function ProsjektfilerPage() {
   const [projectMeta, setProjectMeta] = useState(null)       // { phases, required_docs, active_phase, document_template_id }
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
   const [viewedPhase, setViewedPhase] = useState(null)       // valgt fase i faselinja
-  // Steg 2b: registrering fra andre moduler (deriverte, live-leste rader)
-  // Avkryssingen «Vis også påkrevde dokumenter og registreringer». false = kun filer
-  // (standard). Vanlig React-state: holder seg når man bytter kategori og fase,
-  // men nullstilles ved sidelasting og når man forlater modulen.
-  const [visAlle, setVisAlle] = useState(false)
+  // Steg 2b: registrering fra andre moduler (deriverte, live-leste rader).
+  // Vises alltid. Det lå tidligere en avkryssing her — «Vis også påkrevde
+  // dokumenter og registreringer» — som var AV som standard. Den skjulte
+  // registreringer fra andre moduler (f.eks. fullførte sjekklister) til man
+  // aktivt huket av, så brukeren så mindre enn det som faktisk fantes. Etiketten
+  // stemte heller ikke: kravblokkene sto der uansett, siden de aldri var koblet
+  // til avkryssingen.
   const [derivedFulfilled, setDerivedFulfilled] = useState(() => new Set()) // Set("fase|doc_type") oppfylt av kilder
   const [derivedRows, setDerivedRows] = useState({})         // { [kategori]: [ {id, tittel, status, nr, kilde, side, emoji} ] }
   const [derivedTotals, setDerivedTotals] = useState({})     // { [key]: totalt antall i kilden }
@@ -7392,11 +7394,9 @@ function ProsjektfilerPage() {
   // Steg 2b: deriverte kilder (avvik/ordre/EM/registrerte sjekklister) for prosjektet.
   // Presens teller for faseoppfyllelse (≥1 → kravet oppfylt). Hver kilde hentes med
   // limit + count fra DB (aldri hele tabellen) → treffer ikke 1000-grensen.
-  const loadDerived = async (projectId, opts = {}) => {
+  const loadDerived = async (projectId) => {
     if (!projectId || projectId === 'all') { setDerivedFulfilled(new Set()); setDerivedRows({}); setDerivedTotals({}); setDerivedReady(true); return }
-    // Ved rent visnings-bytte (behold=true) rører vi ikke derivedReady, så «X av Y»
-    // ikke blinker — oppfyllelsen er allerede kjent og endres ikke av bryteren.
-    if (!opts.behold) setDerivedReady(false)
+    setDerivedReady(false)
     try {
       const oppfylt = new Set(), rader = {}, totals = {}
       // Hver kilde uavhengig: én feilende kilde (f.eks. manglende kolonne) skal
@@ -7412,10 +7412,11 @@ function ProsjektfilerPage() {
           const n = count || 0
           totals[k.key] = n
           if (n > 0) oppfylt.add(k.fase + '|' + k.doc_type)
-          if (visAlle) {
-            const liste = (data || []).map(r => ({ id: r.id, tittel: r.title || '(uten tittel)', status: r.status || '', nr: k.nrfelt ? r[k.nrfelt] : null, kilde: k.kilde, side: k.side, emoji: k.emoji, key: k.key, fase: k.fase }))
-            rader[k.kategori] = (rader[k.kategori] || []).concat(liste)
-          }
+          // Radene bygges alltid. Spørringen over henter dem uansett (den trenger
+          // `count` til «X av Y»), så dette koster ingen ekstra rundtur — tidligere
+          // ble de bare kastet når avkryssingen var av.
+          const liste = (data || []).map(r => ({ id: r.id, tittel: r.title || '(uten tittel)', status: r.status || '', nr: k.nrfelt ? r[k.nrfelt] : null, kilde: k.kilde, side: k.side, emoji: k.emoji, key: k.key, fase: k.fase }))
+          rader[k.kategori] = (rader[k.kategori] || []).concat(liste)
         } catch (e) { console.warn('[prosjektfiler] kilde feilet:', k.key, e); totals[k.key] = 0 }
       }))
       setDerivedFulfilled(oppfylt); setDerivedRows(rader); setDerivedTotals(totals)
@@ -7517,13 +7518,6 @@ function ProsjektfilerPage() {
     loadDerived(selectedProject)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedProject])
-
-  // Avkryssingen slås av/på: hent (evt. tøm) deriverte rader.
-  // behold=true → ikke nullstill oppfyllelses-status (unngår blink i «X av Y»).
-  useEffect(() => {
-    if (selectedProject !== 'all') loadDerived(selectedProject, { behold: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visAlle])
 
   // Bytt kategori/undermappe → last første side. Søk er debouncet.
   useEffect(() => {
@@ -7863,7 +7857,9 @@ function ProsjektfilerPage() {
     )
   }
 
-  // Krav satt til «Ikke aktuelt». Står nederst — avskrevet, men angrbart.
+  // Krav satt til «Ikke aktuelt». Står rett under manglene — avskrevet, men
+  // angrbart. Beslutningen skal være synlig, ikke skjult: i et KS-system er
+  // forskjellen på «vurdert og avvist» og «glemt» hele poenget.
   const renderIkkeAktueltBlokk = () => {
     if (!kravBlokkAktiv() || waivedForView.length === 0) return null
     return (
@@ -7888,33 +7884,10 @@ function ProsjektfilerPage() {
     )
   }
 
-  // Avkryssing for om registreringer fra andre moduler skal legges TIL lista.
-  // Bevisst ikke to knapper: de to visningene er ikke likestilte alternativer —
-  // den ene inneholder alt den andre har, pluss mer. En avkryssing viser at
-  // brukeren legger noe til, ikke velger mellom to ting.
-  // Avhuket (standard) = kun filer. Påhuket = filer + krav + registreringer.
-  const renderVisningToggle = () => (
-    <label
-      style={{
-        display: 'flex', alignItems: 'center', gap: '10px',
-        minHeight: '48px', padding: '6px 12px 6px 10px',
-        border: `1px solid ${visAlle ? '#bbf7d0' : '#e2e8f0'}`,
-        background: visAlle ? '#f0fdf4' : 'white',
-        borderRadius: '10px', cursor: 'pointer', userSelect: 'none',
-        maxWidth: '100%', boxSizing: 'border-box',
-      }}>
-      <input type="checkbox" checked={visAlle} onChange={e => setVisAlle(e.target.checked)}
-        style={{ width: '20px', height: '20px', accentColor: '#059669', cursor: 'pointer', flexShrink: 0, margin: 0 }} />
-      <span style={{ fontSize: '13px', fontWeight: '600', color: visAlle ? '#166534' : '#475569', lineHeight: 1.35 }}>
-        Vis også påkrevde dokumenter og registreringer
-      </span>
-    </label>
-  )
-
   // Registrerte poster fra andre moduler (deriverte, live) i valgt kategori.
-  // Vises kun når avkryssingen er påhuket. Peker tilbake til posten via deep-link.
+  // Peker tilbake til posten via deep-link.
   const renderDerivertBlokk = () => {
-    if (!visAlle || !selectedCategory) return null
+    if (!selectedCategory) return null
     // Fasen er FAST for disse kildene (alle: Utførelse). Har prosjektet en mal,
     // vises radene KUN i den fasen — aldri i Anbud/Kontrakt/FDV/Overlevering.
     // Uten mal finnes ingen fase-kontekst, og radene vises som før.
@@ -7951,7 +7924,7 @@ function ProsjektfilerPage() {
 
   // Finnes det noe annet å se på i kategorien enn opplastede filer?
   const antallAndreRader = () => {
-    const derivert = (visAlle && selectedCategory)
+    const derivert = selectedCategory
       ? (derivedRows[selectedCategory] || []).filter(r => !hasFaser || r.fase === viewedPhase).length : 0
     const krav = kravBlokkAktiv() ? (missingForView.length + waivedForView.length) : 0
     return derivert + krav
@@ -8175,7 +8148,6 @@ function ProsjektfilerPage() {
                     style={{ width: '100%', paddingLeft: '32px', padding: '8px 12px 8px 32px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: '13px', outline: 'none', boxSizing: 'border-box', background: online ? 'white' : '#f8fafc', color: online ? '#0f172a' : '#94a3b8', cursor: online ? 'text' : 'not-allowed' }} />
                 </div>
               </div>
-              <div style={{ marginBottom: '12px' }}>{renderVisningToggle()}</div>
               {catSupportsRevision && (
                 <button onClick={() => setShowArchive(v => !v)}
                   style={{ width: '100%', padding: '8px', background: showArchive ? '#f0fdf4' : 'white', color: showArchive ? '#059669' : '#64748b', border: `1px solid ${showArchive ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '10px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', marginBottom: '12px' }}>
@@ -8213,9 +8185,14 @@ function ProsjektfilerPage() {
                   )}
                 </div>
               )}
+              {/* Rekkefølge: de to KRAV-blokkene hører sammen og står samlet —
+                  det som mangler, så det som er vurdert og avskrevet. Registreringer
+                  fra andre moduler er noe annet og kommer etter. «Ikke aktuelt» lå
+                  tidligere nederst, under en liste som kan være lang, og ble derfor
+                  lest som borte. */}
               {renderManglerBlokk()}
-              {renderDerivertBlokk()}
               {renderIkkeAktueltBlokk()}
+              {renderDerivertBlokk()}
             </>
           )}
         </div>
@@ -8316,7 +8293,6 @@ function ProsjektfilerPage() {
                       🗄️ {showArchive ? 'Skjul arkiv' : 'Vis arkiverte revisjoner'}
                     </button>
                   )}
-                  {renderVisningToggle()}
                 </div>
                 {/* Opplasting ligger KUN i headeren — én knapp, ikke tre. */}
               </div>
@@ -8377,9 +8353,14 @@ function ProsjektfilerPage() {
                   )}
                 </div>
               )}
+              {/* Rekkefølge: de to KRAV-blokkene hører sammen og står samlet —
+                  det som mangler, så det som er vurdert og avskrevet. Registreringer
+                  fra andre moduler er noe annet og kommer etter. «Ikke aktuelt» lå
+                  tidligere nederst, under en liste som kan være lang, og ble derfor
+                  lest som borte. */}
               {renderManglerBlokk()}
-              {renderDerivertBlokk()}
               {renderIkkeAktueltBlokk()}
+              {renderDerivertBlokk()}
             </>
           )}
         </div>
