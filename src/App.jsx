@@ -7425,10 +7425,100 @@ async function uploadRevisionRow({ baseFile, newFile, note, user }) {
     archived: false,
     fase: baseFile.fase || null,          // revisjon arver fase/doc_type fra basen
     doc_type: baseFile.doc_type || null,
+    // Arves også — ellers mister revisjonen koblingen til kalkylen, og NESTE
+    // sending finner ikke basefilen: den ville laget en ny fil i stedet for
+    // Rev03. Samme hviteliste-fallgruve som `paaslag` og `_omregning`.
+    source_calculation_id: baseFile.source_calculation_id || null,
     revision_note: (note || '').trim() || null,
     revision_log: newLog,
   })
   if (insErr) throw new Error('Lagring feilet: ' + insErr.message)
+}
+
+// ─── ARKIVER TILBUDS-PDF I PROSJEKTFILER ─────────────────────────────────────
+// Kalkylen sender tilbudet med PDF-en som e-postvedlegg. Den PDF-en er det
+// kunden faktisk mottok, og fram til nå ble den kastet i samme øyeblikk:
+// kravet «Tilbudsbrev» i Prosjektfiler sto som en åpen mangel selv om tilbudet
+// var sendt. Her tar vi vare på den.
+//
+// Kaster ved feil. Kalleren MÅ kjøre denne etter at e-posten er sendt, slik at
+// en feilet arkivering aldri kan velte utsendelsen — se handleSend.
+//
+// doc_type slås opp fra PROSJEKTETS egne krav, ikke hardkodes. Kravet heter
+// «tilbud» i noen dokumentmaler og «tilbudsbrev» i andre, og en fil har bare
+// én doc_type. Uten oppslag ville filen lukket kravet i noen prosjekter og
+// stille latt være i andre. Finnes ikke kravet, lagres filen uten doc_type —
+// den havner i kategorien, men lukker ingenting.
+async function arkiverTilbudsPdf({ projectId, rotId, filename, base64, user }) {
+  if (!projectId || !rotId || !filename || !base64) return { arkivert: false, grunn: 'mangler data' }
+
+  // 1. Hvilken doc_type krever DETTE prosjektet?
+  let docType = null
+  let fase = null
+  try {
+    const { data: proj } = await supabase.from('projects').select('required_docs').eq('id', projectId).single()
+    const krav = (Array.isArray(proj?.required_docs) ? proj.required_docs : [])
+      .find(r => r?.phase === 'anbud' && r?.category === 'okonomi')
+    if (krav?.doc_type) { docType = krav.doc_type; fase = 'anbud' }
+  } catch (e) {
+    // Uten mal har prosjektet ingen krav — filen lagres uten kobling.
+    console.warn('[tilbudsarkiv] kunne ikke lese prosjektets krav:', e)
+  }
+
+  // 2. Finnes det alt en aktiv fil fra SAMME kalkyle-familie?
+  // Nøkkelen er rotId, ikke filnavnet: filnavnet inneholder revisjonsnummeret
+  // og endrer seg mellom sendingene. To ULIKE kalkyler på samme prosjekt har
+  // hver sin rotId og blir derfor to separate dokumenter — ikke revisjoner av
+  // hverandre. To uavhengige tilbud skal ikke arkivere hverandre.
+  let baseFile = null
+  try {
+    const { data } = await supabase.from('project_files')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('source_calculation_id', rotId)
+      .or('archived.is.null,archived.eq.false')
+      .order('created_at', { ascending: false })
+      .limit(1)
+    baseFile = (data || [])[0] || null
+  } catch (e) {
+    // Slår oppslaget feil, lager vi heller et nytt dokument enn å miste kopien.
+    console.warn('[tilbudsarkiv] kunne ikke se etter tidligere versjon:', e)
+  }
+
+  // 3. base64 → File. uploadRevisionRow og opplastingen leser .name og .size,
+  // så en ren Blob duger ikke.
+  const raa = atob(base64)
+  const bytes = new Uint8Array(raa.length)
+  for (let i = 0; i < raa.length; i++) bytes[i] = raa.charCodeAt(i)
+  const fil = new File([bytes], filename, { type: 'application/pdf' })
+
+  // 4a. Ny revisjon av samme tilbud — arkiverer forrige og bygger revision_log.
+  if (baseFile) {
+    await uploadRevisionRow({ baseFile, newFile: fil, note: 'Nytt tilbud sendt til kunde', user })
+    return { arkivert: true, revisjon: true, docType }
+  }
+
+  // 4b. Første gang: last opp og opprett raden.
+  const path = `projects/${projectId}/${Date.now()}-${Math.random().toString(36).slice(2)}.pdf`
+  const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, fil)
+  if (upErr) throw new Error('Filopplasting feilet: ' + upErr.message)
+
+  const { error: dbErr } = await supabase.from('project_files').insert({
+    name: filename,
+    project_id: projectId,
+    file_url: path,
+    file_type: 'pdf',
+    file_size: fil.size,
+    category: 'okonomi',
+    uploaded_by: user?.id,
+    revision_label: 'Rev01',
+    archived: false,
+    fase,
+    doc_type: docType,
+    source_calculation_id: rotId,
+  })
+  if (dbErr) throw new Error('Lagring feilet: ' + dbErr.message)
+  return { arkivert: true, revisjon: false, docType }
 }
 
 function ProsjektfilerPage() {
@@ -85117,6 +85207,34 @@ ${validUntil ? `<div class="validity">⏰ Tilbudet er gyldig til <strong>${new D
         })
       const fnData = await fnRes.json()
       if (!fnRes.ok || fnData?.error) throw new Error(fnData?.error || 'Sending feilet')
+
+      // ── Arkiver kopien i Prosjektfiler ──────────────────────────────────
+      // ETTER at e-posten er sendt og bekreftet, og i egen try/catch: en
+      // feilet arkivering skal ALDRI velte en utsendelse som gikk bra.
+      // Kunden har fått tilbudet i det vi kommer hit.
+      //
+      // rotId, ikke kalkylens egen id: en revisjon skal legge seg som Rev02 på
+      // samme dokument, mens en helt annen kalkyle på prosjektet blir sitt eget.
+      if (pdfAttachment && kalk.project_id) {
+        try {
+          await arkiverTilbudsPdf({
+            projectId: kalk.project_id,
+            rotId: kalk.parent_calculation_id || kalk.id,
+            filename: pdfAttachment.filename,
+            base64: pdfAttachment.content,
+            user,
+          })
+        } catch (arkivErr) {
+          console.warn('[tilbudsarkiv] arkivering feilet:', arkivErr)
+          // Lavmælt, og etter at sendingen er bekreftet. Formuleringen skal
+          // ikke så tvil om at tilbudet nådde kunden — det gjorde det.
+          await appAlert({
+            message: 'Tilbudet er sendt',
+            subMessage: 'Kopien ble ikke arkivert i Prosjektfiler. Du kan laste den ned herfra og legge den inn manuelt.',
+            kind: 'info',
+          })
+        }
+      }
 
       setSent(true)
       setTimeout(() => onSent(), 1500)
