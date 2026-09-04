@@ -56259,6 +56259,17 @@ function satsEllerNull(v) {
   return isFinite(n) ? n : null
 }
 
+// Faktorfelt som bevisst IKKE er redigerbare i Prosjektsatser-panelet.
+// tests/prosjektsats-felt.mjs krever at hvert felt i getDefaultFaktorer enten
+// står i panelet eller her med en grunn. Uten den sperren blir et nytt felt
+// stille uredigerbart per prosjekt — man kan sette det for bedriften, men ikke
+// for én kalkyle, og ingenting sier fra.
+const PROSJEKTSATS_UTELATT = {
+  // Redigeres i «Juster grunntiden»-modalen bak grunntid_justering, ikke som
+  // eget tallfelt. Selve faktoren er redigerbar i panelet.
+  grunntid_poster: 'redigeres i grunntid-modalen',
+}
+
 function getDefaultFaktorer(fagId) {
   const fag = getFaggruppe(fagId)
   return {
@@ -78644,7 +78655,8 @@ function KalkFaktorerPage({ onBack }) {
             <div><strong>Faste kostn.:</strong> Kontor, admin, forsikring etc.</div>
             <div><strong>Grunntid-just.:</strong> 1.0 = tariff, 1.2 = 20% tregere</div>
             <div><strong>Fortj. lønn:</strong> Ønsket fortjeneste på timekostnad</div>
-            <div><strong>Fortj. innkjøp:</strong> Ønsket fortjeneste på materialer/UE</div>
+            <div><strong>Fortj. innkjøp:</strong> Ønsket fortjeneste på materialer</div>
+            <div><strong>UE-påslag:</strong> Entreprenørfortjeneste på underleverandørpriser — betaling for koordinering og ansvar. Står feltet tomt, brukes Fortj. innkjøp i stedet.</div>
             <div><strong>Mat.justering:</strong> Tillegg for festemidler, spill etc.</div>
             <div><strong>Timekostnad:</strong> Lønn × (1 + sosiale + faste)</div>
           </div>
@@ -78688,13 +78700,14 @@ function KalkFaktorerPage({ onBack }) {
                     over. På materiell kjøper du en vare og legger på; på en UE-pris
                     står du ansvarlig for andres arbeid overfor byggherren.
                     Tomt felt = arv fra «Fortj. innkjøp %», som er slik det virket før
-                    feltet fantes. Derfor placeholder og ikke en forhåndsutfylt verdi:
-                    et tall her ville endret summen på alle lagrede kalkyler. */}
+                    feltet fantes.
+                    BEVISST INGEN placeholder: en grå prosent i feltet ble lest som at
+                    tallet alt var fylt inn, og da tør man ikke røre det. Feltet skal
+                    se tomt ut når det er tomt. Hva som arves står i tooltipen. */}
                 <div>{lbl('UE-påslag %')}
                   <input type="number" value={fakt.ue_paaslag_prosent ?? ''}
                     onChange={e=>updateF(fag.id,'ue_paaslag_prosent', e.target.value === '' ? null : e.target.value)}
-                    placeholder={fmtTall(satsEllerNull(fakt.fortjeneste_innkjop_prosent) ?? 0)}
-                    title={`Fortjeneste på underleverandørpriser for ${fag.name}. Står feltet tomt, brukes «Fortj. innkjøp %» som før.`}
+                    title={`Fortjeneste på underleverandørpriser for ${fag.name}. Står feltet tomt, brukes «Fortj. innkjøp %» (${fmtTall(satsEllerNull(fakt.fortjeneste_innkjop_prosent) ?? 0)} %) som før.`}
                     style={{ ...qInp, background: satsEllerNull(fakt.ue_paaslag_prosent) === null ? '#f8fafc' : 'white' }} />
                 </div>
                 <div>{lbl('Mat.justering %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateF(fag.id,'mat_justering_prosent',e.target.value)} style={qInp} /></div>
@@ -79092,7 +79105,7 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
                         { key:'sosiale_prosent', label:'Sosiale', unit:'%' },
                         { key:'faste_prosent', label:'Faste', unit:'%' },
                         { key:'fortjeneste_lonn_prosent', label:'Fortj.lønn', unit:'%' },
-                        { key:'fortjeneste_innkjop_prosent', label:'Fortj.mat', unit:'%' },
+                        { key:'fortjeneste_innkjop_prosent', label:'Fortj. innkjøp', unit:'%' },
                         { key:'grunntid_justering', label:'Tidsjust.', unit:'×' },
                       ].map(field => {
                         if (field.key === 'grunntid_justering') {
@@ -79581,6 +79594,24 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
   const alleFaktorer = k.faktorer || {}
   const totals = beregnProsjektTotal(kalkyler, alleFaktorer)
   const hasCustomFaktorer = Object.keys(alleFaktorer).length > 0
+
+  // Bedriftens lagrede standardsatser for gitte fag. ÉN kilde for begge
+  // tilbakestill-knappene i Prosjektsatser. De betydde tidligere to
+  // forskjellige ting: «Tilbakestill alle» hentet bedriftens satser fra
+  // company_settings, mens ↺ per kalkyle satte getDefaultFaktorer — altså
+  // fabrikkverdiene. En bedrift med egen timelønn fikk 380 tilbake i stedet
+  // for sine egne 400, og knappen som het det samme gjorde noe annet.
+  // Feiler oppslaget, er fabrikkverdiene det eneste vi har å falle tilbake på.
+  const hentBedriftssatser = async (fagIder) => {
+    let bedriftF = {}
+    try {
+      const { data } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
+      bedriftF = data?.kalk_faktorer || {}
+    } catch (e) { console.error('[prosjektsatser] kunne ikke hente bedriftssatser', e) }
+    const ut = {}
+    ;(fagIder || []).forEach(fagId => { ut[fagId] = bedriftF[fagId] || getDefaultFaktorer(fagId) })
+    return ut
+  }
   const [showProjFaktorer, setShowProjFaktorer] = useState(false)
   const [grunntidModalProj, setGrunntidModalProj] = useState(null)  // { fag } når popup åpen i prosjektsatser
   const hasCustomProjFaktorer = kalkyler.some(kl => {
@@ -82056,24 +82087,50 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         </div>
                         <div style={{ display:'flex', alignItems:'center', gap:'4px' }}>
                           {hasOverride && <span style={{ fontSize:'9px', color:'#2563eb', fontWeight:'600' }}>Tilpasset</span>}
-                          <button onClick={() => {
-                            const newFaktorer = { ...alleFaktorer, [kl.fag]: getDefaultFaktorer(kl.fag) }
-                            saveProject({ ...k, faktorer: newFaktorer })
-                          }} title="Tilbakestill til bedriftsstandard" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#94a3b8', padding:'2px' }}>↺</button>
+                          <button onClick={async () => {
+                            const nye = await hentBedriftssatser([kl.fag])
+                            saveProject({ ...k, faktorer: { ...alleFaktorer, ...nye } })
+                          }} title="Tilbakestill til bedriftens standardsatser" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'11px', color:'#94a3b8', padding:'2px' }}>↺</button>
                         </div>
                       </div>
                       <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr 1fr', gap:'4px' }}>
+                        {/* PROSJEKTSATS-FELT — leses av tests/prosjektsats-felt.mjs.
+                            Hvert felt i getDefaultFaktorer må enten stå her eller i
+                            PROSJEKTSATS_UTELATT med en grunn. Uten den sperren blir et
+                            nytt faktorfelt stille uredigerbart per prosjekt, slik
+                            mat_justering_prosent har vært. */}
                         {[
                           { key: 'produksjonslonn', label: 'Lønn', unit: 'kr/t' },
                           { key: 'sosiale_prosent', label: 'Sosiale', unit: '%' },
                           { key: 'faste_prosent', label: 'Faste', unit: '%' },
                           { key: 'fortjeneste_lonn_prosent', label: 'Fortj.lønn', unit: '%' },
-                          { key: 'fortjeneste_innkjop_prosent', label: 'Fortj.mat', unit: '%' },
+                          { key: 'fortjeneste_innkjop_prosent', label: 'Fortj. innkjøp', unit: '%' },
+                          // tomLagresSomNull: et tømt felt skrives som null, ikke som
+                          // tom streng. Hva NULL så betyr, avhenger av feltet:
+                          //   ue_paaslag_prosent  — arv. Kjeden i uePaaslagFor faller
+                          //     videre til innkjøpsmarginen.
+                          //   mat_justering_prosent — 0 %. beregnMaterialkostnad har
+                          //     ingen kjede (`parseFloat(x) || 0`), så tomt betyr
+                          //     «ingen påslag på materiell i dette prosjektet».
+                          // Flagget styrer bare LAGRINGEN og sammenligningen, ikke
+                          // betydningen — den ligger i beregningen.
+                          { key: 'ue_paaslag_prosent', label: 'UE-påslag', unit: '%', tomLagresSomNull: true,
+                            hjelp: 'Tomt felt = arver satsen fra Fortj. innkjøp.' },
+                          { key: 'mat_justering_prosent', label: 'Mat.justering', unit: '%', tomLagresSomNull: true,
+                            hjelp: 'Påslag for festemidler, spill etc. Tomt felt = 0 %, altså ingen påslag på materiell i dette prosjektet.' },
                           { key: 'grunntid_justering', label: 'Tidsjust.', unit: '×', step: '0.1' },
                         ].map(field => {
                           const val = fakt[field.key] ?? ''
                           const defVal = defFakt[field.key] ?? ''
-                          const isDiff = String(val) !== String(defVal)
+                          // Felt som lagres som null sammenlignes på TALLVERDI, ikke
+                          // tekst: standarden kan være null mens et tømt felt er '',
+                          // og String(null) !== String('') ville merket et urørt felt
+                          // som «Tilpasset». Med satsEllerNull blir begge null, mens
+                          // et tømt mat.justering (0 %) fortsatt skiller seg fra
+                          // standarden 5 % — som det skal.
+                          const isDiff = field.tomLagresSomNull
+                            ? satsEllerNull(fakt[field.key]) !== satsEllerNull(defFakt[field.key])
+                            : String(val) !== String(defVal)
                           if (field.key === 'grunntid_justering') {
                             return (
                               <div key={field.key}>
@@ -82091,8 +82148,12 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                             <div key={field.key}>
                               <div style={{ fontSize:'9px', color: isDiff ? '#2563eb' : '#94a3b8', fontWeight:'600', marginBottom:'2px' }}>{field.label}</div>
                               <input type="number" step={field.step || '1'} value={val}
+                                title={field.hjelp || undefined}
                                 onChange={e => {
-                                  const newFaktorer = { ...alleFaktorer, [kl.fag]: { ...fakt, [field.key]: e.target.value } }
+                                  // Tomt arvefelt lagres som null, ikke som ''. 0 % påslag
+                                  // og «ikke satt» er to forskjellige ting i kjeden.
+                                  const nyVerdi = (field.tomLagresSomNull && e.target.value === '') ? null : e.target.value
+                                  const newFaktorer = { ...alleFaktorer, [kl.fag]: { ...fakt, [field.key]: nyVerdi } }
                                   saveProject({ ...k, faktorer: newFaktorer })
                                 }}
                                 style={{ width:'100%', padding:'5px 6px', border:`1px solid ${isDiff ? '#bfdbfe' : '#e2e8f0'}`, borderRadius:'6px', fontSize:'12px', outline:'none', boxSizing:'border-box', background: isDiff ? '#eff6ff' : 'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }} />
@@ -82104,13 +82165,8 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   )
                 })}
                 <button onClick={async () => {
-                  try {
-                    const { data } = await supabase.from('company_settings').select('kalk_faktorer').limit(1).single()
-                    const bedriftF = data?.kalk_faktorer || {}
-                    const newF = {}
-                    kalkyler.forEach(kl => { newF[kl.fag] = bedriftF[kl.fag] || getDefaultFaktorer(kl.fag) })
-                    saveProject({ ...k, faktorer: newF })
-                  } catch(e) { console.error(e) }
+                  const nye = await hentBedriftssatser(kalkyler.map(kl => kl.fag))
+                  saveProject({ ...k, faktorer: nye })
                 }} style={{ width:'100%', padding:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'8px', cursor:'pointer', fontSize:'11px', fontWeight:'600', color:'#64748b', marginTop:'4px' }}>
                   ↺ Tilbakestill alle til bedriftsstandard
                 </button>
