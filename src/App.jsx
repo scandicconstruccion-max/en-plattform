@@ -6461,6 +6461,241 @@ function ProsjekterPage({ onNavigateDetail }) {
   )
 }
 
+// ─── ØKONOMI FOR HELE PROSJEKTTREET ──────────────────────────────────────────
+//
+// Kortet holder tre nivåer fra hverandre: budsjett, prosjektets EGNE godkjente
+// tillegg, og UNDERPROSJEKTENES. Før dette summerte kortet bare prosjektets egne
+// endringsmeldinger, så et tillegg ført på et underprosjekt var usynlig i
+// hovedprosjektet — pengene fantes, men ingen så dem.
+//
+// Budsjettet står delt i «eget» og «underprosjekter» fordi vi IKKE kan vite om
+// et hovedbudsjett allerede inkluderer barna. projects.budget er ett fritt tall
+// per prosjekt, uten konvensjon og uten validering. Står tallene delt, ser
+// brukeren selv om de overlapper; ett samletall ville skjult det.
+//
+// Tallene kommer fra prosjekt_okonomi_sammendrag og prosjekt_okonomi_tre, som går
+// hele treet ned med rekursiv CTE. Summeringen skjer i DB, ikke her.
+function ProsjektOkonomiKort({ project, endringsmeldinger, okonomi, okonomiTre, isMob, card, onNavigateDetail }) {
+  const [visUnder, setVisUnder] = useState(false)
+
+  // numeric fra PostgREST kan komme som streng. null skal FORBLI null: «ikke
+  // ført budsjett» og «null kroner» er to ulike ting, og skal vises ulikt
+  // («–» mot «0 kr»).
+  const tall = (v) => (v === null || v === undefined || v === '') ? null : (Number(v) || 0)
+  const kr = (n) => Math.round(n || 0).toLocaleString('nb-NO') + ' kr'
+
+  // Fallback når RPC-en ikke svarer — offline, eller funksjonen ikke rullet ut
+  // i dette Supabase-prosjektet ennå. Da faller kortet tilbake på prosjektets
+  // egne tall, altså nøyaktig det som sto her før. Underprosjektene mangler,
+  // men siden virker.
+  const egetLokaltGodkjent = endringsmeldinger
+    .filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
+    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+  const egetLokaltAvventer = endringsmeldinger
+    .filter(e => e.status === 'Sendt' || e.status === 'Under forhandling')
+    .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
+
+  const s = okonomi
+  const egetBudsjett  = s ? tall(s.eget_budsjett) : tall(project.budget)
+  const egneTillegg   = s ? (tall(s.egne_tillegg) || 0) : egetLokaltGodkjent
+  const egneAvvent    = s ? (tall(s.egne_avventende) || 0) : egetLokaltAvventer
+  const underBudsjett = s ? (tall(s.underprosjekt_budsjett) || 0) : 0
+  const underTillegg  = s ? (tall(s.underprosjekt_tillegg) || 0) : 0
+  const underAvvent   = s ? (tall(s.underprosjekt_avventende) || 0) : 0
+  const antallUnder            = s ? Number(s.antall_underprosjekter || 0) : 0
+  const antallUnderMedBudsjett = s ? Number(s.antall_underprosjekt_med_budsjett || 0) : 0
+  const antallUtenBudsjett     = s ? Number(s.antall_uten_budsjett_med_tillegg || 0) : 0
+  const antallEm               = s ? Number(s.antall_em || 0) : endringsmeldinger.length
+
+  const harUnder    = antallUnder > 0
+  const harBudsjett = egetBudsjett !== null || antallUnderMedBudsjett > 0
+  const sumBudsjett = (egetBudsjett || 0) + underBudsjett
+  const sumTillegg  = egneTillegg + underTillegg
+  const sumAvvent   = egneAvvent + underAvvent
+  const justert     = sumBudsjett + sumTillegg
+
+  // Kortet dukker nå opp for et prosjekttre som BARE har budsjett — før krevde
+  // det minst én EGEN endringsmelding, så et hovedprosjekt med tillegg kun på
+  // barna viste ingenting i det hele tatt.
+  //
+  // Et FLATT prosjekt uten endringsmeldinger får det fortsatt ikke: budsjettet
+  // står allerede i Prosjektinformasjon-kortet over, og en tilleggsrad på null
+  // ville bare gjentatt tallet uten å tilføre noe.
+  if (antallEm === 0 && (!harUnder || !harBudsjett)) return null
+
+  // Prosjekter i treet som har godkjente tillegg, men ikke noe budsjett. Summen
+  // tar tilleggene med, men grunnbudsjettet mangler — det skal sies rett ut,
+  // ikke skjules bak et tall som ser komplett ut.
+  const manglerBudsjett = (okonomiTre || []).filter(r => tall(r.budsjett) === null && (tall(r.godkjente_tillegg) || 0) > 0)
+  const underRader = (okonomiTre || []).filter(r => !r.er_rot)
+
+  const rad = (etikett, verdi, opts = {}) => (
+    <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize: isMob ? '11px' : '12px', marginBottom:'4px' }}>
+      <span style={{ color: opts.farge || '#64748b', flexShrink:0 }}>{etikett}</span>
+      <span style={{ fontWeight:'600', color: opts.farge || '#0f172a', textAlign:'right' }}>{verdi}</span>
+    </div>
+  )
+  const blokkTittel = (t) => (
+    <div style={{ fontSize:'10px', fontWeight:'700', color:'#94a3b8', letterSpacing:'0.04em', marginBottom:'6px' }}>{t}</div>
+  )
+  const boks = { background:'#f8fafc', borderRadius:'10px', padding:'10px 12px', marginBottom:'10px' }
+
+  return (
+    <div style={card}>
+      <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>
+        {harUnder ? '💰 Økonomi – hele prosjektet' : (antallEm > 0 ? `🔄 Endringsmeldinger (${endringsmeldinger.length})` : '💰 Økonomi')}
+      </h3>
+
+      {harUnder ? (
+        <>
+          <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0', textAlign:'center', marginBottom:'12px' }}>
+            <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', marginBottom:'2px' }}>SAMLET JUSTERT BUDSJETT</div>
+            <div style={{ fontSize: isMob ? '18px' : '22px', fontWeight:'800', color:'#059669' }}>{kr(justert)}</div>
+          </div>
+
+          <div style={boks}>
+            {blokkTittel('BUDSJETT')}
+            {rad('Dette prosjektet', egetBudsjett === null ? '–' : kr(egetBudsjett))}
+            {rad(`Underprosjekter (${antallUnder})`, antallUnderMedBudsjett === 0 ? '–' : kr(underBudsjett))}
+            <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
+            {rad('Sum budsjett', kr(sumBudsjett), { farge:'#0f172a' })}
+          </div>
+
+          <div style={boks}>
+            {blokkTittel('GODKJENTE TILLEGG')}
+            {rad('Dette prosjektet', '+' + kr(egneTillegg), { farge:'#059669' })}
+            <button type="button" onClick={() => setVisUnder(v => !v)}
+              style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', width:'100%', padding:0, marginBottom:'4px',
+                background:'none', border:'none', cursor:'pointer', fontSize: isMob ? '11px' : '12px', textAlign:'left', fontFamily:'inherit' }}>
+              <span style={{ color:'#059669', flexShrink:0 }}>
+                Underprosjekter ({antallUnder}) <span style={{ color:'#94a3b8' }}>{visUnder ? '▾' : '▸'}</span>
+              </span>
+              <span style={{ fontWeight:'600', color:'#059669', textAlign:'right' }}>+{kr(underTillegg)}</span>
+            </button>
+
+            {visUnder && underRader.length > 0 && (
+              <div style={{ marginTop:'6px', marginBottom:'6px', borderLeft:'2px solid #e2e8f0', paddingLeft:'8px', display:'flex', flexDirection:'column', gap:'6px' }}>
+                {underRader.map(r => {
+                  const b = tall(r.budsjett)
+                  const t = tall(r.godkjente_tillegg) || 0
+                  // niva 1 er første nivå under prosjektet vi står i — derfor -1,
+                  // så det nivået ikke får unødig innrykk.
+                  const innrykk = Math.min((Number(r.niva || 1) - 1) * (isMob ? 8 : 12), isMob ? 24 : 48)
+                  const klikkbar = typeof onNavigateDetail === 'function'
+                  return (
+                    <button key={r.project_id} type="button" disabled={!klikkbar}
+                      onClick={() => klikkbar && onNavigateDetail(r.project_id)}
+                      style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', marginLeft: `${innrykk}px`,
+                        padding:'4px 0', background:'none', border:'none', cursor: klikkbar ? 'pointer' : 'default', textAlign:'left', fontFamily:'inherit' }}>
+                      <span style={{ flex:1, minWidth:0 }}>
+                        <span style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.name}</span>
+                        <span style={{ display:'block', fontSize:'10px', color:'#94a3b8' }}>
+                          {r.project_number ? '#' + r.project_number + ' · ' : ''}budsjett {b === null ? '–' : kr(b)}
+                        </span>
+                      </span>
+                      <span style={{ flexShrink:0, fontSize:'11px', fontWeight:'700', color: t > 0 ? '#059669' : '#cbd5e1' }}>{t > 0 ? '+' + kr(t) : '–'}</span>
+                      {klikkbar && <span style={{ flexShrink:0, color:'#cbd5e1', fontSize:'12px' }}>›</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
+            {rad('Sum tillegg', '+' + kr(sumTillegg), { farge:'#059669' })}
+          </div>
+
+          <div style={{ height:'2px', background:'#e2e8f0', margin:'10px 0' }} />
+          <div style={{ display:'flex', justifyContent:'space-between', gap:'8px', fontSize: isMob ? '12px' : '13px', marginBottom:'10px' }}>
+            <span style={{ fontWeight:'700', color:'#0f172a', flexShrink:0 }}>{isMob ? 'Samlet justert' : 'Samlet justert budsjett'}</span>
+            <span style={{ fontWeight:'800', color:'#0f172a', textAlign:'right' }}>{kr(justert)}</span>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Flatt prosjekt: nøyaktig kortet testbrukerne kjenner. «Justert
+              budsjett» beholder navnet sitt — den nye strukturen slår først inn
+              når det faktisk finnes underprosjekter. */}
+          {antallEm > 0 && (
+            <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0', textAlign:'center', marginBottom:'12px' }}>
+              <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', marginBottom:'2px' }}>GODKJENT TILLEGGSARBEID</div>
+              <div style={{ fontSize: isMob ? '18px' : '22px', fontWeight:'800', color:'#059669' }}>{kr(egneTillegg)}</div>
+            </div>
+          )}
+          {egetBudsjett !== null && (
+            <div style={boks}>
+              {rad('Budsjett', kr(egetBudsjett), { farge:'#0f172a' })}
+              {rad(isMob ? '+ Endringer' : '+ Godkjente endringer', '+' + kr(egneTillegg), { farge:'#059669' })}
+              <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
+              <div style={{ display:'flex', justifyContent:'space-between', gap:'4px', fontSize: isMob ? '12px' : '13px' }}>
+                <span style={{ fontWeight:'700', color:'#0f172a', flexShrink:0 }}>{isMob ? 'Justert' : 'Justert budsjett'}</span>
+                <span style={{ fontWeight:'800', color:'#0f172a', textAlign:'right' }}>{kr(egetBudsjett + egneTillegg)}</span>
+              </div>
+              {egetBudsjett > 0 && (
+                <>
+                  <div style={{ marginTop:'8px', height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden' }}>
+                    <div style={{ height:'100%', borderRadius:'3px', background:'#059669', width: `${Math.min(100, (egetBudsjett / (egetBudsjett + egneTillegg)) * 100)}%` }} />
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>
+                    <span>Oppr.</span>
+                    <span>+{(egneTillegg / egetBudsjett * 100).toFixed(1)}%</span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {antallUtenBudsjett > 0 && (
+        <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 12px', marginBottom:'10px' }}>
+          <p style={{ margin:0, fontSize:'11px', color:'#92400e', lineHeight:1.5 }}>
+            ⚠️ {manglerBudsjett.length === 1 && manglerBudsjett[0]?.name
+              ? <><strong>{manglerBudsjett[0].name}</strong> har godkjente tillegg, men ikke noe budsjett.</>
+              : <>{antallUtenBudsjett} prosjekter har godkjente tillegg, men ikke noe budsjett.</>}
+            {' '}Tilleggene er med i summen — grunnbudsjettet mangler.
+          </p>
+        </div>
+      )}
+
+      {sumAvvent > 0 && (
+        <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'10px 12px', border:'1px solid #fde68a', marginBottom:'12px', textAlign:'center' }}>
+          <div style={{ fontSize:'10px', color:'#d97706', fontWeight:'600', marginBottom:'2px' }}>AVVENTER GODKJENNING</div>
+          <div style={{ fontSize:'16px', fontWeight:'700', color:'#d97706' }}>{kr(sumAvvent)}</div>
+          {harUnder && underAvvent > 0 && (
+            <div style={{ fontSize:'11px', color:'#92400e', marginTop:'2px' }}>
+              herav {kr(underAvvent)} på underprosjekter
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Listen viser prosjektets EGNE endringsmeldinger, som før. Underprosjektenes
+          ligger i den utfoldbare listen over — de er tall her, ikke enkeltsaker. */}
+      {endringsmeldinger.length > 0 && (
+        <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
+          {endringsmeldinger.slice(0, 5).map(em => {
+            const emSt = { Utkast:'#64748b', Sendt:'#2563eb', Godkjent:'#16a34a', Avvist:'#dc2626', 'Under forhandling':'#d97706', Fakturert:'#7c3aed' }[em.status] || '#64748b'
+            return (
+              <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize: isMob ? '11px' : '12px', gap:'6px' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{em.title}</div>
+                  <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'1px' }}>
+                    <span style={{ color:'#94a3b8', fontSize:'11px' }}>{em.em_number}</span>
+                    <span style={{ color: emSt, fontSize:'10px', fontWeight:'600' }}>{em.status}</span>
+                  </div>
+                </div>
+                <span style={{ fontWeight:'700', color: emSt, fontSize: isMob ? '11px' : '12px', flexShrink:0, marginLeft:'6px' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')}</span>
+              </div>
+            )
+          })}
+          {endringsmeldinger.length > 5 && <div style={{ fontSize:'11px', color:'#94a3b8', textAlign:'center', paddingTop:'4px' }}>+ {endringsmeldinger.length - 5} flere</div>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateChecklist }) {
   const { user, kanStyreProsjekt } = useAuth()
   const appAlert = useAppAlert()
@@ -6475,6 +6710,12 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const [checklistTemplates, setChecklistTemplates] = useState([])
   const [checklistSortBy, setChecklistSortBy] = useState('newest') // 'newest' | 'oldest' | 'alpha' | 'category'
   const [endringsmeldinger, setEndringsmeldinger] = useState([])
+  // Økonomi for HELE prosjekttreet — sammendrag (de fire tallene hver for seg)
+  // og én rad per prosjekt til den utfoldbare listen. Begge fra RPC, begge
+  // summert i DB. null = ikke svart ennå; kortet faller da tilbake på
+  // prosjektets egne tall.
+  const [okonomi, setOkonomi] = useState(null)
+  const [okonomiTre, setOkonomiTre] = useState([])
   const [loading, setLoading] = useState(true)
   const [showEdit, setShowEdit] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
@@ -6516,16 +6757,21 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const load = async () => {
     try {
       // allSettled, ikke all. Med Promise.all veltet ÉN feilende spørring hele
-      // lastingen — offline avvises alle fem, setProject kjørte aldri, og siden
-      // sa «Prosjekt ikke funnet» selv om prosjektet lå i cachen. Nå tar hver
-      // del sitt eget utfall: prosjektet og lista kommer fra IndexedDB, mens
+      // lastingen — offline avvises alle sammen, setProject kjørte aldri, og
+      // siden sa «Prosjekt ikke funnet» selv om prosjektet lå i cachen. Nå tar
+      // hver del sitt eget utfall: prosjektet og lista kommer fra IndexedDB, mens
       // sjekklister og endringsmeldinger står tomme til man er på nett igjen.
-      const [projR, allProjR, clRes, emRes, tmplRes] = await Promise.allSettled([
+      // De to okonomi-kallene er med her nettopp fordi de kan feile alene: en
+      // bedrift på et Supabase-prosjekt uten funksjonene får 404, og da skal
+      // kortet falle tilbake på prosjektets egne tall — ikke velte siden.
+      const [projR, allProjR, clRes, emRes, tmplRes, okRes, okTreRes] = await Promise.allSettled([
         db.getProject(projectId),
         db.getProjects(),
         supabase.from('checklists').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('endringsmeldinger').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
         supabase.from('checklist_templates').select('id, category').then(r => r.data || []),
+        supabase.rpc('prosjekt_okonomi_sammendrag', { p_project_id: projectId }),
+        supabase.rpc('prosjekt_okonomi_tre', { p_project_id: projectId }),
       ])
       const proj = projR.status === 'fulfilled' ? projR.value : null
       // Fant vi ikke prosjektet i det hele tatt, la forrige verdi stå i stedet
@@ -6535,6 +6781,11 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       setChecklists(clRes.status === 'fulfilled' ? (clRes.value.data || []) : [])
       setEndringsmeldinger(emRes.status === 'fulfilled' ? (emRes.value.data || []) : [])
       setChecklistTemplates(tmplRes.status === 'fulfilled' ? tmplRes.value : [])
+      // Funksjonen returnerer alltid nøyaktig én rad, også for et prosjekt som
+      // ikke finnes — da med nuller. error settes ved 404/RLS-avslag; begge
+      // skal gi null, som slår på fallbacken i kortet.
+      setOkonomi(okRes.status === 'fulfilled' && !okRes.value.error ? (okRes.value.data?.[0] || null) : null)
+      setOkonomiTre(okTreRes.status === 'fulfilled' && !okTreRes.value.error ? (okTreRes.value.data || []) : [])
       // Last navn/epost på den som godkjenner timer (hvis satt)
       if (proj?.time_approver_id) {
         try {
@@ -6883,76 +7134,17 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
         </div>
 
         <div style={{ display:'flex', flexDirection:'column', gap: isMobH ? '10px' : '16px', overflow:'hidden', minWidth:0 }}>
-          {/* Endringsmeldinger-sammendrag */}
-          {endringsmeldinger.length > 0 && (() => {
-            const godkjent = endringsmeldinger.filter(e => e.status === 'Godkjent' || e.status === 'Fakturert')
-            const avventer = endringsmeldinger.filter(e => e.status === 'Sendt' || e.status === 'Under forhandling')
-            const totalGodkjent = godkjent.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-            const totalAvventer = avventer.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-            const totalAlle = endringsmeldinger.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-            return (
-              <div style={card}>
-                <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>🔄 Endringsmeldinger ({endringsmeldinger.length})</h3>
-                {/* Akkumulert beløp */}
-                <div style={{ background:'#f0fdf4', borderRadius:'12px', padding:'14px', border:'1px solid #bbf7d0', textAlign:'center', marginBottom:'12px' }}>
-                  <div style={{ fontSize:'11px', color:'#16a34a', fontWeight:'600', marginBottom:'2px' }}>GODKJENT TILLEGGSARBEID</div>
-                  <div style={{ fontSize: isMobH ? '18px' : '22px', fontWeight:'800', color:'#059669' }}>{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</div>
-                </div>
-                {/* Avventende */}
-                {totalAvventer > 0 && (
-                  <div style={{ background:'#fffbeb', borderRadius:'10px', padding:'10px 12px', border:'1px solid #fde68a', marginBottom:'12px', textAlign:'center' }}>
-                    <div style={{ fontSize:'10px', color:'#d97706', fontWeight:'600', marginBottom:'2px' }}>AVVENTER GODKJENNING</div>
-                    <div style={{ fontSize:'16px', fontWeight:'700', color:'#d97706' }}>{Math.round(totalAvventer).toLocaleString('nb-NO')} kr</div>
-                    <div style={{ fontSize:'11px', color:'#92400e', marginTop:'2px' }}>{avventer.length} endringsmelding{avventer.length !== 1 ? 'er' : ''}</div>
-                  </div>
-                )}
-                {/* Budsjett-kontekst */}
-                {project.budget && (
-                  <div style={{ background:'#f8fafc', borderRadius:'10px', padding:'10px 12px', marginBottom:'12px' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '11px' : '12px', marginBottom:'4px', gap:'4px' }}>
-                      <span style={{ color:'#64748b', flexShrink:0 }}>Budsjett</span>
-                      <span style={{ fontWeight:'600', color:'#0f172a' }}>{Number(project.budget).toLocaleString('nb-NO')} kr</span>
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '11px' : '12px', marginBottom:'4px', gap:'4px' }}>
-                      <span style={{ color:'#059669', flexShrink:0 }}>{isMobH ? '+ Endringer' : '+ Godkjente endringer'}</span>
-                      <span style={{ fontWeight:'600', color:'#059669', textAlign:'right' }}>+{Math.round(totalGodkjent).toLocaleString('nb-NO')} kr</span>
-                    </div>
-                    <div style={{ height:'1px', background:'#e2e8f0', margin:'6px 0' }} />
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize: isMobH ? '12px' : '13px', gap:'4px' }}>
-                      <span style={{ fontWeight:'700', color:'#0f172a', flexShrink:0 }}>{isMobH ? 'Justert' : 'Justert budsjett'}</span>
-                      <span style={{ fontWeight:'800', color:'#0f172a', textAlign:'right' }}>{Math.round(Number(project.budget) + totalGodkjent).toLocaleString('nb-NO')} kr</span>
-                    </div>
-                    <div style={{ marginTop:'8px', height:'6px', background:'#e2e8f0', borderRadius:'3px', overflow:'hidden' }}>
-                      <div style={{ height:'100%', borderRadius:'3px', background:'#059669', width: `${Math.min(100, (Number(project.budget) / (Number(project.budget) + totalGodkjent)) * 100)}%` }} />
-                    </div>
-                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:'10px', color:'#94a3b8', marginTop:'4px' }}>
-                      <span>Oppr.</span>
-                      <span>+{(totalGodkjent / Number(project.budget) * 100).toFixed(1)}%</span>
-                    </div>
-                  </div>
-                )}
-                {/* Liste over siste EM-er */}
-                <div style={{ display:'flex', flexDirection:'column', gap:'4px' }}>
-                  {endringsmeldinger.slice(0, 5).map(em => {
-                    const emSt = { Utkast:'#64748b', Sendt:'#2563eb', Godkjent:'#16a34a', Avvist:'#dc2626', 'Under forhandling':'#d97706', Fakturert:'#7c3aed' }[em.status] || '#64748b'
-                    return (
-                      <div key={em.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize: isMobH ? '11px' : '12px', gap:'6px' }}>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{em.title}</div>
-                          <div style={{ display:'flex', gap:'6px', alignItems:'center', marginTop:'1px' }}>
-                            <span style={{ color:'#94a3b8', fontSize:'11px' }}>{em.em_number}</span>
-                            <span style={{ color: emSt, fontSize:'10px', fontWeight:'600' }}>{em.status}</span>
-                          </div>
-                        </div>
-                        <span style={{ fontWeight:'700', color: emSt, fontSize: isMobH ? '11px' : '12px', flexShrink:0, marginLeft:'6px' }}>{Math.round(em.amount || 0).toLocaleString('nb-NO')}</span>
-                      </div>
-                    )
-                  })}
-                  {endringsmeldinger.length > 5 && <div style={{ fontSize:'11px', color:'#94a3b8', textAlign:'center', paddingTop:'4px' }}>+ {endringsmeldinger.length - 5} flere</div>}
-                </div>
-              </div>
-            )
-          })()}
+          {/* Økonomi for hele prosjekttreet — budsjett og tillegg, eget og
+              underprosjektenes holdt fra hverandre. */}
+          <ProsjektOkonomiKort
+            project={project}
+            endringsmeldinger={endringsmeldinger}
+            okonomi={okonomi}
+            okonomiTre={okonomiTre}
+            isMob={isMobH}
+            card={card}
+            onNavigateDetail={onNavigateDetail}
+          />
 
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
