@@ -5790,10 +5790,240 @@ function ContactSection({ title, items, onChange }) {
   )
 }
 
+// ─── HENT GRUNNLAG FRA KALKYLE ───────────────────────────────────────────────
+//
+// Et prosjekt opprettes ALDRI automatisk fra en kalkyle. Man regner på mange
+// jobber som aldri blir noe, og prosjektlista skal ikke fylles med dem. I stedet
+// hentes kalkylen inn her — når prosjektet faktisk opprettes.
+//
+// Koblingen lagres på kalkyle-SAKEN, ikke på den enkelte revisjonen: rad-id-en
+// bytter ved hver revidering (opprettKalkyleRevisjon lager en NY rad og setter
+// den gamle til «Erstattet»), så en peker til én versjon ville pekt på en
+// erstattet rad etter første revisjon. Gjeldende versjon er den med høyest
+// revision_number i familien.
+
+// Kolonnene som trengs for å fylle ut prosjektskjemaet. `kalkyler` og `faktorer`
+// hentes bevisst IKKE — de er store jsonb-trær med alle bygningsdeler, og lista
+// trenger dem ikke. 25 rader med dem ville vært megabytes.
+// `project_id` er med for å KUNNE ADVARE: en kalkyle hører til maks ett prosjekt,
+// så å hente inn en som alt er knyttet, flytter den. Det skal ikke skje stille.
+const KALK_GRUNNLAG_KOLONNER =
+  'id, kalk_number, title, customer_id, customer_name, customer_email, customer_address, ' +
+  'notes, total_ex_mva, revision_number, parent_calculation_id, project_id, status, updated_at'
+
+function KalkylePickerModal({ onVelg, onClose }) {
+  const [sok, setSok] = useState('')
+  const [debSok, setDebSok] = useState('')
+  const [rader, setRader] = useState([])
+  const [laster, setLaster] = useState(true)
+  const [feil, setFeil] = useState('')
+  const [side, setSide] = useState(0)
+  const [harFlere, setHarFlere] = useState(false)
+  const isMobKP = typeof window !== 'undefined' && window.innerWidth < 768
+  const SIDE_STORRELSE = 25
+
+  // Debounce — uten den blir det ett DB-kall per tastetrykk.
+  useEffect(() => {
+    const t = setTimeout(() => { setDebSok(sanitizeSearch(sok)); setSide(0) }, 250)
+    return () => clearTimeout(t)
+  }, [sok])
+
+  // Søk, filtrering, sortering og paginering skjer i DB — ikke på et uttrekk i
+  // frontend. En bedrift kan ha flere tusen kalkyler, og Supabase returnerer
+  // maks 1000 rader per spørring.
+  useEffect(() => {
+    let avbrutt = false
+    setLaster(true); setFeil('')
+    const fra = side * SIDE_STORRELSE
+    let q = supabase.from('calculations')
+      .select(KALK_GRUNNLAG_KOLONNER)
+      .eq('is_template', false)
+      .neq('status', KALK_STATUS_ERSTATTET)   // erstattede revisjoner er ikke gjeldende versjon
+      .order('updated_at', { ascending: false, nullsFirst: false })
+      .order('id', { ascending: true })       // deterministisk paginering ved lik updated_at
+      .range(fra, fra + SIDE_STORRELSE)       // én rad ekstra: forteller om det finnes en side til
+    if (debSok) q = q.or(`title.ilike.%${debSok}%,kalk_number.ilike.%${debSok}%,customer_name.ilike.%${debSok}%`)
+    Promise.resolve(q)
+      .then(({ data, error }) => {
+        if (avbrutt) return
+        if (error) { setFeil(error.message || 'Kunne ikke hente kalkyler'); setRader([]); setHarFlere(false) }
+        else {
+          const alle = data || []
+          setHarFlere(alle.length > SIDE_STORRELSE)
+          setRader(alle.slice(0, SIDE_STORRELSE))
+        }
+        setLaster(false)
+      })
+      .catch(e => { if (!avbrutt) { setFeil((e && e.message) || 'Kunne ikke hente kalkyler'); setRader([]); setLaster(false) } })
+    return () => { avbrutt = true }
+  }, [debSok, side])
+
+  const sideKnapp = (deaktivert) => ({
+    padding: '7px 14px', borderRadius: '9px', border: '1px solid #e2e8f0',
+    background: deaktivert ? '#f8fafc' : 'white', color: deaktivert ? '#cbd5e1' : '#374151',
+    fontSize: '13px', fontWeight: '600', cursor: deaktivert ? 'not-allowed' : 'pointer',
+  })
+
+  return (
+    <>
+      <div onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}
+        style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.45)', zIndex:110 }} />
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', background:'white',
+        borderRadius: isMobKP ? '16px' : '20px', width:'min(620px, calc(100vw - 24px))', maxHeight:'85vh',
+        display:'flex', flexDirection:'column', zIndex:111, boxShadow:'0 20px 60px rgba(0,0,0,0.2)',
+        fontFamily:'system-ui, sans-serif' }}>
+        <div style={{ padding: isMobKP ? '14px 16px' : '16px 20px', borderBottom:'1px solid #f1f5f9', flexShrink:0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:'10px' }}>
+            <h2 style={{ margin:0, fontSize: isMobKP ? '15px' : '16px', fontWeight:'700', color:'#0f172a' }}>🧮 Hent fra kalkyle</h2>
+            <button type="button" onClick={onClose}
+              style={{ background:'none', border:'none', fontSize:'22px', cursor:'pointer', color:'#94a3b8', lineHeight:1, padding:'0 4px' }}>×</button>
+          </div>
+          {/* 16px på telefon: under det zoomer iOS inn på feltet når det får fokus.
+              autoFocus bare på desktop — på telefon ville tastaturet sprettet opp
+              og spist mesteparten av lista før brukeren har sett den. */}
+          <input autoFocus={!isMobKP} value={sok} onChange={e => setSok(e.target.value)}
+            placeholder="Søk på navn, kalkylenummer eller kunde"
+            style={{ width:'100%', marginTop:'12px', padding:'10px 12px', border:'1px solid #e2e8f0', borderRadius:'10px',
+              fontSize: isMobKP ? '16px' : '14px', outline:'none', boxSizing:'border-box' }} />
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding: isMobKP ? '12px' : '12px 16px' }}>
+          {laster && <p style={{ textAlign:'center', color:'#94a3b8', fontSize:'13px', padding:'24px 0', margin:0 }}>Laster kalkyler …</p>}
+          {!laster && feil && <p style={{ textAlign:'center', color:'#dc2626', fontSize:'13px', padding:'24px 0', margin:0 }}>{feil}</p>}
+          {!laster && !feil && rader.length === 0 && (
+            <p style={{ textAlign:'center', color:'#94a3b8', fontSize:'13px', padding:'24px 0', margin:0 }}>
+              {debSok ? 'Ingen kalkyler matcher søket.' : 'Ingen kalkyler å hente fra ennå.'}
+            </p>
+          )}
+          {!laster && !feil && rader.length > 0 && (
+            <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+              {rader.map(k => (
+                <button key={k.id} type="button" onClick={() => onVelg(k)}
+                  style={{ display:'flex', alignItems:'center', gap:'12px', width:'100%', padding:'12px 14px', borderRadius:'12px',
+                    border:'1px solid #f1f5f9', background:'white', cursor:'pointer', textAlign:'left' }}
+                  onMouseEnter={e => { e.currentTarget.style.borderColor = '#059669' }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = '#f1f5f9' }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'6px', minWidth:0 }}>
+                      <span style={{ fontWeight:'700', fontSize: isMobKP ? '13px' : '14px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{k.title}</span>
+                      {k.project_id && (
+                        <span style={{ flexShrink:0, background:'#fffbeb', color:'#b45309', border:'1px solid #fde68a', fontSize:'10px', fontWeight:'700', padding:'1px 6px', borderRadius:'4px' }}>Knyttet</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: isMobKP ? '11px' : '12px', color:'#94a3b8', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                      {kalkNrMedRev(k)}{k.customer_name ? ' · ' + k.customer_name : ''}{k.status ? ' · ' + k.status : ''}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight:'700', color:'#059669', fontSize: isMobKP ? '12px' : '14px', flexShrink:0 }}>{fmtI(k.total_ex_mva)}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {(side > 0 || harFlere) && (
+          <div style={{ padding:'10px 16px', borderTop:'1px solid #f1f5f9', display:'flex', alignItems:'center',
+            justifyContent:'space-between', gap:'8px', flexShrink:0 }}>
+            <button type="button" disabled={side === 0 || laster} onClick={() => setSide(s => Math.max(0, s - 1))} style={sideKnapp(side === 0 || laster)}>← Forrige</button>
+            <span style={{ fontSize:'12px', color:'#94a3b8' }}>Side {side + 1}</span>
+            <button type="button" disabled={!harFlere || laster} onClick={() => setSide(s => s + 1)} style={sideKnapp(!harFlere || laster)}>Neste →</button>
+          </div>
+        )}
+      </div>
+    </>
+  )
+}
+
+// Knytter en kalkyle-SAK til et nyopprettet prosjekt. HELE revisjonsfamilien
+// oppdateres, ikke bare raden brukeren valgte: åpner man senere en gammel
+// versjon og reviderer derfra, arver den nye raden project_id via kopien i
+// opprettKalkyleRevisjon — men bare hvis raden man reviderte fra hadde den.
+//
+// Feiler oppdateringen, ER prosjektet likevel opprettet. Da skal brukeren få
+// vite at koblingen mangler, ikke møte «en feil oppstod» og tro at ingenting
+// ble lagret.
+async function knyttKalkyleTilProsjekt(valgtKalk, prosjekt, appAlert) {
+  if (!valgtKalk || !valgtKalk.rotId || !prosjekt || !prosjekt.id) return
+  try {
+    const { error } = await supabase.from('calculations')
+      .update({ project_id: prosjekt.id, updated_at: new Date().toISOString() })
+      .or(`id.eq.${valgtKalk.rotId},parent_calculation_id.eq.${valgtKalk.rotId}`)
+    if (error) throw error
+  } catch (e) {
+    await appAlert({
+      message: 'Prosjektet er opprettet, men ikke koblet til kalkylen',
+      subMessage: `Feltene ble hentet inn som normalt. Selve koblingen til ${kalkNrMedRev(valgtKalk)} ble ikke lagret: ${(e && e.message) || 'ukjent feil'}`,
+      kind: 'warning',
+    })
+  }
+}
+
 function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allProjects }) {
   const [form, setForm] = useState(initial || emptyProsjekt)
   const [pnrError, setPnrError] = useState('')
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  // ── Grunnlag fra kalkyle ──
+  // Kun ved NYTT prosjekt. Å bytte grunnlag på et prosjekt som allerede finnes
+  // er en annen operasjon enn å opprette det, og hører hjemme på prosjektsiden.
+  const erNytt = !initial?.id
+  const [valgtKalk, setValgtKalk] = useState(null)
+  const [visKalkPicker, setVisKalkPicker] = useState(false)
+  const [harKalkyler, setHarKalkyler] = useState(false)
+
+  // Vis «Hent fra kalkyle» bare når det finnes noe å hente. Svarer ikke
+  // spørringen — bedriften mangler kalkulasjonsmodulen, eller rollen får ikke
+  // lese calculations (RLS krever admin/leder/les) — skjules kortet stille.
+  useEffect(() => {
+    if (!erNytt) return undefined
+    let avbrutt = false
+    Promise.resolve(
+      supabase.from('calculations')
+        .select('id', { count: 'exact', head: true })
+        .eq('is_template', false)
+        .neq('status', KALK_STATUS_ERSTATTET)
+    )
+      .then(({ count, error }) => { if (!avbrutt && !error) setHarKalkyler((count || 0) > 0) })
+      .catch(() => {})
+    return () => { avbrutt = true }
+  }, [erNytt])
+
+  // Kalkylens felter → prosjektets. Verdier brukeren alt har skrevet beholdes
+  // når kalkylen ikke har noe å sette i stedet — så et halvutfylt skjema ikke
+  // blir tømt av å hente inn et grunnlag.
+  const hentFraKalkyle = (k) => {
+    const adresse = (k.customer_address || '').trim()
+    const notat = (k.notes || '').trim()
+    const sum = Number(k.total_ex_mva)
+    setForm(f => ({
+      ...f,
+      name: k.title || f.name,
+      customer_id: k.customer_id || f.customer_id,
+      client_name: k.customer_name || f.client_name,
+      client_email: k.customer_email || f.client_email,
+      // Kalkylen har ÉN fritekstlinje som adresse. Den legges hel i gateadressen.
+      // Å gjette postnummer og poststed ut av den ville bommet like ofte som den
+      // traff, og brukeren retter det på to sekunder.
+      address_street: adresse || f.address_street,
+      description: notat || f.description,
+      // Budsjettet er den FROSNE verdien: satt ved opprettelse, deretter et
+      // vanlig redigerbart felt. Reviderer man kalkylen senere, endrer ikke det
+      // budsjettet — nøkkeltallene leses live fra kalkylen i stedet.
+      budget: (Number.isFinite(sum) && sum > 0) ? String(Math.round(sum)) : f.budget,
+    }))
+    setValgtKalk({
+      id: k.id,
+      // Koblingen følger SAKEN, ikke raden: rot-id er parent_calculation_id på en
+      // revisjon, og id-en selv på originalen.
+      rotId: k.parent_calculation_id || k.id,
+      kalk_number: k.kalk_number,
+      revision_number: k.revision_number,
+      title: k.title,
+      total_ex_mva: k.total_ex_mva,
+      alleredeKnyttet: !!k.project_id,
+    })
+    setVisKalkPicker(false)
+  }
 
   // Dokumentmaler (systemmaler + bedriftens egne). «Uten mal» = ingen fase-system.
   const [docTemplates, setDocTemplates] = useState([])
@@ -5846,7 +6076,9 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
         payload = { ...form }
       }
     }
-    onSave(payload)
+    // valgtKalk er null overalt utenom nyopprettelse med hentet grunnlag.
+    // Mottakere som ikke bryr seg, ignorerer andre argument.
+    onSave(payload, valgtKalk)
   }
 
   return (
@@ -5864,6 +6096,45 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
           </div>
           {/* Scrollbart innhold */}
           <div style={{ overflowY:'auto', flex:1, padding:'20px 24px', display:'flex', flexDirection:'column', gap:'20px' }}>
+            {erNytt && harKalkyler && (valgtKalk ? (
+              <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'12px 14px' }}>
+                <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'10px', flexWrap:'wrap' }}>
+                  <div style={{ minWidth:0, flex:1 }}>
+                    <div style={{ fontSize:'11px', fontWeight:'700', color:'#059669', letterSpacing:'0.03em' }}>HENTET FRA KALKYLE</div>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', marginTop:'3px', wordBreak:'break-word' }}>{valgtKalk.title}</div>
+                    <div style={{ fontSize:'12px', color:'#065f46', marginTop:'2px' }}>{kalkNrMedRev(valgtKalk)} · {fmtI(valgtKalk.total_ex_mva)}</div>
+                  </div>
+                  <div style={{ display:'flex', gap:'6px', flexShrink:0 }}>
+                    <button type="button" onClick={() => setVisKalkPicker(true)}
+                      style={{ padding:'6px 12px', border:'1px solid #a7f3d0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#059669' }}>Bytt</button>
+                    <button type="button" onClick={() => setValgtKalk(null)}
+                      style={{ padding:'6px 12px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'12px', fontWeight:'600', color:'#64748b' }}>Fjern</button>
+                  </div>
+                </div>
+                <p style={{ margin:'8px 0 0', fontSize:'11px', color:'#065f46', lineHeight:1.5 }}>
+                  Feltene under er fylt ut fra kalkylen — endre det du vil. Kalkylen knyttes til prosjektet når du lagrer.
+                  «Fjern» tar bort koblingen, men lar feltene stå.
+                </p>
+                {valgtKalk.alleredeKnyttet && (
+                  <p style={{ margin:'6px 0 0', fontSize:'11px', color:'#b45309', fontWeight:'600', lineHeight:1.5 }}>
+                    ⚠️ Denne kalkylen er allerede knyttet til et annet prosjekt. Lagrer du, flyttes den hit — det gamle
+                    prosjektet står igjen uten kalkyle. Velg «Fjern» hvis du bare vil bruke feltene.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <button type="button" onClick={() => setVisKalkPicker(true)}
+                style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', padding:'12px 14px', borderRadius:'12px',
+                  border:'1px dashed #a7f3d0', background:'#f0fdf4', cursor:'pointer', textAlign:'left' }}>
+                <span style={{ fontSize:'18px', flexShrink:0 }}>🧮</span>
+                <span style={{ minWidth:0 }}>
+                  <span style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#059669' }}>Hent fra kalkyle</span>
+                  <span style={{ display:'block', fontSize:'11px', color:'#64748b', marginTop:'1px', lineHeight:1.45 }}>
+                    Fyll ut navn, kunde, adresse, beskrivelse og budsjett fra en eksisterende kalkyle.
+                  </span>
+                </span>
+              </button>
+            ))}
             {sec('Grunnleggende')}
             <div style={g2}>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="Prosjektnavn *"><FInput value={form.name} onChange={e => set('name', e.target.value)} placeholder="Skriv inn prosjektnavn" required /></FLabel></div>
@@ -5972,6 +6243,8 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
           </div>
         </form>
       </div>
+      {/* Utenfor <form> med vilje: en knapp inne i skjemaet ville sendt det. */}
+      {visKalkPicker && <KalkylePickerModal onVelg={hentFraKalkyle} onClose={() => setVisKalkPicker(false)} />}
     </>
   )
 }
@@ -6041,7 +6314,7 @@ function ProsjekterPage({ onNavigateDetail }) {
     })
   }, [activeProjects, search, statusFilter, sortBy, viewMode, showArchived])
 
-  const handleCreate = async (form) => {
+  const handleCreate = async (form, valgtKalk) => {
     setSaving(true)
     try {
       // Beregn depth og prosjektnummer basert på parent
@@ -6061,7 +6334,8 @@ function ProsjekterPage({ onNavigateDetail }) {
         // Auto-generert nummer kolliderte — legg til tidsstempel
         projectNumber = projectNumber + 'B'
       }
-      await db.createProject(sanitizeUuidFields({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
+      const nyttProsjekt = await db.createProject(sanitizeUuidFields({ ...form, project_number: projectNumber, parent_id: form.parent_id || null, depth, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
+      await knyttKalkyleTilProsjekt(valgtKalk, nyttProsjekt, appAlert)
       setShowCreate(false)
       load()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
@@ -6406,7 +6680,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
   const childProjects = allProjects.filter(p => p.parent_id === projectId)
   const parentProject = project.parent_id ? allProjects.find(p => p.id === project.parent_id) : null
 
-  const handleCreateSub = async (form) => {
+  const handleCreateSub = async (form, valgtKalk) => {
     setSaving(true)
     try {
       const siblings = allProjects.filter(p => p.parent_id === projectId)
@@ -6419,7 +6693,8 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
       if (existing) {
         projectNumber = projectNumber + 'B'
       }
-      await db.createProject(sanitizeUuidFields({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
+      const nyttUnderprosjekt = await db.createProject(sanitizeUuidFields({ ...form, parent_id: projectId, depth, project_number: projectNumber, address: [form.address_street, `${form.address_postal} ${form.address_city}`.trim()].filter(Boolean).join(', '), budget: form.budget ? parseFloat(form.budget) : null, created_by: user?.id }))
+      await knyttKalkyleTilProsjekt(valgtKalk, nyttUnderprosjekt, appAlert)
       setShowCreateSub(false); load()
     } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) } finally { setSaving(false) }
   }
