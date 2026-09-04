@@ -56088,13 +56088,25 @@ const getFaggruppe = (id) => FAGGRUPPER.find(f => f.id === id) || FAGGRUPPER[0]
 // forståelige poster i stedet for å gjette på ett tall. Summen av postene (%)
 // gir faktoren:  grunntid_justering = 1 + sum/100.  Tekstene er skrevet i
 // klarspråk for håndverkere (bevisst IKKE regnskapssjargong).
+// `maks` står KUN her. Inntastingsfeltet (max=), clampingen i settVerdi og
+// «/ 40»-teksten leser alle p.maks, og overskriften i forklaringen bygges av
+// samme tall — så taket kan endres på én linje uten at noe glir fra hverandre.
+//
+// `hjelp` er den korte grå linjen som alltid står under tittelen.
+// `info`  er den utfyllende forklaringen bak i-ikonet, skjult til den åpnes.
 const GRUNNTID_POSTER = [
-  { key: 'rehab',     label: 'Rehabilitering – arbeid i eksisterende bygg', maks: 10, hjelp: 'Riving, tilpasning og uforutsett arbeid tar mer tid enn nybygg.' },
-  { key: 'transport', label: 'Bæring og transport på bygget',                maks: 13, hjelp: 'Lang vei til materialene, trapper, trange forhold, flere etasjer.' },
-  { key: 'kompleks',  label: 'Vanskelig bygg – form og løsninger',           maks: 20, hjelp: 'Kompliserte vinkler, buer og spesialløsninger som krever mer tilpasning.' },
-  { key: 'gjentak',   label: 'Lite gjentakelse i jobben',                    maks: 20, hjelp: 'Få like oppgaver – du kommer aldri «inn i flyten» slik serieproduksjon gir.' },
-  { key: 'kort',      label: 'Korte oppdrag – under 20 dager',               maks: 20, hjelp: 'Rigg, opp- og nedpakking utgjør en større del av småjobber.' },
-  { key: 'tempo',     label: 'Justering for eget arbeidstempo',             maks: 60, hjelp: 'Tilpass normtidene til hvor raskt ditt lag faktisk jobber.' },
+  { key: 'rehab',     label: 'Rehabilitering – arbeid i eksisterende bygg', maks: 40, hjelp: 'Riving, tilpasning og uforutsett arbeid tar mer tid enn nybygg.',
+    info: 'Normtidene forutsetter nybygg. I et hus som allerede står bruker du tid på riving, tilpasning til skjeve flater og ting du ikke ser før du åpner. Lett oppussing ligger lavt i skalaen, full rehab i eldre bygg høyt. Nybygg = 0.' },
+  { key: 'transport', label: 'Bæring og transport på bygget',                maks: 13, hjelp: 'Lang vei til materialene, trapper, trange forhold, flere etasjer.',
+    info: 'Gjelder tiden etter at bilen er tømt. Trapper, trange ganger, fjerde etasje uten heis, lang vei fra parkering.' },
+  { key: 'kompleks',  label: 'Vanskelig bygg – form og løsninger',           maks: 20, hjelp: 'Kompliserte vinkler, buer og spesialløsninger som krever mer tilpasning.',
+    info: 'Buer, skjeve vinkler, spesialløsninger. Alt som ikke lar seg gjøre rett fram.' },
+  { key: 'gjentak',   label: 'Lite gjentakelse i jobben',                    maks: 20, hjelp: 'Få like oppgaver – du kommer aldri «inn i flyten» slik serieproduksjon gir.',
+    info: 'Mange ulike oppgaver, få like. Du kommer aldri inn i rytmen slik du gjør når du setter hundre like vinduer.' },
+  { key: 'kort',      label: 'Korte oppdrag – under 20 dager',               maks: 20, hjelp: 'Rigg, opp- og nedpakking utgjør en større del av småjobber.',
+    info: 'Rigg opp og rigg ned tar like lang tid uansett. På en kort jobb utgjør det en langt større del av totalen.' },
+  { key: 'tempo',     label: 'Justering for eget arbeidstempo',             maks: 60, hjelp: 'Tilpass normtidene til hvor raskt ditt lag faktisk jobber.',
+    info: 'Normtidene er et bransjesnitt. Her tilpasser du til ditt eget lag. Den eneste posten som handler om deg og ikke om bygget — derfor høyere ramme.' },
 ]
 
 // Sum av alle poster (%) → faktor. Tom/ingen poster = 1.0 (nøytralt).
@@ -56114,6 +56126,10 @@ function tommeGrunntidPoster() {
 // onLagre(nyFaktor, nyePoster) kalles når brukeren lagrer.
 function GrunntidJusteringModal({ startPoster, startFaktor, fagNavn, onLagre, onLukk }) {
   const [poster, setPoster] = React.useState(() => ({ ...tommeGrunntidPoster(), ...(startPoster || {}) }))
+  // Hvilken post har forklaringen sin utfelt. Én om gangen — da holder modalen
+  // seg kompakt, og teksten man nettopp åpnet står ikke og konkurrerer med fem
+  // andre. null = alle lukket, som er utgangstilstanden.
+  const [apenInfo, setApenInfo] = React.useState(null)
   const sum = GRUNNTID_POSTER.reduce((s, p) => s + (parseFloat(poster[p.key]) || 0), 0)
   const faktor = Math.round((1 + sum / 100) * 100) / 100
   const settVerdi = (key, maks, raw) => {
@@ -56139,20 +56155,52 @@ function GrunntidJusteringModal({ startPoster, startFaktor, fagNavn, onLagre, on
           </div>
         </div>
         <div style={{ padding:'14px 22px', overflowY:'auto', flex:1 }}>
-          {GRUNNTID_POSTER.map(p => (
-            <div key={p.key} style={{ display:'flex', alignItems:'flex-start', gap:'12px', padding:'12px 0', borderBottom:'1px solid #f1f5f9' }}>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{p.label}</div>
-                <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', lineHeight:1.4 }}>{p.hjelp}</div>
+          {GRUNNTID_POSTER.map(p => {
+            const apen = apenInfo === p.key
+            return (
+            <div key={p.key} style={{ padding:'12px 0', borderBottom:'1px solid #f1f5f9' }}>
+              <div style={{ display:'flex', alignItems:'flex-start', gap:'12px' }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:'5px' }}>
+                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a' }}>{p.label}</span>
+                    {/* Samme visuelle språk som InfoTip-ikonet i kalkyletabellen, men
+                        forklaringen felles ut UNDER raden i stedet for i en absolutt
+                        plassert boble. Innholdsområdet her har overflowY: auto, og
+                        det klipper alltid absolutte barn som stikker utenfor — en
+                        boble på de nederste postene ville blitt kappet på midten.
+                        padding/negativ margin gir et touch-mål på ~22 px uten å
+                        flytte noe i layouten. */}
+                    <button type="button" onClick={() => setApenInfo(apen ? null : p.key)}
+                      aria-expanded={apen} aria-label={`Forklaring: ${p.label}`}
+                      title={apen ? 'Skjul forklaring' : 'Vis forklaring'}
+                      style={{ display:'inline-flex', alignItems:'center', justifyContent:'center',
+                        width: isMob ? '16px' : '14px', height: isMob ? '16px' : '14px',
+                        borderRadius:'50%', border:'none', background: apen ? '#059669' : '#e2e8f0',
+                        color: apen ? 'white' : '#94a3b8', fontSize: isMob ? '9px' : '8px',
+                        fontWeight:'800', cursor:'pointer', lineHeight:1, flexShrink:0,
+                        userSelect:'none', padding:'4px', margin:'-4px',
+                        boxSizing:'content-box', fontFamily:'inherit' }}>i</button>
+                  </div>
+                  <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'2px', lineHeight:1.4 }}>{p.hjelp}</div>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
+                  <input type="number" min="0" max={p.maks} step="1" value={poster[p.key] ?? 0}
+                    onChange={e=>settVerdi(p.key, p.maks, e.target.value)}
+                    style={{ width:'62px', padding:'7px 8px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'14px', textAlign:'right', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a' }} />
+                  <span style={{ fontSize:'12px', color:'#64748b', width:'52px' }}>% <span style={{ color:'#cbd5e1' }}>/ {p.maks}</span></span>
+                </div>
               </div>
-              <div style={{ display:'flex', alignItems:'center', gap:'6px', flexShrink:0 }}>
-                <input type="number" min="0" max={p.maks} step="1" value={poster[p.key] ?? 0}
-                  onChange={e=>settVerdi(p.key, p.maks, e.target.value)}
-                  style={{ width:'62px', padding:'7px 8px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'14px', textAlign:'right', outline:'none', fontFamily:'system-ui,sans-serif', color:'#0f172a' }} />
-                <span style={{ fontSize:'12px', color:'#64748b', width:'52px' }}>% <span style={{ color:'#cbd5e1' }}>/ {p.maks}</span></span>
-              </div>
+              {apen && (
+                <div style={{ marginTop:'8px', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'10px', padding:'10px 12px' }}>
+                  {/* Taket hentes fra p.maks, ikke skrevet inn i teksten — da kan
+                      grensen endres ett sted uten at overskriften blir feil. */}
+                  <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a', marginBottom:'4px' }}>{p.label} (maks {p.maks} %)</div>
+                  <div style={{ fontSize:'12px', color:'#475569', lineHeight:1.55 }}>{p.info}</div>
+                </div>
+              )}
             </div>
-          ))}
+            )
+          })}
         </div>
         <div style={{ padding:'14px 22px', borderTop:'1px solid #f1f5f9', background:'#f8fafc', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'space-between', gap:'12px', flexWrap: isMob ? 'wrap' : 'nowrap' }}>
           <div style={{ display:'flex', gap:'18px', alignItems:'center' }}>
