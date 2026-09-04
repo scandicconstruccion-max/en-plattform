@@ -28280,7 +28280,11 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
     setSelectedBds(prev => {
       const key = `${kalkId}_${bdId}`
       if (prev[key]) { const { [key]: _, ...rest } = prev; return rest }
-      return { ...prev, [key]: { checked: true, pct: 100 - (previouslyInvoicedBds[bdId] || 0) } }
+      // Id-ene lagres i verdien, ikke bare i den sammensatte nøkkelen. Nøkkelen
+      // ble tidligere splittet på «_» og parseInt-et tilbake — det virket bare så
+      // lenge id-ene var tall. nyRadId() gir UUID-er, så oppslaget bommet alltid
+      // og fakturaen ble tom.
+      return { ...prev, [key]: { checked: true, pct: 100 - (previouslyInvoicedBds[bdId] || 0), kalkId, bdId } }
     })
   }
 
@@ -28298,20 +28302,34 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
       const alleFaktorer = k.faktorer || {}
       const lines = []; const invoicedBds = []
 
-      entries.forEach(([key, val]) => {
-        const [kalkIdStr, bdId] = key.split('_')
-        const kalkId = parseInt(kalkIdStr)
-        const kalkyle = (k.kalkyler || []).find(kl => kl.id === kalkId)
+      entries.forEach(([_key, val]) => {
+        // String() på begge sider: gamle kalkyler har tall-id-er (Date.now()),
+        // nye har UUID-er fra nyRadId(). Begge skal treffe.
+        const kalkyle = (k.kalkyler || []).find(kl => String(kl.id) === String(val.kalkId))
         if (!kalkyle) return
-        const bd = (kalkyle.bygningsdeler || []).find(b => b.id === parseInt(bdId))
+        const bd = (kalkyle.bygningsdeler || []).find(b => String(b.id) === String(val.bdId))
         if (!bd) return
         const fakt = alleFaktorer[kalkyle.fag] || getDefaultFaktorer(kalkyle.fag)
         const bdRes = beregnBygningsdel(bd, fakt)
         const amount = Math.round(bdRes.totalMedFortjeneste * val.pct / 100)
         const fag = getFaggruppe(kalkyle.fag)
         lines.push({ id: Date.now() + Math.random() * 1000, description: `${fag.emoji} ${bd.name} (${val.pct}%)`, qty: 1, unit: 'stk', unitPrice: amount, mvaRate: 0.25 })
-        invoicedBds.push({ bd_id: bdId, kalkyle_id: kalkId, bd_name: bd.name, fag: kalkyle.fag, percent: val.pct })
+        // bd_id som streng — previouslyInvoicedBds slår opp på den.
+        invoicedBds.push({ bd_id: String(bd.id), kalkyle_id: kalkyle.id, bd_name: bd.name, fag: kalkyle.fag, percent: val.pct })
       })
+
+      // Sperre mot tom faktura. Etter id-fiksen over skal dette ikke skje, men
+      // kalkylen kan være endret i en annen fane etter at modalen ble åpnet —
+      // da finner ikke oppslaget postene lenger. Uten sperren opprettes en
+      // faktura på 0 kr som ser vellykket ut, og den spiser et fakturanummer.
+      if (lines.length === 0) {
+        await appAlert({
+          message: 'Fant ikke postene i kalkylen',
+          subMessage: 'Kalkylen kan ha blitt endret etter at du åpnet vinduet. Last siden på nytt og velg postene igjen.',
+          kind: 'warn',
+        })
+        return
+      }
 
       const { net } = calcLines(lines)
       const proj = projects.find(p => p.id === k.project_id)
@@ -28405,7 +28423,7 @@ function FakturaFraKalkModal({ calculations, projects, invoices, user, onClose, 
                             {sel?.checked && !isFullyInvoiced && (
                               <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
                                 <input type="number" value={sel.pct} onChange={e => setPct(kalkyle.id, bd.id, parseInt(e.target.value) || 0)} min={0} max={remaining}
-                                  style={{ width:'50px', padding:'4px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', textAlign:'center' }} />
+                                  style={{ width:'64px', padding:'5px 6px', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'12px', textAlign:'center', boxSizing:'border-box' }} />
                                 <span style={{ fontSize:'11px', color:'#64748b' }}>%</span>
                                 <span style={{ fontSize:'11px', color:'#059669', fontWeight:'600', marginLeft:'4px' }}>{fmtI(bdRes.totalMedFortjeneste * sel.pct / 100)}</span>
                               </div>
