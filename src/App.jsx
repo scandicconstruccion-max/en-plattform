@@ -56242,18 +56242,61 @@ function GrunntidJusteringModal({ startPoster, startFaktor, fagNavn, onLagre, on
   )
 }
 
+// ─── LESING AV EN SATS FRA kalk_faktorer ─────────────────────────────────────
+// Faktorene ligger i jsonb, og de er IKKE typet konsistent i basen: samme sats
+// kan stå som tall (30) hos én bedrift og som tekst ("20") hos en annen —
+// avhengig av om verdien kom fra defaults eller fra et <input type="number">,
+// som alltid gir streng. Det samme gjelder grunntid_justering ("1.2").
+//
+// Returnerer null — ikke 0 — når satsen ikke er satt. Forskjellen er hele
+// poenget i fallback-kjeden for UE-påslag: 0 betyr «null prosent påslag»,
+// mens null betyr «ikke bestemt, spør neste ledd». Blandes de, får en bedrift
+// som ikke har satt UE-sats plutselig 0 % påslag i stedet for å arve
+// innkjøpsmarginen, og tilbudet blir for lavt uten et eneste varsel.
+function satsEllerNull(v) {
+  if (v === null || v === undefined || v === '') return null
+  const n = parseFloat(String(v).replace(',', '.'))
+  return isFinite(n) ? n : null
+}
+
 function getDefaultFaktorer(fagId) {
   const fag = getFaggruppe(fagId)
   return {
     produksjonslonn: fag.defaultLonn,
     sosiale_prosent: fag.defaultSosiale,
     faste_prosent: fag.defaultFaste,
-    fortjeneste_lonn_prosent: fag.defaultFortjenestLonn,
     fortjeneste_innkjop_prosent: fag.defaultFortjenesteInnkjop,
+    fortjeneste_lonn_prosent: fag.defaultFortjenestLonn,
+    // Entreprenørfortjeneste på UE — bevisst null, ikke et tall.
+    //
+    // fortjeneste_innkjop_prosent er innkjøpsmargin på varer du kjøper og
+    // legger på. Påslaget på en UE-pris er noe annet: du står ansvarlig for
+    // UEs arbeid overfor byggherren, koordinerer og bærer risiko. Satsene skal
+    // kunne settes uavhengig.
+    //
+    // null betyr «bedriften har ikke bestemt en egen UE-sats ennå» — da arver
+    // UE-linjene innkjøpsmarginen, nøyaktig som før feltet fantes. Et tall her
+    // ville endret summen på hver eneste lagrede kalkyle i det øyeblikket
+    // beregningen begynte å lese feltet. Se fallback-kjeden i beregnBygningsdel.
+    ue_paaslag_prosent: null,
     mat_justering_prosent: fag.defaultMatJustering,
     grunntid_justering: fag.defaultGrunntidJustering,
     grunntid_poster: tommeGrunntidPoster(),
   }
+}
+
+// Satsen som skal brukes på ÉN UE-linje, i prioritert rekkefølge:
+//   1. postens eget påslag        (u.paaslag — overstyring per post)
+//   2. fagets UE-sats             (ue_paaslag_prosent — entreprenørfortjeneste)
+//   3. fagets innkjøpsmargin      (fortjeneste_innkjop_prosent — som før)
+// Hvert ledd leses med satsEllerNull, så en tom streng eller en ubrukelig
+// verdi faller videre i stedet for å bli 0.
+function uePaaslagFor(u, faktorer) {
+  const f = faktorer || {}
+  return satsEllerNull(u && u.paaslag)
+    ?? satsEllerNull(f.ue_paaslag_prosent)
+    ?? satsEllerNull(f.fortjeneste_innkjop_prosent)
+    ?? 0
 }
 
 // ─── BIM-KALKYLE TILGANGSKONTROLL ────────────────────────────────────────────
@@ -62594,6 +62637,33 @@ function enhetTekst(kanonisk) { return ENHET_NAVN[kanonisk] || kanonisk }
 const MAT_INTERNE_FELT = {
   lagres: ['_omregning', '_prisEnhet'],
   lagresIkke: ['_ny', '_varselVist'],
+}
+
+// ─── FELT PÅ EN UNDERLEVERANDØR-LINJE ────────────────────────────────────────
+// Samme sperre som MAT_INTERNE_FELT, av samme grunn. Hvitelisten i
+// bibliotekTilBygningsdel bygges FRA `bevares`, så et felt som føres opp her
+// blir automatisk med når en bygningsdel hentes fra biblioteket.
+//
+// `paaslag` er hele årsaken til at listen finnes: entreprenørfortjenesten på en
+// UE-post er en prisregel som hører til malen. Sto hvitelisten fortsatt for
+// hånd, ville et påslag brukeren hadde satt bli skrevet til biblioteket og så
+// stille forsvinne ved henting — nøyaktig samme symptom som `_omregning` ga på
+// materiallinjer, og like vanskelig å se: summen blir bare litt feil.
+//
+// `bevaresIkke` er prosjektspesifikt. En e-postadresse, en status eller en
+// foresporsel_id peker på ÉN kalkyle og skal ikke følge med inn i et annet
+// prosjekt — da ville en mal dratt med seg en fremmed forespørsel.
+//
+// tests/ue-linje-felt.mjs feiler dersom et felt brukes på en UE-linje uten å
+// stå i én av de to listene.
+const UE_LINJE_FELT = {
+  bevares: [
+    { felt: 'navn',        standard: '' },
+    { felt: 'beskrivelse', standard: '' },
+    { felt: 'kostnad',     standard: 0 },
+    { felt: 'paaslag',     standard: null },
+  ],
+  bevaresIkke: ['email', 'telefon', 'status', 'foresporsel_id', 'source'],
 }
 
 // Enheter der prisen gjelder en hel leveranse, ikke et areal. Disse utløser
@@ -71255,7 +71325,8 @@ function beregnBygningsdel(bd, faktorer) {
   let totalArbeid = 0, totalArbeidMedFortjeneste = 0, totalTimer = 0
   let totalMaterial = 0, totalMaterialMedFortjeneste = 0
   let totalUE = 0
-  const fortjenesteInnkjop = parseFloat(faktorer.fortjeneste_innkjop_prosent) || 0
+  // Innkjøpsmarginen leses ikke lenger her — UE-linjene går via uePaaslagFor,
+  // og materiallinjene via beregnMaterialkostnad.
   const fortjenesteLonn = parseFloat(faktorer.fortjeneste_lonn_prosent) || 0
 
   ;(bd.arbeidsarter || []).forEach(a => {
@@ -71272,8 +71343,8 @@ function beregnBygningsdel(bd, faktorer) {
   let totalUESelvkost = 0
   ;(bd.underleverandorer || []).forEach(u => {
     const kost = parseFloat(u.kostnad) || 0
-    // UE-forespørsler bærer sitt EGET påslag (paaslag). Manuelle UE-linjer bruker fagets fortjeneste_innkjop.
-    const mk = (u.paaslag != null && u.paaslag !== '') ? (parseFloat(u.paaslag) || 0) : fortjenesteInnkjop
+    // Egen sats på posten → fagets UE-sats → fagets innkjøpsmargin. Se uePaaslagFor.
+    const mk = uePaaslagFor(u, faktorer)
     const kostMengde = kost * mengde
     totalUESelvkost += kostMengde
     totalUE += kostMengde * (1 + mk / 100)
@@ -71336,37 +71407,44 @@ function beregnBygningsdel(bd, faktorer) {
   const totalMedFortjeneste = totalArbeidMedFortjeneste + totalMaterialMedFortjeneste + totalUE + flatetilleggMedFortjeneste + totalApningstillegg
   const dekningsbidrag = totalMedFortjeneste - selvkost
   const dbProsent = totalMedFortjeneste > 0 ? (dekningsbidrag / totalMedFortjeneste) * 100 : 0
-  return { mengde, materialMengde, totalApningsareal, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
+  // totalUE er MED påslag, totalUESelvkost er UE-prisen slik den kom fra
+  // underleverandøren. Begge må ut: uten selvkosten kan ingen vise hva som er
+  // innkjøp og hva som er vårt påslag, og sammendraget måtte tidligere gjette
+  // seg fram til fordelingen.
+  return { mengde, materialMengde, totalApningsareal, totalTimer, totalArbeid, totalArbeidMedFortjeneste, totalMaterial, totalMaterialMedFortjeneste, totalUE, totalUESelvkost, selvkost, totalMedFortjeneste, totalFlatetillegg, flatetilleggMedFortjeneste, totalApningstillegg, totalFlatetilleggTimer, totalApningstilleggTimer, dekningsbidrag, dbProsent }
 }
 
 function beregnKalkyle(kalkyle, faktorer) {
-  let totTimer = 0, totArbeid = 0, totMaterial = 0, totUE = 0, totMedFortjeneste = 0, totSelvkost = 0
+  let totTimer = 0, totArbeid = 0, totMaterial = 0, totUE = 0, totUESelvkost = 0, totMedFortjeneste = 0, totSelvkost = 0
   ;(kalkyle.bygningsdeler || []).forEach(bd => {
     const r = beregnBygningsdel(bd, faktorer)
     totTimer += r.totalTimer
     totArbeid += r.totalArbeidMedFortjeneste
     totMaterial += r.totalMaterialMedFortjeneste
     totUE += r.totalUE
+    totUESelvkost += r.totalUESelvkost
     totSelvkost += r.selvkost
     totMedFortjeneste += r.totalMedFortjeneste
   })
   const fortjeneste = totMedFortjeneste - totSelvkost
   const fortjenesteProsent = totMedFortjeneste > 0 ? (fortjeneste / totMedFortjeneste) * 100 : 0
-  return { totTimer, totArbeid, totMaterial, totUE, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent }
+  return { totTimer, totArbeid, totMaterial, totUE, totUESelvkost, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent }
 }
 
 function beregnProsjektTotal(kalkyler, alleFaktorer) {
-  let totTimer = 0, totArbeid = 0, totMaterial = 0, totUE = 0, totSelvkost = 0, totMedFortjeneste = 0
+  let totTimer = 0, totArbeid = 0, totMaterial = 0, totUE = 0, totUESelvkost = 0, totSelvkost = 0, totMedFortjeneste = 0
   kalkyler.forEach(k => {
     const faktorer = alleFaktorer[k.fag] || getDefaultFaktorer(k.fag)
     const r = beregnKalkyle(k, faktorer)
     totTimer += r.totTimer; totArbeid += r.totArbeid; totMaterial += r.totMaterial
-    totUE += r.totUE; totSelvkost += r.totSelvkost; totMedFortjeneste += r.totMedFortjeneste
+    totUE += r.totUE; totUESelvkost += r.totUESelvkost; totSelvkost += r.totSelvkost; totMedFortjeneste += r.totMedFortjeneste
   })
   const fortjeneste = totMedFortjeneste - totSelvkost
   const fortjenesteProsent = totMedFortjeneste > 0 ? (fortjeneste / totMedFortjeneste) * 100 : 0
   const mva = totMedFortjeneste * 0.25
-  return { totTimer, totArbeid, totMaterial, totUE, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent, mva, totInkMva: totMedFortjeneste + mva }
+  // totUEPaaslag er entreprenørfortjenesten på UE, eksakt — ikke en andel av
+  // totalfortjenesten fordelt etter selvkost.
+  return { totTimer, totArbeid, totMaterial, totUE, totUESelvkost, totUEPaaslag: totUE - totUESelvkost, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent, mva, totInkMva: totMedFortjeneste + mva }
 }
 
 // ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
@@ -73644,11 +73722,17 @@ function bibliotekTilBygningsdel(bd, mengde) {
           .map(felt => [felt, mat[felt]])
       ),
     })),
+    // Samme hviteliste-mekanikk som materiallinjene over: feltene bygges FRA
+    // UE_LINJE_FELT.bevares, ikke skrevet ut for hånd. Sto de for hånd, ville
+    // et nytt felt bli skrevet til biblioteket uten å bli lest tilbake — det
+    // var nøyaktig slik `paaslag` gikk tapt, og før det `_omregning`.
     underleverandorer: underleverandorer.map((u) => ({
       id: nyRadId(),
-      navn: u.navn || '',
-      beskrivelse: u.beskrivelse || '',
-      kostnad: u.kostnad || 0,
+      ...Object.fromEntries(
+        UE_LINJE_FELT.bevares.map(({ felt, standard }) =>
+          [felt, (u[felt] === undefined || u[felt] === null) ? standard : u[felt]]
+        )
+      ),
     })),
   }
 }
@@ -78600,6 +78684,19 @@ function KalkFaktorerPage({ onBack }) {
                 </div>
                 <div>{lbl('Fortj. lønn %')}<input type="number" value={fakt.fortjeneste_lonn_prosent} onChange={e=>updateF(fag.id,'fortjeneste_lonn_prosent',e.target.value)} style={qInp} /></div>
                 <div>{lbl('Fortj. innkjøp %')}<input type="number" value={fakt.fortjeneste_innkjop_prosent} onChange={e=>updateF(fag.id,'fortjeneste_innkjop_prosent',e.target.value)} style={qInp} /></div>
+                {/* Entreprenørfortjeneste på UE — en annen ting enn innkjøpsmarginen
+                    over. På materiell kjøper du en vare og legger på; på en UE-pris
+                    står du ansvarlig for andres arbeid overfor byggherren.
+                    Tomt felt = arv fra «Fortj. innkjøp %», som er slik det virket før
+                    feltet fantes. Derfor placeholder og ikke en forhåndsutfylt verdi:
+                    et tall her ville endret summen på alle lagrede kalkyler. */}
+                <div>{lbl('UE-påslag %')}
+                  <input type="number" value={fakt.ue_paaslag_prosent ?? ''}
+                    onChange={e=>updateF(fag.id,'ue_paaslag_prosent', e.target.value === '' ? null : e.target.value)}
+                    placeholder={fmtTall(satsEllerNull(fakt.fortjeneste_innkjop_prosent) ?? 0)}
+                    title={`Fortjeneste på underleverandørpriser for ${fag.name}. Står feltet tomt, brukes «Fortj. innkjøp %» som før.`}
+                    style={{ ...qInp, background: satsEllerNull(fakt.ue_paaslag_prosent) === null ? '#f8fafc' : 'white' }} />
+                </div>
                 <div>{lbl('Mat.justering %')}<input type="number" value={fakt.mat_justering_prosent} onChange={e=>updateF(fag.id,'mat_justering_prosent',e.target.value)} style={qInp} /></div>
               </div>
             </div>
@@ -78622,24 +78719,13 @@ function KalkFaktorerPage({ onBack }) {
           )
         })()}
 
-        {/* Underleverandør */}
-        <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'18px 22px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }}>
-          <div style={{ display:'flex', alignItems:'center', gap:'10px', marginBottom:'14px' }}>
-            <span style={{ fontSize:'22px' }}>🤝</span>
-            <span style={{ fontSize:'16px', fontWeight:'700', color:'#0f172a' }}>Underleverandører</span>
-          </div>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(2, 1fr)', gap:'10px', maxWidth:'500px' }}>
-            <div>
-              {lbl('Fortjeneste på UE %')}
-              <input type="number" value={(faktorer['ue'] || getDefaultFaktorer('ue')).fortjeneste_innkjop_prosent} onChange={e=>updateF('ue','fortjeneste_innkjop_prosent',e.target.value)} style={qInp} />
-            </div>
-            <div>
-              {lbl('Standard UE-påslag %')}
-              <input type="number" value={(faktorer['ue'] || {}).ue_paaslag_prosent ?? 15} onChange={e=>updateF('ue','ue_paaslag_prosent',e.target.value)} style={qInp} />
-              <div style={{ fontSize:'11px', color:'#94a3b8', marginTop:'4px' }}>Brukes som standard ved nye UE-forespørsler</div>
-            </div>
-          </div>
-        </div>
+        {/* Underleverandører har ikke lenger en egen boks her.
+            «Fortjeneste på UE %» og «Standard UE-påslag %» lå begge på
+            faggruppen 'ue', som ingen kalkyle kan ha — den er ikke valgbar noe
+            sted. «Fortjeneste på UE %» påvirket derfor ingen beregning i det
+            hele tatt, og «Standard UE-påslag %» var én global sats for alle fag.
+            Begge er erstattet av «UE-påslag %» per fag i kortene over, som er
+            det beregningen faktisk leser. */}
 
         {/* Bottom save */}
         <div style={{ display:'flex', justifyContent:'flex-end', paddingTop:'8px' }}>
@@ -78937,7 +79023,12 @@ function KalkProsjektEditor({ initial, onClose, onSaved, defaultProsjektType }) 
                 under navnet gjør cellen enda trangere. Modalen scroller alt
                 (maxHeight 70vh), så den doble høyden koster ingenting. */}
             <div style={{ display:'grid', gridTemplateColumns: isMobKE ? '1fr' : 'repeat(2, 1fr)', gap:'6px' }}>
-              {FAGGRUPPER.map(fag => {
+              {/* 'ue' filtreres bort, som i alle andre faggruppevelgere. Den var
+                  valgbar bare her, og en kalkyle med faggruppen «Underleverandør»
+                  ville brukt UE-radens egne faktorer til å regne ut arbeid og
+                  materiell — med timelønn 0. Underleverandører føres på
+                  UE-linjer inne i bygningsdelene, ikke som egen faggruppe. */}
+              {FAGGRUPPER.filter(f => f.id !== 'ue').map(fag => {
                 const isSelected = selectedFag.includes(fag.id)
                 // Innholdet i faggruppen slik den ligger lagret. Vises i
                 // redigering, så man ser hva som ryker FØR man huker vekk — ikke
@@ -79967,7 +80058,9 @@ function KalkProsjektView({ kalk: init, onBack, onEdit, onNavigate, onEditBim })
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).map(u => u.id === uId ? { ...u, [field]: value } : u) } : b) } : kl))
   }
   const addUE = (kalId, bdId) => {
-    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: nyRadId(), navn: '', beskrivelse: '', kostnad: 0, email: '', telefon: '', status: 'utkast', foresporsel_id: null }] } : b) } : kl))
+    // paaslag: null = «arver fagets sats». Ikke 0 — det ville betydd null
+    // prosent påslag og gitt UE-en ut til kunden til innkjøpspris.
+    updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: [...(b.underleverandorer||[]), { id: nyRadId(), navn: '', beskrivelse: '', kostnad: 0, paaslag: null, email: '', telefon: '', status: 'utkast', foresporsel_id: null }] } : b) } : kl))
   }
   const removeUE = (kalId, bdId, uId) => {
     updateKalkyler(kalkyler.map(kl => kl.id === kalId ? { ...kl, bygningsdeler: (kl.bygningsdeler||[]).map(b => b.id === bdId ? { ...b, underleverandorer: (b.underleverandorer||[]).filter(u => u.id !== uId) } : b) } : kl))
@@ -81395,10 +81488,39 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         <span style={{ background:st.bg, color:st.color, padding:'2px 8px', borderRadius:'6px', fontSize:'10px', fontWeight:'700', whiteSpace:'nowrap' }}>{st.label}</span>
                                         <button onClick={()=>removeUE(kalk.id,bd.id,u.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', flexShrink:0 }}>×</button>
                                       </div>
-                                      {/* Rad 2: Beskrivelse + estimert kostnad */}
-                                      <div style={{ display:'flex', gap:'6px', marginBottom:'6px' }}>
-                                        <input value={u.beskrivelse||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Oppgavebeskrivelse" style={{ ...qInp, flex:1, fontSize:'12px', padding:'6px 8px' }} />
-                                        <input type="number" value={u.kostnad||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Estimat kr" style={{ ...qInp, width:'90px', textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
+                                      {/* Rad 2: Beskrivelse + estimert kostnad + påslag.
+                                          Bryter på mobil — tre felter og en ut-pris får
+                                          ikke plass på 375 px uten at beskrivelsen blir
+                                          ubrukelig smal. */}
+                                      <div style={{ display:'flex', gap:'6px', marginBottom:'6px', flexWrap: isMobKV ? 'wrap' : 'nowrap', alignItems:'center' }}>
+                                        <input value={u.beskrivelse||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'beskrivelse',e.target.value)} placeholder="Oppgavebeskrivelse" style={{ ...qInp, flex:'1 1 120px', minWidth:0, fontSize:'12px', padding:'6px 8px' }} />
+                                        <input type="number" value={u.kostnad||''} onChange={e=>updateUE(kalk.id,bd.id,u.id,'kostnad',e.target.value)} placeholder="Estimat kr" style={{ ...qInp, width:'90px', flexShrink:0, textAlign:'right', fontSize:'12px', padding:'6px 8px' }} />
+                                        {/* Entreprenørfortjeneste for DENNE posten. Tomt felt =
+                                            arver fagets sats; placeholderen viser hvilken. Å skrive
+                                            0 er noe annet enn å la stå tomt, og det skal det være:
+                                            0 betyr «ingen fortjeneste på denne UE-en». */}
+                                        {(() => {
+                                          const arvet = uePaaslagFor(null, fakt)
+                                          const egen = satsEllerNull(u.paaslag)
+                                          const brukt = egen ?? arvet
+                                          const kost = parseFloat(u.kostnad) || 0
+                                          return (
+                                            <div style={{ display:'flex', alignItems:'center', gap:'4px', flexShrink:0 }}>
+                                              <input type="number" value={u.paaslag ?? ''}
+                                                onChange={e=>updateUE(kalk.id,bd.id,u.id,'paaslag', e.target.value === '' ? null : e.target.value)}
+                                                placeholder={fmtTall(arvet)}
+                                                title={egen === null
+                                                  ? `Påslag på UE-prisen. Står feltet tomt, arver posten fagets sats på ${fmtTall(arvet)} %. Skriv et tall for å overstyre bare denne posten.`
+                                                  : `Egen sats for denne posten. Tøm feltet for å arve fagets ${fmtTall(arvet)} %.`}
+                                                style={{ ...qInp, width:'58px', textAlign:'right', fontSize:'12px', padding:'6px 8px',
+                                                  background: egen === null ? '#f8fafc' : 'white',
+                                                  border: `1px solid ${egen === null ? '#e2e8f0' : '#bfdbfe'}` }} />
+                                              <span style={{ fontSize:'11px', color:'#94a3b8', whiteSpace:'nowrap' }}>
+                                                %{kost > 0 ? <> → <span style={{ color:'#0f172a', fontWeight:'600' }}>{fmt(kost * (1 + brukt / 100))}</span></> : null}
+                                              </span>
+                                            </div>
+                                          )
+                                        })()}
                                       </div>
                                       {/* Rad 3: E-post + telefon + send-knapp */}
                                       <div style={{ display:'flex', gap:'6px', alignItems:'center' }}>
@@ -81538,7 +81660,13 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         <button onClick={(e) => {
                           e.stopPropagation()
                           const foresporsler = kalk.ue_foresporsler || []
-                          const defaultPaaslag = parseFloat(alleFaktorer['ue']?.ue_paaslag_prosent || alleFaktorer[kalk.fag]?.ue_paaslag_prosent) || 15
+                          // Forhåndsutfylling av en NY forespørsel. Leser fagets
+                          // UE-sats; 15 beholdes som siste ledd slik det har vært
+                          // — ingen bedrift har satt feltet, så tallet er uendret
+                          // i dag. Merk at beregningen faller tilbake på
+                          // innkjøpsmarginen i stedet for 15 når satsen ikke er
+                          // satt; det avviket er eldre enn denne endringen.
+                          const defaultPaaslag = satsEllerNull(alleFaktorer[kalk.fag]?.ue_paaslag_prosent) ?? 15
                           updateKalkyler(kalkyler.map(kl => kl.id === kalk.id ? { ...kl, _ueOpen: true, ue_foresporsler: [...foresporsler, { id: nyRadId(), navn: '', email: '', telefon: '', beskrivelse: '', status: 'utkast', vedlegg: [], paaslag: defaultPaaslag }] } : kl))
                         }} style={{ background:'#ca8a04', color:'white', border:'none', borderRadius:'6px', padding:'5px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Ny forespørsel</button>
                       </div>
@@ -81860,8 +81988,13 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#64748b' }}>Materiale</span><span style={{ fontWeight:'600' }}>{fmt(totals.totMaterial)}</span></div>
               {totals.totUE > 0 && (
                 <>
-                <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#2563eb' }}>UE innkjøp</span><span style={{ fontWeight:'600', color:'#2563eb' }}>{fmt(totals.totUE)}</span></div>
-                <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#7c3aed' }}>UE påslag</span><span style={{ fontWeight:'600', color:'#7c3aed' }}>{fmt(totals.totMedFortjeneste - totals.totSelvkost > 0 ? (totals.totMedFortjeneste - totals.totSelvkost) * (totals.totUE / Math.max(totals.totSelvkost, 1)) : 0)}</span></div>
+                {/* Begge tallene kommer nå rett fra beregningen. «UE innkjøp» viste
+                    tidligere totUE, som er UE INKLUDERT påslag, og «UE påslag» var
+                    totalfortjenesten fordelt etter selvkostandel — et estimat, ikke
+                    det faktiske påslaget. Årsaken var at UE-selvkosten ikke ble
+                    returnert fra beregnBygningsdel; nå gjør den det. */}
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#2563eb' }}>UE innkjøp</span><span style={{ fontWeight:'600', color:'#2563eb' }}>{fmt(totals.totUESelvkost)}</span></div>
+                <div style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', fontSize:'13px' }}><span style={{ color:'#7c3aed' }}>UE påslag</span><span style={{ fontWeight:'600', color:'#7c3aed' }}>{fmt(totals.totUEPaaslag)}</span></div>
                 </>
               )}
               <div style={{ height:'1px', background:'#f1f5f9', margin:'8px 0' }} />
