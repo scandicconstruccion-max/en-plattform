@@ -71906,6 +71906,68 @@ function beregnProsjektTotal(kalkyler, alleFaktorer) {
   return { totTimer, totArbeid, totMaterial, totUE, totUESelvkost, totUEPaaslag: totUE - totUESelvkost, totSelvkost, totMedFortjeneste, fortjeneste, fortjenesteProsent, mva, totInkMva: totMedFortjeneste + mva }
 }
 
+// ─── DETALJLINJER UNDER EN BYGNINGSDEL ───────────────────────────────────────
+// Linjene som skal SUMMERE til bygningsdelens egen sum. ÉN kilde for alle
+// visningene som lister dem: tilbuds-PDF-en, utskriftsvisningen og den interne
+// kalkylen. De var tre håndskrevne kopier, og alle tre tok bare med arbeid og
+// materiell — mens bygningsdelens sum er
+//
+//   totalMedFortjeneste = arbeid + materiell + UE + flatetillegg + åpningstillegg
+//
+// Detaljene summerte derfor ikke til summen over dem. På et tilbud er det
+// kundens regnestykke som ikke går opp.
+//
+// To ting er verdt å merke seg:
+//   · Materialer bruker materialMengde, ikke mengde. Åpningsfradraget gjelder
+//     bare materialer, og beregningen trekker det fra (se beregnBygningsdel).
+//     Kopiene ganget med full mengde og fikk for høye materiallinjer.
+//   · Tilleggene har ingen naturlig tekst per linje — åpningstillegg kommer av
+//     telleregler, ikke av rader brukeren har skrevet. Derfor én samlelinje per
+//     type, med timene som mengde.
+//
+// visUeNavn: den interne rapporten viser hvilken underentreprenør som er brukt.
+// Kundevendte dokumenter gjør det ikke — hvem du kjøper av er din
+// forretningsrelasjon, og navnet gir kunden en vei utenom deg. Beskrivelsen av
+// ARBEIDET tas med begge steder; den røper ingen relasjon.
+//
+// Enheten returneres rå. Visningene formaterer den hver på sin måte.
+function bygningsdelDetaljer(bd, faktorer, opts = {}) {
+  const visUeNavn = opts.visUeNavn === true
+  const bdt = beregnBygningsdel(bd, faktorer)
+  const mengde = parseFloat(bd.mengde) || 1
+  const rund = (n) => parseFloat((n || 0).toFixed(1))
+  const rader = []
+
+  ;(bd.arbeidsarter || []).forEach(a => {
+    const r = beregnArbeidskostnad(a, faktorer)
+    rader.push({ text: a.beskrivelse || 'Arbeid', mengde: rund(r.faktiskTid * mengde), enhet: 't', amount: r.medFortjeneste * mengde })
+  })
+
+  ;(bd.materialer || []).forEach(m => {
+    const r = beregnMaterialkostnad(m, faktorer)
+    rader.push({ text: m.varenavn || 'Material', mengde: rund((parseFloat(m.mengde) || 0) * bdt.materialMengde), enhet: m.enhet || '', amount: r.medFortjeneste * bdt.materialMengde })
+  })
+
+  ;(bd.underleverandorer || []).forEach(u => {
+    const sats = uePaaslagFor(u, faktorer)
+    const kost = (parseFloat(u.kostnad) || 0) * mengde
+    const deler = visUeNavn ? [u.navn, u.beskrivelse] : ['Underentreprise', u.beskrivelse]
+    rader.push({
+      text: deler.filter(Boolean).join(' — ') || 'Underentreprise',
+      mengde, enhet: bd.enhet || '', amount: kost * (1 + sats / 100),
+    })
+  })
+
+  if (bdt.flatetilleggMedFortjeneste > 0) {
+    rader.push({ text: 'Tillegg for tilpasning', mengde: rund(bdt.totalFlatetilleggTimer), enhet: 't', amount: bdt.flatetilleggMedFortjeneste })
+  }
+  if (bdt.totalApningstillegg > 0) {
+    rader.push({ text: 'Tillegg for åpninger', mengde: rund(bdt.totalApningstilleggTimer), enhet: 't', amount: bdt.totalApningstillegg })
+  }
+
+  return rader
+}
+
 // ─── KALKULASJON HOVEDSIDE ───────────────────────────────────────────────────
 
 function KalkulasjonPage({ onNavigate, autoOpenBim = false }) {
@@ -80954,13 +81016,10 @@ td{border-bottom:1px solid #f1f5f9} .total td{border-top:3px solid #0f172a;font-
             const mengde = parseFloat(bd.mengde) || 1
             tableRows += `<tr><td style="padding:6px 14px 6px 28px;font-size:13px;color:#374151">${bd.name || 'Bygningsdel'}</td><td style="padding:6px 10px;text-align:right;font-size:13px">${mengde}</td><td style="padding:6px 10px;font-size:13px;color:#64748b">${fmtEnhetPreview(bd.enhet)}</td><td style="padding:6px 14px;text-align:right;font-size:13px;font-weight:600">${Math.round(bdt.totalMedFortjeneste).toLocaleString('nb-NO')} kr</td></tr>`
             if (visning === 'detaljert') {
-              ;(bd.arbeidsarter || []).forEach(a => {
-                const r = beregnArbeidskostnad(a, fakt)
-                tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${a.beskrivelse}</td><td style="padding:3px 10px;text-align:right;font-size:12px;color:#94a3b8">${(r.faktiskTid*mengde).toFixed(1)}</td><td style="padding:3px 10px;font-size:12px;color:#94a3b8">t</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(r.medFortjeneste*mengde).toLocaleString('nb-NO')} kr</td></tr>`
-              })
-              ;(bd.materialer || []).forEach(m => {
-                const r = beregnMaterialkostnad(m, fakt)
-                tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${m.varenavn}</td><td style="padding:3px 10px;text-align:right;font-size:12px;color:#94a3b8">${((parseFloat(m.mengde)||0)*mengde).toFixed(1)}</td><td style="padding:3px 10px;font-size:12px;color:#94a3b8">${fmtEnhetPreview(m.enhet)}</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(r.medFortjeneste*mengde).toLocaleString('nb-NO')} kr</td></tr>`
+              // Samme kilde som tilbuds-PDF-en. Dette er en KUNDEVENDT utskrift,
+              // så UE står uten firmanavn.
+              bygningsdelDetaljer(bd, fakt).forEach(d => {
+                tableRows += `<tr><td style="padding:3px 14px 3px 44px;font-size:12px;color:#94a3b8">${d.text}</td><td style="padding:3px 10px;text-align:right;font-size:12px;color:#94a3b8">${d.mengde}</td><td style="padding:3px 10px;font-size:12px;color:#94a3b8">${fmtEnhetPreview(d.enhet)}</td><td style="padding:3px 14px;text-align:right;font-size:12px;color:#94a3b8">${Math.round(d.amount).toLocaleString('nb-NO')} kr</td></tr>`
               })
             }
           })
@@ -81014,11 +81073,26 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           })
           ;(bd.materialer||[]).forEach(m => {
             const r = beregnMaterialkostnad(m, fakt)
-            rows += `<tr><td style="padding-left:20px;color:#059669">📦 ${m.varenavn}</td><td class="nobb">${m.nobb||''}</td><td></td><td class="r">${((parseFloat(m.mengde)||0)*mengde).toFixed(2)}</td><td>${m.enhet||''}</td><td class="r">${fmt(m.enhetspris)}</td><td class="r">${fmt(r.kostnad*mengde)}</td><td class="r">${fmt(r.medFortjeneste*mengde)}</td></tr>`
+            // materialMengde, ikke mengde: åpningsfradraget gjelder materialer,
+            // og beregningen trekker det fra. Full mengde ga for høye linjer.
+            rows += `<tr><td style="padding-left:20px;color:#059669">📦 ${m.varenavn}</td><td class="nobb">${m.nobb||''}</td><td></td><td class="r">${((parseFloat(m.mengde)||0)*bdt.materialMengde).toFixed(2)}</td><td>${m.enhet||''}</td><td class="r">${fmt(m.enhetspris)}</td><td class="r">${fmt(r.kostnad*bdt.materialMengde)}</td><td class="r">${fmt(r.medFortjeneste*bdt.materialMengde)}</td></tr>`
           })
           ;(bd.underleverandorer||[]).forEach(u => {
-            rows += `<tr><td style="padding-left:20px;color:#7c3aed">🏗️ ${u.navn} — ${u.beskrivelse}</td><td></td><td></td><td class="r">${mengde}</td><td>${bd.enhet||'stk'}</td><td class="r">${fmt(u.kostnad)}</td><td class="r">${fmt((u.kostnad||0)*mengde)}</td><td class="r">${fmt((u.kostnad||0)*mengde*(1+(parseFloat(fakt.fortjeneste||25)/100)))}</td></tr>`
+            // Satsen kommer fra uePaaslagFor — samme kjede som beregningen.
+            // Her sto `fakt.fortjeneste || 25`, og det feltet finnes ikke i
+            // faktorobjektet: linjen viste alltid 25 %, uansett hva som var satt.
+            const ueUt = (parseFloat(u.kostnad) || 0) * mengde * (1 + uePaaslagFor(u, fakt) / 100)
+            rows += `<tr><td style="padding-left:20px;color:#7c3aed">🏗️ ${u.navn} — ${u.beskrivelse}</td><td></td><td></td><td class="r">${mengde}</td><td>${bd.enhet||'stk'}</td><td class="r">${fmt(u.kostnad)}</td><td class="r">${fmt((u.kostnad||0)*mengde)}</td><td class="r">${fmt(ueUt)}</td></tr>`
           })
+          // Tilleggene er med i bygningsdelens sum, men manglet som linjer.
+          // Ingen naturlig tekst per linje — åpningstillegg kommer av telleregler
+          // — så én samlelinje per type, med timene som mengde.
+          if (bdt.flatetilleggMedFortjeneste > 0) {
+            rows += `<tr><td style="padding-left:20px;color:#d97706">📐 Tillegg for tilpasning</td><td></td><td></td><td class="r">${bdt.totalFlatetilleggTimer.toFixed(1)}</td><td>t</td><td></td><td class="r">${fmt(bdt.totalFlatetillegg)}</td><td class="r">${fmt(bdt.flatetilleggMedFortjeneste)}</td></tr>`
+          }
+          if (bdt.totalApningstillegg > 0) {
+            rows += `<tr><td style="padding-left:20px;color:#d97706">🪟 Tillegg for åpninger</td><td></td><td></td><td class="r">${bdt.totalApningstilleggTimer.toFixed(1)}</td><td>t</td><td></td><td class="r">${fmt(bdt.totalApningstillegg / (1 + (parseFloat(fakt.fortjeneste_lonn_prosent) || 0) / 100))}</td><td class="r">${fmt(bdt.totalApningstillegg)}</td></tr>`
+          }
         })
         rows += '</tbody></table>'
         return rows
@@ -84448,21 +84522,15 @@ function KalkSendModal({ kalk, totals, kalkyler, alleFaktorer, user, onClose, on
       const fakt = alleFaktorer[kl.fag] || getDefaultFaktorer(kl.fag)
       const kt = beregnKalkyle(kl, fakt)
       // «Detaljert uten priser» (bygningsdel) og «Detaljert med priser»
-      // (detaljert) har NØYAKTIG samme innhold — arbeidsarter og materialer per
-      // bygningsdel. Forskjellen ligger bare i om prisen per linje skrives ut.
+      // (detaljert) har NØYAKTIG samme innhold. Forskjellen ligger bare i om
+      // prisen per linje skrives ut.
+      // Linjene kommer fra bygningsdelDetaljer, som er delt med utskrifts- og
+      // internvisningen — dette er et KUNDEVENDT dokument, så UE står uten
+      // firmanavn.
       const bdLines = (visning === 'bygningsdel' || visning === 'detaljert') ? (kl.bygningsdeler || []).map(bd => {
         const bdt = beregnBygningsdel(bd, fakt)
         const mengde = parseFloat(bd.mengde) || 1
-        const detailLines = [
-          ...(bd.arbeidsarter || []).map(a => {
-            const r = beregnArbeidskostnad(a, fakt)
-            return { type: 'detail', text: a.beskrivelse, mengde: parseFloat((r.faktiskTid * mengde).toFixed(1)), enhet: 't', amount: r.medFortjeneste * mengde }
-          }),
-          ...(bd.materialer || []).map(m => {
-            const r = beregnMaterialkostnad(m, fakt)
-            return { type: 'detail', text: m.varenavn, mengde: parseFloat(((parseFloat(m.mengde)||0) * mengde).toFixed(1)), enhet: fmtEnhet(m.enhet), amount: r.medFortjeneste * mengde }
-          }),
-        ]
+        const detailLines = bygningsdelDetaljer(bd, fakt).map(d => ({ ...d, type: 'detail', enhet: fmtEnhet(d.enhet) }))
         return { type: 'bd', name: bd.name || 'Bygningsdel', mengde, enhet: fmtEnhet(bd.enhet), amount: bdt.totalMedFortjeneste, details: detailLines }
       }) : []
       return { fag, name: kl.name, amount: kt.totMedFortjeneste, bdLines }
