@@ -3810,273 +3810,6 @@ const MODUL_OMVISNINGER = {
   ],
 }
 
-// ─── MIN FRAMDRIFT — dashbordkort der ansatte melder inn hvor langt de har kommet ───
-// Bookingen er oppgaven, men den ligger som ÉN RAD PER DAG i resource_plans.
-// Radene bindes sammen av fase_id, og framdriften lagres én gang per fase i
-// booking_framdrift (fase_id er unique der). Derfor grupperes dagsradene her
-// før de vises — ellers ville en 9-dagers oppgave blitt ni kort.
-//
-// «Ferdig» skal koste ÉTT trykk. Derfor ingen bekreftelsesdialog: statusen
-// lagres optimistisk med en angre-knapp ved siden av. Kommentar er valgfri,
-// bortsett fra ved «Blokkert» der årsaken er hele poenget — der åpnes feltet
-// automatisk, men statusen er allerede lagret så den aldri holdes tilbake av
-// at teksten mangler.
-//
-// Kortet returnerer null når brukeren ikke har oppgaver i vinduet. Dashbordet
-// er derfor uendret for alle som ikke står på en jobb akkurat nå.
-const FRAMDRIFT_STATUSER = [
-  { v: 'ikke_startet', kort: 'Ikke startet', emoji: '⚪', farge: '#64748b', bg: '#f1f5f9', kant: '#e2e8f0' },
-  { v: 'pagar',        kort: 'Pågår',        emoji: '🔨', farge: '#2563eb', bg: '#eff6ff', kant: '#bfdbfe' },
-  { v: 'ferdig',       kort: 'Ferdig',       emoji: '✅', farge: '#059669', bg: '#ecfdf5', kant: '#bbf7d0' },
-  { v: 'blokkert',     kort: 'Blokkert',     emoji: '🚧', farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca' },
-]
-
-function MinFramdriftKort({ user, mob, onNavigate, activeModules, trialActive }) {
-  const appAlert = useAppAlert()
-  const [oppgaver, setOppgaver] = useState([])
-  const [laster, setLaster] = useState(true)
-  const [lagrer, setLagrer] = useState(null)
-  const [apenKommentar, setApenKommentar] = useState(null)
-  const [kommentarTekst, setKommentarTekst] = useState('')
-
-  const fmtDato = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
-  const idag = React.useMemo(() => fmtDato(new Date()), [])
-
-  // Ressursplan er en betalt modul. Har bedriften den ikke, finnes det ingen
-  // bookinger å melde framdrift på — da lastes ingenting.
-  const harRessursplan = !activeModules || trialActive || (activeModules || []).includes('ressursplan')
-
-  const last = React.useCallback(async () => {
-    if (!user?.id || !harRessursplan) { setLaster(false); return }
-    try {
-      const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
-      if (!emp?.id) { setOppgaver([]); setLaster(false); return }
-
-      // 30 dager bakover fanger det som er forsinket, 14 fram det som starter snart.
-      const fraD = new Date(idag + 'T12:00:00'); fraD.setDate(fraD.getDate() - 30)
-      const tilD = new Date(idag + 'T12:00:00'); tilD.setDate(tilD.getDate() + 14)
-
-      const { data: plans } = await supabase.from('resource_plans')
-        .select('id, fase_id, project_id, resource_id, date, task_description')
-        .eq('resource_id', emp.id).eq('resource_type', 'employee')
-        .not('fase_id', 'is', null)
-        .gte('date', fmtDato(fraD)).lte('date', fmtDato(tilD))
-        .order('date')
-      if (!plans || plans.length === 0) { setOppgaver([]); setLaster(false); return }
-
-      // Grupper dagsradene til én oppgave per fase_id
-      const map = new Map()
-      for (const p of plans) {
-        if (!map.has(p.fase_id)) {
-          map.set(p.fase_id, {
-            fase_id: p.fase_id, project_id: p.project_id, resource_id: p.resource_id,
-            task: p.task_description || 'Booking', datoer: [],
-          })
-        }
-        map.get(p.fase_id).datoer.push(p.date)
-      }
-      const liste = Array.from(map.values()).map(o => {
-        const sortert = o.datoer.slice().sort()
-        return { ...o, fra: sortert[0], til: sortert[sortert.length - 1], antallDager: sortert.length }
-      })
-
-      const faseIds = liste.map(o => o.fase_id)
-      const projIds = Array.from(new Set(liste.map(o => o.project_id).filter(Boolean)))
-      const [fdRes, projRes] = await Promise.all([
-        supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt').in('fase_id', faseIds),
-        projIds.length ? supabase.from('projects').select('id, name, project_number').in('id', projIds) : Promise.resolve({ data: [] }),
-      ])
-      const fdMap = new Map((fdRes.data || []).map(f => [f.fase_id, f]))
-      const projMap = new Map((projRes.data || []).map(p => [p.id, p]))
-
-      const grense = fmtDato(new Date(Date.now() - 7 * 86400000))
-      const beriket = liste.map(o => {
-        const fd = fdMap.get(o.fase_id)
-        const status = fd?.status || 'ikke_startet'
-        return {
-          ...o,
-          status,
-          kommentar: fd?.kommentar || null,
-          faktiskSlutt: fd?.faktisk_slutt || null,
-          // Har den ansatte faktisk meldt noe? Uten dette ville «Ikke startet»
-          // stått fremhevet på hver eneste oppgave og konkurrert med «Ferdig».
-          harMeldt: !!fd,
-          prosjekt: projMap.get(o.project_id) || null,
-          // «Forsinket» er ikke en lagret status — den utledes.
-          forsinket: status !== 'ferdig' && o.til < idag,
-          paagaarNaa: o.fra <= idag && idag <= o.til,
-        }
-      })
-      // Ferdigmeldte forsvinner etter en uke, ellers vokser kortet i det uendelige.
-      const synlige = beriket.filter(o => !(o.status === 'ferdig' && o.faktiskSlutt && o.faktiskSlutt < grense))
-      // Rekkefølge: det som haster øverst.
-      const vekt = (o) => o.status === 'ferdig' ? 4 : o.forsinket ? 0 : o.status === 'blokkert' ? 1 : o.paagaarNaa ? 2 : 3
-      synlige.sort((a, b) => vekt(a) - vekt(b) || a.fra.localeCompare(b.fra))
-      setOppgaver(synlige)
-    } catch (e) { console.error('MinFramdriftKort:', e); setOppgaver([]) }
-    finally { setLaster(false) }
-  }, [user?.id, idag, harRessursplan])
-
-  React.useEffect(() => { last() }, [last])
-
-  const skrivFramdrift = async (o, felt) => {
-    const rad = {
-      fase_id: o.fase_id, project_id: o.project_id, resource_id: o.resource_id,
-      status: o.status, kommentar: o.kommentar,
-      meldt_av: user?.id || null, meldt_at: new Date().toISOString(),
-      planlagt_slutt: o.til,
-      updated_at: new Date().toISOString(),
-      ...felt,
-    }
-    rad.faktisk_slutt = rad.status === 'ferdig' ? (o.faktiskSlutt || idag) : null
-    const { error } = await supabase.from('booking_framdrift').upsert(rad, { onConflict: 'fase_id' })
-    if (error) throw error
-    return rad
-  }
-
-  const settStatus = async (o, nyStatus) => {
-    if (lagrer) return
-    const forrige = { status: o.status, faktiskSlutt: o.faktiskSlutt, forsinket: o.forsinket, harMeldt: o.harMeldt }
-    setLagrer(o.fase_id)
-    setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
-      ? { ...x, status: nyStatus, harMeldt: true, faktiskSlutt: nyStatus === 'ferdig' ? (x.faktiskSlutt || idag) : null, forsinket: nyStatus !== 'ferdig' && x.til < idag }
-      : x))
-    try {
-      await skrivFramdrift(o, { status: nyStatus })
-      // Ved «Blokkert» er årsaken hele verdien — åpne feltet, men statusen er lagret.
-      if (nyStatus === 'blokkert') { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }
-    } catch (e) {
-      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, ...forrige } : x))
-      await appAlert({ message: 'Kunne ikke lagre framdrift', subMessage: e.message, kind: 'error' })
-    } finally { setLagrer(null) }
-  }
-
-  const lagreKommentar = async (o) => {
-    if (lagrer) return
-    setLagrer(o.fase_id)
-    const ny = kommentarTekst.trim() || null
-    try {
-      await skrivFramdrift(o, { kommentar: ny })
-      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, kommentar: ny, harMeldt: true } : x))
-      setApenKommentar(null); setKommentarTekst('')
-    } catch (e) {
-      await appAlert({ message: 'Kunne ikke lagre kommentaren', subMessage: e.message, kind: 'error' })
-    } finally { setLagrer(null) }
-  }
-
-  if (laster || !harRessursplan || oppgaver.length === 0) return null
-
-  const kortDato = (s) => new Date(s + 'T12:00:00').toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })
-
-  return (
-    <div style={{ padding: mob ? '16px 16px 0' : '24px 32px 0' }}>
-      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: mob ? '14px' : '16px', overflow: 'hidden' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: mob ? '12px 14px' : '14px 18px', borderBottom: '1px solid #f1f5f9' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
-            <span style={{ fontSize: mob ? '16px' : '18px' }}>📋</span>
-            <h2 style={{ margin: 0, fontSize: mob ? '15px' : '16px', fontWeight: '700', color: '#0f172a' }}>Min framdrift</h2>
-          </div>
-          <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', whiteSpace: 'nowrap' }}>
-            {oppgaver.length} oppgave{oppgaver.length !== 1 ? 'r' : ''}
-          </span>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
-          {oppgaver.map((o, i) => {
-            const travel = lagrer === o.fase_id
-            return (
-              <div key={o.fase_id} style={{ padding: mob ? '12px 14px' : '14px 18px', borderTop: i === 0 ? 'none' : '1px solid #f8fafc', background: o.forsinket ? '#fffbfa' : 'white' }}>
-                {/* Oppgave + prosjekt */}
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: mob ? '14px' : '15px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{o.task}</div>
-                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {o.prosjekt ? `🏗️ ${o.prosjekt.name} · ` : ''}{kortDato(o.fra)}–{kortDato(o.til)}
-                    </div>
-                  </div>
-                  {o.forsinket && (
-                    <span style={{ flexShrink: 0, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: '800', whiteSpace: 'nowrap' }}>
-                      FORSINKET
-                    </span>
-                  )}
-                </div>
-
-                {/* Statusknapper — ett trykk, ingen bekreftelsesdialog. */}
-                <div style={{ display: 'grid', gridTemplateColumns: mob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '6px' }}>
-                  {FRAMDRIFT_STATUSER.map(s => {
-                    const valgt = o.harMeldt && o.status === s.v
-                    return (
-                      <button key={s.v} onClick={() => settStatus(o, s.v)} disabled={travel || valgt}
-                        style={{
-                          minHeight: mob ? '46px' : '38px', padding: mob ? '8px 6px' : '7px 8px',
-                          borderRadius: '10px', cursor: travel || valgt ? 'default' : 'pointer',
-                          border: `1px solid ${valgt ? s.farge : s.kant}`,
-                          background: valgt ? s.farge : s.bg,
-                          color: valgt ? 'white' : s.farge,
-                          fontSize: mob ? '13px' : '12px', fontWeight: '700',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
-                          opacity: travel ? 0.6 : 1, transition: 'all 0.12s',
-                        }}>
-                        <span style={{ fontSize: mob ? '14px' : '13px' }}>{s.emoji}</span>
-                        <span>{s.kort}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Kommentar — valgfri. Her ligger den reelle verdien:
-                    «venter på rørlegger» sier mer enn en prosent. */}
-                {apenKommentar === o.fase_id ? (
-                  <div style={{ marginTop: '8px' }}>
-                    <textarea value={kommentarTekst} onChange={e => setKommentarTekst(e.target.value)} rows={2} autoFocus
-                      placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «venter på rørlegger»' : 'Kort kommentar (valgfritt)'}
-                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: mob ? '15px' : '13px', fontFamily: 'system-ui, sans-serif', resize: 'vertical', outline: 'none', color: '#0f172a' }} />
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                      <button onClick={() => { setApenKommentar(null); setKommentarTekst('') }} disabled={travel}
-                        style={{ padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: '1px solid #e2e8f0', borderRadius: '9px', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
-                        Hopp over
-                      </button>
-                      <button onClick={() => lagreKommentar(o)} disabled={travel}
-                        style={{ flex: 1, padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: 'none', borderRadius: '9px', background: travel ? '#6ee7b7' : '#059669', color: 'white', fontSize: '13px', fontWeight: '700', cursor: travel ? 'default' : 'pointer' }}>
-                        {travel ? 'Lagrer…' : 'Lagre kommentar'}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
-                    <button onClick={() => { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }}
-                      style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
-                      {o.kommentar ? '✏️ Endre kommentar' : '＋ Legg til kommentar'}
-                    </button>
-                    {o.harMeldt && (
-                      <button onClick={() => settStatus(o, 'ikke_startet')} disabled={travel}
-                        style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#94a3b8' }}>
-                        Angre
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {o.kommentar && apenKommentar !== o.fase_id && (
-                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'flex-start', gap: '6px', background: '#f8fafc', borderRadius: '8px', padding: '7px 10px' }}>
-                    <span style={{ fontSize: '12px', flexShrink: 0 }}>💬</span>
-                    <span style={{ fontSize: '12px', color: '#475569', lineHeight: 1.4, wordBreak: 'break-word' }}>{o.kommentar}</span>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <button onClick={() => onNavigate && onNavigate('ressursplan')}
-          style={{ width: '100%', padding: mob ? '12px' : '10px', minHeight: mob ? '44px' : 'auto', background: '#fafbfc', border: 'none', borderTop: '1px solid #f1f5f9', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#64748b' }}>
-          Se hele planen i Ressursplan →
-        </button>
-      </div>
-    </div>
-  )
-}
-
 function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kanSe }) {
   const days = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag']
   const months = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']
@@ -4177,11 +3910,6 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kan
           </div>
         )}
       </div>
-      {/* Min framdrift — ansattens innmelding. Kortet skjuler seg selv når
-          brukeren ikke har bookinger, så dashbordet er uendret for de fleste. */}
-      <MinFramdriftKort user={user} mob={mob} onNavigate={onNavigate}
-        activeModules={activeModules} trialActive={trialActive} />
-
       <style>{`
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
         @media (min-width: 1200px) { .dashboard-grid-single { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
@@ -32785,6 +32513,450 @@ function ganttWeekNumber(dateStr) {
 const stripePattern = (color='#dc2626', alpha=0.08) =>
   `repeating-linear-gradient(135deg, ${color.replace('rgb','rgba').replace(')', `,${alpha})`)} 0 6px, transparent 6px 12px)`
 
+// ─── MINE OPPGAVER — den ansattes visning i Ressursplan ─────────────────────────
+// Én av to visninger: «Kalender» viser planen slik den er lagt, «Mine oppgaver»
+// viser den ansattes egne bookinger med handlinger på. Ansatte lander her.
+// Bookingen er oppgaven, men den ligger som ÉN RAD PER DAG i resource_plans.
+// Radene bindes sammen av fase_id, og framdriften lagres én gang per fase i
+// booking_framdrift (fase_id er unique der). Derfor grupperes dagsradene her
+// før de vises — ellers ville en 9-dagers oppgave blitt ni kort.
+//
+// «Ferdig» skal koste ÉTT trykk. Derfor ingen bekreftelsesdialog: statusen
+// lagres optimistisk med en angre-knapp ved siden av. Kommentar er valgfri,
+// bortsett fra ved «Blokkert» der årsaken er hele poenget — der åpnes feltet
+// automatisk, men statusen er allerede lagret så den aldri holdes tilbake av
+// at teksten mangler.
+//
+// Panelet viser en rolig tomtilstand når den ansatte ikke har oppgaver — en tom
+// Gantt sier ingenting til den som bare vil vite hva han skal gjøre.
+const FRAMDRIFT_STATUSER = [
+  { v: 'ikke_startet', kort: 'Ikke startet', emoji: '⚪', farge: '#64748b', bg: '#f1f5f9', kant: '#e2e8f0' },
+  { v: 'pagar',        kort: 'Pågår',        emoji: '🔨', farge: '#2563eb', bg: '#eff6ff', kant: '#bfdbfe' },
+  { v: 'ferdig',       kort: 'Ferdig',       emoji: '✅', farge: '#059669', bg: '#ecfdf5', kant: '#bbf7d0' },
+  { v: 'blokkert',     kort: 'Blokkert',     emoji: '🚧', farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca' },
+]
+
+function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttVisning }) {
+  const appAlert = useAppAlert()
+  const [oppgaver, setOppgaver] = useState([])
+  const [laster, setLaster] = useState(true)
+  const [lagrer, setLagrer] = useState(null)
+  const [apenKommentar, setApenKommentar] = useState(null)
+  const [kommentarTekst, setKommentarTekst] = useState('')
+  // Dagvelgeren er åpen for én oppgave om gangen, og teller opp fra 5 når
+  // brukeren har trykket «5+».
+  const [apenDager, setApenDager] = useState(null)
+  const [dagerTeller, setDagerTeller] = useState(5)
+
+  const fmtDato = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const idag = React.useMemo(() => fmtDato(new Date()), [])
+
+  // Modulsjekken er ikke lenger panelets ansvar: det lever inne i Ressursplan,
+  // og kommer man dit, har bedriften modulen.
+  const last = React.useCallback(async () => {
+    if (!user?.id) { setLaster(false); return }
+    try {
+      const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
+      if (!emp?.id) { setOppgaver([]); setLaster(false); return }
+
+      // 30 dager bakover fanger det som er forsinket, 14 fram det som starter snart.
+      const fraD = new Date(idag + 'T12:00:00'); fraD.setDate(fraD.getDate() - 30)
+      const tilD = new Date(idag + 'T12:00:00'); tilD.setDate(tilD.getDate() + 14)
+
+      const { data: plans } = await supabase.from('resource_plans')
+        .select('id, fase_id, project_id, resource_id, date, task_description')
+        .eq('resource_id', emp.id).eq('resource_type', 'employee')
+        .not('fase_id', 'is', null)
+        .gte('date', fmtDato(fraD)).lte('date', fmtDato(tilD))
+        .order('date')
+      if (!plans || plans.length === 0) { setOppgaver([]); setLaster(false); return }
+
+      // Grupper dagsradene til én oppgave per fase_id
+      const map = new Map()
+      for (const p of plans) {
+        if (!map.has(p.fase_id)) {
+          map.set(p.fase_id, {
+            fase_id: p.fase_id, project_id: p.project_id, resource_id: p.resource_id,
+            task: p.task_description || 'Booking', datoer: [],
+          })
+        }
+        map.get(p.fase_id).datoer.push(p.date)
+      }
+      const liste = Array.from(map.values()).map(o => {
+        const sortert = o.datoer.slice().sort()
+        return { ...o, fra: sortert[0], til: sortert[sortert.length - 1], antallDager: sortert.length }
+      })
+
+      const faseIds = liste.map(o => o.fase_id)
+      const projIds = Array.from(new Set(liste.map(o => o.project_id).filter(Boolean)))
+      const [fdRes, projRes] = await Promise.all([
+        supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, estimert_slutt, gjenstaende_dager, meldt_av').in('fase_id', faseIds),
+        projIds.length ? supabase.from('projects').select('id, name, project_number').in('id', projIds) : Promise.resolve({ data: [] }),
+      ])
+      const fdMap = new Map((fdRes.data || []).map(f => [f.fase_id, f]))
+      const projMap = new Map((projRes.data || []).map(p => [p.id, p]))
+
+      const grense = fmtDato(new Date(Date.now() - 7 * 86400000))
+      const beriket = liste.map(o => {
+        const fd = fdMap.get(o.fase_id)
+        const status = fd?.status || 'ikke_startet'
+        return {
+          ...o,
+          status,
+          kommentar: fd?.kommentar || null,
+          faktiskSlutt: fd?.faktisk_slutt || null,
+          estimertSlutt: fd?.estimert_slutt || null,
+          gjenstaendeDager: fd?.gjenstaende_dager ?? null,
+          meldtAv: fd?.meldt_av || null,
+          // Har den ansatte faktisk meldt noe? Uten dette ville «Ikke startet»
+          // stått fremhevet på hver eneste oppgave og konkurrert med «Ferdig».
+          harMeldt: !!fd,
+          prosjekt: projMap.get(o.project_id) || null,
+          // «Forsinket» er ikke en lagret status — den utledes.
+          forsinket: status !== 'ferdig' && o.til < idag,
+          paagaarNaa: o.fra <= idag && idag <= o.til,
+        }
+      })
+      // Ferdigmeldte forsvinner etter en uke, ellers vokser kortet i det uendelige.
+      const synlige = beriket.filter(o => !(o.status === 'ferdig' && o.faktiskSlutt && o.faktiskSlutt < grense))
+      // Rekkefølge: det som haster øverst.
+      const vekt = (o) => o.status === 'ferdig' ? 4 : o.forsinket ? 0 : o.status === 'blokkert' ? 1 : o.paagaarNaa ? 2 : 3
+      synlige.sort((a, b) => vekt(a) - vekt(b) || a.fra.localeCompare(b.fra))
+      setOppgaver(synlige)
+    } catch (e) { console.error('MineOppgaverPanel:', e); setOppgaver([]) }
+    finally { setLaster(false) }
+  }, [user?.id, idag])
+
+  React.useEffect(() => { last() }, [last])
+
+  const skrivFramdrift = async (o, felt) => {
+    const rad = {
+      fase_id: o.fase_id, project_id: o.project_id, resource_id: o.resource_id,
+      status: o.status, kommentar: o.kommentar,
+      estimert_slutt: o.estimertSlutt, gjenstaende_dager: o.gjenstaendeDager,
+      meldt_av: user?.id || null, meldt_at: new Date().toISOString(),
+      planlagt_slutt: o.til,
+      updated_at: new Date().toISOString(),
+      ...felt,
+    }
+    rad.faktisk_slutt = rad.status === 'ferdig' ? (o.faktiskSlutt || idag) : null
+    // Estimatet gir bare mening mens jobben pågår. Er den ferdig, er faktisk
+    // sluttdato fasiten; er den ikke startet, finnes det ikke noe å estimere.
+    if (rad.status !== 'pagar') { rad.estimert_slutt = null; rad.gjenstaende_dager = null }
+    const { error } = await supabase.from('booking_framdrift').upsert(rad, { onConflict: 'fase_id' })
+    if (error) throw error
+    return rad
+  }
+
+  const settStatus = async (o, nyStatus) => {
+    if (lagrer) return
+    const forrige = { status: o.status, faktiskSlutt: o.faktiskSlutt, forsinket: o.forsinket, harMeldt: o.harMeldt }
+    setLagrer(o.fase_id)
+    setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
+      ? { ...x, status: nyStatus, harMeldt: true, faktiskSlutt: nyStatus === 'ferdig' ? (x.faktiskSlutt || idag) : null, forsinket: nyStatus !== 'ferdig' && x.til < idag }
+      : x))
+    try {
+      await skrivFramdrift(o, { status: nyStatus })
+      // Ved «Blokkert» er årsaken hele verdien — åpne feltet, men statusen er lagret.
+      if (nyStatus === 'blokkert') { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }
+      // «Pågår» alene svarer ikke på det prosjektlederen trenger å vite — om
+      // jobben blir ferdig i tide. Derfor åpner den dagvelgeren. Statusen er
+      // allerede lagret, så den som hopper over har likevel meldt fra.
+      if (nyStatus === 'pagar') { setApenDager(o.fase_id); setDagerTeller(Math.max(1, o.gjenstaendeDager || 1)) }
+      if (nyStatus !== 'pagar') setApenDager(null)
+    } catch (e) {
+      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, ...forrige } : x))
+      await appAlert({ message: 'Kunne ikke lagre framdrift', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(null) }
+  }
+
+  // Antall dager gjøres om til en DATO før lagring. Et tall forvitrer: melder
+  // han «3 dager» på mandag og prosjektlederen leser det på onsdag, betyr «3
+  // dager» plutselig noe annet. Datoen betyr det samme uansett når den leses.
+  const lagreDager = async (o, dager) => {
+    if (lagrer) return
+    setLagrer(o.fase_id)
+    try {
+      const d = new Date(idag + 'T12:00:00')
+      let lagt = 0
+      while (lagt < dager) {
+        d.setDate(d.getDate() + 1)
+        const ukedag = d.getDay()
+        if (ukedag !== 0 && ukedag !== 6) lagt++
+      }
+      const slutt = fmtDato(d)
+      await skrivFramdrift(o, { status: 'pagar', estimert_slutt: slutt, gjenstaende_dager: dager })
+      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
+        ? { ...x, status: 'pagar', harMeldt: true, estimertSlutt: slutt, gjenstaendeDager: dager } : x))
+      setApenDager(null)
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke lagre estimatet', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(null) }
+  }
+
+  // Hva «n dager fra i dag» betyr i kalenderen, brukt til å vise konsekvensen
+  // før den ansatte bekrefter.
+  const sluttEtterDager = (dager) => {
+    const d = new Date(idag + 'T12:00:00')
+    let lagt = 0
+    while (lagt < dager) { d.setDate(d.getDate() + 1); const u = d.getDay(); if (u !== 0 && u !== 6) lagt++ }
+    return fmtDato(d)
+  }
+  const virkedagerMellom = (fra, til) => {
+    if (!fra || !til || til <= fra) return 0
+    const d = new Date(fra + 'T12:00:00'); const slutt = new Date(til + 'T12:00:00')
+    let n = 0
+    while (d < slutt) { d.setDate(d.getDate() + 1); const u = d.getDay(); if (u !== 0 && u !== 6) n++ }
+    return n
+  }
+
+  const lagreKommentar = async (o) => {
+    if (lagrer) return
+    setLagrer(o.fase_id)
+    const ny = kommentarTekst.trim() || null
+    try {
+      await skrivFramdrift(o, { kommentar: ny })
+      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, kommentar: ny, harMeldt: true } : x))
+      setApenKommentar(null); setKommentarTekst('')
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke lagre kommentaren', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(null) }
+  }
+
+  const kortDato = (s) => new Date(s + 'T12:00:00').toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })
+  const navnPaa = (userId) => {
+    if (!userId) return null
+    const e = (employees || []).find(x => x.user_id === userId)
+    return e ? `${e.first_name || ''} ${e.last_name || ''}`.trim() : null
+  }
+
+  if (laster) {
+    return (
+      <div style={{ padding: '40px 20px', textAlign: 'center', color: '#94a3b8', fontSize: '14px' }}>
+        Laster oppgavene dine…
+      </div>
+    )
+  }
+
+  // En tom Gantt sier ingenting til den som bare vil vite hva han skal gjøre.
+  if (oppgaver.length === 0) {
+    return (
+      <div style={{ padding: mob ? '48px 24px' : '64px 24px', textAlign: 'center' }}>
+        <div style={{ fontSize: '38px', opacity: 0.65 }}>📋</div>
+        <div style={{ fontSize: mob ? '15px' : '16px', fontWeight: '700', color: '#0f172a', marginTop: '12px' }}>
+          Du har ingen planlagte oppgaver
+        </div>
+        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '7px', lineHeight: 1.5, maxWidth: '300px', margin: '7px auto 0' }}>
+          Når prosjektlederen setter deg opp på en jobb, dukker den opp her.
+        </div>
+        {onByttVisning && (
+          <button onClick={() => onByttVisning('plan')}
+            style={{ marginTop: '20px', padding: '11px 18px', minHeight: '44px', background: '#f0fdf4', color: '#059669', border: '1px solid #bbf7d0', borderRadius: '10px', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
+            📅 Se hele kalenderen
+          </button>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ padding: mob ? '16px 16px 0' : '24px 32px 0' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: mob ? '14px' : '16px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: mob ? '12px 14px' : '14px 18px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ fontSize: mob ? '16px' : '18px' }}>📋</span>
+            <h2 style={{ margin: 0, fontSize: mob ? '15px' : '16px', fontWeight: '700', color: '#0f172a' }}>Mine oppgaver</h2>
+          </div>
+          <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', whiteSpace: 'nowrap' }}>
+            {oppgaver.length} oppgave{oppgaver.length !== 1 ? 'r' : ''}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {oppgaver.map((o, i) => {
+            const travel = lagrer === o.fase_id
+            return (
+              <div key={o.fase_id} style={{ padding: mob ? '12px 14px' : '14px 18px', borderTop: i === 0 ? 'none' : '1px solid #f8fafc', background: o.forsinket ? '#fffbfa' : 'white' }}>
+                {/* Oppgave + prosjekt */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: mob ? '14px' : '15px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{o.task}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {o.prosjekt ? `🏗️ ${o.prosjekt.name} · ` : ''}{kortDato(o.fra)}–{kortDato(o.til)}
+                    </div>
+                  </div>
+                  {o.forsinket && (
+                    <span style={{ flexShrink: 0, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                      FORSINKET
+                    </span>
+                  )}
+                </div>
+
+                {/* Statusknapper — ett trykk, ingen bekreftelsesdialog. */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '6px' }}>
+                  {FRAMDRIFT_STATUSER.map(s => {
+                    const valgt = o.harMeldt && o.status === s.v
+                    return (
+                      <button key={s.v} onClick={() => settStatus(o, s.v)} disabled={travel || valgt}
+                        style={{
+                          minHeight: mob ? '46px' : '38px', padding: mob ? '8px 6px' : '7px 8px',
+                          borderRadius: '10px', cursor: travel || valgt ? 'default' : 'pointer',
+                          border: `1px solid ${valgt ? s.farge : s.kant}`,
+                          background: valgt ? s.farge : s.bg,
+                          color: valgt ? 'white' : s.farge,
+                          fontSize: mob ? '13px' : '12px', fontWeight: '700',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                          opacity: travel ? 0.6 : 1, transition: 'all 0.12s',
+                        }}>
+                        <span style={{ fontSize: mob ? '14px' : '13px' }}>{s.emoji}</span>
+                        <span>{s.kort}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Dagvelger — vises kun ved «Pågår», som er det eneste tilfellet
+                    der spørsmålet «blir du ferdig i tide?» gir mening. Ferdig er
+                    ferdig; ikke startet og blokkert har ingen framdrift å anslå. */}
+                {apenDager === o.fase_id && o.status === 'pagar' && (() => {
+                  const hurtig = [1, 2, 3, 4]
+                  const visTeller = dagerTeller > 4
+                  const valgtDager = visTeller ? dagerTeller : (o.gjenstaendeDager || 0)
+                  const forhaandsSlutt = sluttEtterDager(visTeller ? dagerTeller : (valgtDager || 1))
+                  const forsinkelse = virkedagerMellom(o.til, forhaandsSlutt)
+                  return (
+                    <div style={{ marginTop: '9px', paddingTop: '9px', borderTop: '1px solid #f1f5f9' }}>
+                      <div style={{ fontSize: '12px', fontWeight: '600', color: '#0f172a', marginBottom: '7px' }}>
+                        Hvor mange dager trenger du?
+                      </div>
+                      {!visTeller ? (
+                        <div style={{ display: 'flex', gap: '5px' }}>
+                          {hurtig.map(n => (
+                            <button key={n} onClick={() => lagreDager(o, n)} disabled={travel}
+                              style={{ flex: 1, minHeight: mob ? '44px' : '38px', borderRadius: '9px', border: '1px solid #e2e8f0', background: 'white', color: '#0f172a', fontSize: '14px', fontWeight: '700', cursor: 'pointer' }}>
+                              {n}
+                            </button>
+                          ))}
+                          <button onClick={() => setDagerTeller(5)} disabled={travel}
+                            style={{ flex: 1, minHeight: mob ? '44px' : '38px', borderRadius: '9px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '700', cursor: 'pointer' }}>
+                            5+
+                          </button>
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <button onClick={() => setDagerTeller(n => Math.max(1, n - 1))} disabled={travel}
+                            style={{ width: '44px', height: '44px', borderRadius: '9px', border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: '18px', fontWeight: '700', cursor: 'pointer' }}>−</button>
+                          <div style={{ flex: 1, textAlign: 'center', fontSize: '15px', fontWeight: '700', color: '#0f172a', fontVariantNumeric: 'tabular-nums' }}>
+                            {dagerTeller} dag{dagerTeller !== 1 ? 'er' : ''}
+                          </div>
+                          <button onClick={() => setDagerTeller(n => Math.min(60, n + 1))} disabled={travel}
+                            style={{ width: '44px', height: '44px', borderRadius: '9px', border: '1px solid #e2e8f0', background: 'white', color: '#475569', fontSize: '18px', fontWeight: '700', cursor: 'pointer' }}>＋</button>
+                        </div>
+                      )}
+
+                      {/* Konsekvensen vises FØR bekreftelse. Å se «3 dager etter plan»
+                          mens man teller gjør estimatet mer ærlig, ikke mindre. */}
+                      <div style={{
+                        marginTop: '8px', padding: '7px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+                        background: forsinkelse > 0 ? '#fffbeb' : '#ecfdf5',
+                        border: `1px solid ${forsinkelse > 0 ? '#fde68a' : '#bbf7d0'}`,
+                        color: forsinkelse > 0 ? '#b45309' : '#047857',
+                      }}>
+                        → Ferdig {new Date(forhaandsSlutt + 'T12:00:00').toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'short' })}
+                        {forsinkelse > 0 ? ` — ${forsinkelse} dag${forsinkelse !== 1 ? 'er' : ''} etter plan` : ' — innenfor plan'}
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '8px', marginTop: '7px' }}>
+                        <button onClick={() => { setApenDager(null); setDagerTeller(5) }} disabled={travel}
+                          style={{ padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: '1px solid #e2e8f0', borderRadius: '9px', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                          Hopp over
+                        </button>
+                        {visTeller && (
+                          <button onClick={() => lagreDager(o, dagerTeller)} disabled={travel}
+                            style={{ flex: 1, padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: 'none', borderRadius: '9px', background: travel ? '#6ee7b7' : '#059669', color: 'white', fontSize: '13px', fontWeight: '700', cursor: travel ? 'default' : 'pointer' }}>
+                            {travel ? 'Lagrer…' : `Lagre ${dagerTeller} dager`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* Meldt estimat, når dagvelgeren er lukket */}
+                {o.status === 'pagar' && o.estimertSlutt && apenDager !== o.fase_id && (() => {
+                  const forsinkelse = virkedagerMellom(o.til, o.estimertSlutt)
+                  return (
+                    <button onClick={() => { setApenDager(o.fase_id); setDagerTeller(o.gjenstaendeDager > 4 ? o.gjenstaendeDager : 5) }}
+                      style={{
+                        display: 'block', width: '100%', textAlign: 'left', marginTop: '8px', padding: '7px 10px',
+                        borderRadius: '8px', fontSize: '12px', fontWeight: '600', cursor: 'pointer',
+                        background: forsinkelse > 0 ? '#fffbeb' : '#ecfdf5',
+                        border: `1px solid ${forsinkelse > 0 ? '#fde68a' : '#bbf7d0'}`,
+                        color: forsinkelse > 0 ? '#b45309' : '#047857',
+                      }}>
+                      🗓️ Ferdig {kortDato(o.estimertSlutt)}
+                      {forsinkelse > 0 ? ` — ${forsinkelse} dag${forsinkelse !== 1 ? 'er' : ''} etter plan` : ' — innenfor plan'}
+                    </button>
+                  )
+                })()}
+
+                {/* Kommentar — valgfri. Her ligger den reelle verdien:
+                    «venter på rørlegger» sier mer enn en prosent. */}
+                {apenKommentar === o.fase_id ? (
+                  <div style={{ marginTop: '8px' }}>
+                    <textarea value={kommentarTekst} onChange={e => setKommentarTekst(e.target.value)} rows={2} autoFocus
+                      placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «venter på rørlegger»' : 'Kort kommentar (valgfritt)'}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: mob ? '15px' : '13px', fontFamily: 'system-ui, sans-serif', resize: 'vertical', outline: 'none', color: '#0f172a' }} />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                      <button onClick={() => { setApenKommentar(null); setKommentarTekst('') }} disabled={travel}
+                        style={{ padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: '1px solid #e2e8f0', borderRadius: '9px', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                        Hopp over
+                      </button>
+                      <button onClick={() => lagreKommentar(o)} disabled={travel}
+                        style={{ flex: 1, padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: 'none', borderRadius: '9px', background: travel ? '#6ee7b7' : '#059669', color: 'white', fontSize: '13px', fontWeight: '700', cursor: travel ? 'default' : 'pointer' }}>
+                        {travel ? 'Lagrer…' : 'Lagre kommentar'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }}
+                      style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
+                      {o.kommentar ? '✏️ Endre kommentar' : '＋ Legg til kommentar'}
+                    </button>
+                    {o.harMeldt && (
+                      <button onClick={() => settStatus(o, 'ikke_startet')} disabled={travel}
+                        style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#94a3b8' }}>
+                        Angre
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {o.kommentar && apenKommentar !== o.fase_id && (
+                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'flex-start', gap: '6px', background: '#f8fafc', borderRadius: '8px', padding: '7px 10px' }}>
+                    <span style={{ fontSize: '12px', flexShrink: 0 }}>💬</span>
+                    <span style={{ fontSize: '12px', color: '#475569', lineHeight: 1.4, wordBreak: 'break-word' }}>{o.kommentar}</span>
+                  </div>
+                )}
+
+                {/* Hvem meldte. Uten dette vet ingen om tallet kom fra plassen
+                    eller fra kontoret — og da er det ikke til å stole på. */}
+                {o.harMeldt && o.meldtAv && o.meldtAv !== user?.id && (
+                  <div style={{ marginTop: '5px', fontSize: '10.5px', color: '#94a3b8' }}>
+                    Meldt av {navnPaa(o.meldtAv) || 'en annen'}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+      </div>
+    </div>
+  )
+}
+
 function RessursGanttGrid({
   kanRedigere = true,
   resources, plans, projects, milestones, resourceType,
@@ -33819,6 +33991,49 @@ function RessursGanttGrid({
                       {filterProject !== 'alle' ? 'Ingen bookinger på dette prosjektet' : (kanRedigere ? 'Klikk en dag for å planlegge' : 'Kun lesetilgang — planlegging gjøres av leder/admin')}
                     </div>
                   )}
+
+                  {/* Estimert overtid — meldt, ikke planlagt.
+                      Tegnes som egen boks bak bjelkene, med stiplet kant og uten
+                      pekerhendelser: dette er tid ingen har satt av, bare varslet
+                      om. Prosjektlederen ser forsinkelsen som LENGDE, og ser i
+                      samme blikk om den spiser inn i neste oppgave. */}
+                  {bars.map(bar => {
+                    const fd = bar.framdrift
+                    if (!fd || fd.status !== 'pagar' || !fd.estimert_slutt) return null
+                    if (fd.estimert_slutt <= bar.endDate) return null
+                    const endIdx = dateIndex.get(bar.endDate)
+                    if (endIdx === undefined) return null
+                    // Estimatet kan ligge utenfor vinduet som vises — klipp til
+                    // siste synlige kolonne i stedet for å droppe hele merket.
+                    let estIdx = dateIndex.get(fd.estimert_slutt)
+                    if (estIdx === undefined) {
+                      if (fd.estimert_slutt < dates[0]) return null
+                      estIdx = dates.length - 1
+                    }
+                    const estSpan = estIdx - endIdx
+                    if (estSpan <= 0) return null
+                    const estLeft = (endIdx + 1) * colW + 2
+                    const estWidth = estSpan * colW - 4
+                    return (
+                      <div key={'est-' + bar.id}
+                        title={'Meldt: anslått ferdig ' + new Date(fd.estimert_slutt + 'T12:00:00').toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'short' }) + ' — etter planlagt slutt'}
+                        style={{
+                          position: 'absolute',
+                          left: estLeft + 'px',
+                          width: Math.max(estWidth, 6) + 'px',
+                          top: '4px', bottom: '4px',
+                          borderRadius: '0 6px 6px 0',
+                          border: '2px dashed #d97706', borderLeft: 'none',
+                          background: 'repeating-linear-gradient(45deg, rgba(217,119,6,0.16) 0 6px, rgba(217,119,6,0) 6px 12px)',
+                          pointerEvents: 'none', zIndex: 2,
+                          display: 'flex', alignItems: 'center', paddingLeft: '5px',
+                          fontSize: '10px', fontWeight: '800', color: '#b45309',
+                          overflow: 'hidden', whiteSpace: 'nowrap',
+                        }}>
+                        {estWidth > 30 ? '+' + estSpan + ' d' : ''}
+                      </div>
+                    )
+                  })}
 
                   {/* Bars */}
                   {bars.map(bar => {
@@ -35954,6 +36169,15 @@ function RessursPage() {
   const alert = useAppAlert()
   const { user, role, kanStyreProsjekt } = useAuth()
   const kanRedigereRessurs = kanStyreProsjekt || role === 'superadmin'  // kun admin/leder (+superadmin) kan planlegge
+
+  // Å melde framdrift er IKKE å endre planen. Planen — hvem, hvor, hvor lenge —
+  // er fortsatt prosjektlederens, og kanRedigereRessurs styrer den uendret.
+  // Framdrift er en rapport om hva som faktisk skjedde, og den eier den som
+  // gjør jobben. Derfor en egen rettighet: alle med en ansattrad kan melde på
+  // sine EGNE bookinger. Skrivetilgangen håndheves uansett av RLS på
+  // booking_framdrift (resource_id = auth_employee_id()); dette styrer bare
+  // om knappene i det hele tatt vises.
+  const kanMeldeEgenFramdrift = role !== 'les'
   const confirm = useConfirm()
   const [employees, setEmployees] = useState([])
   const [machines, setMachines] = useState([])
@@ -35966,6 +36190,10 @@ function RessursPage() {
   const viewMode = 'gantt'
   const setViewMode = () => {} // no-op for å unngå krasj hvis noe kaller den
   const [resourceType, setResourceType] = useState('ansatte')
+  // 'plan' = kalenderen/Gantt slik den er lagt. 'mine' = den ansattes egne
+  // oppgaver med handlinger på. En ansatt har ikke bruk for hele Gantt, så
+  // han lander på sine egne; admin og leder lander på planen som før.
+  const [ressursVisning, setRessursVisning] = useState(() => role === 'ansatt' ? 'mine' : 'plan')
   const [currentDate, setCurrentDate] = useState(startOfWeek(new Date().toISOString().split('T')[0]))
   const [showBookingModal, setShowBookingModal] = useState(null)
   const [showFaseModal, setShowFaseModal] = useState(null) // { bar, resourceName } — null hvis ikke åpen
@@ -36122,6 +36350,9 @@ function RessursPage() {
   }
   // Innlogget brukers egen ansatt-rad (for «Min plan»-snarveien på mobil)
   const minEmployee = user ? employees.find(e => e.user_id === user.id) : null
+  // Har brukeren ingen ansattrad, finnes det ingen bookinger å melde på —
+  // da skal bryteren heller ikke vises.
+  const visMineOppgaver = !!minEmployee && kanMeldeEgenFramdrift
 
   // Filter resources
   let resources = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
@@ -36582,15 +36813,31 @@ function RessursPage() {
           )}
           </div>
 
-        {/* Mobil: tydelig ansatt-filter — «hvor skal jeg jobbe?» (alltid synlig, ett trykk) */}
+        {/* Mobil: visningsbryter + ansattfilter.
+            Bryteren erstatter nedtrekkslista for rollen «ansatt»: lista over ALLE
+            ansatte er til for den som planlegger, og en ansatt har bare seg selv.
+            Slik blir det ingen ny navigasjonsrad — den ene som forsvinner var
+            uansett ikke hans. */}
         {isMobRP && resourceType==='ansatte' && (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px', padding:'10px 12px', background:'#fafbfc', borderTop:'1px solid #f1f5f9' }}>
-            {minEmployee && (
-              <button onClick={()=>{ setResourceType('ansatte'); setShowMateriell(false); setFilterEmployee(minEmployee.id) }}
-                style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:'7px', width:'100%', minHeight:'46px', background: filterEmployee===minEmployee.id ? '#059669' : '#ecfdf5', color: filterEmployee===minEmployee.id ? 'white' : '#059669', border:`1px solid ${filterEmployee===minEmployee.id ? '#059669' : '#bbf7d0'}`, borderRadius:'10px', fontSize:'15px', fontWeight:'700', cursor:'pointer' }}>
-                📍 Min plan — hvor jobber jeg?
-              </button>
+            {visMineOppgaver && (
+              <div style={{ display:'flex', gap:'4px', background:'#e9edeb', padding:'3px', borderRadius:'10px' }}>
+                {[['plan','📅','Kalender'],['mine','📋','Mine oppgaver']].map(([v,emoji,label]) => (
+                  <button key={v} onClick={()=>setRessursVisning(v)}
+                    style={{ flex:1, minHeight:'44px', border:'none', borderRadius:'8px', cursor:'pointer',
+                      background: ressursVisning===v ? 'white' : 'transparent',
+                      color: ressursVisning===v ? '#0f172a' : '#64748b',
+                      fontSize:'13.5px', fontWeight: ressursVisning===v ? '700' : '600',
+                      boxShadow: ressursVisning===v ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
+                      display:'flex', alignItems:'center', justifyContent:'center', gap:'5px' }}>
+                    <span>{emoji}</span><span>{label}</span>
+                  </button>
+                ))}
+              </div>
             )}
+            {/* Nedtrekkslista er for den som planlegger — skjult for rollen ansatt,
+                og for den som står i sine egne oppgaver. */}
+            {ressursVisning === 'plan' && role !== 'ansatt' && (
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span style={{ fontSize:'18px', flexShrink:0 }}>👤</span>
               <div style={{ position:'relative', flex:1 }}>
@@ -36602,6 +36849,7 @@ function RessursPage() {
               </div>
               {filterEmployee!=='alle' && <button onClick={()=>setFilterEmployee('alle')} title="Nullstill" style={{ flexShrink:0, background:'#f1f5f9', border:'none', borderRadius:'10px', width:'46px', height:'46px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}>✕</button>}
             </div>
+            )}
           </div>
         )}
 
@@ -36614,6 +36862,23 @@ function RessursPage() {
               style={{ padding:'3px 9px', background:'#fef2f2', color:'#dc2626', border:'1px solid #fecaca', borderRadius:'6px', fontSize:'11px', fontWeight:'700', cursor:'pointer', display:'flex', alignItems:'center', gap:'4px' }}>
               ⚠️ {doubleBookCount} konflikt{doubleBookCount>1?'er':''}
             </button>
+          )}
+
+          {/* Visningsbryter — samme to visninger som på mobil. Prosjektlederen
+              bruker den sjelden, men han er også ansatt et sted. */}
+          {visMineOppgaver && (
+            <div style={{ display:'flex', gap:'2px', background:'#f1f5f9', borderRadius:'7px', padding:'2px', marginRight:'2px' }}>
+              {[['plan','📅 Plan'],['mine','📋 Mine oppgaver']].map(([v,label]) => (
+                <button key={v} onClick={()=>setRessursVisning(v)}
+                  style={{ padding:'3px 9px', border:'none', borderRadius:'5px', cursor:'pointer',
+                    background: ressursVisning===v ? 'white' : 'transparent',
+                    color: ressursVisning===v ? '#0f172a' : '#94a3b8',
+                    fontSize:'11px', fontWeight: ressursVisning===v ? '600' : '500',
+                    boxShadow: ressursVisning===v ? '0 1px 2px rgba(0,0,0,0.05)' : 'none' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
           )}
 
           {/* Ledig mannskap */}
@@ -37038,7 +37303,20 @@ function RessursPage() {
       )}
 
       {/* ─── MOBIL-VISNING (feltmodus for håndverkere) ─── */}
-      {isMobRP ? (
+      {/* «Mine oppgaver» erstatter hele planvisningen — ikke som et felt ved siden
+          av den. Den ansatte skal se sine egne oppgaver, ikke lete etter dem i en
+          Gantt han uansett ikke kan endre. */}
+      {ressursVisning === 'mine' && visMineOppgaver ? (
+        <div style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
+          <MineOppgaverPanel
+            user={user}
+            mob={isMobRP}
+            employees={employees}
+            kanMelde={kanMeldeEgenFramdrift}
+            onByttVisning={setRessursVisning}
+          />
+        </div>
+      ) : isMobRP ? (
         <MobilRessursView
           framdrift={framdrift}
           kanRedigere={kanRedigereRessurs}
@@ -37487,6 +37765,7 @@ function RessursPage() {
           resourceName={showFaseModal.resourceName}
           allPlans={plans}
           projects={projects}
+          employees={employees}
           user={user}
           settings={settings}
           onClose={() => setShowFaseModal(null)}
@@ -37781,7 +38060,7 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
 // ── FaseRedigeringsModal — åpnes når bruker klikker en Gantt-bjelke ──
 // En "fase" = alle bookinger i bar.plans (samme prosjekt + oppgave + ressurs + tilstøtende dager)
 // Operasjoner: Flytt, Split, Slett, Rediger enkeltdag (fallback til BookingModal)
-function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onClose, onSaved, onEditSingleDay, settings = { skipWeekends: true } }) {
+function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees = [], user, onClose, onSaved, onEditSingleDay, settings = { skipWeekends: true } }) {
   const alert = useAppAlert()
   const confirm = useConfirm()
   const [mode, setMode] = useState('overview') // 'overview' | 'move' | 'split'
@@ -37805,6 +38084,41 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
   // Frigjøringen er et FORSLAG han bekrefter, ikke automatikk: dagene slettes
   // permanent, og en feilmelding fra en ansatt skal ikke kunne rive ned planen
   // på egen hånd.
+  // Prosjektlederen får ofte beskjed muntlig — på telefon, på plassen. Da må
+  // han kunne føre det inn selv. Men det MÅ være synlig at det kom fra
+  // kontoret og ikke fra den som gjorde jobben: et tall ingen vet opphavet
+  // til er ikke til å stole på. Derfor lagres meldt_av, og «Meldt av …»
+  // vises både her og i den ansattes egen liste.
+  const [meldStatusLagrer, setMeldStatusLagrer] = useState(false)
+  const meldStatus = async (nyStatus) => {
+    if (!bar.faseId || meldStatusLagrer) return
+    setMeldStatusLagrer(true)
+    const iDagStr = new Date().toISOString().split('T')[0]
+    const fd = bar.framdrift
+    try {
+      const { error } = await supabase.from('booking_framdrift').upsert({
+        fase_id: bar.faseId,
+        project_id: bar.projectId,
+        resource_id: bar.resourceId,
+        status: nyStatus,
+        kommentar: fd?.kommentar || null,
+        planlagt_slutt: bar.endDate,
+        faktisk_slutt: nyStatus === 'ferdig' ? (fd?.faktisk_slutt || iDagStr) : null,
+        // Estimatet hører til «pågår». Endres statusen bort fra det, er det
+        // ikke lenger gyldig og skal ikke bli stående og se ferskt ut.
+        estimert_slutt: nyStatus === 'pagar' ? (fd?.estimert_slutt || null) : null,
+        gjenstaende_dager: nyStatus === 'pagar' ? (fd?.gjenstaende_dager ?? null) : null,
+        meldt_av: user?.id || null,
+        meldt_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'fase_id' })
+      if (error) throw error
+      onSaved()
+    } catch (e) {
+      await alert({ message: 'Kunne ikke lagre framdriften', subMessage: e.message, kind: 'error' })
+    } finally { setMeldStatusLagrer(false) }
+  }
+
   const frigjorbare = React.useMemo(() => {
     const fd = bar.framdrift
     if (!fd || fd.status !== 'ferdig' || !fd.faktisk_slutt) return []
@@ -38040,7 +38354,14 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
             const fd = bar.framdrift
             const iDagStr = new Date().toISOString().split('T')[0]
             const perioden0ver = bar.endDate < iDagStr
-            if (!fd && !perioden0ver) return null
+            // Hvem som meldte. Uten dette vet ingen om tallet kom fra plassen
+            // eller fra kontoret — og da er det ikke til aa stole paa.
+            const meldtAvNavn = (() => {
+              if (!fd?.meldt_av) return null
+              const e = (employees || []).find(x => x.user_id === fd.meldt_av)
+              return e ? ((e.first_name || '') + ' ' + (e.last_name || '')).trim() : null
+            })()
+            if (!fd && !perioden0ver && !bar.faseId) return null
 
             let tittel, farge, bg, emoji, undertekst = null
             if (fd?.status === 'ferdig') {
@@ -38088,9 +38409,46 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
                     <span style={{ fontSize:'12px', color:'#334155', lineHeight:1.4, wordBreak:'break-word' }}>{fd.kommentar}</span>
                   </div>
                 )}
+                {fd?.status === 'pagar' && fd?.estimert_slutt && (() => {
+                  const est = fd.estimert_slutt
+                  const forsinket = est > bar.endDate
+                  return (
+                    <div style={{ marginTop:'7px', padding:'6px 9px', borderRadius:'7px', fontSize:'11.5px', fontWeight:'600',
+                      background: forsinket ? '#fffbeb' : '#ecfdf5',
+                      border: '1px solid ' + (forsinket ? '#fde68a' : '#bbf7d0'),
+                      color: forsinket ? '#b45309' : '#047857' }}>
+                      🗓️ Anslått ferdig {new Date(est + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })}
+                      {fd.gjenstaende_dager != null ? ' (' + fd.gjenstaende_dager + ' dag' + (fd.gjenstaende_dager !== 1 ? 'er' : '') + ' igjen)' : ''}
+                    </div>
+                  )
+                })()}
                 {fd?.meldt_at && (
                   <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'5px' }}>
                     Meldt {new Date(fd.meldt_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
+                    {meldtAvNavn ? ' · av ' + meldtAvNavn : ''}
+                  </div>
+                )}
+
+                {/* Prosjektlederen kan føre inn det han har fått muntlig.
+                    Krever fase_id — uten den finnes det ingen oppgave å henge
+                    framdriften på. */}
+                {bar.faseId && (
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'5px', marginTop:'9px' }}>
+                    {FRAMDRIFT_STATUSER.map(st => {
+                      const valgt = fd?.status === st.v
+                      return (
+                        <button key={st.v} onClick={() => meldStatus(st.v)} disabled={meldStatusLagrer || valgt}
+                          style={{ minHeight:'34px', padding:'6px 4px', borderRadius:'8px',
+                            cursor: (meldStatusLagrer || valgt) ? 'default' : 'pointer',
+                            border: '1px solid ' + (valgt ? st.farge : st.kant),
+                            background: valgt ? st.farge : st.bg,
+                            color: valgt ? 'white' : st.farge,
+                            fontSize:'11px', fontWeight:'700', opacity: meldStatusLagrer ? 0.6 : 1,
+                            display:'flex', alignItems:'center', justifyContent:'center', gap:'4px' }}>
+                          <span style={{ fontSize:'12px' }}>{st.emoji}</span><span>{st.kort}</span>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>
@@ -89115,9 +89473,15 @@ function AppContent() {
           const lesemodusSide = role === 'les' || (role === 'ansatt' && ANSATT_KUN_LESE.includes(page))
           if (!lesemodusSide) return null
           const modulNavn = navItems.find(n => n.id === page)?.label || 'denne modulen'
+          // Ressursplan er et unntak: ansatte kan ikke endre PLANEN, men de kan
+          // melde egen framdrift. Den gamle ordlyden («ikke opprette, endre eller
+          // slette her») ble direkte usann i det de fikk en knapp som lagrer — og
+          // en bruker som får beskjed om at noe er umulig, prøver ikke igjen.
           const tekst = role === 'les'
             ? 'Lesemodus — du kan se alt bedriften har, men ikke gjøre endringer. Kontakt en leder eller admin hvis du trenger å endre noe.'
-            : `Lesetilgang til ${modulNavn} — din rolle (Ansatt) kan se, men ikke opprette, endre eller slette her. Kontakt en leder eller admin hvis du trenger å gjøre endringer.`
+            : page === 'ressursplan'
+              ? 'Planen settes opp av prosjektlederen — du kan ikke flytte eller endre bookinger. Egen framdrift melder du under «Mine oppgaver».'
+              : `Lesetilgang til ${modulNavn} — din rolle (Ansatt) kan se, men ikke opprette, endre eller slette her. Kontakt en leder eller admin hvis du trenger å gjøre endringer.`
           return (
             <div style={{ margin:'0', padding:'8px 20px', display:'flex', alignItems:'center', gap:'8px', background:'#fffbeb', borderBottom:'1px solid #fde68a' }}>
               <span style={{ fontSize:'14px', flexShrink:0 }}>👁️</span>
