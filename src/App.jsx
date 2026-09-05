@@ -15818,7 +15818,7 @@ const useAppAlert = () => {
 // ─── END CONFIRM DIALOG ───────────────────────────────────────────────────────
 
 // Hjelpefunksjon: send varsel til prosjektleder for et gitt prosjekt
-async function notifyProjectManager(projectId, title, message, type, linkPage) {
+async function notifyProjectManager(projectId, title, message, type, linkPage, ikkeVarsleUserId) {
   if (!projectId) return
   try {
     const { data: project } = await supabase.from('projects').select('project_manager_id, project_manager_email, project_manager_name').eq('id', projectId).single()
@@ -15838,8 +15838,105 @@ async function notifyProjectManager(projectId, title, message, type, linkPage) {
       userId = users?.[0]?.user_id || null
     }
     if (!userId) return
+    // Melder prosjektlederen selv, skal han ikke få varsel om sin egen melding.
+    if (ikkeVarsleUserId && userId === ikkeVarsleUserId) return
     await supabase.from('notifications').insert({ user_id: userId, title, message, type: type||'info', link_page: linkPage||null })
   } catch(e) { console.error('notifyProjectManager error:', e) }
+}
+
+// ─── FRAMDRIFTSVARSEL TIL PROSJEKTLEDER ──────────────────────────────────────
+// Regelen er avvik, ikke aktivitet. Prosjektlederen ser rutinemessig framdrift i
+// Gantt; varsler han får på hver hake eller hver kommentar slår han av innen en
+// uke, og da mister han også de tre som betyr noe:
+//
+//   blokkert            — jobben står, og det krever handling fra ham
+//   ferdig_for_tiden    — dager kan frigjøres
+//   forsinket           — anslått slutt har passert planlagt slutt
+//   ferdig_forsinket    — meldt ferdig etter planlagt slutt
+//
+// «forsinket» varsles ÉN gang per avvik, ikke ved hver justering. Det er derfor
+// varslet_type lagres: justerer håndverkeren estimatet fra 3 til 4 dager er han
+// fortsatt forsinket, og det er ikke ny informasjon. Går han derimot tilbake
+// innenfor plan og senere ut igjen, ER det nytt — da nullstilles typen og neste
+// avvik varsles på nytt.
+//
+// Retur: true hvis et varsel faktisk ble sendt.
+async function varsleFramdriftsavvik({ faseId, projectId, avvikType, oppgave, prosjektNavn, melderNavn, kommentar, forrigeVarslet, melderUserId }) {
+  if (!faseId || !projectId) return false
+
+  // Ingen avvik igjen? Nullstill, slik at neste avvik varsles på nytt.
+  if (!avvikType) {
+    if (forrigeVarslet) {
+      try {
+        await supabase.from('booking_framdrift')
+          .update({ varslet_type: null, varslet_at: null }).eq('fase_id', faseId)
+      } catch (e) { /* varsling skal aldri blokkere selve innmeldingen */ }
+    }
+    return false
+  }
+
+  // Samme avvik som sist — han vet det allerede.
+  if (avvikType === forrigeVarslet) return false
+
+  const oppg = oppgave || 'En oppgave'
+  const hvor = prosjektNavn ? `${prosjektNavn} · ${oppg}` : oppg
+  const av = melderNavn ? ` (meldt av ${melderNavn})` : ''
+  const tekst = {
+    blokkert:         { t: `🚧 Blokkert: ${oppg}`,        m: `${hvor} er meldt blokkert${av}.` },
+    ferdig_for_tiden: { t: `🎉 Ferdig før tiden: ${oppg}`, m: `${hvor} er meldt ferdig før planlagt slutt${av}. Gjenstående dager kan frigjøres.` },
+    forsinket:        { t: `⚠️ Forsinket: ${oppg}`,        m: `${hvor} rekker ikke planlagt slutt${av}.` },
+    ferdig_forsinket: { t: `✅ Ferdig, men forsinket: ${oppg}`, m: `${hvor} er meldt ferdig etter planlagt slutt${av}.` },
+  }[avvikType]
+  if (!tekst) return false
+
+  const melding = kommentar ? `${tekst.m} «${kommentar}»` : tekst.m
+  // «Ferdig, men forsinket» er ikke en advarsel om noe som må gjøres — jobben
+  // er over. Den er informasjon om at planen sprakk, og skal ikke se like
+  // alarmerende ut som en blokkering.
+  const varselType = (avvikType === 'ferdig_for_tiden' || avvikType === 'ferdig_forsinket') ? 'success' : 'warning'
+
+  // De to stegene holdes fra hverandre med vilje. Varselet er det som betyr
+  // noe for prosjektlederen; å huske at det er sendt er bare husholdning som
+  // hindrer duplikater. Feiler husholdningen — kolonnen mangler, nettet
+  // ryker — skal den ansatte likevel få vite at beskjeden gikk fram, ellers
+  // ringer han for å sjekke, som er nøyaktig det vi ville unngå.
+  let sendt = false
+  try {
+    await notifyProjectManager(projectId, tekst.t, melding, varselType, 'ressursplan', melderUserId)
+    sendt = true
+  } catch (e) {
+    console.error('varsleFramdriftsavvik (sending):', e)
+    return false
+  }
+  try {
+    await supabase.from('booking_framdrift')
+      .update({ varslet_type: avvikType, varslet_at: new Date().toISOString() })
+      .eq('fase_id', faseId)
+  } catch (e) {
+    // Verste følge: han får samme varsel én gang til ved neste innmelding.
+    console.error('varsleFramdriftsavvik (husholdning):', e)
+  }
+  return sendt
+}
+
+// Utleder hvilket avvik en framdriftsrad representerer, hvis noe.
+// Rekkefølgen er alvorlighetsgrad: blokkert slår forsinket.
+function framdriftsavvik({ status, faktiskSlutt, estimertSlutt, planlagtSlutt }) {
+  if (status === 'blokkert') return 'blokkert'
+  if (status === 'ferdig') {
+    if (!faktiskSlutt || !planlagtSlutt) return null
+    if (faktiskSlutt < planlagtSlutt) return 'ferdig_for_tiden'
+    // Ferdig ETTER planlagt slutt. Meldte han estimat underveis, har
+    // prosjektlederen allerede fått «forsinket» — men da er varslet_type
+    // 'forsinket', og et nytt avvik slipper gjennom, som det skal: nå vet han
+    // at det faktisk er over. Meldte han derimot bare «ferdig» fire dager for
+    // sent uten å ha meldt noe underveis, er DETTE eneste gangen han får vite
+    // at oppgaven sprakk.
+    if (faktiskSlutt > planlagtSlutt) return 'ferdig_forsinket'
+    return null
+  }
+  if (status === 'pagar' && estimertSlutt && planlagtSlutt && estimertSlutt > planlagtSlutt) return 'forsinket'
+  return null
 }
 
 function NotifBell({ onNavigate }) {
@@ -32550,6 +32647,21 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
 
   const fmtDato = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
   const idag = React.useMemo(() => fmtDato(new Date()), [])
+  // Deklarert her, ikke nede ved JSX: varslingen kaller den fra
+  // hendelsesbehandlerne, og en const som deklareres lenger nede ville
+  // vært utilgjengelig for dem hvis rekkefølgen noen gang endres.
+  const navnPaa = React.useCallback((userId) => {
+    if (!userId) return null
+    const e = (employees || []).find(x => x.user_id === userId)
+    return e ? `${e.first_name || ''} ${e.last_name || ''}`.trim() : null
+  }, [employees])
+  // Sant når varselet krysset en terskel som er verdt en liten kvittering.
+  const [sisteVarsel, setSisteVarsel] = useState(null)
+  // «Si fra til prosjektleder» er en egen, bevisst handling. Rutinekommentarer
+  // varsles ikke — men noen ganger er kommentaren hele poenget, og da må
+  // håndverkeren kunne dytte den fram UTEN å måtte endre status til noe den
+  // ikke er.
+  const [siFra, setSiFra] = useState(false)
 
   // Modulsjekken er ikke lenger panelets ansvar: det lever inne i Ressursplan,
   // og kommer man dit, har bedriften modulen.
@@ -32590,7 +32702,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
       const faseIds = liste.map(o => o.fase_id)
       const projIds = Array.from(new Set(liste.map(o => o.project_id).filter(Boolean)))
       const [fdRes, projRes] = await Promise.all([
-        supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, estimert_slutt, gjenstaende_dager, meldt_av').in('fase_id', faseIds),
+        supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, estimert_slutt, gjenstaende_dager, meldt_av, varslet_type').in('fase_id', faseIds),
         projIds.length ? supabase.from('projects').select('id, name, project_number').in('id', projIds) : Promise.resolve({ data: [] }),
       ])
       const fdMap = new Map((fdRes.data || []).map(f => [f.fase_id, f]))
@@ -32608,6 +32720,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
           estimertSlutt: fd?.estimert_slutt || null,
           gjenstaendeDager: fd?.gjenstaende_dager ?? null,
           meldtAv: fd?.meldt_av || null,
+          varsletType: fd?.varslet_type || null,
           // Har den ansatte faktisk meldt noe? Uten dette ville «Ikke startet»
           // stått fremhevet på hver eneste oppgave og konkurrert med «Ferdig».
           harMeldt: !!fd,
@@ -32648,6 +32761,29 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
     return rad
   }
 
+  // Kalles etter at framdriften er lagret. Varselet er en ETTERPÅ-handling:
+  // feiler det, står innmeldingen likevel, og den ansatte har gjort sitt.
+  const varsleHvisAvvik = async (o, felt) => {
+    const status = felt.status ?? o.status
+    const avvik = framdriftsavvik({
+      status,
+      faktiskSlutt: felt.faktisk_slutt !== undefined ? felt.faktisk_slutt : o.faktiskSlutt,
+      estimertSlutt: felt.estimert_slutt !== undefined ? felt.estimert_slutt : o.estimertSlutt,
+      planlagtSlutt: o.til,
+    })
+    const sendt = await varsleFramdriftsavvik({
+      faseId: o.fase_id, projectId: o.project_id, avvikType: avvik,
+      oppgave: o.task, prosjektNavn: o.prosjekt?.name,
+      melderNavn: navnPaa(user?.id), kommentar: felt.kommentar !== undefined ? felt.kommentar : o.kommentar,
+      forrigeVarslet: o.varsletType, melderUserId: user?.id,
+    })
+    setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, varsletType: avvik } : x))
+    if (sendt) {
+      setSisteVarsel(o.fase_id)
+      setTimeout(() => setSisteVarsel(v => v === o.fase_id ? null : v), 4000)
+    }
+  }
+
   const settStatus = async (o, nyStatus) => {
     if (lagrer) return
     const forrige = { status: o.status, faktiskSlutt: o.faktiskSlutt, forsinket: o.forsinket, harMeldt: o.harMeldt }
@@ -32657,6 +32793,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
       : x))
     try {
       await skrivFramdrift(o, { status: nyStatus })
+      await varsleHvisAvvik(o, { status: nyStatus, faktisk_slutt: nyStatus === 'ferdig' ? (o.faktiskSlutt || idag) : null })
       // Ved «Blokkert» er årsaken hele verdien — åpne feltet, men statusen er lagret.
       if (nyStatus === 'blokkert') { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }
       // «Pågår» alene svarer ikke på det prosjektlederen trenger å vite — om
@@ -32688,6 +32825,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
       await skrivFramdrift(o, { status: 'pagar', estimert_slutt: slutt, gjenstaende_dager: dager })
       setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
         ? { ...x, status: 'pagar', harMeldt: true, estimertSlutt: slutt, gjenstaendeDager: dager } : x))
+      await varsleHvisAvvik(o, { status: 'pagar', estimert_slutt: slutt })
       setApenDager(null)
     } catch (e) {
       await appAlert({ message: 'Kunne ikke lagre estimatet', subMessage: e.message, kind: 'error' })
@@ -32717,18 +32855,26 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
     try {
       await skrivFramdrift(o, { kommentar: ny })
       setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, kommentar: ny, harMeldt: true } : x))
-      setApenKommentar(null); setKommentarTekst('')
+      if (siFra) {
+        // Bevisst varsel: går uansett om det finnes et avvik eller ikke, og
+        // uansett hva som er varslet før. Derfor forrigeVarslet: null.
+        const sendt = await varsleFramdriftsavvik({
+          faseId: o.fase_id, projectId: o.project_id,
+          avvikType: framdriftsavvik({ status: o.status, faktiskSlutt: o.faktiskSlutt,
+            estimertSlutt: o.estimertSlutt, planlagtSlutt: o.til }) || 'blokkert',
+          oppgave: o.task, prosjektNavn: o.prosjekt?.name,
+          melderNavn: navnPaa(user?.id), kommentar: ny,
+          forrigeVarslet: null, melderUserId: user?.id,
+        })
+        if (sendt) { setSisteVarsel(o.fase_id); setTimeout(() => setSisteVarsel(v => v === o.fase_id ? null : v), 4000) }
+      }
+      setApenKommentar(null); setKommentarTekst(''); setSiFra(false)
     } catch (e) {
       await appAlert({ message: 'Kunne ikke lagre kommentaren', subMessage: e.message, kind: 'error' })
     } finally { setLagrer(null) }
   }
 
   const kortDato = (s) => new Date(s + 'T12:00:00').toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })
-  const navnPaa = (userId) => {
-    if (!userId) return null
-    const e = (employees || []).find(x => x.user_id === userId)
-    return e ? `${e.first_name || ''} ${e.last_name || ''}`.trim() : null
-  }
 
   if (laster) {
     return (
@@ -32907,8 +33053,24 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
                     <textarea value={kommentarTekst} onChange={e => setKommentarTekst(e.target.value)} rows={2} autoFocus
                       placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «venter på rørlegger»' : 'Kort kommentar (valgfritt)'}
                       style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: mob ? '15px' : '13px', fontFamily: 'system-ui, sans-serif', resize: 'vertical', outline: 'none', color: '#0f172a' }} />
+                    <button onClick={() => setSiFra(v => !v)} disabled={travel}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', marginTop: '7px',
+                        padding: mob ? '10px 11px' : '8px 10px', minHeight: mob ? '44px' : 'auto',
+                        borderRadius: '9px', cursor: 'pointer', textAlign: 'left',
+                        border: `1px solid ${siFra ? '#fbbf24' : '#e2e8f0'}`,
+                        background: siFra ? '#fffbeb' : 'white' }}>
+                      <span style={{ width: '19px', height: '19px', flexShrink: 0, borderRadius: '5px',
+                        border: `2px solid ${siFra ? '#d97706' : '#cbd5e1'}`, background: siFra ? '#d97706' : 'white',
+                        color: 'white', fontSize: '12px', fontWeight: '800', display: 'grid', placeItems: 'center' }}>
+                        {siFra ? '✓' : ''}
+                      </span>
+                      <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', fontWeight: '600', color: siFra ? '#b45309' : '#475569' }}>
+                        📣 Si fra til prosjektleder
+                      </span>
+                    </button>
+
                     <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                      <button onClick={() => { setApenKommentar(null); setKommentarTekst('') }} disabled={travel}
+                      <button onClick={() => { setApenKommentar(null); setKommentarTekst(''); setSiFra(false) }} disabled={travel}
                         style={{ padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: '1px solid #e2e8f0', borderRadius: '9px', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
                         Hopp over
                       </button>
@@ -32930,6 +33092,15 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
                         Angre
                       </button>
                     )}
+                  </div>
+                )}
+
+                {/* Uten denne vet ikke den ansatte om noen faktisk fikk beskjed,
+                    og da ringer han for å sjekke — nøyaktig det vi ville unngå. */}
+                {sisteVarsel === o.fase_id && (
+                  <div style={{ marginTop: '7px', padding: '7px 10px', borderRadius: '8px', background: '#ecfdf5',
+                    border: '1px solid #bbf7d0', color: '#047857', fontSize: '12px', fontWeight: '600' }}>
+                    ✓ Prosjektlederen er varslet
                   </div>
                 )}
 
@@ -36296,7 +36467,7 @@ function RessursPage() {
       // Feiler dette, viser Gantt seg akkurat som før — framdrift er et tillegg,
       // ikke en forutsetning for at planen skal kunne leses.
       try {
-        const { data: fd } = await supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, planlagt_slutt, meldt_at')
+        const { data: fd } = await supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, planlagt_slutt, meldt_at, estimert_slutt, gjenstaende_dager, meldt_av, varslet_type')
         setFramdrift(Object.fromEntries((fd || []).map(f => [f.fase_id, f])))
       } catch (e) { console.error('framdrift:', e) }
       setCacheInfo({ fraCache: pl.fraCache, lagretAt: pl.lagretAt })
@@ -38113,6 +38284,25 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
         updated_at: new Date().toISOString(),
       }, { onConflict: 'fase_id' })
       if (error) throw error
+      // Samme avviksregel som i den ansattes egen liste. notifyProjectManager
+      // hopper over mottakeren hvis det er han selv som melder — ellers ville
+      // prosjektlederen fått varsel om sin egen registrering.
+      await varsleFramdriftsavvik({
+        faseId: bar.faseId, projectId: bar.projectId,
+        avvikType: framdriftsavvik({
+          status: nyStatus,
+          faktiskSlutt: nyStatus === 'ferdig' ? (fd?.faktisk_slutt || iDagStr) : null,
+          estimertSlutt: nyStatus === 'pagar' ? (fd?.estimert_slutt || null) : null,
+          planlagtSlutt: bar.endDate,
+        }),
+        oppgave: task, prosjektNavn: proj?.name,
+        melderNavn: (() => {
+          const e = (employees || []).find(x => x.user_id === user?.id)
+          return e ? ((e.first_name || '') + ' ' + (e.last_name || '')).trim() : null
+        })(),
+        kommentar: fd?.kommentar,
+        forrigeVarslet: fd?.varslet_type || null, melderUserId: user?.id,
+      })
       onSaved()
     } catch (e) {
       await alert({ message: 'Kunne ikke lagre framdriften', subMessage: e.message, kind: 'error' })
