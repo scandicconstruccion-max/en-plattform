@@ -7952,6 +7952,49 @@ function ProsjektfilerPage() {
     return (fil.fase && fil.fase !== linkTarget.phase) ? 'kopierer' : 'kobler'
   }
 
+  // ── Kopier én fil til en annen fase ────────────────────────────────────────
+  // ÉN kilde for begge veiene inn: «Velg eksisterende fil» på et krav i
+  // målfasen, og «Send til fase» fra selve filraden. To kopier av denne
+  // logikken ville drevet fra hverandre — det var nettopp slik detaljlinjene i
+  // tilbuds-PDF-en endte opp med fire ulike feil.
+  //
+  // Kaster ved feil. Originalen røres aldri.
+  const kopierFilTilFase = async (fil, maalfase, docType) => {
+    // Egen fil i Storage, ikke delt sti. confirmDelete fjerner Storage-objektet
+    // ubetinget, uten å telle referanser: to rader på samme file_url ville betydd
+    // at sletting av den ene ga 404 for den andre — stille, og først oppdaget
+    // når noen trenger dokumentet.
+    const ext = (fil.file_type || String(fil.file_url || '').split('.').pop() || 'pdf').replace(/[^a-zA-Z0-9]/g, '') || 'pdf'
+    const nyPath = `projects/${selectedProject}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+    const { error: copyErr } = await supabase.storage.from('plattform-files').copy(fil.file_url, nyPath)
+    // BEVISST ingen fallback til originalens sti. Mønsteret «pek på originalen
+    // hvis kopiering feiler» finnes for bilder, men her ville det gitt nettopp
+    // den delte stien vi unngår. Feiler kopien, avbryter vi.
+    if (copyErr) throw new Error('Kunne ikke kopiere filen: ' + copyErr.message)
+
+    const { error: insErr } = await supabase.from('project_files').insert({
+      name: fil.name,
+      project_id: selectedProject,
+      file_url: nyPath,
+      file_type: fil.file_type || ext,
+      file_size: fil.file_size || null,
+      category: fil.category,
+      sub_folder: fil.sub_folder || null,
+      description: fil.description || null,
+      access_level: fil.access_level || 'alle',
+      uploaded_by: user?.id,
+      revision_label: 'Rev01',
+      archived: false,
+      fase: maalfase,
+      doc_type: docType || null,
+      // IKKE document_group fra originalen: kopien skal ha sin egen
+      // revisjonshistorikk. Delte de gruppe, ville en revisjon i Utførelse
+      // arkivert anbudsfilen. Uten feltet blir kopiens egen id gruppen.
+      kopiert_fra_id: fil.id,
+    })
+    if (insErr) throw new Error('Kunne ikke lagre kopien: ' + insErr.message)
+  }
+
   const confirmLink = async (fileId) => {
     if (!linkTarget || !fileId) return
     const fil = (linkChoices || []).find(f => f.id === fileId)
@@ -7962,44 +8005,66 @@ function ProsjektfilerPage() {
           .update({ fase: linkTarget.phase, doc_type: linkTarget.doc_type }).eq('id', fileId)
         if (error) throw error
       } else {
-        // ── Kopi til målfasen ──────────────────────────────────────────────
-        // Egen fil i Storage, ikke delt sti. confirmDelete fjerner
-        // Storage-objektet ubetinget, uten å telle referanser: to rader på
-        // samme file_url ville betydd at sletting av den ene ga 404 for den
-        // andre — stille, og først oppdaget når noen trenger dokumentet.
-        const ext = (fil.file_type || String(fil.file_url || '').split('.').pop() || 'pdf').replace(/[^a-zA-Z0-9]/g, '') || 'pdf'
-        const nyPath = `projects/${selectedProject}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
-        const { error: copyErr } = await supabase.storage.from('plattform-files').copy(fil.file_url, nyPath)
-        // BEVISST ingen fallback til originalens sti. Mønsteret «pek på
-        // originalen hvis kopiering feiler» finnes for bilder, men her ville
-        // det gitt nettopp den delte stien vi unngår. Feiler kopien, avbryter vi.
-        if (copyErr) throw new Error('Kunne ikke kopiere filen: ' + copyErr.message)
-
-        const { error: insErr } = await supabase.from('project_files').insert({
-          name: fil.name,
-          project_id: selectedProject,
-          file_url: nyPath,
-          file_type: fil.file_type || ext,
-          file_size: fil.file_size || null,
-          category: fil.category,
-          sub_folder: fil.sub_folder || null,
-          description: fil.description || null,
-          access_level: fil.access_level || 'alle',
-          uploaded_by: user?.id,
-          revision_label: 'Rev01',
-          archived: false,
-          fase: linkTarget.phase,
-          doc_type: linkTarget.doc_type,
-          // IKKE document_group fra originalen: kopien skal ha sin egen
-          // revisjonshistorikk. Delte de gruppe, ville en revisjon i Utførelse
-          // arkivert anbudsfilen. Uten feltet blir kopiens egen id gruppen.
-          kopiert_fra_id: fil.id,
-        })
-        if (insErr) throw new Error('Kunne ikke lagre kopien: ' + insErr.message)
+        // Her VET vi hvilket krav kopien skal oppfylle — brukeren startet fra det.
+        await kopierFilTilFase(fil, linkTarget.phase, linkTarget.doc_type)
       }
       setLinkTarget(null); setLinkChoices([])
       await refresh()
     } catch (e) { await appAlert({ message: 'Kunne ikke knytte fil til kravet', subMessage: e.message, kind: 'error' }) }
+  }
+
+  // ── «Send til fase» — fra filen, ikke fra kravet ───────────────────────────
+  // Motsatt vei av confirmLink: brukeren står med tegningen foran seg og vil
+  // sende den videre. Typisk flyt er at anbudstegninger som fortsatt stemmer
+  // kopieres til Utførelse, og at de siste kopieres videre til FDV.
+  const [sendFaseTarget, setSendFaseTarget] = useState(null)   // { fil, finnesI: Set(fase) }
+  const [sendFaseLagrer, setSendFaseLagrer] = useState(false)
+
+  const openSendTilFase = async (fil) => {
+    // Hvilke faser har denne filen allerede? Kopier kjennes igjen på
+    // kopiert_fra_id, originalen på sin egen id — og en kopi av en kopi peker
+    // tilbake på leddet over, så vi tar med begge veier fra den valgte fila.
+    const finnesI = new Set(fil.fase ? [fil.fase] : [])
+    try {
+      const { data } = await supabase.from('project_files')
+        .select('fase, kopiert_fra_id, id')
+        .eq('project_id', selectedProject)
+        .or('archived.is.null,archived.eq.false')
+      ;(data || []).forEach(r => {
+        const beslektet = r.id === fil.id || r.kopiert_fra_id === fil.id || (fil.kopiert_fra_id && (r.id === fil.kopiert_fra_id || r.kopiert_fra_id === fil.kopiert_fra_id))
+        if (beslektet && r.fase) finnesI.add(r.fase)
+      })
+    } catch (e) {
+      // Uten oppslaget mister vi bare «finnes allerede»-merkingen — brukeren kan
+      // fortsatt sende, og en dublett er langt mindre alvorlig enn å blokkere.
+      console.warn('[prosjektfiler] kunne ikke sjekke hvilke faser filen finnes i:', e)
+    }
+    setSendFaseTarget({ fil, finnesI })
+  }
+
+  const confirmSendTilFase = async (maalfase) => {
+    const t = sendFaseTarget
+    if (!t || !maalfase || sendFaseLagrer) return
+    setSendFaseLagrer(true)
+    try {
+      // doc_type = null, BEVISST. Filen sendes til en FASE, ikke til et krav.
+      // At målfasen har ett krav i samme kategori betyr ikke at nettopp denne
+      // filen oppfyller det — kategorien «Tegninger / Planer» rommer både
+      // arkitekt-, konstruksjons- og VVS-tegninger. Gjettet vi feil, ville et
+      // krav sett oppfylt ut uten å være det, som er akkurat feilen vi ryddet
+      // opp i. Brukeren kobler den til et krav etterpå om hen vil: filen ligger
+      // da i riktig fase, og «Velg eksisterende fil» kobler uten å kopiere.
+      await kopierFilTilFase(t.fil, maalfase, null)
+      setSendFaseTarget(null)
+      await refresh()
+      await appAlert({
+        message: `Kopiert til ${faseLabel(maalfase)}`,
+        subMessage: `«${t.fil.name}» ligger nå i både ${t.fil.fase ? faseLabel(t.fil.fase) : 'sin opprinnelige fase'} og ${faseLabel(maalfase)}. Originalen er urørt.`,
+        kind: 'success',
+      })
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke sende til fase', subMessage: e.message, kind: 'error' })
+    } finally { setSendFaseLagrer(false) }
   }
   const setActivePhase = async (phase) => {
     try {
@@ -8545,7 +8610,7 @@ function ProsjektfilerPage() {
                     const archived = archivedPanelFiles.filter(f => (f.document_group || f.id) === docGroup)
                     return (
                       <div key={current.id} style={{ marginBottom: '8px' }}>
-                        <FileRow file={current} isArchived={false} catBg={selectedCat?.bg} catColor={selectedCat?.color} supportsRevision={catSupportsRevision} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={handleNewRevision} uploading={uploading} />
+                        <FileRow file={current} isArchived={false} catBg={selectedCat?.bg} catColor={selectedCat?.color} supportsRevision={catSupportsRevision} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={handleNewRevision} onSendTilFase={hasFaser ? openSendTilFase : undefined} uploading={uploading} />
                         {showArchive && archived.map(f => (
                           <div key={f.id} style={{ marginTop: '3px', marginLeft: '12px' }}>
                             <FileRow file={f} isArchived={true} catBg="#fef2f2" catColor="#dc2626" supportsRevision={false} onDownload={handleDownload} onDelete={handleDelete} onNewRevision={null} uploading={false} />
@@ -8707,6 +8772,7 @@ function ProsjektfilerPage() {
                           onDownload={handleDownload}
                           onDelete={handleDelete}
                           onNewRevision={handleNewRevision}
+                          onSendTilFase={hasFaser ? openSendTilFase : undefined}
                           uploading={uploading} />
                         {/* Archived revisions — shown inline below when showArchive is true */}
                         {showArchive && archived.map(f => (
@@ -8984,6 +9050,51 @@ function ProsjektfilerPage() {
       )}
 
       {/* «Velg eksisterende fil»-modal (knytt fil til krav) */}
+      {/* «Send til fase» — kopier filen til en annen fase. Motsatt vei av
+          koblingsdialogen under: her starter brukeren fra FILEN, ikke fra et krav. */}
+      {sendFaseTarget && (
+        <>
+          <div onMouseDown={(e) => { if (e.target === e.currentTarget && !sendFaseLagrer) setSendFaseTarget(null) }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
+          <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(460px, calc(100vw - 32px))', maxHeight: '80vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
+            <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
+              <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>📤 Send til fase</h2>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+                Lager en kopi av «{sendFaseTarget.fil.name}» i en annen fase. Originalen blir liggende der den er.
+              </p>
+            </div>
+            <div style={{ padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              {projectFaser.map(f => {
+                const finnes = sendFaseTarget.finnesI.has(f)
+                return (
+                  <button key={f} disabled={finnes || sendFaseLagrer} onClick={() => confirmSendTilFase(f)}
+                    style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 14px', minHeight: '52px',
+                      border: '1px solid #f1f5f9', borderRadius: '10px', background: finnes ? '#f8fafc' : 'white',
+                      cursor: (finnes || sendFaseLagrer) ? 'default' : 'pointer', textAlign: 'left', opacity: finnes ? 0.6 : 1 }}>
+                    <span style={{ fontSize: '16px' }}>{finnes ? '✓' : '📂'}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a' }}>{faseLabel(f)}</div>
+                      {finnes && <div style={{ fontSize: '11px', color: '#94a3b8' }}>Filen finnes allerede her</div>}
+                    </div>
+                    {!finnes && <span style={{ fontSize: '12px', color: '#2563eb', fontWeight: '600', whiteSpace: 'nowrap' }}>Kopier hit →</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <div style={{ padding: '14px 24px', borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              {/* Sier hva som IKKE skjer, så ingen tror kopien lukker et krav av
+                  seg selv. Den kobles til et krav i målfasen om brukeren vil. */}
+              <span style={{ fontSize: '11px', color: '#94a3b8', flex: 1, minWidth: '160px' }}>
+                Kopien knyttes ikke til noe krav automatisk.
+              </span>
+              <button onClick={() => setSendFaseTarget(null)} disabled={sendFaseLagrer}
+                style={{ padding: '10px 20px', border: '1px solid #e2e8f0', borderRadius: '10px', background: 'white', cursor: sendFaseLagrer ? 'default' : 'pointer', fontSize: '14px', fontWeight: '600', color: '#374151' }}>
+                {sendFaseLagrer ? 'Kopierer…' : 'Avbryt'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
       {linkTarget && (
         <>
           <div onMouseDown={(e) => { if (e.target === e.currentTarget) { setLinkTarget(null); setLinkChoices([]) } }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', zIndex: 100 }} />
@@ -9069,7 +9180,9 @@ function ProsjektfilerPage() {
   )
 }
 
-function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, uploading }) {
+// onSendTilFase er valgfri: den sendes kun inn når prosjektet har faser, så
+// knappen forsvinner av seg selv på prosjekter uten dokumentmal.
+function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownload, onDelete, onNewRevision, onSendTilFase, uploading }) {
   const isMobTL = typeof window !== 'undefined' && window.innerWidth < 768
   const [showPreview, setShowPreview] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -9265,6 +9378,10 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
                 <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display: 'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
               </label>
             )}
+            {!isArchived && onSendTilFase && (
+              <button onClick={() => onSendTilFase(file)} title="Kopier filen til en annen fase"
+                style={{ padding: '6px 12px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', cursor: 'pointer', fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap' }}>📤 Send til fase</button>
+            )}
             {canPreview && <button onClick={openPreview} title="Forhåndsvisning"
               style={{ background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '6px 10px', cursor: 'pointer', fontSize: '14px' }}>👁️</button>}
             <button onClick={() => onDownload(file)} title="Last ned"
@@ -9282,6 +9399,10 @@ function FileRow({ file, isArchived, catBg, catColor, supportsRevision, onDownlo
               🔄 Ny revisjon
               <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display:'none' }} onChange={e => onNewRevision(e, file)} disabled={uploading} />
             </label>
+          )}
+          {!isArchived && onSendTilFase && (
+            <button onClick={() => onSendTilFase(file)} title="Kopier filen til en annen fase"
+              style={{ padding:'5px 10px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'6px', cursor:'pointer', fontSize:'11px', fontWeight:'600', whiteSpace:'nowrap' }}>📤 Send til fase</button>
           )}
           <button onClick={() => onDelete(file)} style={{ background:'#fef2f2', color:'#dc2626', border:'none', borderRadius:'6px', padding:'5px 8px', cursor:'pointer', fontSize:'11px' }}>🗑️</button>
         </div>

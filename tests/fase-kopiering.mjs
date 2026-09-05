@@ -57,9 +57,10 @@ console.log('\n── Kopier eller koble ──')
   sjekk('uten fil: koble (trygg default)', mot(null), 'kobler')
 }
 
-// ── Strukturelle krav i confirmLink ──────────────────────────────────────────
+// ── Strukturelle krav i selve kopieringen ────────────────────────────────────
+// Logikken ligger i kopierFilTilFase, som begge veiene inn deler.
 console.log('\n── Kopigrenen må være trygg ──')
-const cl = src.slice(src.indexOf('const confirmLink = async (fileId)'), src.indexOf('\n  const setActivePhase'))
+const cl = src.slice(src.indexOf('const kopierFilTilFase = async'), src.indexOf('const confirmLink = async (fileId)'))
 
 antall++
 if (/storage\.from\('plattform-files'\)\.copy\(/.test(cl)) console.log('  ✓ bruker storage.copy (ingen ned-/opplasting)')
@@ -106,6 +107,71 @@ if (/fase: viewedPhase \|\| projectMeta\?\.active_phase/.test(src)) {
   console.log('  ✓ defaulten er viewedPhase, ikke prosjektets active_phase')
 } else {
   kritisk('opplastingens fase-default bruker ikke viewedPhase først')
+}
+
+// ── «Send til fase» — den andre veien inn ────────────────────────────────────
+// Kopieringen skal ikke være skrevet to ganger. Det var nettopp slik
+// detaljlinjene i tilbuds-PDF-en endte opp med fire ulike feil: samme logikk
+// håndskrevet tre steder, som drev fra hverandre.
+console.log('\n── Send til fase gjenbruker kopieringen ──')
+
+antall++
+if (/const kopierFilTilFase = async \(fil, maalfase, docType\)/.test(src)) {
+  console.log('  ✓ kopieringen ligger i én delt hjelper')
+} else {
+  kritisk('kopierFilTilFase finnes ikke — er logikken skrevet på nytt?')
+}
+
+// Begge veiene må gå gjennom hjelperen.
+const antallKall = (src.match(/await kopierFilTilFase\(/g) || []).length
+antall++
+if (antallKall >= 2) console.log(`  ✓ begge veiene kaller hjelperen (${antallKall} kallsteder)`)
+else kritisk(`bare ${antallKall} kallsted til kopierFilTilFase — én av veiene kopierer på egen hånd`)
+
+// Storage-kopieringen skal finnes NØYAKTIG ett sted.
+const antallCopy = (src.match(/storage\.from\('plattform-files'\)\.copy\(/g) || []).length
+const antallIProsjektfiler = (src.slice(src.indexOf('const kopierFilTilFase'), src.indexOf('const confirmLink')).match(/\.copy\(/g) || []).length
+antall++
+if (antallIProsjektfiler === 1) console.log('  ✓ storage.copy står ett sted i Prosjektfiler')
+else kritisk(`storage.copy står ${antallIProsjektfiler} steder i kopihjelperen — skal være nøyaktig ett`)
+
+const sf = src.slice(src.indexOf('const confirmSendTilFase'), src.indexOf('const setActivePhase'))
+
+antall++
+if (/kopierFilTilFase\(t\.fil, maalfase, null\)/.test(sf)) {
+  console.log('  ✓ doc_type = null: kopien lukker ikke et krav av seg selv')
+} else {
+  kritisk('confirmSendTilFase setter doc_type — filen sendes til en FASE, ikke til et krav')
+}
+
+antall++
+if (/setSendFaseLagrer\(true\)/.test(sf) && /sendFaseLagrer\) return/.test(sf)) {
+  console.log('  ✓ dobbeltklikk gir ikke to kopier')
+} else {
+  kritisk('confirmSendTilFase har ingen sperre mot dobbeltklikk')
+}
+
+// «Finnes allerede her» må dekke både originalen og kopiene av den.
+const os = src.slice(src.indexOf('const openSendTilFase'), src.indexOf('const confirmSendTilFase'))
+antall++
+if (/kopiert_fra_id === fil\.id/.test(os) && /r\.id === fil\.id/.test(os)) {
+  console.log('  ✓ finner både originalen og dens kopier')
+} else {
+  kritisk('openSendTilFase sporer ikke slektskapet — samme fil kunne kopieres dit den alt er')
+}
+
+antall++
+if (/onSendTilFase\?/.test(src) || /onSendTilFase &&/.test(src)) {
+  console.log('  ✓ knappen vises kun når den er sendt inn (prosjekt med faser)')
+} else {
+  kritisk('FileRow sjekker ikke om onSendTilFase finnes')
+}
+
+antall++
+if (/onSendTilFase=\{hasFaser \? openSendTilFase : undefined\}/.test(src)) {
+  console.log('  ✓ knappen kobles kun inn når prosjektet har faser')
+} else {
+  kritisk('onSendTilFase sendes inn uten hasFaser-sjekk')
 }
 
 console.log(`\n${antall - feil} av ${antall} OK`)
