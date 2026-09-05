@@ -7712,7 +7712,10 @@ function ProsjektfilerPage() {
   const loadPanel = async (reset) => {
     if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); setPanelFromCache(false); return }
     const pageToLoad = reset ? 0 : page + 1
-    const cacheKey = `pf:liste:${selectedProject}:${selectedCategory}:${selectedSub || '_'}`
+    // Fasen er med i cache-nøkkelen: samme kategori viser nå ULIKE filer i ulike
+    // faser, og uten fasen her ville den offline-speilede lista fra én fase blitt
+    // vist i en annen.
+    const cacheKey = `pf:liste:${selectedProject}:${selectedCategory}:${selectedSub || '_'}:${hasFaser ? (viewedPhase || '_') : '_'}`
     reset ? setLoading(true) : setLoadingMore(true)
     try {
       let q = supabase.from('project_files')
@@ -7720,6 +7723,16 @@ function ProsjektfilerPage() {
         .eq('project_id', selectedProject)
         .eq('category', selectedCategory)
         .or('archived.is.null,archived.eq.false')
+      // En fil hører til fasen den ble lastet opp i, og blir der. Skal samme
+      // tegning gjelde i en annen fase, KOPIERES den dit — se confirmLink.
+      // Uten dette filteret fulgte hver fil med til alle faser, og det så ut som
+      // arbeidstegninger fantes selv om bare anbudstegningene var lastet opp.
+      //
+      // Filer UTEN fase vises i alle faser. 10 av 23 aktive filer i prod er
+      // slike, fordelt på flere prosjekter — å skjule dem ville fjernet nesten
+      // halvparten av innholdet uten at brukeren fikk vite hvor det ble av.
+      // De blir synlige overalt til noen gir dem en fase.
+      if (hasFaser && viewedPhase) q = q.or(`fase.is.null,fase.eq.${viewedPhase}`)
       if (selectedSub) q = q.eq('sub_folder', selectedSub)
       if (search.trim()) q = q.ilike('name', `%${search.trim()}%`)
       const from = pageToLoad * PAGE_SIZE
@@ -7806,8 +7819,10 @@ function ProsjektfilerPage() {
     if (selectedProject === 'all' || !selectedCategory) { setPanelFiles([]); setTotalCount(0); setPage(0); setPanelFromCache(false); return }
     const t = setTimeout(() => { loadPanel(true); if (showArchive) loadArchived() }, search ? 300 : 0)
     return () => clearTimeout(t)
+    // viewedPhase er med fordi lista nå filtreres på fase — uten den ville
+    // fasebytte vist forrige fases filer til noe annet utløste en lasting.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProject, selectedCategory, selectedSub, search, showArchive])
+  }, [selectedProject, selectedCategory, selectedSub, search, showArchive, viewedPhase])
 
   // Aktive dokumenter i opplastingsprosjektet — grunnlag for revisjonsforslag.
   useEffect(() => {
@@ -7823,11 +7838,17 @@ function ProsjektfilerPage() {
     return () => { cancelled = true }
   }, [showUpload, uploadForm.project_id])
 
-  // Forhåndsvelg aktiv fase i opplastingsdialogen når prosjektet har faser og
-  // fase ikke allerede er satt (openUploadForReq setter fase eksplisitt før åpning).
+  // Forhåndsvelg fase i opplastingsdialogen når prosjektet har faser og fase
+  // ikke allerede er satt (openUploadForReq setter fase eksplisitt før åpning).
+  //
+  // VIEWEDPHASE, ikke prosjektets active_phase: brukeren står i en fane og
+  // laster opp det som hører hjemme DER. Med active_phase kunne man stå i Anbud
+  // og laste opp en anbudstegning som stille havnet i Utførelse, fordi
+  // prosjektet var kommet dit — og nå som lista filtreres på fase, ville filen
+  // forsvunnet fra fanen man nettopp lastet den opp i.
   useEffect(() => {
     if (showUpload && hasFaser && !uploadForm.fase) {
-      setUploadForm(f => ({ ...f, fase: projectMeta?.active_phase || projectFaser[0] || '' }))
+      setUploadForm(f => ({ ...f, fase: viewedPhase || projectMeta?.active_phase || projectFaser[0] || '' }))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showUpload])
@@ -7903,8 +7924,11 @@ function ProsjektfilerPage() {
   const openLinkExisting = async (req) => {
     setLinkTarget({ ...req, phase: viewedPhase })
     try {
+      // Feltene under file_url og utover trengs når valget blir en KOPI — se
+      // confirmLink. De hentes alltid, så dialogen slipper et ekstra oppslag
+      // i det brukeren har bestemt seg.
       const { data } = await supabase.from('project_files')
-        .select('id, name, category, sub_folder, revision_label, fase, doc_type')
+        .select('id, name, category, sub_folder, revision_label, fase, doc_type, file_url, file_size, file_type, access_level, description')
         .eq('project_id', selectedProject).or('archived.is.null,archived.eq.false').order('name')
       // Foreslå samme kategori øverst
       const rows = data || []
@@ -7912,12 +7936,67 @@ function ProsjektfilerPage() {
       setLinkChoices(rows)
     } catch (e) { setLinkChoices([]) }
   }
+
+  // Hva skjer om brukeren velger denne fila? Avgjør både handlingen i
+  // confirmLink og teksten i dialogen — de skal ikke kunne si ulike ting.
+  //
+  // KOPI når fila hører hjemme i en ANNEN fase. En anbudstegning som knyttes
+  // til et utførelseskrav skal ikke flytte seg: anbudsfasen må beholde nøyaktig
+  // det som lå til grunn for prisen. Før kopierte vi ikke — vi flyttet, og
+  // anbudskravet ble stående åpent etterpå uten at noen fikk vite det.
+  //
+  // KOBLING når fila mangler fase eller alt ligger i målfasen. En fil uten fase
+  // er hjemløs; den får endelig en tilhørighet, og ingenting går tapt.
+  const linkHandling = (fil) => {
+    if (!fil || !linkTarget) return 'kobler'
+    return (fil.fase && fil.fase !== linkTarget.phase) ? 'kopierer' : 'kobler'
+  }
+
   const confirmLink = async (fileId) => {
     if (!linkTarget || !fileId) return
+    const fil = (linkChoices || []).find(f => f.id === fileId)
+    if (!fil) return
     try {
-      const { error } = await supabase.from('project_files')
-        .update({ fase: linkTarget.phase, doc_type: linkTarget.doc_type }).eq('id', fileId)
-      if (error) throw error
+      if (linkHandling(fil) === 'kobler') {
+        const { error } = await supabase.from('project_files')
+          .update({ fase: linkTarget.phase, doc_type: linkTarget.doc_type }).eq('id', fileId)
+        if (error) throw error
+      } else {
+        // ── Kopi til målfasen ──────────────────────────────────────────────
+        // Egen fil i Storage, ikke delt sti. confirmDelete fjerner
+        // Storage-objektet ubetinget, uten å telle referanser: to rader på
+        // samme file_url ville betydd at sletting av den ene ga 404 for den
+        // andre — stille, og først oppdaget når noen trenger dokumentet.
+        const ext = (fil.file_type || String(fil.file_url || '').split('.').pop() || 'pdf').replace(/[^a-zA-Z0-9]/g, '') || 'pdf'
+        const nyPath = `projects/${selectedProject}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`
+        const { error: copyErr } = await supabase.storage.from('plattform-files').copy(fil.file_url, nyPath)
+        // BEVISST ingen fallback til originalens sti. Mønsteret «pek på
+        // originalen hvis kopiering feiler» finnes for bilder, men her ville
+        // det gitt nettopp den delte stien vi unngår. Feiler kopien, avbryter vi.
+        if (copyErr) throw new Error('Kunne ikke kopiere filen: ' + copyErr.message)
+
+        const { error: insErr } = await supabase.from('project_files').insert({
+          name: fil.name,
+          project_id: selectedProject,
+          file_url: nyPath,
+          file_type: fil.file_type || ext,
+          file_size: fil.file_size || null,
+          category: fil.category,
+          sub_folder: fil.sub_folder || null,
+          description: fil.description || null,
+          access_level: fil.access_level || 'alle',
+          uploaded_by: user?.id,
+          revision_label: 'Rev01',
+          archived: false,
+          fase: linkTarget.phase,
+          doc_type: linkTarget.doc_type,
+          // IKKE document_group fra originalen: kopien skal ha sin egen
+          // revisjonshistorikk. Delte de gruppe, ville en revisjon i Utførelse
+          // arkivert anbudsfilen. Uten feltet blir kopiens egen id gruppen.
+          kopiert_fra_id: fil.id,
+        })
+        if (insErr) throw new Error('Kunne ikke lagre kopien: ' + insErr.message)
+      }
       setLinkTarget(null); setLinkChoices([])
       await refresh()
     } catch (e) { await appAlert({ message: 'Kunne ikke knytte fil til kravet', subMessage: e.message, kind: 'error' }) }
@@ -8212,6 +8291,21 @@ function ProsjektfilerPage() {
     return derivert + krav
   }
 
+  // Forklarer hvorfor lista er kortere enn før. Filer hører nå til fasen de ble
+  // lastet opp i, så en fil brukeren er vant til å se her kan ligge i en annen
+  // fane — uten denne linjen ser det ut som den er borte.
+  // Bevisst en opplysning, ikke et varsel: ingenting er galt, og brukeren
+  // trenger ikke gjøre noe.
+  const renderFaseNotis = () => {
+    if (!hasFaser || !viewedPhase || !selectedCategory) return null
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', color: '#94a3b8', marginBottom: '10px' }}>
+        <span style={{ flexShrink: 0 }}>📂</span>
+        <span>Viser filer i {faseLabel(viewedPhase)} og filer uten fase.</span>
+      </div>
+    )
+  }
+
   // Tomtilstand. Har kategorien registrerte rader eller krav, skal ikke det
   // store kortet dominere — da holder én linje over de øvrige radene.
   const renderTomtilstand = (kompakt) => {
@@ -8437,6 +8531,7 @@ function ProsjektfilerPage() {
                 </button>
               )}
               {panelFromCache && <div style={{ marginBottom: '10px' }}><SistOppdatert fraCache={true} lagretAt={panelCacheAt} /></div>}
+              {renderFaseNotis()}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Laster filer...</div>
               ) : fileGroups.length === 0 ? (
@@ -8580,6 +8675,7 @@ function ProsjektfilerPage() {
               </div>
 
               {panelFromCache && <div style={{ marginBottom: '12px' }}><SistOppdatert fraCache={true} lagretAt={panelCacheAt} /></div>}
+              {renderFaseNotis()}
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '60px', color: '#94a3b8' }}>
                   <div style={{ width: '32px', height: '32px', border: '3px solid #e2e8f0', borderTop: '3px solid #059669', borderRadius: '50%', margin: '0 auto 12px', animation: 'spin 1s linear infinite' }} />
@@ -8894,7 +8990,10 @@ function ProsjektfilerPage() {
           <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', background: 'white', borderRadius: '20px', width: 'min(520px, calc(100vw - 32px))', maxHeight: '80vh', display: 'flex', flexDirection: 'column', zIndex: 101, boxShadow: '0 20px 60px rgba(0,0,0,0.15)', fontFamily: 'system-ui, sans-serif' }}>
             <div style={{ padding: '18px 24px', borderBottom: '1px solid #f1f5f9' }}>
               <h2 style={{ margin: 0, fontSize: '17px', fontWeight: '700', color: '#0f172a' }}>Velg eksisterende fil</h2>
-              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>Knytt en fil som allerede ligger i prosjektet til kravet «{linkTarget.label}».</p>
+              <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
+                Knytt en fil som allerede ligger i prosjektet til kravet «{linkTarget.label}».
+                {hasFaser ? ' Ligger filen i en annen fase, lages en kopi her — originalen blir liggende.' : ''}
+              </p>
             </div>
             <div style={{ padding: '12px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
               {linkChoices.length === 0 ? (
@@ -8902,14 +9001,24 @@ function ProsjektfilerPage() {
               ) : linkChoices.map(fl => {
                 const cat = FILE_CATEGORIES.find(c => c.id === fl.category)
                 const alt = fl.doc_type && fl.doc_type !== linkTarget.doc_type
+                // Fasen og handlingen står på raden: uten dem er forskjellen
+                // mellom å flytte en fil og å lage en kopi usynlig i det
+                // øyeblikket brukeren velger.
+                const blirKopi = linkHandling(fl) === 'kopierer'
                 return (
                   <button key={fl.id} onClick={() => confirmLink(fl.id)} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', border: '1px solid #f1f5f9', borderRadius: '10px', background: 'white', cursor: 'pointer', textAlign: 'left' }}>
                     <span style={{ fontSize: '16px' }}>{cat?.emoji || '📄'}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontSize: '13px', fontWeight: '600', color: '#0f172a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{fl.name}</div>
-                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>{cat?.name || fl.category}{fl.sub_folder ? ' · ' + fl.sub_folder : ''}{alt ? ' · knyttet til annet krav' : ''}</div>
+                      <div style={{ fontSize: '11px', color: '#94a3b8' }}>
+                        {cat?.name || fl.category}{fl.sub_folder ? ' · ' + fl.sub_folder : ''}
+                        {hasFaser ? ' · ' + (fl.fase ? faseLabel(fl.fase) : 'uten fase') : ''}
+                        {alt ? ' · knyttet til annet krav' : ''}
+                      </div>
                     </div>
-                    <span style={{ fontSize: '12px', color: '#059669', fontWeight: '600', whiteSpace: 'nowrap' }}>Velg →</span>
+                    <span style={{ fontSize: '12px', fontWeight: '600', whiteSpace: 'nowrap', color: blirKopi ? '#2563eb' : '#059669' }}>
+                      {blirKopi ? 'Kopier hit →' : 'Velg →'}
+                    </span>
                   </button>
                 )
               })}
