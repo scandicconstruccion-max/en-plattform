@@ -3810,6 +3810,273 @@ const MODUL_OMVISNINGER = {
   ],
 }
 
+// ─── MIN FRAMDRIFT — dashbordkort der ansatte melder inn hvor langt de har kommet ───
+// Bookingen er oppgaven, men den ligger som ÉN RAD PER DAG i resource_plans.
+// Radene bindes sammen av fase_id, og framdriften lagres én gang per fase i
+// booking_framdrift (fase_id er unique der). Derfor grupperes dagsradene her
+// før de vises — ellers ville en 9-dagers oppgave blitt ni kort.
+//
+// «Ferdig» skal koste ÉTT trykk. Derfor ingen bekreftelsesdialog: statusen
+// lagres optimistisk med en angre-knapp ved siden av. Kommentar er valgfri,
+// bortsett fra ved «Blokkert» der årsaken er hele poenget — der åpnes feltet
+// automatisk, men statusen er allerede lagret så den aldri holdes tilbake av
+// at teksten mangler.
+//
+// Kortet returnerer null når brukeren ikke har oppgaver i vinduet. Dashbordet
+// er derfor uendret for alle som ikke står på en jobb akkurat nå.
+const FRAMDRIFT_STATUSER = [
+  { v: 'ikke_startet', kort: 'Ikke startet', emoji: '⚪', farge: '#64748b', bg: '#f1f5f9', kant: '#e2e8f0' },
+  { v: 'pagar',        kort: 'Pågår',        emoji: '🔨', farge: '#2563eb', bg: '#eff6ff', kant: '#bfdbfe' },
+  { v: 'ferdig',       kort: 'Ferdig',       emoji: '✅', farge: '#059669', bg: '#ecfdf5', kant: '#bbf7d0' },
+  { v: 'blokkert',     kort: 'Blokkert',     emoji: '🚧', farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca' },
+]
+
+function MinFramdriftKort({ user, mob, onNavigate, activeModules, trialActive }) {
+  const appAlert = useAppAlert()
+  const [oppgaver, setOppgaver] = useState([])
+  const [laster, setLaster] = useState(true)
+  const [lagrer, setLagrer] = useState(null)
+  const [apenKommentar, setApenKommentar] = useState(null)
+  const [kommentarTekst, setKommentarTekst] = useState('')
+
+  const fmtDato = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  const idag = React.useMemo(() => fmtDato(new Date()), [])
+
+  // Ressursplan er en betalt modul. Har bedriften den ikke, finnes det ingen
+  // bookinger å melde framdrift på — da lastes ingenting.
+  const harRessursplan = !activeModules || trialActive || (activeModules || []).includes('ressursplan')
+
+  const last = React.useCallback(async () => {
+    if (!user?.id || !harRessursplan) { setLaster(false); return }
+    try {
+      const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
+      if (!emp?.id) { setOppgaver([]); setLaster(false); return }
+
+      // 30 dager bakover fanger det som er forsinket, 14 fram det som starter snart.
+      const fraD = new Date(idag + 'T12:00:00'); fraD.setDate(fraD.getDate() - 30)
+      const tilD = new Date(idag + 'T12:00:00'); tilD.setDate(tilD.getDate() + 14)
+
+      const { data: plans } = await supabase.from('resource_plans')
+        .select('id, fase_id, project_id, resource_id, date, task_description')
+        .eq('resource_id', emp.id).eq('resource_type', 'employee')
+        .not('fase_id', 'is', null)
+        .gte('date', fmtDato(fraD)).lte('date', fmtDato(tilD))
+        .order('date')
+      if (!plans || plans.length === 0) { setOppgaver([]); setLaster(false); return }
+
+      // Grupper dagsradene til én oppgave per fase_id
+      const map = new Map()
+      for (const p of plans) {
+        if (!map.has(p.fase_id)) {
+          map.set(p.fase_id, {
+            fase_id: p.fase_id, project_id: p.project_id, resource_id: p.resource_id,
+            task: p.task_description || 'Booking', datoer: [],
+          })
+        }
+        map.get(p.fase_id).datoer.push(p.date)
+      }
+      const liste = Array.from(map.values()).map(o => {
+        const sortert = o.datoer.slice().sort()
+        return { ...o, fra: sortert[0], til: sortert[sortert.length - 1], antallDager: sortert.length }
+      })
+
+      const faseIds = liste.map(o => o.fase_id)
+      const projIds = Array.from(new Set(liste.map(o => o.project_id).filter(Boolean)))
+      const [fdRes, projRes] = await Promise.all([
+        supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt').in('fase_id', faseIds),
+        projIds.length ? supabase.from('projects').select('id, name, project_number').in('id', projIds) : Promise.resolve({ data: [] }),
+      ])
+      const fdMap = new Map((fdRes.data || []).map(f => [f.fase_id, f]))
+      const projMap = new Map((projRes.data || []).map(p => [p.id, p]))
+
+      const grense = fmtDato(new Date(Date.now() - 7 * 86400000))
+      const beriket = liste.map(o => {
+        const fd = fdMap.get(o.fase_id)
+        const status = fd?.status || 'ikke_startet'
+        return {
+          ...o,
+          status,
+          kommentar: fd?.kommentar || null,
+          faktiskSlutt: fd?.faktisk_slutt || null,
+          // Har den ansatte faktisk meldt noe? Uten dette ville «Ikke startet»
+          // stått fremhevet på hver eneste oppgave og konkurrert med «Ferdig».
+          harMeldt: !!fd,
+          prosjekt: projMap.get(o.project_id) || null,
+          // «Forsinket» er ikke en lagret status — den utledes.
+          forsinket: status !== 'ferdig' && o.til < idag,
+          paagaarNaa: o.fra <= idag && idag <= o.til,
+        }
+      })
+      // Ferdigmeldte forsvinner etter en uke, ellers vokser kortet i det uendelige.
+      const synlige = beriket.filter(o => !(o.status === 'ferdig' && o.faktiskSlutt && o.faktiskSlutt < grense))
+      // Rekkefølge: det som haster øverst.
+      const vekt = (o) => o.status === 'ferdig' ? 4 : o.forsinket ? 0 : o.status === 'blokkert' ? 1 : o.paagaarNaa ? 2 : 3
+      synlige.sort((a, b) => vekt(a) - vekt(b) || a.fra.localeCompare(b.fra))
+      setOppgaver(synlige)
+    } catch (e) { console.error('MinFramdriftKort:', e); setOppgaver([]) }
+    finally { setLaster(false) }
+  }, [user?.id, idag, harRessursplan])
+
+  React.useEffect(() => { last() }, [last])
+
+  const skrivFramdrift = async (o, felt) => {
+    const rad = {
+      fase_id: o.fase_id, project_id: o.project_id, resource_id: o.resource_id,
+      status: o.status, kommentar: o.kommentar,
+      meldt_av: user?.id || null, meldt_at: new Date().toISOString(),
+      planlagt_slutt: o.til,
+      updated_at: new Date().toISOString(),
+      ...felt,
+    }
+    rad.faktisk_slutt = rad.status === 'ferdig' ? (o.faktiskSlutt || idag) : null
+    const { error } = await supabase.from('booking_framdrift').upsert(rad, { onConflict: 'fase_id' })
+    if (error) throw error
+    return rad
+  }
+
+  const settStatus = async (o, nyStatus) => {
+    if (lagrer) return
+    const forrige = { status: o.status, faktiskSlutt: o.faktiskSlutt, forsinket: o.forsinket, harMeldt: o.harMeldt }
+    setLagrer(o.fase_id)
+    setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
+      ? { ...x, status: nyStatus, harMeldt: true, faktiskSlutt: nyStatus === 'ferdig' ? (x.faktiskSlutt || idag) : null, forsinket: nyStatus !== 'ferdig' && x.til < idag }
+      : x))
+    try {
+      await skrivFramdrift(o, { status: nyStatus })
+      // Ved «Blokkert» er årsaken hele verdien — åpne feltet, men statusen er lagret.
+      if (nyStatus === 'blokkert') { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }
+    } catch (e) {
+      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, ...forrige } : x))
+      await appAlert({ message: 'Kunne ikke lagre framdrift', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(null) }
+  }
+
+  const lagreKommentar = async (o) => {
+    if (lagrer) return
+    setLagrer(o.fase_id)
+    const ny = kommentarTekst.trim() || null
+    try {
+      await skrivFramdrift(o, { kommentar: ny })
+      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, kommentar: ny, harMeldt: true } : x))
+      setApenKommentar(null); setKommentarTekst('')
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke lagre kommentaren', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(null) }
+  }
+
+  if (laster || !harRessursplan || oppgaver.length === 0) return null
+
+  const kortDato = (s) => new Date(s + 'T12:00:00').toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' })
+
+  return (
+    <div style={{ padding: mob ? '16px 16px 0' : '24px 32px 0' }}>
+      <div style={{ background: 'white', border: '1px solid #e2e8f0', borderRadius: mob ? '14px' : '16px', overflow: 'hidden' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: mob ? '12px 14px' : '14px 18px', borderBottom: '1px solid #f1f5f9' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <span style={{ fontSize: mob ? '16px' : '18px' }}>📋</span>
+            <h2 style={{ margin: 0, fontSize: mob ? '15px' : '16px', fontWeight: '700', color: '#0f172a' }}>Min framdrift</h2>
+          </div>
+          <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: '500', whiteSpace: 'nowrap' }}>
+            {oppgaver.length} oppgave{oppgaver.length !== 1 ? 'r' : ''}
+          </span>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {oppgaver.map((o, i) => {
+            const travel = lagrer === o.fase_id
+            return (
+              <div key={o.fase_id} style={{ padding: mob ? '12px 14px' : '14px 18px', borderTop: i === 0 ? 'none' : '1px solid #f8fafc', background: o.forsinket ? '#fffbfa' : 'white' }}>
+                {/* Oppgave + prosjekt */}
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '8px' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: mob ? '14px' : '15px', fontWeight: '700', color: '#0f172a', lineHeight: 1.3 }}>{o.task}</div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {o.prosjekt ? `🏗️ ${o.prosjekt.name} · ` : ''}{kortDato(o.fra)}–{kortDato(o.til)}
+                    </div>
+                  </div>
+                  {o.forsinket && (
+                    <span style={{ flexShrink: 0, background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '999px', padding: '2px 8px', fontSize: '10px', fontWeight: '800', whiteSpace: 'nowrap' }}>
+                      FORSINKET
+                    </span>
+                  )}
+                </div>
+
+                {/* Statusknapper — ett trykk, ingen bekreftelsesdialog. */}
+                <div style={{ display: 'grid', gridTemplateColumns: mob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '6px' }}>
+                  {FRAMDRIFT_STATUSER.map(s => {
+                    const valgt = o.harMeldt && o.status === s.v
+                    return (
+                      <button key={s.v} onClick={() => settStatus(o, s.v)} disabled={travel || valgt}
+                        style={{
+                          minHeight: mob ? '46px' : '38px', padding: mob ? '8px 6px' : '7px 8px',
+                          borderRadius: '10px', cursor: travel || valgt ? 'default' : 'pointer',
+                          border: `1px solid ${valgt ? s.farge : s.kant}`,
+                          background: valgt ? s.farge : s.bg,
+                          color: valgt ? 'white' : s.farge,
+                          fontSize: mob ? '13px' : '12px', fontWeight: '700',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px',
+                          opacity: travel ? 0.6 : 1, transition: 'all 0.12s',
+                        }}>
+                        <span style={{ fontSize: mob ? '14px' : '13px' }}>{s.emoji}</span>
+                        <span>{s.kort}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Kommentar — valgfri. Her ligger den reelle verdien:
+                    «venter på rørlegger» sier mer enn en prosent. */}
+                {apenKommentar === o.fase_id ? (
+                  <div style={{ marginTop: '8px' }}>
+                    <textarea value={kommentarTekst} onChange={e => setKommentarTekst(e.target.value)} rows={2} autoFocus
+                      placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «venter på rørlegger»' : 'Kort kommentar (valgfritt)'}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: mob ? '15px' : '13px', fontFamily: 'system-ui, sans-serif', resize: 'vertical', outline: 'none', color: '#0f172a' }} />
+                    <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
+                      <button onClick={() => { setApenKommentar(null); setKommentarTekst('') }} disabled={travel}
+                        style={{ padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: '1px solid #e2e8f0', borderRadius: '9px', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                        Hopp over
+                      </button>
+                      <button onClick={() => lagreKommentar(o)} disabled={travel}
+                        style={{ flex: 1, padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: 'none', borderRadius: '9px', background: travel ? '#6ee7b7' : '#059669', color: 'white', fontSize: '13px', fontWeight: '700', cursor: travel ? 'default' : 'pointer' }}>
+                        {travel ? 'Lagrer…' : 'Lagre kommentar'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
+                    <button onClick={() => { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }}
+                      style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
+                      {o.kommentar ? '✏️ Endre kommentar' : '＋ Legg til kommentar'}
+                    </button>
+                    {o.harMeldt && (
+                      <button onClick={() => settStatus(o, 'ikke_startet')} disabled={travel}
+                        style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#94a3b8' }}>
+                        Angre
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {o.kommentar && apenKommentar !== o.fase_id && (
+                  <div style={{ marginTop: '6px', display: 'flex', alignItems: 'flex-start', gap: '6px', background: '#f8fafc', borderRadius: '8px', padding: '7px 10px' }}>
+                    <span style={{ fontSize: '12px', flexShrink: 0 }}>💬</span>
+                    <span style={{ fontSize: '12px', color: '#475569', lineHeight: 1.4, wordBreak: 'break-word' }}>{o.kommentar}</span>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+
+        <button onClick={() => onNavigate && onNavigate('ressursplan')}
+          style={{ width: '100%', padding: mob ? '12px' : '10px', minHeight: mob ? '44px' : 'auto', background: '#fafbfc', border: 'none', borderTop: '1px solid #f1f5f9', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#64748b' }}>
+          Se hele planen i Ressursplan →
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kanSe }) {
   const days = ['søndag','mandag','tirsdag','onsdag','torsdag','fredag','lørdag']
   const months = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']
@@ -3910,6 +4177,11 @@ function Dashboard({ onNavigate, user, activeModules, trialActive, onUpsell, kan
           </div>
         )}
       </div>
+      {/* Min framdrift — ansattens innmelding. Kortet skjuler seg selv når
+          brukeren ikke har bookinger, så dashbordet er uendret for de fleste. */}
+      <MinFramdriftKort user={user} mob={mob} onNavigate={onNavigate}
+        activeModules={activeModules} trialActive={trialActive} />
+
       <style>{`
         .dashboard-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
         @media (min-width: 1200px) { .dashboard-grid-single { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); } }
@@ -5154,6 +5426,7 @@ const emptyForm = {
   client_name: '', client_contact: '', client_email: '', client_phone: '',
   resident_name: '', resident_phone: '', resident_email: '',
   project_manager_name: '', project_manager_email: '', project_manager_phone: '',
+  project_manager_id: '',   // settes kun når PL velges fra ansattlista
   time_approver_id: null,
   subcontractors: [], architects: [], consultants: [],
 }
@@ -5183,7 +5456,17 @@ function ProsjektForm({ initial, onSubmit, onCancel, loading }) {
       <div>
         <h3 style={{ margin: '0 0 16px', fontSize: '15px', fontWeight: '700', color: '#0f172a', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px' }}>Prosjektleder</h3>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-          <Field label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></Field>
+          <Field label="Navn">
+            {/* Velges en ansatt, settes project_manager_id og varselet virker.
+                Skrives navnet fritt, nullstilles id-en — se settPmFritekst. */}
+            <EmployeeNameSelect value={form.project_manager_name}
+              onChange={v => settPmFritekst(set, v)}
+              onSelect={emp => settPmValgt(set, emp)}
+              placeholder="Velg ansatt, eller skriv inn ekstern" />
+            <div style={{ marginTop: '6px' }}>
+              <ProsjektlederVarselMerke harId={form.project_manager_id} navn={form.project_manager_name} />
+            </div>
+          </Field>
           <Field label="Telefon"><Input2 value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></Field>
           <div style={{ gridColumn: '1 / -1' }}><Field label="E-post"><Input2 type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></Field></div>
           <div style={{ gridColumn: '1 / -1' }}>
@@ -5732,6 +6015,53 @@ function sanitizeDbPayload(obj) {
   return out
 }
 
+// Velges en ansatt fra lista: sett navn, kontaktinfo OG id.
+//
+// EmployeeNameSelect kaller onChange(navn) FØR onSelect(emp), i samme tick
+// (se handleSelect). onChange nullstiller id-en, onSelect setter den. Begge
+// prosjektskjemaene bruker FUNKSJONELL setState — setForm(f => ({...f})) —
+// så updaterne kjøres i kø-rekkefølge og id-en satt her overlever
+// nullstillingen. Hadde skjemaene brukt closure-form (setForm({...form})),
+// ville hvert kall bygget på samme gamle form og bare det siste feltet
+// overlevd. Verifisert med monteringstest, ikke antatt.
+function settPmValgt(set, emp) {
+  set('project_manager_name', ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim())
+  if (emp.email) set('project_manager_email', emp.email)
+  if (emp.phone) set('project_manager_phone', emp.phone)
+  set('project_manager_id', emp.id || '')
+}
+
+// Fritekst = ekstern prosjektleder. Da finnes ingen brukerkonto å varsle, og
+// id-en må bort — ellers ville merket lovet varsler som aldri kommer.
+function settPmFritekst(set, verdi) {
+  set('project_manager_name', verdi)
+  set('project_manager_id', '')
+}
+// Viser om prosjektlederen kan motta varsler i appen. Signalet er
+// project_manager_id: settes den, er personen en ansatt med brukerkonto.
+// Skrives navnet fritt (ekstern PL — en reell situasjon), står id-en tom, og
+// da SKAL det være synlig at varsler ikke når fram. Alternativet er at noen
+// tror varselet virker helt til et avvik aldri ble meldt fra om.
+function ProsjektlederVarselMerke({ harId, navn, kompakt }) {
+  if (!navn || !String(navn).trim()) return null
+  const ok = !!harId
+  return (
+    <span title={ok
+      ? 'Prosjektlederen er ansatt med brukerkonto og får varsler i appen.'
+      : 'Ekstern prosjektleder uten brukerkonto. Avviksvarsler sendes ikke.'}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: '4px',
+        background: ok ? '#ecfdf5' : '#fffbeb',
+        color: ok ? '#047857' : '#b45309',
+        border: '1px solid ' + (ok ? '#bbf7d0' : '#fde68a'),
+        borderRadius: '999px', padding: kompakt ? '1px 7px' : '2px 9px',
+        fontSize: kompakt ? '10px' : '11px', fontWeight: '700', whiteSpace: 'nowrap',
+      }}>
+      {ok ? '🔔 Varsles i appen' : '⚠️ Ekstern — varsles ikke'}
+    </span>
+  )
+}
+
 const emptyProsjekt = {
   name:'', project_number:'', description:'', status:'planlagt',
   parent_id:'', depth: 0,
@@ -5739,7 +6069,7 @@ const emptyProsjekt = {
   start_date:'', end_date:'', budget:'',
   client_name:'', client_contact:'', client_email:'', client_phone:'',
   resident_name:'', resident_phone:'', resident_email:'',
-  project_manager_name:'', project_manager_email:'', project_manager_phone:'', customer_id:'',
+  project_manager_name:'', project_manager_email:'', project_manager_phone:'', project_manager_id:'', customer_id:'',
   time_approver_id: null,
   subcontractors:[], architects:[], consultants:[],
   document_template_id: null,
@@ -6177,7 +6507,15 @@ function ProsjektModal({ title, initial, onSave, onClose, saving, projects: allP
             </div>
             {sec('Prosjektleder')}
             <div style={g2}>
-              <FLabel label="Navn"><EmployeeNameSelect value={form.project_manager_name} onChange={v => set('project_manager_name', v)} onSelect={emp => { set('project_manager_name', `${emp.first_name||''} ${emp.last_name||''}`.trim()); if(emp.email) set('project_manager_email', emp.email); if(emp.phone) set('project_manager_phone', emp.phone) }} placeholder="Velg eller skriv inn navn" /></FLabel>
+              <FLabel label="Navn">
+                <EmployeeNameSelect value={form.project_manager_name}
+                  onChange={v => settPmFritekst(set, v)}
+                  onSelect={emp => settPmValgt(set, emp)}
+                  placeholder="Velg ansatt, eller skriv inn ekstern" />
+                <div style={{ marginTop: '6px' }}>
+                  <ProsjektlederVarselMerke harId={form.project_manager_id} navn={form.project_manager_name} />
+                </div>
+              </FLabel>
               <FLabel label="Telefon"><FInput value={form.project_manager_phone} onChange={e => set('project_manager_phone', e.target.value)} placeholder="+47 000 00 000" /></FLabel>
               <div style={{ gridColumn:'1/-1' }}><FLabel label="E-post"><FInput type="email" value={form.project_manager_email} onChange={e => set('project_manager_email', e.target.value)} placeholder="prosjektleder@bedrift.no" /></FLabel></div>
               <div style={{ gridColumn:'1/-1' }}>
@@ -7148,7 +7486,7 @@ function ProsjektDetaljerPage({ projectId, onBack, onNavigateDetail, onNavigateC
 
           <div style={card}>
             <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>👷 Prosjektleder</h3>
-            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
+            {project.project_manager_name ? <div style={{ display:'flex', flexDirection:'column', gap:'6px', wordBreak:'break-word' }}><p style={{ margin:0, fontWeight:'600', color:'#0f172a', fontSize: isMobH ? '13px' : '14px' }}>{project.project_manager_name}</p><div><ProsjektlederVarselMerke harId={project.project_manager_id} navn={project.project_manager_name} kompakt /></div>{project.project_manager_email && <a href={`mailto:${project.project_manager_email}`} style={{ fontSize: isMobH ? '11px' : '13px', color:'#059669', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>✉️ {project.project_manager_email}</a>}{project.project_manager_phone && <a href={`tel:${project.project_manager_phone}`} style={{ fontSize: isMobH ? '12px' : '13px', color:'#059669', textDecoration:'none' }}>📞 {project.project_manager_phone}</a>}</div> : <p style={{ color:'#94a3b8', fontSize:'13px', margin:0 }}>Ikke tildelt</p>}
           </div>
           {/* ── TIMER GODKJENNES AV ──
               Viser hvem som er ansvarlig for godkjenning av timeregistreringer
@@ -15755,11 +16093,22 @@ const useAppAlert = () => {
 async function notifyProjectManager(projectId, title, message, type, linkPage) {
   if (!projectId) return
   try {
-    const { data: project } = await supabase.from('projects').select('project_manager_email, project_manager_name').eq('id', projectId).single()
-    if (!project?.project_manager_email) return
-    // Finn bruker-id basert på e-post
-    const { data: users } = await supabase.from('employees').select('user_id').eq('email', project.project_manager_email).limit(1)
-    const userId = users?.[0]?.user_id
+    const { data: project } = await supabase.from('projects').select('project_manager_id, project_manager_email, project_manager_name').eq('id', projectId).single()
+    if (!project) return
+    // project_manager_id er den pålitelige koblingen: den kan bare settes ved å
+    // velge en ansatt fra lista, og kan derfor ikke peke på en adresse som ikke
+    // finnes. E-postoppslaget beholdes som fallback for prosjekter som ennå
+    // ikke har fått id — uten det ville de tre som faktisk virker i dag slutte
+    // å virke i vinduet mellom deploy og backfill.
+    let userId = null
+    if (project.project_manager_id) {
+      const { data: emp } = await supabase.from('employees').select('user_id').eq('id', project.project_manager_id).maybeSingle()
+      userId = emp?.user_id || null
+    }
+    if (!userId && project.project_manager_email) {
+      const { data: users } = await supabase.from('employees').select('user_id').eq('email', project.project_manager_email).limit(1)
+      userId = users?.[0]?.user_id || null
+    }
     if (!userId) return
     await supabase.from('notifications').insert({ user_id: userId, title, message, type: type||'info', link_page: linkPage||null })
   } catch(e) { console.error('notifyProjectManager error:', e) }
@@ -32445,6 +32794,7 @@ function RessursGanttGrid({
   filterProject, filterEmployee,
   settings, isWeekend, isToday,
   getProjectColor, holidays,
+  framdrift = {},
   onOpenBooking, onOpenFase, onMovePlan, onMoveBar, onDragStart, onDragEnd, onResizePlan,
   dragging, resizing,
   setShowOppgaveModal,
@@ -32639,6 +32989,7 @@ function RessursGanttGrid({
         notes: first.notes,
         taskDescription: first.task_description || null,
         faseId,
+        framdrift: framdrift[faseId] || null,
         activeDates,                    // NY: datoer som er aktive i fasen
         resourceId,
         resourceType: first.resource_type,
@@ -32696,6 +33047,7 @@ function RessursGanttGrid({
         notes: plan.notes,
         taskDescription: planTask,
         faseId: null,
+        framdrift: null,   // uten fase_id finnes ingen framdrift å knytte til
         activeDates: new Set(planGroup.map(p => p.date)),
         resourceId,
         resourceType: plan.resource_type,
@@ -32707,7 +33059,7 @@ function RessursGanttGrid({
       })
     }
     return bars
-  }, [visiblePlans, plans, settings.skipWeekends])
+  }, [visiblePlans, plans, settings.skipWeekends, framdrift])
 
   // Capacity
   const getUtilization = React.useCallback((resourceId) => {
@@ -33620,6 +33972,43 @@ function RessursGanttGrid({
                           }}/>
                         ))}
 
+                        {/* Framdriftsmerke — prosjektlederen skal se status på bjelken uten å
+                            hovre. Vises bare når det faktisk er noe å si: en meldt status, eller
+                            en periode som er over uten at noen har meldt fra. Bjelker som går som
+                            planlagt får ingen prikk, slik at de som trenger oppmerksomhet skiller
+                            seg ut i stedet for å drukne. */}
+                        {(() => {
+                          const fd = bar.framdrift
+                          const iDagStr = new Date().toISOString().split('T')[0]
+                          const perioden0ver = bar.endDate < iDagStr
+                          let merke = null
+                          if (fd?.status === 'ferdig') {
+                            merke = (fd.faktisk_slutt && fd.faktisk_slutt < bar.endDate)
+                              ? { tegn: '\u2713', bg: '#059669', tittel: 'Meldt ferdig f\u00f8r tiden \u2014 dager kan frigj\u00f8res' }
+                              : { tegn: '\u2713', bg: '#059669', tittel: 'Meldt ferdig' }
+                          } else if (fd?.status === 'blokkert') {
+                            merke = { tegn: '!', bg: '#dc2626', tittel: 'Blokkert' + (fd.kommentar ? ': ' + fd.kommentar : '') }
+                          } else if (fd?.status === 'pagar') {
+                            merke = perioden0ver
+                              ? { tegn: '!', bg: '#d97706', tittel: 'P\u00e5g\u00e5r \u2014 forsinket' }
+                              : { tegn: '\u25b6', bg: '#2563eb', tittel: 'P\u00e5g\u00e5r' }
+                          } else if (fd?.status === 'ikke_startet' && perioden0ver) {
+                            merke = { tegn: '!', bg: '#d97706', tittel: 'Ikke startet \u2014 forsinket' }
+                          } else if (!fd && perioden0ver && bar.faseId) {
+                            merke = { tegn: '?', bg: '#94a3b8', tittel: 'Perioden er over \u2014 ingen framdrift meldt' }
+                          }
+                          if (!merke || width < 44) return null
+                          return (
+                            <div title={merke.tittel} style={{
+                              position: 'absolute', top: '3px', right: '3px', zIndex: 3,
+                              width: '15px', height: '15px', borderRadius: '50%',
+                              background: merke.bg, color: 'white',
+                              fontSize: '10px', fontWeight: '800', lineHeight: '15px', textAlign: 'center',
+                              boxShadow: '0 0 0 1.5px rgba(255,255,255,0.9)', pointerEvents: 'none',
+                            }}>{merke.tegn}</div>
+                          )
+                        })()}
+
                         {/* Content — Float-stil: prosjektnr. + navn + OPPGAVE i selve bjelken,
                             timer per dag nederst-høyre. Høyere bjelker gir plass til alt. */}
                         {(() => {
@@ -33832,45 +34221,59 @@ function RessursGanttGrid({
         const dateRange = bar.startDate === bar.endDate ? startFmt : `${startFmt} – ${endFmt}`
         const projColor = proj ? getProjectColor(proj.id, projects) : '#64748b'
 
-        // ── Progresjonsberegning ──
-        // Sorter plans etter dato for å regne "dag X av Y"
+        // ── Framdrift ──
+        // To kilder, og de må ikke forveksles:
+        //  1) MELDT framdrift fra den ansatte (booking_framdrift) — dette er fakta.
+        //  2) Ren kalenderposisjon — hvor langt i tidsrommet vi er.
+        //
+        // Før dette viste popupen KUN (2), men presenterte den som progresjon:
+        // en booking som ikke var rørt viste «Fullført periode ✅ 100 %» så snart
+        // sluttdatoen passerte. Det er nettopp den løgnen prosjektlederen ringte
+        // for å avkrefte. Nå vises (1) når den finnes, og (2) merkes eksplisitt
+        // som «ikke meldt» så den ikke kan leses som framdrift.
         const sortedPlans = [...bar.plans].sort((a,b) => a.date.localeCompare(b.date))
         const todayStr = new Date().toISOString().split('T')[0]
         const totalDays = sortedPlans.length
-        // Antall dager som er passert (dato < i dag)
-        const pastDays = sortedPlans.filter(p => p.date < todayStr).length
-        // Er vi på dagens dato?
-        const isOngoing = bar.startDate <= todayStr && todayStr <= bar.endDate
         const isPast = bar.endDate < todayStr
         const isFuture = bar.startDate > todayStr
-        // Nåværende progresjon i prosent
-        let progressPct = 0
-        if (isPast) progressPct = 100
-        else if (isFuture) progressPct = 0
-        else {
-          // Beregn inneværende dag inkludert i dag
-          const currentDay = sortedPlans.filter(p => p.date <= todayStr).length
-          progressPct = totalDays > 0 ? Math.round((currentDay / totalDays) * 100) : 0
-        }
-        // Statustekst
-        let statusLabel, statusColor, statusBg, statusEmoji
-        if (isPast) {
-          statusLabel = 'Fullført periode'
-          statusColor = '#64748b'
-          statusBg = '#f1f5f9'
-          statusEmoji = '✅'
+        const fd = bar.framdrift || null
+        const meldtStatus = fd?.status || null
+
+        let statusLabel, statusColor, statusBg, statusEmoji, progressPct, erMeldt = !!meldtStatus
+        if (meldtStatus === 'ferdig') {
+          // Meldt ferdig FØR siste planlagte dag = dager som kan frigjøres.
+          const foerTiden = fd.faktisk_slutt && fd.faktisk_slutt < bar.endDate
+          statusLabel = foerTiden ? 'Ferdig før tiden' : 'Meldt ferdig'
+          statusColor = '#059669'; statusBg = '#ecfdf5'; statusEmoji = '✅'; progressPct = 100
+        } else if (meldtStatus === 'blokkert') {
+          statusLabel = 'Blokkert'
+          statusColor = '#dc2626'; statusBg = '#fef2f2'; statusEmoji = '🚧'; progressPct = 50
+        } else if (meldtStatus === 'pagar') {
+          // Forsinket utledes: pågår fortsatt etter siste planlagte dag.
+          statusLabel = isPast ? 'Pågår — forsinket' : 'Pågår'
+          statusColor = isPast ? '#d97706' : '#2563eb'
+          statusBg = isPast ? '#fffbeb' : '#eff6ff'
+          statusEmoji = isPast ? '⚠️' : '🔨'
+          progressPct = 50
+        } else if (meldtStatus === 'ikke_startet') {
+          statusLabel = isPast ? 'Ikke startet — forsinket' : 'Ikke startet'
+          statusColor = isPast ? '#d97706' : '#64748b'
+          statusBg = isPast ? '#fffbeb' : '#f1f5f9'
+          statusEmoji = isPast ? '⚠️' : '⚪'
+          progressPct = 0
         } else if (isFuture) {
           const daysUntil = Math.ceil((new Date(bar.startDate + 'T12:00:00') - new Date(todayStr + 'T12:00:00')) / (1000*60*60*24))
           statusLabel = daysUntil === 1 ? 'Starter i morgen' : `Starter om ${daysUntil} dager`
-          statusColor = '#2563eb'
-          statusBg = '#eff6ff'
-          statusEmoji = '📅'
+          statusColor = '#2563eb'; statusBg = '#eff6ff'; statusEmoji = '📅'; progressPct = 0
+        } else if (isPast) {
+          // Perioden er over, men ingen har meldt noe. Dette er det viktigste
+          // tilfellet å ikke pynte på — her ringte han før.
+          statusLabel = 'Perioden er over — ingen framdrift meldt'
+          statusColor = '#d97706'; statusBg = '#fffbeb'; statusEmoji = '❓'; progressPct = 0
         } else {
           const currentDay = sortedPlans.filter(p => p.date <= todayStr).length
-          statusLabel = `Dag ${currentDay} av ${totalDays}`
-          statusColor = '#059669'
-          statusBg = '#f0fdf4'
-          statusEmoji = '⏱️'
+          statusLabel = `Dag ${currentDay} av ${totalDays} — ikke meldt`
+          statusColor = '#64748b'; statusBg = '#f8fafc'; statusEmoji = '⏱️'; progressPct = 0
         }
 
         // ── Plassering ──────────────────────────────────────────────────────
@@ -33973,7 +34376,8 @@ function RessursGanttGrid({
                 </div>
                 <span style={{ fontSize:'11px', fontWeight:'700', color: statusColor }}>{progressPct}%</span>
               </div>
-              {/* Progresjonsbar */}
+              {/* Progresjonsbar. Fylles bare av MELDT framdrift — er ingenting meldt,
+                  står den tom i stedet for å antyde en framgang ingen har bekreftet. */}
               <div style={{ height:'5px', background:'rgba(255,255,255,0.6)', borderRadius:'3px', overflow:'hidden' }}>
                 <div style={{
                   width: `${progressPct}%`,
@@ -33983,6 +34387,21 @@ function RessursGanttGrid({
                   transition:'width 0.3s',
                 }} />
               </div>
+
+              {/* Kommentaren fra den ansatte. Dette er ofte den eneste informasjonen
+                  som faktisk endrer hva prosjektlederen gjør videre. */}
+              {fd?.kommentar && (
+                <div style={{ display:'flex', alignItems:'flex-start', gap:'6px', marginTop:'7px', paddingTop:'7px', borderTop:'1px solid rgba(0,0,0,0.07)' }}>
+                  <span style={{ fontSize:'12px', flexShrink:0 }}>💬</span>
+                  <span style={{ fontSize:'12px', color:'#334155', lineHeight:1.35, fontWeight:'500' }}>{fd.kommentar}</span>
+                </div>
+              )}
+              {erMeldt && fd?.meldt_at && (
+                <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'5px' }}>
+                  Meldt {new Date(fd.meldt_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}
+                  {fd.faktisk_slutt && fd.status === 'ferdig' ? ` · ferdig ${new Date(fd.faktisk_slutt + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })} (planlagt ${new Date(bar.endDate + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })})` : ''}
+                </div>
+              )}
             </div>
 
             {/* Metadata */}
@@ -34178,7 +34597,7 @@ function RessursGanttGrid({
 
 // ── MobilRessursView — feltmodus for håndverkere ──
 // Erstatter Gantt-grida på mobil (<768px). Bruker kortbasert layout gruppert per uke per dag.
-function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenPlanning, onOpenMilestone, getProjectColor, holidays, user }) {
+function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenPlanning, onOpenMilestone, getProjectColor, holidays, user, framdrift = {} }) {
   // Start av inneværende måned
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date()
@@ -34693,8 +35112,37 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                             cursor:'pointer',
                           }}>
                           <div style={{ flex:1, minWidth:0 }}>
-                            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                              🏗️ {proj ? proj.name : 'Uten prosjekt'}
+                            <div style={{ display:'flex', alignItems:'center', gap:'6px', minWidth:0 }}>
+                              <div style={{ flex:1, minWidth:0, fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                🏗️ {proj ? proj.name : 'Uten prosjekt'}
+                              </div>
+                              {/* Framdriftsmerke — samme sannhet som på desktop. Uten dette ville
+                                  prosjektlederen fått ett svar i Gantt og et annet på telefonen.
+                                  Er flere faser samlet i samme dagrad, vinner den mest alvorlige:
+                                  blokkert foran forsinket foran resten. */}
+                              {(() => {
+                                const faser = [...new Set(bookings.map(b => b.fase_id).filter(Boolean))]
+                                if (faser.length === 0) return null
+                                const rang = { blokkert: 0, forsinket: 1, pagar: 2, ferdig: 3 }
+                                let verst = null
+                                for (const fid of faser) {
+                                  const fd = framdrift[fid]
+                                  const dager = bookings.filter(b => b.fase_id === fid).map(b => b.date).sort()
+                                  const sisteDag = dager[dager.length - 1]
+                                  let n = null
+                                  if (fd?.status === 'blokkert') n = { k: 'blokkert', tegn: '🚧', bg: '#fef2f2', farge: '#dc2626', tekst: 'Blokkert' }
+                                  else if (fd?.status === 'ferdig') n = { k: 'ferdig', tegn: '✅', bg: '#ecfdf5', farge: '#059669', tekst: 'Ferdig' }
+                                  else if (fd && fd.status !== 'ferdig' && sisteDag && sisteDag < today) n = { k: 'forsinket', tegn: '⚠️', bg: '#fffbeb', farge: '#d97706', tekst: 'Forsinket' }
+                                  else if (fd?.status === 'pagar') n = { k: 'pagar', tegn: '🔨', bg: '#eff6ff', farge: '#2563eb', tekst: 'Pågår' }
+                                  if (n && (!verst || rang[n.k] < rang[verst.k])) verst = n
+                                }
+                                if (!verst) return null
+                                return (
+                                  <span style={{ flexShrink:0, display:'inline-flex', alignItems:'center', gap:'3px', background: verst.bg, color: verst.farge, border: `1px solid ${verst.farge}33`, borderRadius:'999px', padding:'2px 7px', fontSize:'10px', fontWeight:'800', whiteSpace:'nowrap' }}>
+                                    <span style={{ fontSize:'10px' }}>{verst.tegn}</span>{verst.tekst}
+                                  </span>
+                                )
+                              })()}
                             </div>
                             {(() => {
                               const tasks = [...new Set(bookings.map(b => b.task_description).filter(Boolean))]
@@ -35598,6 +36046,10 @@ function RessursPage() {
   const [ganttAnchor, setGanttAnchor] = useState(() => startOfWeek(new Date().toISOString().split('T')[0]))
   const [scrollToTodayTrigger, setScrollToTodayTrigger] = useState(0)
   const [ganttDragCreate, setGanttDragCreate] = useState(null) // { resourceId, startDate, endDate }
+  // Framdrift meldt inn av ansatte, nøklet på fase_id. Hentes utenom lesMedCache:
+  // dette er ferskvare — prosjektlederen skal se status slik den er nå, ikke slik
+  // den var da offline-cachen sist ble skrevet.
+  const [framdrift, setFramdrift] = useState({})
 
   const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const load = async () => {
@@ -35613,6 +36065,12 @@ function RessursPage() {
       ])
       setEmployees(emp.data); setMachines(mac.data); setProjects(proj.data); setPlans(pl.data); setMilestones(ms.data)
       setAllSkills(sk.data)
+      // Feiler dette, viser Gantt seg akkurat som før — framdrift er et tillegg,
+      // ikke en forutsetning for at planen skal kunne leses.
+      try {
+        const { data: fd } = await supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, planlagt_slutt, meldt_at')
+        setFramdrift(Object.fromEntries((fd || []).map(f => [f.fase_id, f])))
+      } catch (e) { console.error('framdrift:', e) }
       setCacheInfo({ fraCache: pl.fraCache, lagretAt: pl.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
@@ -36582,6 +37040,7 @@ function RessursPage() {
       {/* ─── MOBIL-VISNING (feltmodus for håndverkere) ─── */}
       {isMobRP ? (
         <MobilRessursView
+          framdrift={framdrift}
           kanRedigere={kanRedigereRessurs}
           employees={employees}
           machines={machines}
@@ -36665,6 +37124,7 @@ function RessursPage() {
           getProjectColor={getProjectColor}
           holidays={ALL_HOLIDAYS}
           onOpenBooking={(modalData) => { if (!kanRedigereRessurs) return; setShowBookingModal(modalData) }}
+          framdrift={framdrift}
           onOpenFase={(faseData) => { if (!kanRedigereRessurs) return; setShowFaseModal(faseData) }}
           onMovePlan={async (plan, newResourceId, newDate, isCopy) => {
             if (!kanRedigereRessurs) return
@@ -37337,6 +37797,60 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
   const totalHours = bar.plans.reduce((s, p) => s + (parseFloat(p.hours) || 0), 0)
   const dayCount = bar.plans.length
 
+  // ── Gjenstående dager etter en ferdigmelding før tiden ──────────────────────
+  // Meldes jobben ferdig onsdag, står torsdag og fredag fortsatt som opptatt i
+  // planen. Det er nettopp den ryddejobben framdriftsmeldingen skulle spare
+  // prosjektlederen for — uten dette ser planen fortsatt full ut.
+  //
+  // Frigjøringen er et FORSLAG han bekrefter, ikke automatikk: dagene slettes
+  // permanent, og en feilmelding fra en ansatt skal ikke kunne rive ned planen
+  // på egen hånd.
+  const frigjorbare = React.useMemo(() => {
+    const fd = bar.framdrift
+    if (!fd || fd.status !== 'ferdig' || !fd.faktisk_slutt) return []
+    const etter = bar.plans.filter(pl => pl.date > fd.faktisk_slutt)
+    // Meldes en oppgave ferdig FØR den har startet, ligger hele bookingen etter
+    // ferdigdatoen. Da er dette ikke lenger en frigjøring, men en sletting av
+    // hele fasen — og den handlingen finnes allerede, med sin egen advarsel.
+    // Å skjule knappen her hindrer at en feiltrykt ferdigmelding river bort
+    // bookingen via en dialog som lover noe langt mildere.
+    if (etter.length >= bar.plans.length) return []
+    return etter
+  }, [bar.framdrift, bar.plans])
+
+  const frigjorTimer = frigjorbare.reduce((sum, pl) => sum + (parseFloat(pl.hours) || 0), 0)
+
+  const handleFrigjor = async () => {
+    if (frigjorbare.length === 0) return
+    const fd = bar.framdrift
+    const fmt = (d) => new Date(d + 'T12:00:00').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })
+    const datoer = frigjorbare.map(pl => pl.date).sort()
+    const ok = await confirm({
+      message: `Frigjør ${frigjorbare.length} dag${frigjorbare.length !== 1 ? 'er' : ''} på ${resourceName}?`,
+      subMessage: `${task || 'Oppgaven'} ble meldt ferdig ${fmt(fd.faktisk_slutt)} ` +
+        `Dagene ${fmt(datoer[0])}${datoer.length > 1 ? ` – ${fmt(datoer[datoer.length - 1])}` : ''} ` +
+        `(${frigjorTimer}t) slettes permanent, slik at ${resourceName} blir ledig for annet arbeid. ` +
+        `Selve ferdigmeldingen beholdes.`,
+      confirmLabel: 'Frigjør dagene',
+      danger: true,
+    })
+    if (!ok) return
+    setSaving(true)
+    try {
+      const ids = frigjorbare.map(pl => pl.id)
+      // Koblede maskinbookinger må følge med, ellers står maskinen igjen som
+      // opptatt på dager ingen lenger jobber.
+      const maskinIds = allPlans
+        .filter(pl => pl.linked_resource_plan_id && ids.includes(pl.linked_resource_plan_id))
+        .map(pl => pl.id)
+      const { error } = await supabase.from('resource_plans').delete().in('id', [...ids, ...maskinIds])
+      if (error) throw error
+      onSaved()
+    } catch (e) {
+      await alert({ message: 'Kunne ikke frigjøre dagene', subMessage: e.message, kind: 'error' })
+    } finally { setSaving(false) }
+  }
+
   // Finn etterfølgende faser for samme ressurs og prosjekt
   const laterPlans = React.useMemo(() => {
     return allPlans.filter(p =>
@@ -37517,6 +38031,71 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
             <div>📅 {startFmt.split(' ').slice(1).join(' ')} – {endFmt.split(' ').slice(1).join(' ')}</div>
             <div>⏱️ {totalHours}t · {dayCount} dag{dayCount !== 1 ? 'er' : ''}</div>
           </div>
+
+          {/* Framdrift meldt av den ansatte. Står øverst i modalen fordi den avgjør
+              hvilken av handlingene under som er den riktige: er jobben meldt ferdig
+              før tiden, er det gjenstående dager som skal frigjøres — ikke fasen som
+              skal flyttes. */}
+          {(() => {
+            const fd = bar.framdrift
+            const iDagStr = new Date().toISOString().split('T')[0]
+            const perioden0ver = bar.endDate < iDagStr
+            if (!fd && !perioden0ver) return null
+
+            let tittel, farge, bg, emoji, undertekst = null
+            if (fd?.status === 'ferdig') {
+              const fslutt = fd.faktisk_slutt
+              if (fslutt && fslutt < bar.endDate) {
+                const rest = bar.plans.filter(pl => pl.date > fslutt).length
+                tittel = 'Meldt ferdig før tiden'
+                farge = '#059669'; bg = '#ecfdf5'; emoji = '✅'
+                undertekst = rest > 0
+                  ? `Ferdig ${new Date(fslutt + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })} — ${rest} planlagt${rest !== 1 ? 'e' : ''} dag${rest !== 1 ? 'er' : ''} står fortsatt som opptatt`
+                  : `Ferdig ${new Date(fslutt + 'T12:00:00').toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}`
+              } else {
+                tittel = 'Meldt ferdig'; farge = '#059669'; bg = '#ecfdf5'; emoji = '✅'
+              }
+            } else if (fd?.status === 'blokkert') {
+              tittel = 'Blokkert'; farge = '#dc2626'; bg = '#fef2f2'; emoji = '🚧'
+            } else if (fd?.status === 'pagar') {
+              tittel = perioden0ver ? 'Pågår — forsinket' : 'Pågår'
+              farge = perioden0ver ? '#d97706' : '#2563eb'
+              bg = perioden0ver ? '#fffbeb' : '#eff6ff'
+              emoji = perioden0ver ? '⚠️' : '🔨'
+            } else if (fd?.status === 'ikke_startet') {
+              tittel = perioden0ver ? 'Ikke startet — forsinket' : 'Ikke startet'
+              farge = perioden0ver ? '#d97706' : '#64748b'
+              bg = perioden0ver ? '#fffbeb' : '#f1f5f9'
+              emoji = perioden0ver ? '⚠️' : '⚪'
+            } else {
+              tittel = 'Ingen framdrift meldt'
+              farge = '#d97706'; bg = '#fffbeb'; emoji = '❓'
+              undertekst = 'Perioden er over. Den ansatte har ikke meldt inn status.'
+            }
+
+            return (
+              <div style={{ marginTop:'10px', background: bg, border: `1px solid ${farge}33`, borderRadius:'10px', padding:'10px 12px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'7px' }}>
+                  <span style={{ fontSize:'14px' }}>{emoji}</span>
+                  <span style={{ fontSize:'13px', fontWeight:'700', color: farge }}>{tittel}</span>
+                </div>
+                {undertekst && (
+                  <div style={{ fontSize:'11.5px', color:'#475569', marginTop:'4px', lineHeight:1.4 }}>{undertekst}</div>
+                )}
+                {fd?.kommentar && (
+                  <div style={{ display:'flex', alignItems:'flex-start', gap:'6px', marginTop:'7px', paddingTop:'7px', borderTop:'1px solid rgba(0,0,0,0.07)' }}>
+                    <span style={{ fontSize:'12px', flexShrink:0 }}>💬</span>
+                    <span style={{ fontSize:'12px', color:'#334155', lineHeight:1.4, wordBreak:'break-word' }}>{fd.kommentar}</span>
+                  </div>
+                )}
+                {fd?.meldt_at && (
+                  <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'5px' }}>
+                    Meldt {new Date(fd.meldt_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
+                  </div>
+                )}
+              </div>
+            )
+          })()}
         </div>
 
         {/* Innhold — dynamisk basert på modus */}
@@ -37525,6 +38104,26 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, user, onC
           {mode === 'overview' && (
             <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
               <div style={{ fontSize:'11px', fontWeight:'700', color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:'4px' }}>Handlinger</div>
+
+              {/* Frigjør gjenstående dager — vises kun når jobben er meldt ferdig
+                  før siste planlagte dag. Står øverst fordi den da nesten alltid
+                  er det riktige neste steget: flytting eller splitting rydder ikke
+                  opp i dager som allerede er unødvendige. */}
+              {frigjorbare.length > 0 && (
+                <button onClick={handleFrigjor} disabled={saving}
+                  style={{ display:'flex', alignItems:'center', gap:'12px', padding:'14px 16px', background:'#ecfdf5', border:'1px solid #86efac', borderRadius:'10px', cursor: saving ? 'default' : 'pointer', textAlign:'left', width:'100%' }}>
+                  <span style={{ fontSize:'22px', flexShrink:0 }}>🎉</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:'14px', fontWeight:'700', color:'#047857' }}>
+                      Frigjør {frigjorbare.length} gjenstående dag{frigjorbare.length !== 1 ? 'er' : ''}
+                    </div>
+                    <div style={{ fontSize:'11px', color:'#059669', marginTop:'2px' }}>
+                      Meldt ferdig før tiden — {frigjorTimer}t står fortsatt som opptatt på {resourceName}
+                    </div>
+                  </div>
+                  <span style={{ fontSize:'16px', color:'#059669' }}>›</span>
+                </button>
+              )}
 
               {/* Flytt fasen */}
               <button onClick={() => setMode('move')} disabled={saving}
@@ -83868,6 +84467,18 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               const placeholderIds = {} // Gjenbruk UUID per mann-nummer
               const ueIds = {}           // Gjenbruk UUID per UE-navn (samme UE = samme rad)
 
+              // fase_id binder dagsradene sammen til ÉN oppgave. Uten den er en
+              // bygningsdel over ni dager ni løsrevne rader, og framdrift kan ikke
+              // henges på noe — verken i dashbordkortet eller i Gantt.
+              //
+              // Nøkkelen er (bygningsdel × RESSURS), ikke bygningsdel alene: hver
+              // ansatt har sin egen bjelke og melder sin egen framdrift, og
+              // booking_framdrift har unique(fase_id). Delte to ansatte fase_id,
+              // ville den enes «ferdig» gjelde begge.
+              const nyFaseId = () => (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : `fase-${Date.now()}-${Math.random().toString(36).slice(2,9)}`
+
               // Bruk redigert fase-liste hvis brukeren har vært i faseplanleggeren, ellers original bdPlan
               const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
 
@@ -83886,6 +84497,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 if (bd.utfores === 'ue') {
                   const navn = (bd.ueNavn || '').trim() || 'Underleverandør'
                   if (!ueIds[navn]) ueIds[navn] = crypto.randomUUID()
+                  // Samme UE deler rad på tvers av bygningsdeler, men hver
+                  // bygningsdel er sin egen oppgave — derfor ny fase_id her.
+                  const ueFaseId = nyFaseId()
                   for (const dateStr of workDates) {
                     plans.push(sanitizeDbPayload({
                       resource_id: ueIds[navn],
@@ -83894,6 +84508,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       date: dateStr, hours: 0,
                       notes: `[UE: ${navn}]`,
                       task_description: bd.name || null,
+                      fase_id: ueFaseId,
                       created_by: user?.id
                     }))
                   }
@@ -83901,6 +84516,10 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 }
 
                 if (useEmployees) {
+                  // Genereres FØR datoløkka: alle dagene for samme ansatt må dele
+                  // fase_id, ellers blir hver dag sin egen oppgave.
+                  const empFaseIds = {}
+                  for (const empId of selectedEmployees) empFaseIds[empId] = nyFaseId()
                   for (const dateStr of workDates) {
                     for (const empId of selectedEmployees) {
                       plans.push(sanitizeDbPayload({
@@ -83908,6 +84527,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         date: dateStr, hours: timerPerDag,
                         notes: `📐 ${bd.name} (fra kalkyle)`,
                         task_description: bd.name || null,
+                        fase_id: empFaseIds[empId],
                         created_by: user?.id
                       }))
                     }
@@ -83916,6 +84536,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   for (let mannNr = 1; mannNr <= antallMann; mannNr++) {
                     // Gjenbruk samme placeholder-ID per mann på tvers av bygningsdeler
                     if (!placeholderIds[mannNr]) placeholderIds[mannNr] = crypto.randomUUID()
+                    // Placeholder-raden gjenbrukes på tvers av bygningsdeler, men
+                    // hver bygningsdel er sin egen oppgave — ny fase_id per mann her.
+                    const mannFaseId = nyFaseId()
                     for (const dateStr of workDates) {
                       plans.push(sanitizeDbPayload({
                         resource_id: placeholderIds[mannNr],
@@ -83926,6 +84549,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         // Selve bygningsdelen vises via task_description på hver bar.
                         notes: `[PLACEHOLDER: Ressurs ${mannNr}]`,
                         task_description: bd.name || null,
+                        fase_id: mannFaseId,
                         created_by: user?.id
                       }))
                     }
