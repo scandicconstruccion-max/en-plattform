@@ -174,6 +174,66 @@ if (/onSendTilFase=\{hasFaser \? openSendTilFase : undefined\}/.test(src)) {
   kritisk('onSendTilFase sendes inn uten hasFaser-sjekk')
 }
 
+// ── Kategoritellerne følger samme filter som lista ───────────────────────────
+// Tellerne har en EGEN kilde (RPC-en), ikke fillistas spørring. Da fase-
+// filteret kom i lista, ble tellerne stående igjen og summerte alle faser: én
+// tegning kopiert til tre faser ga «3 filer» over en liste med én, i hver av
+// de tre fanene.
+//
+// Merk at summeringen er en vanlig funksjon, ikke useMemo. Første forsøk brukte
+// useMemo og leste `hasFaser`, som deklareres lenger ned i komponenten — det ga
+// «Cannot access before initialization» og feilskjerm i produksjon.
+// tests/prosjektfiler-monterer.mjs vokter den grensen; her sjekkes regnestykket.
+console.log('\n── Kategoritellerne ──')
+
+const trStart = src.indexOf('const tellerRader = (catId, sub) =>')
+if (trStart === -1) {
+  kritisk('Fant ikke tellerRader — er summeringen flyttet eller omdøpt?')
+} else {
+  const kropp = src.slice(src.indexOf('{', trStart) + 1, src.indexOf('\n  }', trStart))
+  const teller = new Function('countRows', 'hasFaser', 'viewedPhase', 'catId', 'sub', kropp)
+
+  // Det observerte tilfellet: samme tegning kopiert til tre faser, pluss én
+  // fil uten fase (som skal vises overalt).
+  const rader = [
+    { phase: 'anbud',     category: 'tegninger', sub_folder: 'Arkitekttegninger', antall: 1 },
+    { phase: 'kontrakt',  category: 'tegninger', sub_folder: 'Arkitekttegninger', antall: 1 },
+    { phase: 'utforelse', category: 'tegninger', sub_folder: 'Arkitekttegninger', antall: 1 },
+    { phase: null,        category: 'tegninger', sub_folder: 'Arkitekttegninger', antall: 1 },
+    { phase: 'anbud',     category: 'okonomi',   sub_folder: null,                antall: 1 },
+  ]
+  const iFase = (f, cat, sub) => teller(rader, true, f, cat, sub)
+
+  sjekk('Utførelse: egen fase + uten fase', iFase('utforelse', 'tegninger'), 2)
+  sjekk('Utførelse: undermappe teller likt', iFase('utforelse', 'tegninger', 'Arkitekttegninger'), 2)
+  sjekk('Utførelse: økonomi hører til anbud', iFase('utforelse', 'okonomi'), 0)
+  sjekk('Anbud: tegninger', iFase('anbud', 'tegninger'), 2)
+  sjekk('Anbud: økonomi', iFase('anbud', 'okonomi'), 1)
+  sjekk('FDV: bare fila uten fase', iFase('fdv', 'tegninger'), 1)
+  sjekk('uten faser: teller alle rader', teller(rader, false, null, 'tegninger'), 4)
+
+  // Før fiksen viste alle fanene 4. Det var hele feilen.
+  antall++
+  if (iFase('utforelse', 'tegninger') !== 4 && iFase('anbud', 'tegninger') !== 4) {
+    console.log('  ✓ ingen fane viser summen av alle faser')
+  } else { feil++; console.error('  ✗ telleren summerer fortsatt på tvers av faser') }
+}
+
+antall++
+if (/const \[countRows, setCountRows\] = useState\(\[\]\)/.test(src)) {
+  console.log('  ✓ rådataene fra RPC beholdes (summen utledes ved behov)')
+} else {
+  kritisk('countRows finnes ikke — er tellerne lagret ferdig summert igjen?')
+}
+
+// Summeringen MÅ være lat. Et useMemo her leser hasFaser før den er deklarert.
+antall++
+if (!/const \{ catCounts, subCounts \} = React\.useMemo/.test(src)) {
+  console.log('  ✓ summeringen er lat (ikke useMemo over en senere deklarasjon)')
+} else {
+  kritisk('catCounts/subCounts er tilbake i et useMemo — det krasjet produksjon en gang')
+}
+
 console.log(`\n${antall - feil} av ${antall} OK`)
 console.log(feil ? 'FEILET' : 'OK — kopiering og fase-filtrering er som avtalt')
 process.exit(feil ? 1 : 0)
