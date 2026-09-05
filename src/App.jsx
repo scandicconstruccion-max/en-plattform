@@ -7533,13 +7533,12 @@ function ProsjektfilerPage() {
   const PAGE_SIZE = 50
   const [panelFromCache, setPanelFromCache] = useState(false) // fillista vises fra offline-cache
   const [panelCacheAt, setPanelCacheAt] = useState(null)      // når cachen sist ble lagret
-  // RÅDATA fra RPC-en: én rad per (fase, kategori, undermappe, doc_type) med
-  // antall unike dokumenter. Tallene i kategorilista utledes av denne, ikke
-  // lagres ferdig summert — fordi summen avhenger av hvilken fase brukeren ser
-  // på, og fasen kan endres uten at vi henter noe på nytt.
-  const [countRows, setCountRows] = useState([])
+  // Tellere per kategori/undermappe fra RPC (unike dokumenter, ikke rader)
+  const [catCounts, setCatCounts] = useState({})         // { [category]: antall }
+  const [subCounts, setSubCounts] = useState({})         // { [category]: { [sub]: antall } }
   const [countsKnown, setCountsKnown] = useState(false)  // har vi tellere (ferske ell. cache)? ellers: vis ingen tall
   // Fase-/malsystem (steg 2a). Kun aktivt når prosjektet har en mal.
+  const [phaseFileCounts, setPhaseFileCounts] = useState({}) // { [fase]: antall filer } — faselinje-teller
   const [fulfilled, setFulfilled] = useState(() => new Set()) // Set("fase|doc_type") som er oppfylt
   const [projectMeta, setProjectMeta] = useState(null)       // { phases, required_docs, active_phase, document_template_id }
   const [waivers, setWaivers] = useState([])                 // [{id, phase, doc_type, reason, waived_by, waived_at}]
@@ -7629,32 +7628,31 @@ function ProsjektfilerPage() {
 
   // Tellere per kategori/undermappe via RPC (unike dokumenter, ikke rader).
   const loadCounts = async (projectId) => {
-    if (!projectId || projectId === 'all') { setCountRows([]); setCountsKnown(false); return }
+    if (!projectId || projectId === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); return }
     const cacheKey = `pf:tellere:${projectId}`
     try {
       const { data, error } = await supabase.rpc('prosjektfiler_kategori_tellere', { p_project_id: projectId })
       if (error) throw error
-      const rader = data || []
-      // Oppfyllelsen er fase-spesifikk i seg selv (nøkkelen er «fase|doc_type»)
-      // og beregnes derfor ferdig her. Kategoritellerne kan IKKE det — de
-      // avhenger av hvilken fase brukeren ser på, så rådataene tas vare på.
-      const oppfylt = []
-      rader.forEach(r => {
-        if (r.phase && r.doc_type && Number(r.antall || 0) > 0) oppfylt.push(r.phase + '|' + r.doc_type)
+      const cat = {}, sub = {}, faseCnt = {}, oppfylt = []
+      ;(data || []).forEach(r => {
+        const n = Number(r.antall || 0)
+        cat[r.category] = (cat[r.category] || 0) + n
+        if (r.sub_folder) { const m = (sub[r.category] = sub[r.category] || {}); m[r.sub_folder] = (m[r.sub_folder] || 0) + n }
+        if (r.phase) faseCnt[r.phase] = (faseCnt[r.phase] || 0) + n
+        if (r.phase && r.doc_type && n > 0) oppfylt.push(r.phase + '|' + r.doc_type)
       })
-      setCountRows(rader); setFulfilled(new Set(oppfylt)); setCountsKnown(true)
-      idbSett(cacheKey, { rader, oppfylt })   // offline: sist kjente tall
+      setCatCounts(cat); setSubCounts(sub); setPhaseFileCounts(faseCnt); setFulfilled(new Set(oppfylt)); setCountsKnown(true)
+      idbSett(cacheKey, { cat, sub, faseCnt, oppfylt })   // offline: sist kjente tall
     } catch (e) {
       // RPC svarer ikke (offline/feil): vis sist kjente tall fra cache.
       const cachet = await idbHent(cacheKey)
-      if (cachet && cachet.data && Array.isArray(cachet.data.rader)) {
-        setCountRows(cachet.data.rader); setFulfilled(new Set(cachet.data.oppfylt || []))
+      if (cachet && cachet.data) {
+        setCatCounts(cachet.data.cat || {}); setSubCounts(cachet.data.sub || {})
+        setPhaseFileCounts(cachet.data.faseCnt || {}); setFulfilled(new Set(cachet.data.oppfylt || []))
         setCountsKnown(true)
       } else {
-        // Ingenting lagret, eller cache fra før tellerne ble fase-avhengige →
-        // vis ingen tall (tomt er ærligere enn 0). Den fyller seg selv ved
-        // første lasting med nett.
-        setCountRows([]); setFulfilled(new Set()); setCountsKnown(false)
+        // Ingenting lagret → vis ingen tall (tomt er ærligere enn 0)
+        setCatCounts({}); setSubCounts({}); setPhaseFileCounts({}); setFulfilled(new Set()); setCountsKnown(false)
       }
     }
   }
@@ -7809,7 +7807,7 @@ function ProsjektfilerPage() {
 
   // Bytt prosjekt → last tellere + mal-snapshot. (Kategori/undermappe nullstilles i velgeren.)
   useEffect(() => {
-    if (selectedProject === 'all') { setCountRows([]); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); setProjectMeta(null); setWaivers([]); setViewedPhase(null); setDerivedFulfilled(new Set()); setDerivedRows({}); setDerivedTotals({}); setDerivedReady(false); return }
+    if (selectedProject === 'all') { setCatCounts({}); setSubCounts({}); setCountsKnown(false); setPanelFiles([]); setTotalCount(0); setPanelFromCache(false); setProjectMeta(null); setWaivers([]); setViewedPhase(null); setDerivedFulfilled(new Set()); setDerivedRows({}); setDerivedTotals({}); setDerivedReady(false); return }
     loadCounts(selectedProject)
     loadProjectMeta(selectedProject)
     loadDerived(selectedProject)
@@ -7856,25 +7854,6 @@ function ProsjektfilerPage() {
   }, [showUpload])
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  // Tellerne i kategorilista, utledet av rådataene og SAMME fase-filter som
-  // fillista bruker: filen hører til sin fase, og filer uten fase vises overalt.
-  //
-  // Uten filteret summerte tellerne alle faser mens lista under viste én. Én
-  // tegning kopiert til Anbud, Kontrakt og Utførelse ga «Arkitekttegninger — 3
-  // filer» over en liste med nøyaktig én fil, i hver av de tre fanene. Tallet
-  // var ikke feil om man leste det som «i hele prosjektet», men det sto rett
-  // over en liste som mente noe annet.
-  const { catCounts, subCounts } = React.useMemo(() => {
-    const cat = {}, sub = {}
-    countRows.forEach(r => {
-      if (hasFaser && viewedPhase && r.phase && r.phase !== viewedPhase) return
-      const n = Number(r.antall || 0)
-      cat[r.category] = (cat[r.category] || 0) + n
-      if (r.sub_folder) { const m = (sub[r.category] = sub[r.category] || {}); m[r.sub_folder] = (m[r.sub_folder] || 0) + n }
-    })
-    return { catCounts: cat, subCounts: sub }
-  }, [countRows, hasFaser, viewedPhase])
-
   const countForCat = (catId) => catCounts[catId] || 0
   const countForSub = (catId, sub) => (subCounts[catId] && subCounts[catId][sub]) || 0
 
