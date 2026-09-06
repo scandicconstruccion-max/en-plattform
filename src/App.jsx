@@ -85067,7 +85067,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 setLoading(false)
                 if (hasIt) {
                   supabase.from('projects').select('id, name, project_number').order('name').then(({ data: projData }) => setProjects(projData || []))
-                  supabase.from('employees').select('id, first_name, last_name, role, department').order('last_name').then(({ data: empData }) => setEmployees(empData || []))
+                  supabase.from('employees').select('id, first_name, last_name, position, department').order('last_name').then(({ data: empData }) => setEmployees(empData || []))
                 }
               })
               .catch(() => { setHasRessursplan(false); setLoading(false) })
@@ -85576,14 +85576,23 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               // av på sin egen kopi, ville to menn gitt 143 timer utført av 145,2.
               // fase_id lagres i tillegg, men bare som spor tilbake til den
               // utsendingen raden kom fra.
+              // Timene avgjør, ikke navnet. En arbeidsart på 0 timer kan ikke flytte
+              // prosenten, og verre: den teller likevel med i «alt er krysset av», så
+              // ferdigforslaget uteblir til noen huker av en tom rad. Slike oppstår
+              // når noen legger til en linje i kalkylen uten å fylle den ut.
+              //
+              // Mangler bare NAVNET, er timene ekte planlagt arbeid. Da beholdes raden
+              // og får fallback-navnet fra frysingen — å fjerne den ville tatt timer
+              // ut av lista som bookingens dager faktisk er satt av til.
+              const skalKryssesAv = (a) => (parseFloat(a.timer) || 0) > 0
               const samleArbeidsarter = (oppgaveId, forsteFaseId, bd) => {
-                if (!oppgaveId || !Array.isArray(bd.arbeidsarter) || bd.arbeidsarter.length === 0) return
-                bd.arbeidsarter.forEach(a => {
+                if (!oppgaveId || !Array.isArray(bd.arbeidsarter)) return
+                bd.arbeidsarter.filter(skalKryssesAv).forEach(a => {
                   arbeidsartRader.push({
                     oppgave_id: oppgaveId,
                     fase_id: forsteFaseId || null,
                     kilde_arbeidsart_id: a.kildeId || null,
-                    navn: a.navn,
+                    navn: (a.navn || '').trim() || 'Arbeidsart',
                     grunntid: a.grunntid ?? null,
                     mengde: a.mengde ?? null,
                     timer: a.timer ?? 0,
@@ -86190,7 +86199,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                         style={{ cursor:'pointer', width:'16px', height:'16px', accentColor:'#059669', flexShrink:0 }} />
                                       <div style={{ flex:1, minWidth:0 }}>
                                         <div style={{ fontSize:'14px', color: isSelected ? '#059669' : '#0f172a' }}>
-                                          {empName}{emp.role ? ` – ${emp.role}` : ''}
+                                          {empName}{emp.position ? ` – ${emp.position}` : ''}
                                         </div>
                                       </div>
                                       {isSelected && <span style={{ color:'#059669', fontSize:'14px', flexShrink:0 }}>✓</span>}
