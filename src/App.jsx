@@ -33033,6 +33033,8 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
   const [laster, setLaster] = useState(true)
   const [lagrer, setLagrer] = useState(null)
   const [apenKommentar, setApenKommentar] = useState(null)
+  // Skiller «ingen oppgaver» fra «kontoen er ikke koblet til en ansatt».
+  const [ingenKobling, setIngenKobling] = useState(false)
   // Kvittering ved statusendring: uten den vet ikke den ansatte om noen
   // faktisk fikk beskjed, og da ringer han for å sjekke.
   const [sisteVarsel, setSisteVarsel] = useState(null)
@@ -33072,7 +33074,11 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
     if (!user?.id) { setLaster(false); return }
     try {
       const { data: emp } = await supabase.from('employees').select('id').eq('user_id', user.id).maybeSingle()
-      if (!emp?.id) { setOppgaver([]); setLaster(false); return }
+      // Uten kobling til en ansatt-rad finnes det ingen bookinger å hente —
+      // og det er ikke det samme som å ha ingen oppgaver. Skilles de ikke,
+      // ser den ansatte «du har ingen oppgaver» og tror planen er tom.
+      if (!emp?.id) { setIngenKobling(true); setOppgaver([]); setLaster(false); return }
+      setIngenKobling(false)
 
       // 30 dager bakover fanger det som er forsinket, 14 fram det som starter snart.
       const fraD = new Date(idag + 'T12:00:00'); fraD.setDate(fraD.getDate() - 30)
@@ -33394,12 +33400,14 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
   if (oppgaver.length === 0) {
     return (
       <div style={{ padding: mob ? '48px 24px' : '64px 24px', textAlign: 'center' }}>
-        <div style={{ fontSize: '38px', opacity: 0.65 }}>📋</div>
+        <div style={{ fontSize: '38px', opacity: 0.65 }}>{ingenKobling ? '🔗' : '📋'}</div>
         <div style={{ fontSize: mob ? '15px' : '16px', fontWeight: '700', color: '#0f172a', marginTop: '12px' }}>
-          Du har ingen planlagte oppgaver
+          {ingenKobling ? 'Kontoen din er ikke koblet til en ansatt' : 'Du har ingen planlagte oppgaver'}
         </div>
-        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '7px', lineHeight: 1.5, maxWidth: '300px', margin: '7px auto 0' }}>
-          Når prosjektlederen setter deg opp på en jobb, dukker den opp her.
+        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '7px', lineHeight: 1.5, maxWidth: '320px', margin: '7px auto 0' }}>
+          {ingenKobling
+            ? 'Derfor finner vi ikke bookingene dine. Si fra til den som administrerer systemet, så kobler han brukeren din til ansattkortet ditt.'
+            : 'Når prosjektlederen setter deg opp på en jobb, dukker den opp her.'}
         </div>
         {onByttVisning && (
           <button onClick={() => onByttVisning('plan')}
@@ -35620,7 +35628,11 @@ function RessursGanttGrid({
 
 // ── MobilRessursView — feltmodus for håndverkere ──
 // Erstatter Gantt-grida på mobil (<768px). Bruker kortbasert layout gruppert per uke per dag.
-function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenPlanning, onOpenMilestone, getProjectColor, holidays, user, framdrift = {} }) {
+function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenPlanning, onOpenMilestone, onSeOppgave, getProjectColor, holidays, user, framdrift = {} }) {
+  // Hvilken ansatt-rad er MIN? Framdriftsmerket blir bare en vei inn til
+  // «Mine oppgaver» på egne bookinger — ellers ville prosjektlederen trykket
+  // på Olas merke og havnet i sine egne oppgaver.
+  const minEmployeeId = user ? (employees || []).find(e => e.user_id === user.id)?.id || null : null
   // Start av inneværende måned
   const [viewMonth, setViewMonth] = useState(() => {
     const d = new Date()
@@ -36160,8 +36172,19 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                                   if (n && (!verst || rang[n.k] < rang[verst.k])) verst = n
                                 }
                                 if (!verst) return null
+                                const minEgen = !!minEmployeeId && bookings.some(b => b.resource_id === minEmployeeId)
+                                const merke = { flexShrink:0, display:'inline-flex', alignItems:'center', gap:'3px', background: verst.bg, color: verst.farge, border: `1px solid ${verst.farge}33`, borderRadius:'999px', fontSize:'10px', fontWeight:'800', whiteSpace:'nowrap' }
+                                // Egen booking: merket er inngangen til avkryssing, status og
+                                // meldingstråd. Trykk på selve kortet åpner fortsatt dagen.
+                                if (minEgen && onSeOppgave) return (
+                                  <button onClick={e => { e.stopPropagation(); onSeOppgave() }}
+                                    style={{ ...merke, padding:'0 8px', minHeight:'30px', cursor:'pointer', fontFamily:'inherit' }}
+                                    aria-label={`${verst.tekst} — se oppgaven`}>
+                                    <span style={{ fontSize:'10px' }}>{verst.tegn}</span>{verst.tekst}<span style={{ opacity:0.7 }}>›</span>
+                                  </button>
+                                )
                                 return (
-                                  <span style={{ flexShrink:0, display:'inline-flex', alignItems:'center', gap:'3px', background: verst.bg, color: verst.farge, border: `1px solid ${verst.farge}33`, borderRadius:'999px', padding:'2px 7px', fontSize:'10px', fontWeight:'800', whiteSpace:'nowrap' }}>
+                                  <span style={{ ...merke, padding:'2px 7px' }}>
                                     <span style={{ fontSize:'10px' }}>{verst.tegn}</span>{verst.tekst}
                                   </span>
                                 )
@@ -37175,7 +37198,10 @@ function RessursPage() {
   const minEmployee = user ? employees.find(e => e.user_id === user.id) : null
   // Har brukeren ingen ansattrad, finnes det ingen bookinger å melde på —
   // da skal bryteren heller ikke vises.
-  const visMineOppgaver = !!minEmployee && kanMeldeEgenFramdrift
+  // Bryteren skal stå selv om ansattkoblingen mangler. Panelet forklarer da hva
+  // som er galt; skjuler vi bryteren, sitter den ansatte fast i daglista og får
+  // ingen forklaring. minEmployee er fortsatt riktig for alt annet.
+  const visMineOppgaver = kanMeldeEgenFramdrift
 
   // Filter resources
   let resources = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
@@ -37641,7 +37667,7 @@ function RessursPage() {
             ansatte er til for den som planlegger, og en ansatt har bare seg selv.
             Slik blir det ingen ny navigasjonsrad — den ene som forsvinner var
             uansett ikke hans. */}
-        {isMobRP && resourceType==='ansatte' && (
+        {isMobRP && (visMineOppgaver || resourceType==='ansatte') && (
           <div style={{ display:'flex', flexDirection:'column', gap:'8px', padding:'10px 12px', background:'#fafbfc', borderTop:'1px solid #f1f5f9' }}>
             {visMineOppgaver && (
               <div style={{ display:'flex', gap:'4px', background:'#e9edeb', padding:'3px', borderRadius:'10px' }}>
@@ -37660,7 +37686,7 @@ function RessursPage() {
             )}
             {/* Nedtrekkslista er for den som planlegger — skjult for rollen ansatt,
                 og for den som står i sine egne oppgaver. */}
-            {ressursVisning === 'plan' && role !== 'ansatt' && (
+            {resourceType==='ansatte' && ressursVisning === 'plan' && role !== 'ansatt' && (
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               <span style={{ fontSize:'18px', flexShrink:0 }}>👤</span>
               <div style={{ position:'relative', flex:1 }}>
@@ -38155,6 +38181,7 @@ function RessursPage() {
           onOpenBooking={(data) => { if (!kanRedigereRessurs) return; setShowBookingModal(data) }}
           onOpenPlanning={(data) => { if (!kanRedigereRessurs) return; setShowOppgaveModal(data || true) }}
           onOpenMilestone={(ms) => setShowNewMilestone({ edit: ms })}
+          onSeOppgave={visMineOppgaver ? () => setRessursVisning('mine') : null}
           getProjectColor={getProjectColor}
           holidays={ALL_HOLIDAYS}
           user={user}
@@ -39339,7 +39366,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
                     Krever fase_id — uten den finnes det ingen oppgave å henge
                     framdriften på. */}
                 {bar.faseId && (
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(4, 1fr)', gap:'5px', marginTop:'9px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns: erMobil ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap:'5px', marginTop:'9px' }}>
                     {FRAMDRIFT_STATUSER.map(st => {
                       const valgt = fd?.status === st.v
                       return (
