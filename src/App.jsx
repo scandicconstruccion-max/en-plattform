@@ -15919,64 +15919,6 @@ async function varsleFramdriftsavvik({ faseId, projectId, avvikType, oppgave, pr
   return sendt
 }
 
-// ─── FRAMDRIFT REGNET AV ARBEIDSARTER ────────────────────────────────────────
-// Prosenten måles mot arbeidsartenes EGNE timer, ikke mot bookede timer.
-// «Plasstøpt dekke» har 145,2 arbeidsarttimer, men bare 67,5 bookede etter at
-// dagene ble rundet til hele — og de 67,5 er dessuten per mann. Målte vi mot
-// dem, ville to mann til sammen passert 100 % lenge før jobben var gjort.
-//
-// Vekten er timer, ikke antall. «Understøtting og forskaling» på 71,5 timer er
-// halve jobben alene; fire av fire haker er bare 100 % når artene veier likt.
-function arbeidsartFramdrift(arbeidsarter) {
-  const liste = Array.isArray(arbeidsarter) ? arbeidsarter : []
-  if (liste.length === 0) return null
-  const total = liste.reduce((sum, a) => sum + (parseFloat(a.timer) || 0), 0)
-  const gjort = liste.reduce((sum, a) => sum + (a.utfort ? (parseFloat(a.timer) || 0) : 0), 0)
-  const antallGjort = liste.filter(a => a.utfort).length
-  // Timeløse arbeidsarter ville gitt divisjon på null. Da er antall det eneste
-  // meningsfulle målet vi har.
-  const pst = total > 0
-    ? Math.round((gjort / total) * 100)
-    : Math.round((antallGjort / liste.length) * 100)
-  return {
-    total, gjort, pst,
-    antall: liste.length,
-    antallGjort,
-    alleGjort: antallGjort === liste.length,
-    ingenGjort: antallGjort === 0,
-  }
-}
-
-// Hva skal skje med STATUSEN når en hake endres?
-//
-// Automatikk er riktig i én retning og feil i den andre. At noen har krysset av
-// den første arbeidsarten er bevis nok for at jobben er i gang — der sparer
-// automatikken et trykk uten å påstå noe. At alt er krysset av beviser derimot
-// ikke at oppgaven er FERDIG: ryddingen kan gjenstå, og bare den som står der
-// vet det. Derfor foreslås ferdigmelding, den skjer ikke av seg selv.
-//
-// Og fjernes en hake på en oppgave som er meldt ferdig, rettes ingenting
-// automatisk: da er det uklart om ferdigmeldingen var feil eller om noe måtte
-// gjøres om igjen. Avviket vises, mennesket avgjør.
-function statusFolgerAvkryssing({ status, arbeidsarter }) {
-  const fd = arbeidsartFramdrift(arbeidsarter)
-  if (!fd) return { nyStatus: null, foreslaFerdig: false, avvik: false }
-  if (status === 'ikke_startet' && !fd.ingenGjort) {
-    // «Kryss av alt som gjenstår» på en urørt oppgave treffer begge regler på
-    // én gang: statusen skal slutte å si «ikke startet», OG ferdigmeldingen
-    // skal foreslås. Tar vi bare den første, forsvinner forslaget helt for den
-    // som gjorde hele jobben før han meldte fra.
-    return { nyStatus: 'pagar', foreslaFerdig: fd.alleGjort, avvik: false }
-  }
-  if (fd.alleGjort && status !== 'ferdig') {
-    return { nyStatus: null, foreslaFerdig: true, avvik: false }
-  }
-  if (status === 'ferdig' && !fd.alleGjort) {
-    return { nyStatus: null, foreslaFerdig: false, avvik: true }
-  }
-  return { nyStatus: null, foreslaFerdig: false, avvik: false }
-}
-
 // Utleder hvilket avvik en framdriftsrad representerer, hvis noe.
 // Rekkefølgen er alvorlighetsgrad: blokkert slår forsinket.
 function framdriftsavvik({ status, faktiskSlutt, estimertSlutt, planlagtSlutt }) {
@@ -32694,7 +32636,7 @@ const FRAMDRIFT_STATUSER = [
   { v: 'blokkert',     kort: 'Venter',       emoji: '🚧', farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca' },
 ]
 
-function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlanlegge = false, onByttVisning }) {
+function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttVisning }) {
   const appAlert = useAppAlert()
   const [oppgaver, setOppgaver] = useState([])
   const [laster, setLaster] = useState(true)
@@ -32716,14 +32658,6 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
     const e = (employees || []).find(x => x.user_id === userId)
     return e ? `${e.first_name || ''} ${e.last_name || ''}`.trim() : null
   }, [employees])
-  // Slår opp navn på ANSATT-id (employees.id). navnPaa tar bruker-id
-  // (employees.user_id) — de to er ulike nøkler, og å bruke feil gir tomme navn.
-  const navnPaa2 = React.useCallback((id) => {
-    if (!id) return null
-    const e = (employees || []).find(x => x.id === id) || (employees || []).find(x => x.user_id === id)
-    return e ? `${e.first_name || ''} ${e.last_name || ''}`.trim() : null
-  }, [employees])
-
   // Sant når varselet krysset en terskel som er verdt en liten kvittering.
   const [sisteVarsel, setSisteVarsel] = useState(null)
   // «Si fra til prosjektleder» er en egen, bevisst handling. Rutinekommentarer
@@ -32745,7 +32679,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
       const tilD = new Date(idag + 'T12:00:00'); tilD.setDate(tilD.getDate() + 14)
 
       const { data: plans } = await supabase.from('resource_plans')
-        .select('id, fase_id, oppgave_id, project_id, resource_id, date, task_description')
+        .select('id, fase_id, project_id, resource_id, date, task_description')
         .eq('resource_id', emp.id).eq('resource_type', 'employee')
         .not('fase_id', 'is', null)
         .gte('date', fmtDato(fraD)).lte('date', fmtDato(tilD))
@@ -32757,8 +32691,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
       for (const p of plans) {
         if (!map.has(p.fase_id)) {
           map.set(p.fase_id, {
-            fase_id: p.fase_id, oppgave_id: p.oppgave_id || null,
-            project_id: p.project_id, resource_id: p.resource_id,
+            fase_id: p.fase_id, project_id: p.project_id, resource_id: p.resource_id,
             task: p.task_description || 'Booking', datoer: [],
           })
         }
@@ -32770,45 +32703,13 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
       })
 
       const faseIds = liste.map(o => o.fase_id)
-      const oppgaveIds = Array.from(new Set(liste.map(o => o.oppgave_id).filter(Boolean)))
       const projIds = Array.from(new Set(liste.map(o => o.project_id).filter(Boolean)))
-      const [fdRes, projRes, aaRes, delereRes] = await Promise.all([
+      const [fdRes, projRes] = await Promise.all([
         supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, estimert_slutt, gjenstaende_dager, meldt_av, varslet_type').in('fase_id', faseIds),
         projIds.length ? supabase.from('projects').select('id, name, project_number').in('id', projIds) : Promise.resolve({ data: [] }),
-        // Arbeidsartene ligger på OPPGAVEN, ikke på fasen — én liste deles av
-        // alle som er bookt på samme bygningsdel.
-        oppgaveIds.length
-          ? supabase.from('booking_arbeidsarter')
-              .select('id, oppgave_id, navn, timer, rekkefolge, utfort, utfort_av, utfort_at')
-              .in('oppgave_id', oppgaveIds).order('rekkefolge')
-          : Promise.resolve({ data: [] }),
-        // Hvem andre er bookt på de samme oppgavene. En avkryssing andre ser
-        // konsekvensen av bør ha et ansikt.
-        oppgaveIds.length
-          ? supabase.from('resource_plans')
-              .select('oppgave_id, resource_id, resource_type')
-              .in('oppgave_id', oppgaveIds)
-          : Promise.resolve({ data: [] }),
       ])
       const fdMap = new Map((fdRes.data || []).map(f => [f.fase_id, f]))
       const projMap = new Map((projRes.data || []).map(p => [p.id, p]))
-
-      // Arbeidsarter gruppert per oppgave
-      const aaMap = new Map()
-      for (const a of (aaRes.data || [])) {
-        if (!aaMap.has(a.oppgave_id)) aaMap.set(a.oppgave_id, [])
-        aaMap.get(a.oppgave_id).push(a)
-      }
-      // Hvem deler oppgaven, og er noen av dem en underleverandør?
-      const delereMap = new Map()
-      const ueOppgaver = new Set()
-      for (const r of (delereRes.data || [])) {
-        if (!delereMap.has(r.oppgave_id)) delereMap.set(r.oppgave_id, new Set())
-        delereMap.get(r.oppgave_id).add(r.resource_id)
-        // resource_type er den pålitelige markøren — notes er fritekst
-        // prosjektlederen kan skrive om.
-        if (r.resource_type === 'ue') ueOppgaver.add(r.oppgave_id)
-      }
 
       const grense = fmtDato(new Date(Date.now() - 7 * 86400000))
       const beriket = liste.map(o => {
@@ -32830,13 +32731,6 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
           // «Forsinket» er ikke en lagret status — den utledes.
           forsinket: status !== 'ferdig' && o.til < idag,
           paagaarNaa: o.fra <= idag && idag <= o.til,
-          // Arbeidsartene, hvis oppgaven har frosne. Har den ikke, faller den
-          // tilbake på status og dagestimat — nøyaktig som før.
-          arbeidsarter: aaMap.get(o.oppgave_id) || [],
-          erUe: ueOppgaver.has(o.oppgave_id),
-          // Andre enn deg selv som er bookt på samme oppgave.
-          delesMed: Array.from(delereMap.get(o.oppgave_id) || [])
-            .filter(rid => rid !== o.resource_id),
         }
       })
       // Ferdigmeldte forsvinner etter en uke, ellers vokser kortet i det uendelige.
@@ -32869,11 +32763,6 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
     if (error) throw error
     return rad
   }
-
-  // UE-oppgaver krysses av av prosjektlederen — underleverandøren har ikke
-  // konto i systemet. Egne oppgaver krysser man av selv. Rollesjekken er den
-  // samme som styrer resten av Ressursplan, ikke en ny.
-  const kanKrysseAv = (o) => o.erUe ? kanPlanlegge : kanMelde
 
   // Kalles etter at framdriften er lagret. Varselet er en ETTERPÅ-handling:
   // feiler det, står innmeldingen likevel, og den ansatte har gjort sitt.
@@ -32960,77 +32849,6 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
     let n = 0
     while (d < slutt) { d.setDate(d.getDate() + 1); const u = d.getDay(); if (u !== 0 && u !== 6) n++ }
     return n
-  }
-
-  // Kalles etter at en hake er lagret. Bare regel 1 skriver noe av seg selv;
-  // regel 2 og 3 er ren visning, utledet i renderingen.
-  const folgOppAvkryssing = async (o, nyeArter) => {
-    const regel = statusFolgerAvkryssing({ status: o.status, arbeidsarter: nyeArter })
-    if (!regel.nyStatus) return
-    try {
-      await skrivFramdrift(o, { status: regel.nyStatus })
-      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
-        ? { ...x, status: regel.nyStatus, harMeldt: true } : x))
-    } catch (e) {
-      // Haken er lagret uansett — statusen er en bonus, ikke en forutsetning.
-      console.error('statusFolgerAvkryssing:', e)
-    }
-  }
-
-  // Avkryssing. Lagres med én gang, som statusknappene — og med hvem og når,
-  // slik at det er synlig om haken kom fra plassen eller fra kontoret.
-  const settUtfort = async (o, art, nyVerdi) => {
-    if (lagrer) return
-    if (!kanKrysseAv(o)) return
-    setLagrer(o.fase_id)
-    // Optimistisk: haken skal føles umiddelbar, ellers trykker folk to ganger.
-    setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
-      ? { ...x, arbeidsarter: x.arbeidsarter.map(a => a.id === art.id
-          ? { ...a, utfort: nyVerdi, utfort_av: nyVerdi ? (user?.id || null) : null,
-              utfort_at: nyVerdi ? new Date().toISOString() : null }
-          : a) }
-      : x))
-    try {
-      const { error } = await supabase.from('booking_arbeidsarter').update({
-        utfort: nyVerdi,
-        utfort_av: nyVerdi ? (user?.id || null) : null,
-        utfort_at: nyVerdi ? new Date().toISOString() : null,
-        updated_at: new Date().toISOString(),
-      }).eq('id', art.id)
-      if (error) throw error
-      await folgOppAvkryssing(o, (o.arbeidsarter || []).map(a => a.id === art.id ? { ...a, utfort: nyVerdi } : a))
-    } catch (e) {
-      // Rull tilbake — en hake som ser ut til å ha festet seg, men ikke gjorde
-      // det, er verre enn ingen hake.
-      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
-        ? { ...x, arbeidsarter: x.arbeidsarter.map(a => a.id === art.id ? { ...art } : a) }
-        : x))
-      await appAlert({ message: 'Kunne ikke lagre avkryssingen', subMessage: e.message, kind: 'error' })
-    } finally { setLagrer(null) }
-  }
-
-  // Krysser av alle på én gang. «Alt ferdig» er den vanligste handlingen når
-  // jobben er over, og skal ikke koste én hake per arbeidsart.
-  const settAlleUtfort = async (o) => {
-    if (lagrer || !kanKrysseAv(o)) return
-    const igjen = (o.arbeidsarter || []).filter(a => !a.utfort)
-    if (igjen.length === 0) return
-    setLagrer(o.fase_id)
-    const naa = new Date().toISOString()
-    setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id
-      ? { ...x, arbeidsarter: x.arbeidsarter.map(a => a.utfort ? a
-          : { ...a, utfort: true, utfort_av: user?.id || null, utfort_at: naa }) }
-      : x))
-    try {
-      const { error } = await supabase.from('booking_arbeidsarter').update({
-        utfort: true, utfort_av: user?.id || null, utfort_at: naa, updated_at: naa,
-      }).in('id', igjen.map(a => a.id))
-      if (error) throw error
-      await folgOppAvkryssing(o, (o.arbeidsarter || []).map(a => ({ ...a, utfort: true })))
-    } catch (e) {
-      setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, arbeidsarter: o.arbeidsarter } : x))
-      await appAlert({ message: 'Kunne ikke krysse av alt', subMessage: e.message, kind: 'error' })
-    } finally { setLagrer(null) }
   }
 
   const lagreKommentar = async (o) => {
@@ -33122,125 +32940,6 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
                     </span>
                   )}
                 </div>
-
-                {/* Avkryssingsliste — vises når oppgaven har frosne arbeidsarter.
-                    Da er DETTE framdriften; statusknappene under blir sekundære.
-                    Har oppgaven ingen arbeidsarter, vises ikke listen, og
-                    status + dagestimat er eneste metode — som før. */}
-                {(o.arbeidsarter || []).length > 0 && (() => {
-                  const fd = arbeidsartFramdrift(o.arbeidsarter)
-                  const laast = !kanKrysseAv(o)
-                  const enTime = (t) => (Math.round((parseFloat(t) || 0) * 10) / 10).toString().replace('.', ',')
-                  return (
-                    <div style={{ marginBottom: '10px', border: '1px solid #e2e8f0', borderRadius: '10px', overflow: 'hidden' }}>
-                      {/* Fremdrift i timer, ikke i antall haker */}
-                      <div style={{ padding: mob ? '9px 11px' : '8px 11px', background: '#fafbfa', borderBottom: '1px solid #f1f5f9' }}>
-                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '8px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '800', color: fd.pst >= 100 ? '#059669' : '#0f172a' }}>
-                            {fd.pst} % utført
-                          </span>
-                          <span style={{ fontSize: '11px', color: '#64748b', fontVariantNumeric: 'tabular-nums' }}>
-                            {enTime(fd.gjort)} av {enTime(fd.total)} t
-                          </span>
-                        </div>
-                        <div style={{ height: '6px', background: '#e9edeb', borderRadius: '3px', overflow: 'hidden', marginTop: '6px' }}>
-                          <div style={{ width: Math.min(fd.pst, 100) + '%', height: '100%', background: fd.pst >= 100 ? '#059669' : '#2563eb', borderRadius: '3px', transition: 'width 0.25s' }} />
-                        </div>
-                      </div>
-
-                      {/* Regel 2: alt krysset av, men ikke meldt ferdig. Forslag,
-                          ikke automatikk — ryddingen kan gjenstå, og bare den som
-                          står der vet det. */}
-                      {(() => {
-                        const regel = statusFolgerAvkryssing({ status: o.status, arbeidsarter: o.arbeidsarter })
-                        if (regel.foreslaFerdig && !laast) return (
-                          <div style={{ padding: mob ? '10px 11px' : '9px 11px', background: '#ecfdf5', borderBottom: '1px solid #bbf7d0' }}>
-                            <div style={{ fontSize: '12.5px', fontWeight: '700', color: '#047857', marginBottom: '7px' }}>
-                              Alt er krysset av. Meld oppgaven som ferdig?
-                            </div>
-                            <button onClick={() => settStatus(o, 'ferdig')} disabled={travel}
-                              style={{ width: '100%', minHeight: mob ? '44px' : '38px', borderRadius: '9px', border: 'none',
-                                background: travel ? '#6ee7b7' : '#059669', color: 'white',
-                                fontSize: '13px', fontWeight: '700', cursor: travel ? 'default' : 'pointer' }}>
-                              ✅ Meld ferdig
-                            </button>
-                          </div>
-                        )
-                        // Regel 3: meldt ferdig, men en hake er tatt bort igjen.
-                        // Vis avviket — ikke rett det opp automatisk.
-                        if (regel.avvik) return (
-                          <div style={{ padding: '8px 11px', background: '#fffbeb', borderBottom: '1px solid #fde68a',
-                            fontSize: '11.5px', color: '#b45309', fontWeight: '600' }}>
-                            ⚠️ Oppgaven er meldt ferdig, men ikke alt er krysset av
-                          </div>
-                        )
-                        return null
-                      })()}
-
-                      {/* Hvem deler listen. En hake andre ser konsekvensen av
-                          bør ha et ansikt. */}
-                      {(o.delesMed || []).length > 0 && (
-                        <div style={{ padding: '6px 11px', background: '#eff6ff', borderBottom: '1px solid #dbeafe', fontSize: '11px', color: '#1e40af' }}>
-                          👥 Felles liste med {o.delesMed.map(rid => navnPaa2(rid)).filter(Boolean).join(', ') || (o.delesMed.length + ' andre')}
-                        </div>
-                      )}
-                      {o.erUe && (
-                        <div style={{ padding: '6px 11px', background: '#fffbeb', borderBottom: '1px solid #fde68a', fontSize: '11px', color: '#b45309' }}>
-                          🔧 Underleverandør — {kanPlanlegge ? 'du krysser av på deres vegne' : 'bare prosjektleder kan krysse av her'}
-                        </div>
-                      )}
-
-                      {/* Selve artene */}
-                      {o.arbeidsarter.map(a => {
-                        const av = a.utfort ? navnPaa2(a.utfort_av) : null
-                        return (
-                          <button key={a.id} onClick={() => settUtfort(o, a, !a.utfort)}
-                            disabled={laast || travel}
-                            style={{
-                              display: 'flex', alignItems: 'flex-start', gap: '10px', width: '100%',
-                              textAlign: 'left', padding: mob ? '11px' : '9px 11px',
-                              minHeight: mob ? '48px' : 'auto',
-                              background: 'white', border: 'none', borderTop: '1px solid #f8fafc',
-                              cursor: laast ? 'default' : 'pointer', opacity: laast ? 0.75 : 1,
-                            }}>
-                            <span style={{
-                              width: '21px', height: '21px', flexShrink: 0, borderRadius: '6px', marginTop: '1px',
-                              border: '2px solid ' + (a.utfort ? '#059669' : '#cbd5e1'),
-                              background: a.utfort ? '#059669' : 'white',
-                              color: 'white', fontSize: '13px', fontWeight: '800',
-                              display: 'grid', placeItems: 'center',
-                            }}>{a.utfort ? '✓' : ''}</span>
-                            <span style={{ flex: 1, minWidth: 0 }}>
-                              <span style={{
-                                display: 'block', fontSize: mob ? '13.5px' : '13px', fontWeight: '600',
-                                color: a.utfort ? '#8b9a94' : '#0f172a',
-                                textDecoration: a.utfort ? 'line-through' : 'none', lineHeight: 1.3,
-                              }}>{a.navn}</span>
-                              {av && (
-                                <span style={{ display: 'block', fontSize: '10.5px', color: '#94a3b8', marginTop: '2px' }}>
-                                  {a.utfort_av === user?.id ? 'Krysset av deg' : 'Krysset av ' + av}
-                                  {a.utfort_at ? ' · ' + new Date(a.utfort_at).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' }) : ''}
-                                </span>
-                              )}
-                            </span>
-                            <span style={{ fontSize: '11px', color: '#94a3b8', flexShrink: 0, fontVariantNumeric: 'tabular-nums', marginTop: '2px' }}>
-                              {enTime(a.timer)} t
-                            </span>
-                          </button>
-                        )
-                      })}
-
-                      {!laast && !fd.alleGjort && (
-                        <button onClick={() => settAlleUtfort(o)} disabled={travel}
-                          style={{ width: '100%', padding: mob ? '11px' : '9px', minHeight: mob ? '44px' : 'auto',
-                            background: '#ecfdf5', border: 'none', borderTop: '1px solid #bbf7d0',
-                            color: '#059669', fontSize: '12.5px', fontWeight: '700', cursor: 'pointer' }}>
-                          ✅ Kryss av alt som gjenstår
-                        </button>
-                      )}
-                    </div>
-                  )
-                })()}
 
                 {/* Statusknapper — ett trykk, ingen bekreftelsesdialog. */}
                 <div style={{ display: 'grid', gridTemplateColumns: mob ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)', gap: '6px' }}>
@@ -33441,7 +33140,7 @@ function RessursGanttGrid({
   filterProject, filterEmployee,
   settings, isWeekend, isToday,
   getProjectColor, holidays,
-  framdrift = {}, arbeidsarter = {},
+  framdrift = {},
   onOpenBooking, onOpenFase, onMovePlan, onMoveBar, onDragStart, onDragEnd, onResizePlan,
   dragging, resizing,
   setShowOppgaveModal,
@@ -33636,9 +33335,7 @@ function RessursGanttGrid({
         notes: first.notes,
         taskDescription: first.task_description || null,
         faseId,
-        oppgaveId: first.oppgave_id || null,
         framdrift: framdrift[faseId] || null,
-        arbeidsarter: arbeidsarter[first.oppgave_id] || [],
         activeDates,                    // NY: datoer som er aktive i fasen
         resourceId,
         resourceType: first.resource_type,
@@ -33696,9 +33393,7 @@ function RessursGanttGrid({
         notes: plan.notes,
         taskDescription: planTask,
         faseId: null,
-        oppgaveId: null,
         framdrift: null,   // uten fase_id finnes ingen framdrift å knytte til
-        arbeidsarter: [],
         activeDates: new Set(planGroup.map(p => p.date)),
         resourceId,
         resourceType: plan.resource_type,
@@ -33710,7 +33405,7 @@ function RessursGanttGrid({
       })
     }
     return bars
-  }, [visiblePlans, plans, settings.skipWeekends, framdrift, arbeidsarter])
+  }, [visiblePlans, plans, settings.skipWeekends, framdrift])
 
   // Capacity
   const getUtilization = React.useCallback((resourceId) => {
@@ -34932,31 +34627,9 @@ function RessursGanttGrid({
         const isFuture = bar.startDate > todayStr
         const fd = bar.framdrift || null
         const meldtStatus = fd?.status || null
-        // Har oppgaven arbeidsarter, er de fasiten: en TELT prosent slår en
-        // meldt status, fordi den bygger på hva som faktisk er gjort.
-        const aaFd = arbeidsartFramdrift(bar.arbeidsarter)
 
         let statusLabel, statusColor, statusBg, statusEmoji, progressPct, erMeldt = !!meldtStatus
-        if (aaFd) {
-          erMeldt = !aaFd.ingenGjort
-          progressPct = aaFd.pst
-          const enT = (t) => (Math.round(t * 10) / 10).toString().replace('.', ',')
-          const halePaa = ` · ${enT(aaFd.gjort)} av ${enT(aaFd.total)} t`
-          if (aaFd.alleGjort) {
-            statusLabel = 'Alle arbeidsarter utført' + halePaa
-            statusColor = '#059669'; statusBg = '#ecfdf5'; statusEmoji = '✅'
-          } else if (aaFd.ingenGjort) {
-            statusLabel = isPast ? 'Ingenting krysset av — forsinket' : 'Ingenting krysset av ennå'
-            statusColor = isPast ? '#d97706' : '#64748b'
-            statusBg = isPast ? '#fffbeb' : '#f1f5f9'
-            statusEmoji = isPast ? '⚠️' : '☐'
-          } else {
-            statusLabel = `${aaFd.antallGjort} av ${aaFd.antall} arbeidsarter` + halePaa
-            statusColor = isPast ? '#d97706' : '#2563eb'
-            statusBg = isPast ? '#fffbeb' : '#eff6ff'
-            statusEmoji = isPast ? '⚠️' : '☑️'
-          }
-        } else if (meldtStatus === 'ferdig') {
+        if (meldtStatus === 'ferdig') {
           // Meldt ferdig FØR siste planlagte dag = dager som kan frigjøres.
           const foerTiden = fd.faktisk_slutt && fd.faktisk_slutt < bar.endDate
           statusLabel = foerTiden ? 'Ferdig før tiden' : 'Meldt ferdig'
@@ -36779,8 +36452,6 @@ function RessursPage() {
   // dette er ferskvare — prosjektlederen skal se status slik den er nå, ikke slik
   // den var da offline-cachen sist ble skrevet.
   const [framdrift, setFramdrift] = useState({})
-  // oppgave_id → arbeidsarter[]. Delt av alle bookinger på samme bygningsdel.
-  const [arbeidsarter, setArbeidsarter] = useState({})
 
   const [cacheInfo, setCacheInfo] = useState({ fraCache: false, lagretAt: null }) // Offline Lag 2
   const load = async () => {
@@ -36802,19 +36473,6 @@ function RessursPage() {
         const { data: fd } = await supabase.from('booking_framdrift').select('fase_id, status, kommentar, faktisk_slutt, planlagt_slutt, meldt_at, estimert_slutt, gjenstaende_dager, meldt_av, varslet_type')
         setFramdrift(Object.fromEntries((fd || []).map(f => [f.fase_id, f])))
       } catch (e) { console.error('framdrift:', e) }
-      // Arbeidsartene ligger på OPPGAVEN. Har en booking dem, er de fasiten for
-      // framdrift, og status/dagestimat blir sekundært — også i Gantt.
-      try {
-        const { data: aa } = await supabase.from('booking_arbeidsarter')
-          .select('id, oppgave_id, navn, timer, rekkefolge, utfort, utfort_av, utfort_at')
-          .order('rekkefolge')
-        const grupper = {}
-        for (const a of (aa || [])) {
-          if (!grupper[a.oppgave_id]) grupper[a.oppgave_id] = []
-          grupper[a.oppgave_id].push(a)
-        }
-        setArbeidsarter(grupper)
-      } catch (e) { console.error('arbeidsarter:', e) }
       setCacheInfo({ fraCache: pl.fraCache, lagretAt: pl.lagretAt })
     } catch(e) { console.error(e) }
     finally { setLoading(false) }
@@ -37829,7 +37487,6 @@ function RessursPage() {
             mob={isMobRP}
             employees={employees}
             kanMelde={kanMeldeEgenFramdrift}
-            kanPlanlegge={kanRedigereRessurs}
             onByttVisning={setRessursVisning}
           />
         </div>
@@ -37920,7 +37577,6 @@ function RessursPage() {
           holidays={ALL_HOLIDAYS}
           onOpenBooking={(modalData) => { if (!kanRedigereRessurs) return; setShowBookingModal(modalData) }}
           framdrift={framdrift}
-          arbeidsarter={arbeidsarter}
           onOpenFase={(faseData) => { if (!kanRedigereRessurs) return; setShowFaseModal(faseData) }}
           onMovePlan={async (plan, newResourceId, newDate, isCopy) => {
             if (!kanRedigereRessurs) return
@@ -38608,41 +38264,6 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
   // til er ikke til å stole på. Derfor lagres meldt_av, og «Meldt av …»
   // vises både her og i den ansattes egen liste.
   const [meldStatusLagrer, setMeldStatusLagrer] = useState(false)
-  // Lokal kopi, så haken føles umiddelbar. onSaved() henter alt på nytt
-  // etterpå og er fasiten.
-  const [lokaleArter, setLokaleArter] = useState(null)
-  const arter = lokaleArter || bar.arbeidsarter || []
-  const fdNaa = bar.framdrift || null
-
-  // Prosjektlederen krysser av her — for UE fordi underleverandøren ikke har
-  // konto, og ellers fordi han får beskjed muntlig. Samme rollesjekk som styrer
-  // resten av modalen: åpnes den i det hele tatt, kan han planlegge.
-  const settArtUtfort = async (art, nyVerdi) => {
-    if (meldStatusLagrer) return
-    setMeldStatusLagrer(true)
-    const naa = new Date().toISOString()
-    setLokaleArter(arter.map(a => a.id === art.id
-      ? { ...a, utfort: nyVerdi, utfort_av: nyVerdi ? (user?.id || null) : null, utfort_at: nyVerdi ? naa : null }
-      : a))
-    try {
-      const { error } = await supabase.from('booking_arbeidsarter').update({
-        utfort: nyVerdi,
-        utfort_av: nyVerdi ? (user?.id || null) : null,
-        utfort_at: nyVerdi ? naa : null,
-        updated_at: naa,
-      }).eq('id', art.id)
-      if (error) throw error
-      // Samme regel som i «Mine oppgaver»: første hake på en urørt oppgave
-      // setter «Pågår». Ferdigmelding foreslås derimot, den skjer ikke selv.
-      const nyeArter = arter.map(a => a.id === art.id ? { ...a, utfort: nyVerdi } : a)
-      const regel = statusFolgerAvkryssing({ status: fdNaa?.status || 'ikke_startet', arbeidsarter: nyeArter })
-      if (regel.nyStatus) { try { await meldStatus(regel.nyStatus) } catch (_) { /* haken er lagret uansett */ } }
-      onSaved()
-    } catch (e) {
-      setLokaleArter(arter)
-      await alert({ message: 'Kunne ikke lagre avkryssingen', subMessage: e.message, kind: 'error' })
-    } finally { setMeldStatusLagrer(false) }
-  }
   const meldStatus = async (nyStatus) => {
     if (!bar.faseId || meldStatusLagrer) return
     setMeldStatusLagrer(true)
@@ -39030,94 +38651,6 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
 
         {/* Innhold — dynamisk basert på modus */}
         <div style={{ overflowY:'auto', flex:1, padding:'18px 22px' }}>
-
-          {/* Avkryssingsliste. Har oppgaven arbeidsarter, er de framdriften —
-              da er prosenten talt, ikke meldt. */}
-          {mode === 'overview' && arter.length > 0 && (() => {
-            const fd = arbeidsartFramdrift(arter)
-            const enT = (t) => (Math.round((parseFloat(t) || 0) * 10) / 10).toString().replace('.', ',')
-            const erUe = (bar.plans || []).some(pl => pl.resource_type === 'ue')
-            return (
-              <div style={{ marginBottom:'18px', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
-                <div style={{ padding:'10px 12px', background:'#fafbfa', borderBottom:'1px solid #f1f5f9' }}>
-                  <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'8px' }}>
-                    <span style={{ fontSize:'13px', fontWeight:'800', color: fd.pst >= 100 ? '#059669' : '#0f172a' }}>
-                      {fd.pst} % utført
-                    </span>
-                    <span style={{ fontSize:'11px', color:'#64748b', fontVariantNumeric:'tabular-nums' }}>
-                      {enT(fd.gjort)} av {enT(fd.total)} t · {fd.antallGjort} av {fd.antall} arbeidsarter
-                    </span>
-                  </div>
-                  <div style={{ height:'6px', background:'#e9edeb', borderRadius:'3px', overflow:'hidden', marginTop:'6px' }}>
-                    <div style={{ width: Math.min(fd.pst, 100) + '%', height:'100%', background: fd.pst >= 100 ? '#059669' : '#2563eb', borderRadius:'3px' }} />
-                  </div>
-                </div>
-                {erUe && (
-                  <div style={{ padding:'6px 12px', background:'#fffbeb', borderBottom:'1px solid #fde68a', fontSize:'11px', color:'#b45309' }}>
-                    🔧 Underleverandør — de har ikke konto i systemet, så du krysser av på deres vegne
-                  </div>
-                )}
-                {/* Regel 2 og 3: forslag og avvik. Ingen automatikk — det er
-                    mennesket som vet om ryddingen er gjort. */}
-                {(() => {
-                  const regel = statusFolgerAvkryssing({ status: fdNaa?.status || 'ikke_startet', arbeidsarter: arter })
-                  if (regel.foreslaFerdig) return (
-                    <div style={{ padding:'10px 12px', background:'#ecfdf5', borderBottom:'1px solid #bbf7d0' }}>
-                      <div style={{ fontSize:'12.5px', fontWeight:'700', color:'#047857', marginBottom:'7px' }}>
-                        Alt er krysset av. Meld oppgaven som ferdig?
-                      </div>
-                      <button onClick={() => meldStatus('ferdig')} disabled={meldStatusLagrer}
-                        style={{ width:'100%', minHeight:'36px', borderRadius:'9px', border:'none',
-                          background: meldStatusLagrer ? '#6ee7b7' : '#059669', color:'white',
-                          fontSize:'13px', fontWeight:'700', cursor: meldStatusLagrer ? 'default' : 'pointer' }}>
-                        ✅ Meld ferdig
-                      </button>
-                    </div>
-                  )
-                  if (regel.avvik) return (
-                    <div style={{ padding:'8px 12px', background:'#fffbeb', borderBottom:'1px solid #fde68a',
-                      fontSize:'11.5px', color:'#b45309', fontWeight:'600' }}>
-                      ⚠️ Oppgaven er meldt ferdig, men ikke alt er krysset av
-                    </div>
-                  )
-                  return null
-                })()}
-                {arter.map(a => {
-                  const avNavn = a.utfort ? (() => {
-                    const e = (employees || []).find(x => x.user_id === a.utfort_av || x.id === a.utfort_av)
-                    return e ? ((e.first_name || '') + ' ' + (e.last_name || '')).trim() : null
-                  })() : null
-                  return (
-                    <button key={a.id} onClick={() => settArtUtfort(a, !a.utfort)} disabled={meldStatusLagrer}
-                      style={{ display:'flex', alignItems:'flex-start', gap:'10px', width:'100%', textAlign:'left',
-                        padding:'9px 12px', background:'white', border:'none', borderTop:'1px solid #f8fafc',
-                        cursor: meldStatusLagrer ? 'default' : 'pointer' }}>
-                      <span style={{ width:'20px', height:'20px', flexShrink:0, borderRadius:'6px', marginTop:'1px',
-                        border:'2px solid ' + (a.utfort ? '#059669' : '#cbd5e1'),
-                        background: a.utfort ? '#059669' : 'white', color:'white',
-                        fontSize:'12px', fontWeight:'800', display:'grid', placeItems:'center' }}>
-                        {a.utfort ? '✓' : ''}
-                      </span>
-                      <span style={{ flex:1, minWidth:0 }}>
-                        <span style={{ display:'block', fontSize:'13px', fontWeight:'600',
-                          color: a.utfort ? '#8b9a94' : '#0f172a',
-                          textDecoration: a.utfort ? 'line-through' : 'none' }}>{a.navn}</span>
-                        {avNavn && (
-                          <span style={{ display:'block', fontSize:'10px', color:'#94a3b8', marginTop:'2px' }}>
-                            Krysset av {avNavn}
-                            {a.utfort_at ? ' · ' + new Date(a.utfort_at).toLocaleDateString('nb-NO', { day:'numeric', month:'short' }) : ''}
-                          </span>
-                        )}
-                      </span>
-                      <span style={{ fontSize:'11px', color:'#94a3b8', flexShrink:0, fontVariantNumeric:'tabular-nums', marginTop:'2px' }}>
-                        {enT(a.timer)} t
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-            )
-          })()}
 
           {mode === 'overview' && (
             <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
@@ -85545,17 +85078,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               // Frosne arbeidsarter, samlet opp mens fase_id-ene lages. Skrives
               // etter at bookingene er inne — feiler denne, står planen likevel.
               const arbeidsartRader = []
-              // ÉN liste per oppgave, ikke per mann. «Understøtting og forskaling»
-              // på 71,5 timer gjøres én gang, av alle sammen — krysset hver av dem
-              // av på sin egen kopi, ville to menn gitt 143 timer utført av 145,2.
-              // fase_id lagres i tillegg, men bare som spor tilbake til den
-              // utsendingen raden kom fra.
-              const samleArbeidsarter = (oppgaveId, forsteFaseId, bd) => {
-                if (!oppgaveId || !Array.isArray(bd.arbeidsarter) || bd.arbeidsarter.length === 0) return
+              const samleArbeidsarter = (faseId, bd) => {
+                if (!faseId || !Array.isArray(bd.arbeidsarter) || bd.arbeidsarter.length === 0) return
                 bd.arbeidsarter.forEach(a => {
                   arbeidsartRader.push({
-                    oppgave_id: oppgaveId,
-                    fase_id: forsteFaseId || null,
+                    fase_id: faseId,
                     kilde_arbeidsart_id: a.kildeId || null,
                     navn: a.navn,
                     grunntid: a.grunntid ?? null,
@@ -85580,10 +85107,6 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
 
               for (const bd of faserToUse) {
-                // Oppgaven er bygningsdelen i DENNE utsendingen. Sendes samme
-                // kalkyle på nytt senere, blir det en ny oppgave med sin egen
-                // liste — det er to jobber, ikke én.
-                const oppgaveId = nyFaseId()
                 // Bruk akkumulerte startposisjoner for å unngå overlapp mellom bygningsdeler
                 // når bd.dager er desimal. bd.startDag er eksakt, men vi må jobbe med hele dager.
                 const startDagRounded = Math.round(bd.startDag)
@@ -85601,7 +85124,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   // Samme UE deler rad på tvers av bygningsdeler, men hver
                   // bygningsdel er sin egen oppgave — derfor ny fase_id her.
                   const ueFaseId = nyFaseId()
-                  samleArbeidsarter(oppgaveId, ueFaseId, bd)
+                  samleArbeidsarter(ueFaseId, bd)
                   for (const dateStr of workDates) {
                     plans.push(sanitizeDbPayload({
                       resource_id: ueIds[navn],
@@ -85611,7 +85134,6 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       notes: `[UE: ${navn}]`,
                       task_description: bd.name || null,
                       fase_id: ueFaseId,
-                      oppgave_id: oppgaveId,
                       bygningsdel_id: bd.bygningsdelId || null,
                       kalkyle_rot_id: bd.kalkyleRotId || null,
                       created_by: user?.id
@@ -85624,11 +85146,12 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   // Genereres FØR datoløkka: alle dagene for samme ansatt må dele
                   // fase_id, ellers blir hver dag sin egen oppgave.
                   const empFaseIds = {}
-                  for (const empId of selectedEmployees) empFaseIds[empId] = nyFaseId()
-                  // Listen samles ÉN gang for hele oppgaven, ikke per mann.
-                  // fase_id-en som lagres er den første — den peker tilbake til
-                  // utsendingen, ikke til «eieren» av arbeidsartene.
-                  samleArbeidsarter(oppgaveId, empFaseIds[selectedEmployees[0]], bd)
+                  for (const empId of selectedEmployees) {
+                    empFaseIds[empId] = nyFaseId()
+                    // Hver ansatt får sitt eget sett arbeidsarter å krysse av.
+                    // Deler to ansatte samme oppgave, er de likevel to jobber.
+                    samleArbeidsarter(empFaseIds[empId], bd)
+                  }
                   for (const dateStr of workDates) {
                     for (const empId of selectedEmployees) {
                       plans.push(sanitizeDbPayload({
@@ -85637,7 +85160,6 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         notes: `📐 ${bd.name} · ${kilde(bd)}`,
                         task_description: bd.name || null,
                         fase_id: empFaseIds[empId],
-                        oppgave_id: oppgaveId,
                         bygningsdel_id: bd.bygningsdelId || null,
                         kalkyle_rot_id: bd.kalkyleRotId || null,
                         created_by: user?.id
@@ -85651,8 +85173,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     // Placeholder-raden gjenbrukes på tvers av bygningsdeler, men
                     // hver bygningsdel er sin egen oppgave — ny fase_id per mann her.
                     const mannFaseId = nyFaseId()
-                    // Bare første placeholder bærer listen — de øvrige deler den.
-                    if (mannNr === 1) samleArbeidsarter(oppgaveId, mannFaseId, bd)
+                    samleArbeidsarter(mannFaseId, bd)
                     for (const dateStr of workDates) {
                       plans.push(sanitizeDbPayload({
                         resource_id: placeholderIds[mannNr],
@@ -85664,7 +85185,6 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         notes: `[PLACEHOLDER: Ressurs ${mannNr}]`,
                         task_description: bd.name || null,
                         fase_id: mannFaseId,
-                        oppgave_id: oppgaveId,
                         bygningsdel_id: bd.bygningsdelId || null,
                         kalkyle_rot_id: bd.kalkyleRotId || null,
                         created_by: user?.id
