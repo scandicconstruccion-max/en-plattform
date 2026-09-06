@@ -84666,9 +84666,39 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               const bdDager = antallMann > 0 && timerPerDag > 0 ? r.totalTimer / (antallMann * timerPerDag) : 0
               const startDag = akkumulertDager
               akkumulertDager += bdDager
+              // Arbeidsartene FRYSES her, ikke pekes på. Samme bygningsdel-id har
+              // fått mengde 1 → 13 mellom to revisjoner av samme kalkyle; en peker
+              // ville sendt en håndverker fra 100 % til under 8 % uten at han rørte
+              // noe. Navn, grunntid, mengde og utregnet tid lagres som de var da
+              // bookingen ble laget.
+              //
+              // Formelen er den samme som beregnBygningsdel bruker for totalTimer:
+              // grunntid × grunntid_justering × mengde. Summen av «timer» her er
+              // derfor lik r.totalTimer, og prosenten i steg 2 blir konsistent med
+              // det bookingen faktisk er satt opp med.
+              const bdMengde = safeMengde(bd.mengde, 1)
+              const frosneArbeidsarter = (bd.arbeidsarter || []).map((a, i) => {
+                const ar = beregnArbeidskostnad(a, fakt)
+                return {
+                  kildeId: a.id || null,
+                  navn: (a.beskrivelse || '').trim() || 'Arbeidsart',
+                  grunntid: parseFloat(a.grunntid) || 0,
+                  mengde: bdMengde,
+                  timer: ar.faktiskTid * bdMengde,
+                  rekkefolge: i,
+                }
+              })
               bdPlan.push({
                 name: bd.name || 'Uten navn', fag: fag.name, emoji: fag.emoji,
                 timer: r.totalTimer, dager: bdDager, startDag, sluttDag: akkumulertDager,
+                // Referanse til kilden, KUN for en senere «Oppdater fra kalkylen».
+                // Skal aldri brukes til å regne framdrift — da er vi tilbake til
+                // peker-problemet over.
+                bygningsdelId: bd.id || null,
+                kalkyleRotId: k?.parent_calculation_id || k?.id || null,
+                kalkyleNr: k?.kalk_number || null,
+                kalkyleRev: k?.revision_number || null,
+                arbeidsarter: frosneArbeidsarter,
                 startUke: Math.floor(startDag / 5) + 1, sluttUke: Math.ceil(akkumulertDager / 5),
                 materialer: (bd.materialer || []).filter(m => m.varenavn).map(m => ({
                   nobb: m.nobb || '', varenavn: m.varenavn, mengde: parseFloat(m.mengde) || 0,
@@ -84721,6 +84751,15 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               dager: bd.dager,
               materialer: bd.materialer,
               dbProsent: bd.dbProsent,
+              // Disse fire må listes eksplisitt: denne funksjonen kopierer felt for
+              // felt, og et nytt felt som ikke står her forsvinner i det brukeren
+              // åpner faseplanleggeren — altså nettopp på de mest gjennomarbeidede
+              // planene.
+              bygningsdelId: bd.bygningsdelId || null,
+              kalkyleRotId: bd.kalkyleRotId || null,
+              kalkyleNr: bd.kalkyleNr || null,
+              kalkyleRev: bd.kalkyleRev || null,
+              arbeidsarter: bd.arbeidsarter || [],
               isSplit: false,
               // Intern vs UE. Faser uten interne timer (typisk UE-priset fag som elektro)
               // foreslås som UE — de kan uansett ikke planlegges på interne mann-timer.
@@ -84831,8 +84870,13 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               mat2 = original.materialer.map(m => ({ ...m, totalMengde: m.totalMengde * (1 - ratio), mengde: m.mengde * (1 - ratio) }))
             }
 
+            // Arbeidsartene følger IKKE med i en split. En bygningsdel delt i to
+            // har ingen fasit på hvilke arbeidsarter som hører til hvilken del —
+            // «forskaling, armering, støp» kan ikke halveres meningsfullt. Begge
+            // deler faller derfor tilbake på dagestimatet.
             const del1 = {
               ...original,
+              arbeidsarter: [],
               id: `${original.id}_a${Date.now()}`,
               name: name1 || `${original.name} (del 1)`,
               timer: timer1,
@@ -84842,6 +84886,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             }
             const del2 = {
               ...original,
+              arbeidsarter: [],
               id: `${original.id}_b${Date.now()}`,
               name: name2 || `${original.name} (del 2)`,
               timer: timer2,
@@ -85030,6 +85075,34 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 ? crypto.randomUUID()
                 : `fase-${Date.now()}-${Math.random().toString(36).slice(2,9)}`
 
+              // Frosne arbeidsarter, samlet opp mens fase_id-ene lages. Skrives
+              // etter at bookingene er inne — feiler denne, står planen likevel.
+              const arbeidsartRader = []
+              const samleArbeidsarter = (faseId, bd) => {
+                if (!faseId || !Array.isArray(bd.arbeidsarter) || bd.arbeidsarter.length === 0) return
+                bd.arbeidsarter.forEach(a => {
+                  arbeidsartRader.push({
+                    fase_id: faseId,
+                    kilde_arbeidsart_id: a.kildeId || null,
+                    navn: a.navn,
+                    grunntid: a.grunntid ?? null,
+                    mengde: a.mengde ?? null,
+                    timer: a.timer ?? 0,
+                    rekkefolge: a.rekkefolge ?? 0,
+                  })
+                })
+              }
+
+              // Kilden vises i notatet i stedet for den gamle, faste teksten
+              // «(fra kalkyle)». Den sa ikke HVILKEN kalkyle, og ble stående
+              // uendret også når kalkylen var revidert siden.
+              const kilde = (bd) => {
+                const nr = bd.kalkyleNr || k?.kalk_number
+                if (!nr) return 'fra kalkyle'
+                const rev = bd.kalkyleRev ?? k?.revision_number
+                return nr + revNumSuffix(rev)
+              }
+
               // Bruk redigert fase-liste hvis brukeren har vært i faseplanleggeren, ellers original bdPlan
               const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
 
@@ -85051,6 +85124,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   // Samme UE deler rad på tvers av bygningsdeler, men hver
                   // bygningsdel er sin egen oppgave — derfor ny fase_id her.
                   const ueFaseId = nyFaseId()
+                  samleArbeidsarter(ueFaseId, bd)
                   for (const dateStr of workDates) {
                     plans.push(sanitizeDbPayload({
                       resource_id: ueIds[navn],
@@ -85060,6 +85134,8 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                       notes: `[UE: ${navn}]`,
                       task_description: bd.name || null,
                       fase_id: ueFaseId,
+                      bygningsdel_id: bd.bygningsdelId || null,
+                      kalkyle_rot_id: bd.kalkyleRotId || null,
                       created_by: user?.id
                     }))
                   }
@@ -85070,15 +85146,22 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   // Genereres FØR datoløkka: alle dagene for samme ansatt må dele
                   // fase_id, ellers blir hver dag sin egen oppgave.
                   const empFaseIds = {}
-                  for (const empId of selectedEmployees) empFaseIds[empId] = nyFaseId()
+                  for (const empId of selectedEmployees) {
+                    empFaseIds[empId] = nyFaseId()
+                    // Hver ansatt får sitt eget sett arbeidsarter å krysse av.
+                    // Deler to ansatte samme oppgave, er de likevel to jobber.
+                    samleArbeidsarter(empFaseIds[empId], bd)
+                  }
                   for (const dateStr of workDates) {
                     for (const empId of selectedEmployees) {
                       plans.push(sanitizeDbPayload({
                         resource_id: empId, resource_type: 'employee', project_id: projId,
                         date: dateStr, hours: timerPerDag,
-                        notes: `📐 ${bd.name} (fra kalkyle)`,
+                        notes: `📐 ${bd.name} · ${kilde(bd)}`,
                         task_description: bd.name || null,
                         fase_id: empFaseIds[empId],
+                        bygningsdel_id: bd.bygningsdelId || null,
+                        kalkyle_rot_id: bd.kalkyleRotId || null,
                         created_by: user?.id
                       }))
                     }
@@ -85090,6 +85173,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     // Placeholder-raden gjenbrukes på tvers av bygningsdeler, men
                     // hver bygningsdel er sin egen oppgave — ny fase_id per mann her.
                     const mannFaseId = nyFaseId()
+                    samleArbeidsarter(mannFaseId, bd)
                     for (const dateStr of workDates) {
                       plans.push(sanitizeDbPayload({
                         resource_id: placeholderIds[mannNr],
@@ -85101,6 +85185,8 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                         notes: `[PLACEHOLDER: Ressurs ${mannNr}]`,
                         task_description: bd.name || null,
                         fase_id: mannFaseId,
+                        bygningsdel_id: bd.bygningsdelId || null,
+                        kalkyle_rot_id: bd.kalkyleRotId || null,
                         created_by: user?.id
                       }))
                     }
@@ -85113,6 +85199,20 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                 const batch = plans.slice(i, i + 200)
                 const { error } = await supabase.from('resource_plans').insert(batch)
                 if (error) throw error
+              }
+
+              // Arbeidsartene skrives ETTER bookingene, og feiler stille. Planen er
+              // det viktigste; mangler arbeidsartene, faller oppgaven tilbake på
+              // dagestimatet — som er nøyaktig slik alle eksisterende bookinger
+              // fungerer i dag.
+              if (arbeidsartRader.length > 0) {
+                try {
+                  for (let i = 0; i < arbeidsartRader.length; i += 200) {
+                    const batch = arbeidsartRader.slice(i, i + 200)
+                    const { error } = await supabase.from('booking_arbeidsarter').insert(batch)
+                    if (error) throw error
+                  }
+                } catch (e) { console.error('booking_arbeidsarter:', e) }
               }
               setSent({ type: 'ressurs', count: plans.length, mode: useEmployees ? 'ansatte' : 'placeholder' })
             } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
