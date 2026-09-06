@@ -15882,7 +15882,7 @@ async function varsleFramdriftsavvik({ faseId, projectId, avvikType, oppgave, pr
   const hvor = prosjektNavn ? `${prosjektNavn} · ${oppg}` : oppg
   const av = melderNavn ? ` (meldt av ${melderNavn})` : ''
   const tekst = {
-    blokkert:         { t: `🚧 Blokkert: ${oppg}`,        m: `${hvor} er meldt blokkert${av}.` },
+    blokkert:         { t: `🚧 Venter: ${oppg}`,          m: `${hvor} står og venter${av}.` },
     ferdig_for_tiden: { t: `🎉 Ferdig før tiden: ${oppg}`, m: `${hvor} er meldt ferdig før planlagt slutt${av}. Gjenstående dager kan frigjøres.` },
     forsinket:        { t: `⚠️ Forsinket: ${oppg}`,        m: `${hvor} rekker ikke planlagt slutt${av}.` },
     ferdig_forsinket: { t: `✅ Ferdig, men forsinket: ${oppg}`, m: `${hvor} er meldt ferdig etter planlagt slutt${av}.` },
@@ -32620,7 +32620,7 @@ const stripePattern = (color='#dc2626', alpha=0.08) =>
 //
 // «Ferdig» skal koste ÉTT trykk. Derfor ingen bekreftelsesdialog: statusen
 // lagres optimistisk med en angre-knapp ved siden av. Kommentar er valgfri,
-// bortsett fra ved «Blokkert» der årsaken er hele poenget — der åpnes feltet
+// bortsett fra ved «Venter» der årsaken er hele poenget — der åpnes feltet
 // automatisk, men statusen er allerede lagret så den aldri holdes tilbake av
 // at teksten mangler.
 //
@@ -32630,7 +32630,10 @@ const FRAMDRIFT_STATUSER = [
   { v: 'ikke_startet', kort: 'Ikke startet', emoji: '⚪', farge: '#64748b', bg: '#f1f5f9', kant: '#e2e8f0' },
   { v: 'pagar',        kort: 'Pågår',        emoji: '🔨', farge: '#2563eb', bg: '#eff6ff', kant: '#bfdbfe' },
   { v: 'ferdig',       kort: 'Ferdig',       emoji: '✅', farge: '#059669', bg: '#ecfdf5', kant: '#bbf7d0' },
-  { v: 'blokkert',     kort: 'Blokkert',     emoji: '🚧', farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca' },
+  // v er databaseverdien og skal IKKE endres — den ligger i check-constraints
+  // på booking_framdrift og i alle eksisterende rader. Bare «kort» er tekst
+  // brukeren ser.
+  { v: 'blokkert',     kort: 'Venter',       emoji: '🚧', farge: '#dc2626', bg: '#fef2f2', kant: '#fecaca' },
 ]
 
 function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttVisning }) {
@@ -32794,7 +32797,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
     try {
       await skrivFramdrift(o, { status: nyStatus })
       await varsleHvisAvvik(o, { status: nyStatus, faktisk_slutt: nyStatus === 'ferdig' ? (o.faktiskSlutt || idag) : null })
-      // Ved «Blokkert» er årsaken hele verdien — åpne feltet, men statusen er lagret.
+      // Ved «Venter» er årsaken hele verdien — åpne feltet, men statusen er lagret.
       if (nyStatus === 'blokkert') { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }
       // «Pågår» alene svarer ikke på det prosjektlederen trenger å vite — om
       // jobben blir ferdig i tide. Derfor åpner den dagvelgeren. Statusen er
@@ -32963,7 +32966,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
 
                 {/* Dagvelger — vises kun ved «Pågår», som er det eneste tilfellet
                     der spørsmålet «blir du ferdig i tide?» gir mening. Ferdig er
-                    ferdig; ikke startet og blokkert har ingen framdrift å anslå. */}
+                    ferdig; ikke startet og «Venter» har ingen framdrift å anslå. */}
                 {apenDager === o.fase_id && o.status === 'pagar' && (() => {
                   const hurtig = [1, 2, 3, 4]
                   const visTeller = dagerTeller > 4
@@ -34373,7 +34376,7 @@ function RessursGanttGrid({
                               ? { tegn: '\u2713', bg: '#059669', tittel: 'Meldt ferdig f\u00f8r tiden \u2014 dager kan frigj\u00f8res' }
                               : { tegn: '\u2713', bg: '#059669', tittel: 'Meldt ferdig' }
                           } else if (fd?.status === 'blokkert') {
-                            merke = { tegn: '!', bg: '#dc2626', tittel: 'Blokkert' + (fd.kommentar ? ': ' + fd.kommentar : '') }
+                            merke = { tegn: '!', bg: '#dc2626', tittel: 'Venter' + (fd.kommentar ? ': ' + fd.kommentar : '') }
                           } else if (fd?.status === 'pagar') {
                             merke = perioden0ver
                               ? { tegn: '!', bg: '#d97706', tittel: 'P\u00e5g\u00e5r \u2014 forsinket' }
@@ -34632,7 +34635,7 @@ function RessursGanttGrid({
           statusLabel = foerTiden ? 'Ferdig før tiden' : 'Meldt ferdig'
           statusColor = '#059669'; statusBg = '#ecfdf5'; statusEmoji = '✅'; progressPct = 100
         } else if (meldtStatus === 'blokkert') {
-          statusLabel = 'Blokkert'
+          statusLabel = 'Venter'
           statusColor = '#dc2626'; statusBg = '#fef2f2'; statusEmoji = '🚧'; progressPct = 50
         } else if (meldtStatus === 'pagar') {
           // Forsinket utledes: pågår fortsatt etter siste planlagte dag.
@@ -35516,7 +35519,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                                   const dager = bookings.filter(b => b.fase_id === fid).map(b => b.date).sort()
                                   const sisteDag = dager[dager.length - 1]
                                   let n = null
-                                  if (fd?.status === 'blokkert') n = { k: 'blokkert', tegn: '🚧', bg: '#fef2f2', farge: '#dc2626', tekst: 'Blokkert' }
+                                  if (fd?.status === 'blokkert') n = { k: 'blokkert', tegn: '🚧', bg: '#fef2f2', farge: '#dc2626', tekst: 'Venter' }
                                   else if (fd?.status === 'ferdig') n = { k: 'ferdig', tegn: '✅', bg: '#ecfdf5', farge: '#059669', tekst: 'Ferdig' }
                                   else if (fd && fd.status !== 'ferdig' && sisteDag && sisteDag < today) n = { k: 'forsinket', tegn: '⚠️', bg: '#fffbeb', farge: '#d97706', tekst: 'Forsinket' }
                                   else if (fd?.status === 'pagar') n = { k: 'pagar', tegn: '🔨', bg: '#eff6ff', farge: '#2563eb', tekst: 'Pågår' }
@@ -38567,7 +38570,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
                 tittel = 'Meldt ferdig'; farge = '#059669'; bg = '#ecfdf5'; emoji = '✅'
               }
             } else if (fd?.status === 'blokkert') {
-              tittel = 'Blokkert'; farge = '#dc2626'; bg = '#fef2f2'; emoji = '🚧'
+              tittel = 'Venter'; farge = '#dc2626'; bg = '#fef2f2'; emoji = '🚧'
             } else if (fd?.status === 'pagar') {
               tittel = perioden0ver ? 'Pågår — forsinket' : 'Pågår'
               farge = perioden0ver ? '#d97706' : '#2563eb'
