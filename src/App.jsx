@@ -33875,12 +33875,33 @@ function RessursGanttGrid({
 
   // Separate resources by kind (for placeholder styling)
   // Regular resources first (employee/machine), then placeholders last
+  // Ledige rader foldes sammen nederst. Åpnes ved klikk — den som skal
+  // planlegge inn noen nytt trenger dem, den som leser planen gjør ikke.
+  const [visLedige, setVisLedige] = useState(false)
+
   const orderedResources = React.useMemo(() => {
     const regular = resources.filter(r => !r._isPlaceholder && !r._isUe)
     const placeholders = resources.filter(r => r._isPlaceholder)
     const ues = resources.filter(r => r._isUe)
     const base = [...regular, ...placeholders, ...ues]
-    if (filterProject === 'alle') return base
+    if (filterProject === 'alle') {
+      // Hvem har noe å gjøre i perioden som faktisk vises? Dato-avgrensningen
+      // er poenget: en ansatt kan være full til våren og likevel ledig nå.
+      const fra = dates[0], til = dates[dates.length - 1]
+      if (!fra || !til) return base
+      const opptatt = new Set(
+        plans.filter(pl => pl.resource_type !== 'material' && pl.date >= fra && pl.date <= til)
+             .map(pl => pl.resource_id)
+      )
+      const medJobb = base.filter(r => opptatt.has(r.id))
+      const ledige = base.filter(r => !opptatt.has(r.id))
+      // Er alle ledige, er det ingenting å folde bort — da er den tomme planen
+      // hele svaret, og et sammenfoldet skille ville skjult det.
+      if (ledige.length === 0 || medJobb.length === 0) return base
+      const skille = { _ledigSkille: true, id: '__ledige__', restCount: ledige.length,
+                       navn: ledige.slice(0, 4).map(r => (r.first_name || r.name || '').split(' ')[0]).filter(Boolean) }
+      return visLedige ? [...medJobb, skille, ...ledige] : [...medJobb, skille]
+    }
     // Filtrert på ett prosjekt: involverte (har minst én booking på prosjektet)
     // samles øverst, resten legger seg under et skille — stabil rekkefølge i hver gruppe.
     const involvedIds = new Set(
@@ -33890,7 +33911,7 @@ function RessursGanttGrid({
     const rest = base.filter(r => !involvedIds.has(r.id))
     if (involved.length === 0 || rest.length === 0) return base
     return [...involved, { _divider: true, id: '__ikke_involvert__', restCount: rest.length }, ...rest.map(r => ({ ...r, _notInvolved: true }))]
-  }, [resources, filterProject, plans])
+  }, [resources, filterProject, plans, dates, visLedige])
 
   // Filter plans (for bjelker som tilhører ressurs-rader)
   const visiblePlans = React.useMemo(() => {
@@ -34101,6 +34122,12 @@ function RessursGanttGrid({
     const DAYS_NO = ['søn','man','tir','ons','tor','fre','lør']
     if (ganttZoom === 'quarters') {
       return { monthName: MONTH_NAMES[d.getMonth()] }
+    }
+    // Mandag bærer ukenummeret. «man» gjentatt tretten ganger sier ingenting
+    // du ikke allerede ser av rekkefølgen; uke 37 sier hvor du er.
+    const erMandag = d.getDay() === 1
+    if (erMandag && (ganttZoom === 'weeks' || ganttZoom === 'days')) {
+      return { dayName: 'u' + ganttWeekNumber(date), dayNum: d.getDate(), erUke: true }
     }
     return { dayName: DAYS_NO[d.getDay()], dayNum: d.getDate() }
   }
@@ -34411,11 +34438,12 @@ function RessursGanttGrid({
                   return (
                     <div key={d} style={{
                       width:`${colW}px`, flexShrink:0,
-                      background: tod ? '#f0fdf4' : hol ? '#fffbeb' : (we && settings.skipWeekends) ? '#fafafa' : 'white',
+                      background: tod ? '#f0fdf4' : hol ? '#fffbeb' : we ? '#eef2f7' : 'white',
                       borderRight: ganttZoom==='days' ? '1px solid #f1f5f9' : (i%7===6?'1px solid #e2e8f0':'1px solid #f8fafc'),
+                      borderLeft: (i > 0 && new Date(d + 'T12:00:00').getDay() === 1) ? '1px solid #dbe3ec' : 'none',
                       borderBottom: tod ? '2px solid #059669' : 'none',
                       display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'1px',
-                      color: tod?'#059669': (we && settings.skipWeekends)?'#cbd5e1':'#64748b',
+                      color: tod?'#059669': we?'#b6c2d1':'#64748b',
                       position:'relative',
                       padding:'2px 0',
                     }} title={hol?.title || ''}>
@@ -34427,11 +34455,11 @@ function RessursGanttGrid({
                       {lbl && lbl.dayName && (
                         <>
                           <span style={{
-                            fontSize: dayNameSize,
-                            fontWeight: tod?'700':'600',
-                            color: tod?'#059669': we?'#cbd5e1':'#94a3b8',
-                            textTransform:'uppercase',
-                            letterSpacing:'0.04em',
+                            fontSize: lbl.erUke ? '9px' : dayNameSize,
+                            fontWeight: (tod || lbl.erUke) ? '800' : '600',
+                            color: tod?'#059669': lbl.erUke ? '#475569' : we?'#b6c2d1':'#94a3b8',
+                            textTransform: lbl.erUke ? 'none' : 'uppercase',
+                            letterSpacing: lbl.erUke ? '0' : '0.04em',
                             lineHeight:1,
                           }}>{lbl.dayName}</span>
                           <span style={{
@@ -34584,6 +34612,23 @@ function RessursGanttGrid({
           {/* Resource rows */}
           {orderedResources.map(res => {
             // Skille mellom involverte og ikke-involverte når man filtrerer på ett prosjekt
+            if (res._ledigSkille) {
+              return (
+                <div key={res.id} onClick={() => setVisLedige(v => !v)}
+                  style={{ display:'flex', alignItems:'center', minHeight:'32px', background:'#f8fafc',
+                    borderTop:'1px solid #e2e8f0', borderBottom:'1px solid #f1f5f9', cursor:'pointer' }}>
+                  <div style={{ width:`${RESOURCE_COL}px`, flexShrink:0, padding:'6px 12px', position:'sticky', left:0, zIndex:10,
+                    background:'#f8fafc', borderRight:'2px solid #e2e8f0', fontSize:'11.5px', color:'#64748b',
+                    display:'flex', alignItems:'center', gap:'7px', whiteSpace:'nowrap', overflow:'hidden' }}>
+                    <span style={{ color:'#94a3b8', fontSize:'10px' }}>{visLedige ? '▾' : '▸'}</span>
+                    <span><strong style={{ color:'#0f172a' }}>{res.restCount} ledige</strong> i perioden</span>
+                  </div>
+                  <div style={{ flex:1, padding:'0 12px', fontSize:'11px', color:'#94a3b8', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                    {res.navn.join(', ')}{res.restCount > res.navn.length ? ' …' : ''}
+                  </div>
+                </div>
+              )
+            }
             if (res._divider) {
               return (
                 <div key={res.id} style={{ display:'flex', alignItems:'center', minHeight:'34px', background:'#f8fafc', borderTop:'1px solid #e2e8f0', borderBottom:'1px solid #f1f5f9' }}>
@@ -37719,6 +37764,9 @@ function RessursPage() {
             </div>
           )}
 
+          {/* Skille: over hit bytter knappene visning, herfra åpner de paneler. */}
+          <span style={{ width:'1px', height:'16px', background:'#e2e8f0', margin:'0 3px', flexShrink:0 }} />
+
           {/* Ledig mannskap */}
           <button onClick={()=>setShowLedigMannskap(true)}
             style={{ padding:'3px 9px', background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'6px', fontSize:'11px', fontWeight:'500', cursor:'pointer', transition:'all 0.15s' }}
@@ -37738,13 +37786,13 @@ function RessursPage() {
           {/* Milepæler toggle */}
           <button onClick={()=>setShowMilestones(v=>!v)}
             style={{ padding:'3px 9px', background:showMilestones?'#f5f3ff':'white', color:showMilestones?'#7c3aed':'#64748b', border:`1px solid ${showMilestones?'#ddd6fe':'#e2e8f0'}`, borderRadius:'6px', fontSize:'11px', fontWeight: showMilestones?'600':'500', cursor:'pointer', transition:'all 0.15s' }}>
-            🏁 Milepæler
+            🏁 Milepæler{milestones.length > 0 ? ` · ${milestones.length}` : ''}
           </button>
 
           {/* Materiell toggle */}
           <button onClick={()=>setShowMateriell(v=>!v)}
             style={{ padding:'3px 9px', background:showMateriell?'#f0fdf4':'white', color:showMateriell?'#059669':'#64748b', border:`1px solid ${showMateriell?'#bbf7d0':'#e2e8f0'}`, borderRadius:'6px', fontSize:'11px', fontWeight: showMateriell?'600':'500', cursor:'pointer', transition:'all 0.15s' }}>
-            📦 Materiell
+            📦 Materiell{materiellPlans.length > 0 ? ` · ${materiellPlans.length}` : ''}
           </button>
 
           {/* Aktive filter-pills (vises som bekreftelse på valg) */}
