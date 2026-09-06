@@ -15919,6 +15919,108 @@ async function varsleFramdriftsavvik({ faseId, projectId, avvikType, oppgave, pr
   return sendt
 }
 
+// ─── MELDING MED BILDE, DIREKTE TIL PROSJEKTLEDER ────────────────────────────
+// En kommentar med bilde er en hendelse, ikke en tilstand. Derfor egen rad i
+// booking_meldinger som ikke overskriver noe. booking_framdrift.kommentar blir
+// stående som statusnotatet — det som forklarer HVORFOR oppgaven venter.
+//
+// Bildene ligger i plattform-files under framdrift/, bevisst IKKE i Bildedok:
+// den er en betalt modul, og en håndverker skal ikke måtte kjøpe noe for å si
+// fra at rørleggeren ikke er ferdig.
+
+// Hvem er prosjektleder? Svaret styrer knappeteksten, slik at den ansatte vet
+// FØR han trykker om noen faktisk får beskjed. Mangler koblingen, sier knappen
+// det — et varsel som forsvinner i stillhet er verre enn ingen knapp.
+async function finnProsjektleder(projectId) {
+  if (!projectId) return null
+  try {
+    const { data: p } = await supabase.from('projects')
+      .select('project_manager_id, project_manager_email, project_manager_name')
+      .eq('id', projectId).maybeSingle()
+    if (!p) return null
+    let emp = null
+    if (p.project_manager_id) {
+      const { data } = await supabase.from('employees')
+        .select('user_id, first_name, last_name').eq('id', p.project_manager_id).maybeSingle()
+      emp = data || null
+    }
+    // Samme fallback som notifyProjectManager: e-post for prosjekter som ennå
+    // ikke har fått project_manager_id.
+    if (!emp?.user_id && p.project_manager_email) {
+      const { data } = await supabase.from('employees')
+        .select('user_id, first_name, last_name').eq('email', p.project_manager_email).limit(1)
+      emp = data?.[0] || null
+    }
+    if (!emp?.user_id) return null
+    const navn = ((emp.first_name || '') + ' ' + (emp.last_name || '')).trim() || p.project_manager_name || null
+    return { userId: emp.user_id, navn }
+  } catch (e) { console.error('finnProsjektleder:', e); return null }
+}
+
+// Bildet komprimeres før opplasting. Et mobilbilde er 3–8 MB rått; på en
+// byggeplass med halv dekning er komprimeringen forskjellen på at meldingen
+// går og at den ikke går.
+async function lastOppFramdriftsbilde(file) {
+  const blob = await compressImage(file).catch(() => file)
+  const path = `framdrift/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.jpg`
+  const { error } = await supabase.storage.from('plattform-files')
+    .upload(path, blob, { contentType: 'image/jpeg' })
+  if (error) throw error
+  const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
+  return { url: data?.publicUrl || null, path, navn: file.name || null }
+}
+
+// Rekkefølgen er med vilje: raden skrives FØRST, varselet etterpå. Feiler
+// varselet, står meldingen der likevel og er synlig for alle på oppgaven.
+// Motsatt vei ville et sendt varsel pekt på en melding som ikke finnes.
+//
+// varslet_pl lagres slik det FAKTISK gikk. Uten prosjektleder på prosjektet
+// blir den false, og den ansatte får beskjed om det i grensesnittet.
+async function sendFramdriftsmelding({ faseId, oppgaveId, projectId, tekst, bilde,
+                                       oppgave, prosjektNavn, melderNavn, melderUserId }) {
+  const rentTekst = (tekst || '').trim() || null
+  if (!faseId || (!rentTekst && !bilde?.url)) return { ok: false, varslet: false }
+
+  const pl = await finnProsjektleder(projectId)
+  // Melder prosjektlederen selv, skal han ikke varsle seg selv.
+  const skalVarsle = !!pl && pl.userId !== melderUserId
+
+  const { data, error } = await supabase.from('booking_meldinger').insert({
+    fase_id: faseId,
+    oppgave_id: oppgaveId || null,
+    project_id: projectId || null,
+    tekst: rentTekst,
+    bilde_url: bilde?.url || null,
+    bilde_path: bilde?.path || null,
+    bilde_navn: bilde?.navn || null,
+    varslet_pl: skalVarsle,
+    meldt_av: melderUserId || null,
+  }).select().maybeSingle()
+  if (error) throw error
+
+  if (!skalVarsle) return { ok: true, varslet: false, rad: data }
+
+  try {
+    const hvor = prosjektNavn ? `${prosjektNavn} · ${oppgave || 'oppgave'}` : (oppgave || 'En oppgave')
+    const av = melderNavn ? ` — ${melderNavn}` : ''
+    const kropp = rentTekst
+      ? `${hvor}${av}: «${rentTekst}»${bilde?.url ? ' (bilde vedlagt)' : ''}`
+      : `${hvor}${av} sendte et bilde.`
+    await supabase.from('notifications').insert({
+      user_id: pl.userId,
+      title: `💬 Melding: ${oppgave || 'oppgave'}`,
+      message: kropp, type: 'info', link_page: 'ressursplan',
+    })
+  } catch (e) {
+    // Meldingen er lagret, men varselet gikk ikke. Rett opp flagget, så
+    // kvitteringen ikke lyver om at prosjektlederen er varslet.
+    console.error('sendFramdriftsmelding (varsel):', e)
+    try { await supabase.from('booking_meldinger').update({ varslet_pl: false }).eq('id', data?.id) } catch (_) {}
+    return { ok: true, varslet: false, rad: data }
+  }
+  return { ok: true, varslet: true, rad: data }
+}
+
 // ─── FRAMDRIFT REGNET AV ARBEIDSARTER ────────────────────────────────────────
 // Prosenten måles mot arbeidsartenes EGNE timer, ikke mot bookede timer.
 // «Plasstøpt dekke» har 145,2 arbeidsarttimer, men bare 67,5 bookede etter at
@@ -32668,6 +32770,237 @@ function ganttWeekNumber(dateStr) {
 const stripePattern = (color='#dc2626', alpha=0.08) =>
   `repeating-linear-gradient(135deg, ${color.replace('rgb','rgba').replace(')', `,${alpha})`)} 0 6px, transparent 6px 12px)`
 
+// ─── MELDINGSTRÅD PÅ EN OPPGAVE ──────────────────────────────────────────────
+// Samme komponent i «Mine oppgaver» og i FaseModal. Håndverkeren skriver den
+// samme meldingen uansett hvor han står, og prosjektlederen leser den samme
+// tråden — det var nettopp to atskilte systemer som gjorde at kommentaren aldri
+// nådde fram fra Gantt-siden.
+//
+// Tråden hentes på oppgave_id når den finnes, ellers på fase_id. To mann på
+// samme jobb deler oppgave_id men har hver sin fase_id; uten dette ville de
+// ikke sett hverandres meldinger.
+function FramdriftsMeldinger({ faseId, oppgaveId, projectId, oppgaveNavn, prosjektNavn,
+                               user, employees = [], mob = false, kanSkrive = true }) {
+  const appAlert = useAppAlert()
+  const [meldinger, setMeldinger] = useState([])
+  const [laster, setLaster] = useState(true)
+  const [apen, setApen] = useState(false)
+  const [tekst, setTekst] = useState('')
+  const [fil, setFil] = useState(null)
+  const [forhandsvisning, setForhandsvisning] = useState(null)
+  const [sender, setSender] = useState(false)
+  // undefined = ikke slått opp ennå, null = ingen prosjektleder på prosjektet
+  const [pl, setPl] = useState(undefined)
+  const [kvittering, setKvittering] = useState(null)
+  const filRef = React.useRef(null)
+
+  const navnPaa = React.useCallback((userId) => {
+    if (!userId) return null
+    const e = (employees || []).find(x => x.user_id === userId)
+    return e ? ((e.first_name || '') + ' ' + (e.last_name || '')).trim() || null : null
+  }, [employees])
+
+  const hent = React.useCallback(async () => {
+    if (!faseId) { setMeldinger([]); setLaster(false); return }
+    try {
+      const basis = supabase.from('booking_meldinger').select('*')
+      const filtrert = oppgaveId
+        ? basis.or(`fase_id.eq.${faseId},oppgave_id.eq.${oppgaveId}`)
+        : basis.eq('fase_id', faseId)
+      const { data, error } = await filtrert.order('meldt_at', { ascending: true })
+      if (error) throw error
+      setMeldinger(data || [])
+    } catch (e) {
+      // Tabellen kan mangle i vinduet mellom deploy og SQL. Da skal resten av
+      // modalen virke som før, ikke falle sammen.
+      console.error('booking_meldinger (hent):', e)
+      setMeldinger([])
+    } finally { setLaster(false) }
+  }, [faseId, oppgaveId])
+
+  useEffect(() => { hent() }, [hent])
+
+  // Slås opp én gang per prosjekt. Svaret står i knappeteksten, så den ansatte
+  // ser hvem meldingen går til før han trykker.
+  useEffect(() => {
+    let avbrutt = false
+    if (!projectId) { setPl(null); return }
+    finnProsjektleder(projectId).then(r => { if (!avbrutt) setPl(r) })
+    return () => { avbrutt = true }
+  }, [projectId])
+
+  // Forhåndsvisningen er en objectURL og må ryddes, ellers lekker den ved hver
+  // bildevelging gjennom en lang økt på mobil.
+  useEffect(() => () => { if (forhandsvisning) URL.revokeObjectURL(forhandsvisning) }, [forhandsvisning])
+
+  const velgFil = (e) => {
+    const f = e.target.files?.[0]
+    e.target.value = ''
+    if (!f) return
+    if (!/^image\//.test(f.type)) { appAlert({ message: 'Bare bilder kan legges ved', kind: 'warn' }); return }
+    if (forhandsvisning) URL.revokeObjectURL(forhandsvisning)
+    setFil(f)
+    setForhandsvisning(URL.createObjectURL(f))
+  }
+
+  const fjernFil = () => {
+    if (forhandsvisning) URL.revokeObjectURL(forhandsvisning)
+    setFil(null); setForhandsvisning(null)
+  }
+
+  const send = async () => {
+    if (sender) return
+    const rentTekst = tekst.trim()
+    if (!rentTekst && !fil) return
+    setSender(true)
+    try {
+      // Bildet lastes opp først. Feiler radskrivingen etterpå, fjernes fila
+      // igjen — ellers samler bucketen opp filer ingen rad peker på.
+      let bilde = null
+      if (fil) bilde = await lastOppFramdriftsbilde(fil)
+      let r
+      try {
+        r = await sendFramdriftsmelding({
+          faseId, oppgaveId, projectId, tekst: rentTekst, bilde,
+          oppgave: oppgaveNavn, prosjektNavn,
+          melderNavn: navnPaa(user?.id), melderUserId: user?.id,
+        })
+      } catch (e) {
+        if (bilde?.path) { try { await supabase.storage.from('plattform-files').remove([bilde.path]) } catch (_) {} }
+        throw e
+      }
+      if (!r?.ok) return
+      setTekst(''); fjernFil(); setApen(false)
+      await hent()
+      setKvittering(r.varslet ? 'varslet' : 'lagret')
+      setTimeout(() => setKvittering(null), 5000)
+    } catch (e) {
+      await appAlert({ message: 'Kunne ikke sende meldingen', subMessage: e.message, kind: 'error' })
+    } finally { setSender(false) }
+  }
+
+  const naar = (t) => {
+    const d = new Date(t)
+    return d.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' }) + ' ' +
+           d.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const knapp = { minHeight: mob ? '44px' : '38px', borderRadius: '9px', fontFamily: 'inherit',
+                  fontSize: '13px', fontWeight: '700', cursor: 'pointer' }
+
+  if (!faseId) return null
+
+  return (
+    <div style={{ marginTop: '10px' }}>
+      {/* Tråden. Eldste først, som en samtale. */}
+      {!laster && meldinger.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '8px' }}>
+          {meldinger.map(m => {
+            const egen = m.meldt_av === user?.id
+            return (
+              <div key={m.id} style={{ background: egen ? '#f0fdf4' : '#f8fafc', borderRadius: '10px',
+                border: `1px solid ${egen ? '#bbf7d0' : '#e2e8f0'}`, padding: '8px 10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'baseline' }}>
+                  <span style={{ fontSize: '11.5px', fontWeight: '700', color: '#334155', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {egen ? 'Du' : (navnPaa(m.meldt_av) || 'En kollega')}
+                  </span>
+                  <span style={{ fontSize: '10.5px', color: '#94a3b8', flexShrink: 0 }}>{naar(m.meldt_at)}</span>
+                </div>
+                {m.tekst && (
+                  <div style={{ fontSize: '12.5px', color: '#0f172a', lineHeight: 1.45, marginTop: '3px', wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}>
+                    {m.tekst}
+                  </div>
+                )}
+                {m.bilde_url && (
+                  <a href={m.bilde_url} target="_blank" rel="noopener noreferrer"
+                    style={{ display: 'block', marginTop: '6px' }}>
+                    <img src={m.bilde_url} alt={m.bilde_navn || 'Bilde'} loading="lazy"
+                      style={{ width: '100%', maxHeight: '220px', objectFit: 'cover', borderRadius: '8px', display: 'block', border: '1px solid #e2e8f0' }} />
+                  </a>
+                )}
+                {/* Uten dette tror den ansatte at alle meldinger nådde fram. */}
+                {egen && !m.varslet_pl && (
+                  <div style={{ fontSize: '10.5px', color: '#b45309', marginTop: '4px' }}>
+                    Ikke varslet — lagret på oppgaven
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {kvittering && (
+        <div style={{ marginBottom: '8px', padding: '7px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: '600',
+          background: kvittering === 'varslet' ? '#ecfdf5' : '#fffbeb',
+          border: `1px solid ${kvittering === 'varslet' ? '#bbf7d0' : '#fde68a'}`,
+          color: kvittering === 'varslet' ? '#047857' : '#b45309' }}>
+          {kvittering === 'varslet'
+            ? `✓ ${pl?.navn || 'Prosjektlederen'} er varslet`
+            : 'Meldingen er lagret, men ingen ble varslet'}
+        </div>
+      )}
+
+      {kanSkrive && !apen && (
+        <button onClick={() => setApen(true)}
+          style={{ background: 'none', border: 'none', padding: mob ? '8px 0' : '2px 0',
+            minHeight: mob ? '36px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
+          {meldinger.length > 0 ? '＋ Ny melding' : '💬 Skriv til prosjektleder'}
+        </button>
+      )}
+
+      {kanSkrive && apen && (
+        <div>
+          <textarea value={tekst} onChange={e => setTekst(e.target.value)} rows={3} autoFocus
+            placeholder="Hva vil du si fra om? F.eks. «rørlegger ikke ferdig», «feil materialer levert»"
+            style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0',
+              borderRadius: '10px', fontSize: mob ? '16px' : '13px', fontFamily: 'system-ui, sans-serif',
+              resize: 'vertical', outline: 'none', color: '#0f172a' }} />
+
+          {forhandsvisning ? (
+            <div style={{ position: 'relative', marginTop: '7px' }}>
+              <img src={forhandsvisning} alt="Valgt bilde"
+                style={{ width: '100%', maxHeight: '180px', objectFit: 'cover', borderRadius: '10px', display: 'block', border: '1px solid #e2e8f0' }} />
+              <button onClick={fjernFil} aria-label="Fjern bildet"
+                style={{ position: 'absolute', top: '6px', right: '6px', width: '32px', height: '32px', borderRadius: '50%',
+                  border: 'none', background: 'rgba(15,23,42,0.72)', color: 'white', fontSize: '16px', cursor: 'pointer', lineHeight: 1 }}>×</button>
+            </div>
+          ) : (
+            <button onClick={() => filRef.current?.click()} disabled={sender}
+              style={{ ...knapp, width: '100%', marginTop: '7px', border: '1px dashed #cbd5e1', background: 'white', color: '#475569', fontWeight: '600' }}>
+              📷 Legg ved bilde
+            </button>
+          )}
+          {/* capture="environment" åpner kameraet direkte på mobil — det er
+              der bildet faktisk tas, ute på plassen. */}
+          <input ref={filRef} type="file" accept="image/*" capture="environment"
+            onChange={velgFil} style={{ display: 'none' }} />
+
+          {/* Sannheten om mottakeren, FØR han trykker. */}
+          <div style={{ fontSize: '11.5px', color: pl === null ? '#b45309' : '#64748b', marginTop: '8px', lineHeight: 1.45 }}>
+            {pl === undefined ? 'Slår opp prosjektleder…'
+              : pl === null ? '⚠️ Ingen prosjektleder registrert på prosjektet. Meldingen lagres på oppgaven, men ingen blir varslet.'
+              : pl.userId === user?.id ? `Du er prosjektleder her — meldingen lagres uten varsel.`
+              : `Går til ${pl.navn || 'prosjektlederen'}.`}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
+            <button onClick={() => { setTekst(''); fjernFil(); setApen(false) }} disabled={sender}
+              style={{ ...knapp, padding: '0 14px', border: '1px solid #e2e8f0', background: 'white', color: '#64748b', fontWeight: '600' }}>
+              Avbryt
+            </button>
+            <button onClick={send} disabled={sender || (!tekst.trim() && !fil)}
+              style={{ ...knapp, flex: 1, padding: '0 14px', border: 'none', color: 'white',
+                background: (sender || (!tekst.trim() && !fil)) ? '#94a3b8' : '#059669',
+                cursor: (sender || (!tekst.trim() && !fil)) ? 'default' : 'pointer' }}>
+              {sender ? 'Sender…' : pl && pl.userId !== user?.id ? '📣 Send til prosjektleder' : 'Lagre på oppgaven'}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 // ─── MINE OPPGAVER — den ansattes visning i Ressursplan ─────────────────────────
 // Én av to visninger: «Kalender» viser planen slik den er lagt, «Mine oppgaver»
 // viser den ansattes egne bookinger med handlinger på. Ansatte lander her.
@@ -32700,6 +33033,9 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
   const [laster, setLaster] = useState(true)
   const [lagrer, setLagrer] = useState(null)
   const [apenKommentar, setApenKommentar] = useState(null)
+  // Kvittering ved statusendring: uten den vet ikke den ansatte om noen
+  // faktisk fikk beskjed, og da ringer han for å sjekke.
+  const [sisteVarsel, setSisteVarsel] = useState(null)
   const [kommentarTekst, setKommentarTekst] = useState('')
   // Dagvelgeren er åpen for én oppgave om gangen, og teller opp fra 5 når
   // brukeren har trykket «5+».
@@ -32725,12 +33061,10 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
   }, [employees])
 
   // Sant når varselet krysset en terskel som er verdt en liten kvittering.
-  const [sisteVarsel, setSisteVarsel] = useState(null)
   // «Si fra til prosjektleder» er en egen, bevisst handling. Rutinekommentarer
   // varsles ikke — men noen ganger er kommentaren hele poenget, og da må
   // håndverkeren kunne dytte den fram UTEN å måtte endre status til noe den
   // ikke er.
-  const [siFra, setSiFra] = useState(false)
 
   // Modulsjekken er ikke lenger panelets ansvar: det lever inne i Ressursplan,
   // og kommer man dit, har bedriften modulen.
@@ -33040,22 +33374,9 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
     try {
       await skrivFramdrift(o, { kommentar: ny })
       setOppgaver(prev => prev.map(x => x.fase_id === o.fase_id ? { ...x, kommentar: ny, harMeldt: true } : x))
-      if (siFra) {
-        // Bevisst varsel: går uansett om det finnes et avvik eller ikke, og
-        // uansett hva som er varslet før. Derfor forrigeVarslet: null.
-        const sendt = await varsleFramdriftsavvik({
-          faseId: o.fase_id, projectId: o.project_id,
-          avvikType: framdriftsavvik({ status: o.status, faktiskSlutt: o.faktiskSlutt,
-            estimertSlutt: o.estimertSlutt, planlagtSlutt: o.til }) || 'blokkert',
-          oppgave: o.task, prosjektNavn: o.prosjekt?.name,
-          melderNavn: navnPaa(user?.id), kommentar: ny,
-          forrigeVarslet: null, melderUserId: user?.id,
-        })
-        if (sendt) { setSisteVarsel(o.fase_id); setTimeout(() => setSisteVarsel(v => v === o.fase_id ? null : v), 4000) }
-      }
-      setApenKommentar(null); setKommentarTekst(''); setSiFra(false)
+      setApenKommentar(null); setKommentarTekst('')
     } catch (e) {
-      await appAlert({ message: 'Kunne ikke lagre kommentaren', subMessage: e.message, kind: 'error' })
+      await appAlert({ message: 'Kunne ikke lagre notatet', subMessage: e.message, kind: 'error' })
     } finally { setLagrer(null) }
   }
 
@@ -33350,46 +33671,27 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
                   )
                 })()}
 
-                {/* Kommentar — valgfri. Her ligger den reelle verdien:
-                    «venter på rørlegger» sier mer enn en prosent. */}
+                {/* Statusnotatet — åpnes bare når oppgaven settes til «Venter».
+                    Det forklarer statusen og siteres i avviksvarselet. Alt annet
+                    den ansatte vil si, går i meldingstråden under. */}
                 {apenKommentar === o.fase_id ? (
                   <div style={{ marginTop: '8px' }}>
                     <textarea value={kommentarTekst} onChange={e => setKommentarTekst(e.target.value)} rows={2} autoFocus
-                      placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «rørlegger ikke ferdig», «feil materialer levert»' : 'Kort kommentar (valgfritt)'}
+                      placeholder="Hva stopper jobben? F.eks. «rørlegger ikke ferdig», «feil materialer levert»"
                       style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: mob ? '15px' : '13px', fontFamily: 'system-ui, sans-serif', resize: 'vertical', outline: 'none', color: '#0f172a' }} />
-                    <button onClick={() => setSiFra(v => !v)} disabled={travel}
-                      style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', marginTop: '7px',
-                        padding: mob ? '10px 11px' : '8px 10px', minHeight: mob ? '44px' : 'auto',
-                        borderRadius: '9px', cursor: 'pointer', textAlign: 'left',
-                        border: `1px solid ${siFra ? '#fbbf24' : '#e2e8f0'}`,
-                        background: siFra ? '#fffbeb' : 'white' }}>
-                      <span style={{ width: '19px', height: '19px', flexShrink: 0, borderRadius: '5px',
-                        border: `2px solid ${siFra ? '#d97706' : '#cbd5e1'}`, background: siFra ? '#d97706' : 'white',
-                        color: 'white', fontSize: '12px', fontWeight: '800', display: 'grid', placeItems: 'center' }}>
-                        {siFra ? '✓' : ''}
-                      </span>
-                      <span style={{ flex: 1, minWidth: 0, fontSize: '12.5px', fontWeight: '600', color: siFra ? '#b45309' : '#475569' }}>
-                        📣 Si fra til prosjektleder
-                      </span>
-                    </button>
-
                     <div style={{ display: 'flex', gap: '8px', marginTop: '6px' }}>
-                      <button onClick={() => { setApenKommentar(null); setKommentarTekst(''); setSiFra(false) }} disabled={travel}
+                      <button onClick={() => { setApenKommentar(null); setKommentarTekst('') }} disabled={travel}
                         style={{ padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: '1px solid #e2e8f0', borderRadius: '9px', background: 'white', color: '#64748b', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
                         Hopp over
                       </button>
                       <button onClick={() => lagreKommentar(o)} disabled={travel}
                         style={{ flex: 1, padding: mob ? '10px 14px' : '7px 12px', minHeight: mob ? '44px' : 'auto', border: 'none', borderRadius: '9px', background: travel ? '#6ee7b7' : '#059669', color: 'white', fontSize: '13px', fontWeight: '700', cursor: travel ? 'default' : 'pointer' }}>
-                        {travel ? 'Lagrer…' : 'Lagre kommentar'}
+                        {travel ? 'Lagrer…' : 'Lagre notat'}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', flexWrap: 'wrap' }}>
-                    <button onClick={() => { setApenKommentar(o.fase_id); setKommentarTekst(o.kommentar || '') }}
-                      style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '600', color: '#059669' }}>
-                      {o.kommentar ? '✏️ Endre kommentar' : '＋ Legg til kommentar'}
-                    </button>
                     {o.harMeldt && (
                       <button onClick={() => settStatus(o, 'ikke_startet')} disabled={travel}
                         style={{ background: 'none', border: 'none', padding: mob ? '6px 0' : '2px 0', minHeight: mob ? '32px' : 'auto', cursor: 'pointer', fontSize: '12px', fontWeight: '500', color: '#94a3b8' }}>
@@ -33399,8 +33701,6 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
                   </div>
                 )}
 
-                {/* Uten denne vet ikke den ansatte om noen faktisk fikk beskjed,
-                    og da ringer han for å sjekke — nøyaktig det vi ville unngå. */}
                 {sisteVarsel === o.fase_id && (
                   <div style={{ marginTop: '7px', padding: '7px 10px', borderRadius: '8px', background: '#ecfdf5',
                     border: '1px solid #bbf7d0', color: '#047857', fontSize: '12px', fontWeight: '600' }}>
@@ -33414,6 +33714,13 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, kanPlan
                     <span style={{ fontSize: '12px', color: '#475569', lineHeight: 1.4, wordBreak: 'break-word' }}>{o.kommentar}</span>
                   </div>
                 )}
+
+                {/* Meldingstråden. Samme komponent som i FaseModal, samme tabell —
+                    prosjektlederen leser det samme uansett hvor det ble skrevet. */}
+                <FramdriftsMeldinger
+                  faseId={o.fase_id} oppgaveId={o.oppgave_id} projectId={o.project_id}
+                  oppgaveNavn={o.task} prosjektNavn={o.prosjekt?.name}
+                  user={user} employees={employees} mob={mob} kanSkrive={kanKrysseAv(o)} />
 
                 {/* Hvem meldte. Uten dette vet ingen om tallet kom fra plassen
                     eller fra kontoret — og da er det ikke til å stole på. */}
@@ -38617,6 +38924,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
   // må den lokale kopien bære den. Ellers ville modalen fortsatt vist
   // «Ikke startet», og regel 2 regnet på feil grunnlag.
   const [lokalFd, setLokalFd] = useState(null)
+  const erMobil = typeof window !== 'undefined' && window.innerWidth < 768
   const arter = lokaleArter || bar.arbeidsarter || []
   const fdNaa = lokalFd || bar.framdrift || null
 
@@ -39056,6 +39364,20 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
 
         {/* Innhold — dynamisk basert på modus */}
         <div style={{ overflowY:'auto', flex:1, padding:'18px 22px' }}>
+
+          {/* Meldingstråden. Prosjektlederen kan svare her, og den ansatte ser
+              det samme i «Mine oppgaver» — det er én tråd, ikke to. */}
+          {mode === 'overview' && bar.faseId && (
+            <div style={{ marginBottom: '18px' }}>
+              <div style={{ fontSize: '11px', fontWeight: '800', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '2px' }}>
+                Meldinger
+              </div>
+              <FramdriftsMeldinger
+                faseId={bar.faseId} oppgaveId={bar.oppgaveId} projectId={bar.projectId}
+                oppgaveNavn={task} prosjektNavn={proj?.name}
+                user={user} employees={employees} mob={erMobil} />
+            </div>
+          )}
 
           {/* Avkryssingsliste. Har oppgaven arbeidsarter, er de framdriften —
               da er prosenten talt, ikke meldt. */}
