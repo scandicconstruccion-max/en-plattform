@@ -38288,6 +38288,7 @@ function RessursPage() {
           settings={settings}
           onClose={() => setShowFaseModal(null)}
           onSaved={() => { setShowFaseModal(null); load() }}
+          onOppdatert={() => load()}
           onEditSingleDay={(bar) => {
             // Fallback til BookingModal for første dag i fasen
             setShowBookingModal({
@@ -38578,7 +38579,7 @@ function MilestoneModal({ initial, date, projects, employees, user, onClose, onS
 // ── FaseRedigeringsModal — åpnes når bruker klikker en Gantt-bjelke ──
 // En "fase" = alle bookinger i bar.plans (samme prosjekt + oppgave + ressurs + tilstøtende dager)
 // Operasjoner: Flytt, Split, Slett, Rediger enkeltdag (fallback til BookingModal)
-function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees = [], user, onClose, onSaved, onEditSingleDay, settings = { skipWeekends: true } }) {
+function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees = [], user, onClose, onSaved, onOppdatert, onEditSingleDay, settings = { skipWeekends: true } }) {
   const alert = useAppAlert()
   const confirm = useConfirm()
   const [mode, setMode] = useState('overview') // 'overview' | 'move' | 'split'
@@ -38608,11 +38609,24 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
   // til er ikke til å stole på. Derfor lagres meldt_av, og «Meldt av …»
   // vises både her og i den ansattes egen liste.
   const [meldStatusLagrer, setMeldStatusLagrer] = useState(false)
-  // Lokal kopi, så haken føles umiddelbar. onSaved() henter alt på nytt
-  // etterpå og er fasiten.
+  // Lokal kopi, så haken føles umiddelbar — og fordi modalen blir stående:
+  // bar er et øyeblikksbilde fra da bjelken ble klikket og henter seg ikke
+  // selv på nytt. Uten den lokale kopien ville haken hoppe tilbake.
   const [lokaleArter, setLokaleArter] = useState(null)
+  // Samme grunn for statusen: setter regel 1 «Pågår» mens modalen står åpen,
+  // må den lokale kopien bære den. Ellers ville modalen fortsatt vist
+  // «Ikke startet», og regel 2 regnet på feil grunnlag.
+  const [lokalFd, setLokalFd] = useState(null)
   const arter = lokaleArter || bar.arbeidsarter || []
-  const fdNaa = bar.framdrift || null
+  const fdNaa = lokalFd || bar.framdrift || null
+
+  // Escape lukker, som klikk utenfor og X. Ikke mens noe lagres — da ville
+  // modalen forsvinne midt i en skriving, og brukeren ikke visst om den gikk gjennom.
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !saving && !meldStatusLagrer) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, saving, meldStatusLagrer])
 
   // Prosjektlederen krysser av her — for UE fordi underleverandøren ikke har
   // konto, og ellers fordi han får beskjed muntlig. Samme rollesjekk som styrer
@@ -38636,18 +38650,23 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
       // setter «Pågår». Ferdigmelding foreslås derimot, den skjer ikke selv.
       const nyeArter = arter.map(a => a.id === art.id ? { ...a, utfort: nyVerdi } : a)
       const regel = statusFolgerAvkryssing({ status: fdNaa?.status || 'ikke_startet', arbeidsarter: nyeArter })
-      if (regel.nyStatus) { try { await meldStatus(regel.nyStatus) } catch (_) { /* haken er lagret uansett */ } }
-      onSaved()
+      // Avkryssing lukker aldri. Brukeren er midt i en liste og skal kunne
+      // krysse av resten uten å åpne modalen på nytt for hver hake.
+      if (regel.nyStatus) { try { await meldStatus(regel.nyStatus, true) } catch (_) { /* haken er lagret uansett */ } }
+      else if (onOppdatert) onOppdatert()
     } catch (e) {
       setLokaleArter(arter)
       await alert({ message: 'Kunne ikke lagre avkryssingen', subMessage: e.message, kind: 'error' })
     } finally { setMeldStatusLagrer(false) }
   }
-  const meldStatus = async (nyStatus) => {
+  // stille = statusen skrives, men modalen blir stående. Brukes bare av regel 1
+  // (første hake setter «Pågår»). Statusknappene kaller uten flagget og lukker
+  // som før — der er lukkingen kvitteringen på at meldingen gikk inn.
+  const meldStatus = async (nyStatus, stille = false) => {
     if (!bar.faseId || meldStatusLagrer) return
     setMeldStatusLagrer(true)
     const iDagStr = new Date().toISOString().split('T')[0]
-    const fd = bar.framdrift
+    const fd = fdNaa
     try {
       const { error } = await supabase.from('booking_framdrift').upsert({
         fase_id: bar.faseId,
@@ -38685,14 +38704,21 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
         kommentar: fd?.kommentar,
         forrigeVarslet: fd?.varslet_type || null, melderUserId: user?.id,
       })
-      onSaved()
+      setLokalFd({
+        ...(fd || {}), status: nyStatus,
+        faktisk_slutt: nyStatus === 'ferdig' ? (fd?.faktisk_slutt || iDagStr) : null,
+        estimert_slutt: nyStatus === 'pagar' ? (fd?.estimert_slutt || null) : null,
+        gjenstaende_dager: nyStatus === 'pagar' ? (fd?.gjenstaende_dager ?? null) : null,
+        meldt_av: user?.id || null, meldt_at: new Date().toISOString(),
+      })
+      if (stille) { if (onOppdatert) onOppdatert() } else { onSaved() }
     } catch (e) {
       await alert({ message: 'Kunne ikke lagre framdriften', subMessage: e.message, kind: 'error' })
     } finally { setMeldStatusLagrer(false) }
   }
 
   const frigjorbare = React.useMemo(() => {
-    const fd = bar.framdrift
+    const fd = fdNaa
     if (!fd || fd.status !== 'ferdig' || !fd.faktisk_slutt) return []
     const etter = bar.plans.filter(pl => pl.date > fd.faktisk_slutt)
     // Meldes en oppgave ferdig FØR den har startet, ligger hele bookingen etter
@@ -38702,13 +38728,13 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
     // bookingen via en dialog som lover noe langt mildere.
     if (etter.length >= bar.plans.length) return []
     return etter
-  }, [bar.framdrift, bar.plans])
+  }, [fdNaa, bar.plans])
 
   const frigjorTimer = frigjorbare.reduce((sum, pl) => sum + (parseFloat(pl.hours) || 0), 0)
 
   const handleFrigjor = async () => {
     if (frigjorbare.length === 0) return
-    const fd = bar.framdrift
+    const fd = fdNaa
     const fmt = (d) => new Date(d + 'T12:00:00').toLocaleDateString('nb-NO', { weekday: 'short', day: 'numeric', month: 'short' })
     const datoer = frigjorbare.map(pl => pl.date).sort()
     const ok = await confirm({
@@ -38923,7 +38949,7 @@ function FaseRedigeringsModal({ bar, resourceName, allPlans, projects, employees
               før tiden, er det gjenstående dager som skal frigjøres — ikke fasen som
               skal flyttes. */}
           {(() => {
-            const fd = bar.framdrift
+            const fd = fdNaa
             const iDagStr = new Date().toISOString().split('T')[0]
             const perioden0ver = bar.endDate < iDagStr
             // Hvem som meldte. Uten dette vet ingen om tallet kom fra plassen
