@@ -34606,7 +34606,10 @@ function RessursGanttGrid({
                 : (res.department || res.category || '')
             const isHighlighted = conflictHighlight?.resourceId === res.id
             const isOverbooked = !res._isUe && util.pct > 100
-            const rowHeight = 100
+            // Bjelken har all tekst på én linje, så raden trenger ikke mer enn
+            // navnefeltet: avatar 26 + navn + rolle + kapasitetsstripe = 46 px.
+            // Var 100 px, som ga plass til fire ansatte på en vanlig skjerm.
+            const rowHeight = 46
             const initials = res._isUe
               ? '🤝'
               : res._isPlaceholder
@@ -34643,7 +34646,7 @@ function RessursGanttGrid({
                   }}
                   style={{
                   width:`${RESOURCE_COL}px`, flexShrink:0,
-                  padding:'10px 12px', borderRight:'2px solid #e2e8f0',
+                  padding:'6px 11px', borderRight:'2px solid #e2e8f0',
                   background: isHighlighted ? '#fef2f2' : 'white',
                   display:'flex', alignItems:'center', gap:'9px',
                   position:'sticky', left:0, zIndex:10,
@@ -34651,14 +34654,14 @@ function RessursGanttGrid({
                 }}>
                   {/* Avatar */}
                   <div style={{
-                    width:'32px', height:'32px', borderRadius:'50%',
+                    width:'26px', height:'26px', borderRadius:'50%',
                     background: res._isUe
                       ? 'linear-gradient(135deg,#fed7aa,#fdba74)'
                       : res._isPlaceholder
                       ? 'linear-gradient(135deg,#fef3c7,#fde68a)'
                       : avatarGradient(res.id),
                     display:'flex', alignItems:'center', justifyContent:'center',
-                    fontSize: res._isUe ? '15px' : '12px', fontWeight:'700',
+                    fontSize: res._isUe ? '13px' : '10.5px', fontWeight:'700',
                     color: (res._isPlaceholder || res._isUe) ? '#92400e' : 'white',
                     flexShrink:0,
                     border: res._isUe ? '2px dashed #f59e0b' : res._isPlaceholder ? '2px dashed #d97706' : 'none',
@@ -34669,7 +34672,7 @@ function RessursGanttGrid({
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ display:'flex', alignItems:'baseline', justifyContent:'space-between', gap:'6px' }}>
                       <span style={{
-                        fontWeight:'700', fontSize:'14px',
+                        fontWeight:'700', fontSize:'12.5px',
                         color: (res._isPlaceholder || res._isUe) ? '#92400e' : '#0f172a',
                         overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
                         fontStyle: (res._isPlaceholder || res._isUe) ? 'italic' : 'normal',
@@ -34688,12 +34691,12 @@ function RessursGanttGrid({
                       </span>
                       )}
                     </div>
-                    <div style={{ fontSize:'12px', color:'#64748b', marginTop:'1px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                    <div style={{ fontSize:'10.5px', color:'#94a3b8', lineHeight:1.25, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                       {role || '—'}
                     </div>
                     {/* Liten utnyttelse-stripe under rolle */}
                     {util.pct > 0 && (
-                      <div style={{ height:'2px', borderRadius:'999px', background:'#f1f5f9', overflow:'hidden', marginTop:'4px' }}>
+                      <div style={{ height:'4px', borderRadius:'999px', background:'#e9edf2', overflow:'hidden', marginTop:'3px' }}>
                         <div style={{
                           height:'100%', borderRadius:'999px',
                           background: isOverbooked ? '#dc2626' : util.pct > 80 ? '#d97706' : '#16a34a',
@@ -34728,8 +34731,9 @@ function RessursGanttGrid({
                         style={{
                           width:`${colW}px`, flexShrink:0,
                           // Flate farger (ikke stripe-gradienter) — vesentlig lettere å male + renere, Float-aktig
-                          background: tod ? '#f0fdf4' : hol ? '#fef6e7' : (we && settings.skipWeekends) ? '#f1f5f9' : 'white',
+                          background: tod ? '#f0fdf4' : hol ? '#fef6e7' : we ? '#eef2f7' : 'white',
                           borderRight: ganttZoom==='days' ? '1px solid #f8fafc' : (i%7===6 ? '1px solid #e2e8f0' : 'none'),
+                          borderLeft: (i > 0 && new Date(d + 'T12:00:00').getDay() === 1) ? '1px solid #dbe3ec' : 'none',
                           cursor:'pointer',
                           position:'relative',
                           userSelect:'none',  // ikke marker tekst under drag
@@ -34844,8 +34848,6 @@ function RessursGanttGrid({
                     const isDraggingThis = dragBar?.barId === bar.id
                     // Er det denne bjelken detaljvinduet står oppe for?
                     const erAktivBjelke = !!hoveredBar && hoveredBar.bar.id === bar.id && !dragging && !resizing && !dragBar
-                    const showCode = width > 34
-                    const showName = width > 66
                     const showHours = width > 52
                     const isZoomedOut = ganttZoom === 'quarters'
 
@@ -34909,16 +34911,13 @@ function RessursGanttGrid({
                           top:'7px', bottom:'7px',
                           left:`${left}px`, width:`${width}px`,
                           borderRadius:'7px',
-                          background: bar.hasConflict
-                            ? `repeating-linear-gradient(45deg, ${col} 0 6px, ${col}dd 6px 12px)`
-                            : bar.isPlaceholder
-                              ? `${col}59`
-                              : col,
-                          border: bar.hasConflict
-                            ? '2px solid #dc2626'
-                            : bar.isUe ? '2px dashed #f59e0b'
-                            : bar.isPlaceholder ? `2px dashed ${col}` : 'none',
-                          color: bar.isPlaceholder ? '#1e293b' : 'white',
+                          background: bar.hasConflict ? '#fef2f2' : `${col}14`,
+                          border: bar.hasConflict ? '1px solid #fecaca'
+                            : bar.isUe ? '1px dashed #f59e0b'
+                            : bar.isPlaceholder ? `1px dashed ${col}`
+                            : `1px solid ${col}33`,
+                          boxSizing: 'border-box',
+                          color: '#0f172a',
                           cursor: isDraggingThis ? 'grabbing' : 'grab',
                           userSelect:'none',
                           touchAction:'none',
@@ -34951,18 +34950,24 @@ function RessursGanttGrid({
                         onMouseOver={e => { if (!dragging && !resizing) e.currentTarget.style.boxShadow = bar.hasConflict ? '0 0 0 2px rgba(220,38,38,0.3), 0 4px 10px rgba(0,0,0,0.2)' : '0 4px 10px rgba(0,0,0,0.2)' }}
                         onMouseOut={e => { if (!dragging && !resizing) e.currentTarget.style.boxShadow = bar.hasConflict ? '0 0 0 2px rgba(220,38,38,0.2), 0 2px 6px rgba(0,0,0,0.15)' : '0 1px 3px rgba(0,0,0,0.15)' }}
                       >
+                        {/* Prosjektfargen som stripe i venstrekanten. Egen div og ikke
+                            boxShadow, fordi boxShadow allerede bærer drop-skyggen og
+                            settes imperativt ved hover — de to ville overskrevet hverandre. */}
+                        <div style={{ position:'absolute', left:0, top:0, bottom:0, width:'3px',
+                          background: bar.hasConflict ? '#dc2626' : col,
+                          borderRadius:'6px 0 0 6px', pointerEvents:'none', zIndex:1 }} />
                         {/* Left resize handle */}
                         <div onPointerDown={(e) => e.stopPropagation()}
                           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onResizePlan(firstPlan, 'left', e) }}
                           style={{ position:'absolute', left:0, top:0, bottom:0, width:'10px', cursor:'ew-resize', zIndex:4, borderRadius:'6px 0 0 6px', touchAction:'none' }}
-                          onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(255,255,255,0.4)' }}
+                          onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(15,23,42,0.10)' }}
                           onMouseLeave={(e)=>{ e.currentTarget.style.background='transparent' }}
                         />
                         {/* Right resize handle */}
                         <div onPointerDown={(e) => e.stopPropagation()}
                           onMouseDown={(e) => { e.stopPropagation(); e.preventDefault(); onResizePlan(lastPlan, 'right', e) }}
                           style={{ position:'absolute', right:0, top:0, bottom:0, width:'10px', cursor:'ew-resize', zIndex:4, borderRadius:'0 6px 6px 0', touchAction:'none' }}
-                          onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(255,255,255,0.4)' }}
+                          onMouseEnter={(e)=>{ e.currentTarget.style.background='rgba(15,23,42,0.10)' }}
                           onMouseLeave={(e)=>{ e.currentTarget.style.background='transparent' }}
                         />
 
@@ -34975,7 +34980,7 @@ function RessursGanttGrid({
                             top:0, bottom:0,
                             left:`${(i * colW) - 2}px`,
                             width:`${colW}px`,
-                            background: 'repeating-linear-gradient(45deg, rgba(255,255,255,0.20) 0 5px, rgba(255,255,255,0) 5px 10px)',
+                            background: 'repeating-linear-gradient(45deg, rgba(15,23,42,0.07) 0 5px, rgba(15,23,42,0) 5px 10px)',
                             pointerEvents:'none',
                             zIndex:1,
                           }}/>
@@ -35022,61 +35027,45 @@ function RessursGanttGrid({
                             timer per dag nederst-høyre. Høyere bjelker gir plass til alt. */}
                         {(() => {
                           const task = bar.plans.find(p => p.task_description)?.task_description
-                          const txtShadow = bar.isPlaceholder ? 'none' : '0 1px 2px rgba(0,0,0,0.35)'
                           const dagerN = bar.plans.length || 1
                           const perDag = bar.hours / dagerN
                           const perDagStr = (Math.round(perDag * 10) / 10).toString().replace('.', ',')
+                          // Prosjektnavnet gir mening først når oppgaven har fått plass,
+                          // og timetallet sist. Ingenting kuttes midt i et ord — det som
+                          // ikke får plass, vises ikke.
+                          const visProsjekt = width > 150 && !isZoomedOut
+                          const visTimer = showHours && width > 250
+                          const merkePlass = width > 44 ? 20 : 0
+                          // Oppgaven først, fordi det er den som forteller hva som skjer.
+                          // Prosjektet etter, i dempet farge. Timetallet helt til høyre.
+                          // merkePlass holder av rom for framdriftsprikken øverst til høyre.
                           return (
-                            <div style={{ flex:1, minWidth:0, minHeight:0, overflow:'hidden', display:'flex', flexDirection:'column', position:'relative', zIndex:2 }}>
-                              <div style={{ flex:1, minWidth:0, minHeight:0, overflow:'hidden' }}>
-                                {showCode && (
-                                  <div style={{
-                                    fontSize: width > 120 ? '11px' : '10px',
-                                    fontWeight:'700', opacity:0.9, letterSpacing:'0.02em',
-                                    lineHeight:1.1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                                    textShadow: txtShadow,
-                                  }}>
-                                    {proj?.project_number || (proj?.name || '').slice(0,8)}
-                                  </div>
-                                )}
-                                {showName && !isZoomedOut && (
-                                  <div style={{
-                                    fontSize: width > 150 ? '14px' : '13px',
-                                    fontWeight:'800', lineHeight:1.15, marginTop:'1px',
-                                    overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                                    textShadow: txtShadow,
-                                  }}>
-                                    {proj?.name || '—'}
-                                  </div>
-                                )}
-                                {task && width > 90 && !isZoomedOut && (
-                                  <div style={{
-                                    fontSize: width > 150 ? '13px' : '12px',
-                                    fontWeight:'600', opacity:0.92, lineHeight:1.2, marginTop:'3px',
-                                    overflow:'hidden', textOverflow:'ellipsis',
-                                    display:'-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient:'vertical', whiteSpace:'normal',
-                                    textShadow: txtShadow,
-                                  }}>
-                                    🔨 {task}
-                                  </div>
-                                )}
-                                {isZoomedOut && showCode && (
-                                  <div style={{ fontSize:'11px', fontWeight:'800', opacity:0.95, marginTop:'1px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textShadow: txtShadow }}>
-                                    {(proj?.name || '').slice(0,10)}
-                                  </div>
-                                )}
-                              </div>
-                              {showHours && (
-                                <div style={{
-                                  flexShrink:0, marginTop:'2px',
-                                  fontSize:'13px', fontWeight:'800', textAlign:'right',
-                                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap',
-                                  textShadow: txtShadow,
+                            <div style={{ flex:1, minWidth:0, overflow:'hidden', display:'flex', alignItems:'center',
+                              gap:'8px', position:'relative', zIndex:2, paddingRight: merkePlass + 'px' }}>
+                              <span style={{
+                                fontWeight:'700', fontSize: width > 150 ? '12.5px' : '11.5px', lineHeight:1.2,
+                                color: bar.isUe ? '#92400e' : '#0f172a',
+                                overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:1, minWidth:0,
+                              }}>
+                                {task || proj?.name || '—'}
+                              </span>
+                              {visProsjekt && (
+                                <span style={{
+                                  fontSize:'11px', color:'#64748b', lineHeight:1.2,
+                                  overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', flexShrink:2, minWidth:0,
+                                }}>
+                                  {proj?.project_number ? proj.project_number + ' ' : ''}{proj?.name || ''}
+                                </span>
+                              )}
+                              {visTimer && (
+                                <span style={{
+                                  marginLeft:'auto', flexShrink:0, fontSize:'10.5px', fontWeight:'600',
+                                  color:'#94a3b8', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums',
                                 }}>
                                   {bar.isUe
-                                    ? <span>🤝 UE{dagerN > 0 ? ` · ${dagerN}d` : ''}</span>
-                                    : <>{perDagStr}t{dagerN > 1 && width > 90 ? <span style={{ fontWeight:'600', opacity:0.85 }}>{`/dag · ${dagerN}d`}</span> : dagerN > 1 ? '/d' : ''}</>}
-                                </div>
+                                    ? `🤝 UE${dagerN > 0 ? ' · ' + dagerN + 'd' : ''}`
+                                    : `${perDagStr}t/dag${dagerN > 1 ? ' · ' + dagerN + 'd' : ''}`}
+                                </span>
                               )}
                             </div>
                           )
