@@ -85049,6 +85049,11 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const [sending, setSending] = useState(false)
           const [sent, setSent] = useState(null)
           const [leveringsdager, setLeveringsdager] = useState(2)
+          // Hvilket valg brukeren tok i Planlegg-menyen. Trengs helt fram til
+          // faseplanleggeren, som må vite om den skal sende ressursplanen alene
+          // eller begge planene.
+          const [planModus, setPlanModus] = useState(null) // 'ressurs' | 'levering' | 'begge'
+          const [planMenyAapen, setPlanMenyAapen] = useState(false)
           const [showProjectPicker, setShowProjectPicker] = useState(null)
           const [tildelingsmodus, setTildelingsmodus] = useState('reserver') // 'ansatte' | 'reserver'
           // ── Faseplanlegger (mellomsteg mellom oppsett og sending) ──
@@ -85543,12 +85548,15 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
           const handleAction = (action) => {
             const projId = getProjId()
             if (!projId) { setShowProjectPicker(action); return }
-            if (action === 'ressurs') doSendRessursplan(projId)
-            else doGenererLevering(projId)
+            if (action === 'levering') doGenererLevering(projId)
+            else doSendRessursplan(projId, null, action === 'begge')
           }
 
           // ── Send til ressursplan (resource_plans) ──
-          const doSendRessursplan = async (projId) => {
+          // faser: send inn lista eksplisitt når den allerede er kjent (fra
+          // faseplanleggeren). ogsaLevering kjører leveringsplanen på NØYAKTIG
+          // samme liste, som del av samme operasjon.
+          const doSendRessursplan = async (projId, faser = null, ogsaLevering = false) => {
             setSending(true)
             try {
               const plans = []
@@ -85612,7 +85620,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
               }
 
               // Bruk redigert fase-liste hvis brukeren har vært i faseplanleggeren, ellers original bdPlan
-              const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
+              const faserToUse = faser || (editableFaser.length > 0 ? faserWithDates : bdPlan)
 
               for (const bd of faserToUse) {
                 // Oppgaven er bygningsdelen i DENNE utsendingen. Sendes samme
@@ -85729,44 +85737,69 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   }
                 } catch (e) { console.error('booking_arbeidsarter:', e) }
               }
-              setSent({ type: 'ressurs', count: plans.length, mode: useEmployees ? 'ansatte' : 'placeholder' })
+              // «Begge»: leveringen bygges på faserToUse — den samme lista bookingene
+              // over her ble laget fra. Det er hele poenget med valget; regnet den
+              // sitt eget grunnlag, ville leveransene igjen kunne havne på en annen
+              // faseinndeling enn folkene.
+              const mode = useEmployees ? 'ansatte' : 'placeholder'
+              if (ogsaLevering) {
+                const levCount = await byggLeveringsrader(projId, faserToUse)
+                setSent({ type: 'begge', count: plans.length, mode, levCount })
+              } else {
+                setSent({ type: 'ressurs', count: plans.length, mode })
+              }
             } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
             finally { setSending(false) }
           }
 
           // ── Generer leveringsplan (resource_plans med type material) ──
-          const doGenererLevering = async (projId) => {
+          // Bygger og skriver leveringsradene. Ren funksjon: den tar faselista den
+          // skal bruke, rører ingen state og kaster videre ved feil — slik at den kan
+          // kjøres både alene og som andre halvdel av «Begge».
+          //
+          // Avrundingen er Math.round, som i doSendRessursplan. Med Math.floor ville en
+          // fase som starter dag 5,6 gi levering regnet fra dag 5, mens folkene faktisk
+          // møtte dag 6 — materialene kom en dag for tidlig i forhold til arbeidet.
+          const byggLeveringsrader = async (projId, faser) => {
+            const matPlans = []
+            for (const bd of faser) {
+              if (bd.materialer.length === 0) continue
+              const faseStart = addWorkdays(startDato, Math.round(bd.startDag))
+              const leveringsDato = new Date(faseStart)
+              leveringsDato.setDate(leveringsDato.getDate() - leveringsdager)
+              while (leveringsDato.getDay() === 0 || leveringsDato.getDay() === 6) leveringsDato.setDate(leveringsDato.getDate() - 1)
+
+              const matListe = bd.materialer.map(m =>
+                `${m.nobb ? m.nobb + ' ' : ''}${m.varenavn}: ${m.totalMengde.toFixed(1)} ${m.enhet}`
+              ).join('\n')
+
+              matPlans.push(sanitizeDbPayload({
+                resource_id: crypto.randomUUID(),
+                resource_type: 'employee',
+                project_id: projId,
+                date: leveringsDato.toISOString().split('T')[0],
+                hours: 0,
+                notes: `📦 Levering: ${bd.name}\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\n${matListe}`,
+                created_by: user?.id
+              }))
+            }
+
+            if (matPlans.length === 0) return 0
+
+            const { error } = await supabase.from('resource_plans').insert(matPlans)
+            if (error) throw error
+            return matPlans.length
+          }
+
+          // Leveringsplan alene. Denne er valget som utføres med én gang — det finnes
+          // ingen faser å justere når folkene ikke skal bookes.
+          const doGenererLevering = async (projId, faser = null) => {
             setSending(true)
             try {
-              const matPlans = []
-              const faserToUse = editableFaser.length > 0 ? faserWithDates : bdPlan
-              for (const bd of faserToUse) {
-                if (bd.materialer.length === 0) continue
-                const faseStart = addWorkdays(startDato, Math.floor(bd.startDag))
-                const leveringsDato = new Date(faseStart)
-                leveringsDato.setDate(leveringsDato.getDate() - leveringsdager)
-                while (leveringsDato.getDay() === 0 || leveringsDato.getDay() === 6) leveringsDato.setDate(leveringsDato.getDate() - 1)
-
-                const matListe = bd.materialer.map(m =>
-                  `${m.nobb ? m.nobb + ' ' : ''}${m.varenavn}: ${m.totalMengde.toFixed(1)} ${m.enhet}`
-                ).join('\n')
-
-                matPlans.push(sanitizeDbPayload({
-                  resource_id: crypto.randomUUID(),
-                  resource_type: 'employee',
-                  project_id: projId,
-                  date: leveringsDato.toISOString().split('T')[0],
-                  hours: 0,
-                  notes: `📦 Levering: ${bd.name}\nArbeid starter: ${faseStart.toLocaleDateString('nb-NO', { day:'numeric', month:'short' })}\n\n${matListe}`,
-                  created_by: user?.id
-                }))
-              }
-
-              if (matPlans.length === 0) { await appAlert({ message: 'Ingen materialer å sende', subMessage: 'Det finnes ingen bygningsdeler med materialer.', kind: 'warn' }); setSending(false); return }
-
-              const { error } = await supabase.from('resource_plans').insert(matPlans)
-              if (error) throw error
-              setSent({ type: 'levering', count: matPlans.length })
+              const faserToUse = faser || (editableFaser.length > 0 ? faserWithDates : bdPlan)
+              const antall = await byggLeveringsrader(projId, faserToUse)
+              if (antall === 0) { await appAlert({ message: 'Ingen materialer å sende', subMessage: 'Det finnes ingen bygningsdeler med materialer.', kind: 'warn' }); return }
+              setSent({ type: 'levering', count: antall })
             } catch(e) { await appAlert({ message: 'En feil oppstod', subMessage: e.message, kind: 'error' }) }
             finally { setSending(false) }
           }
@@ -85776,24 +85809,32 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
             <div style={{ position:'fixed', inset:0, zIndex:110, display:'flex', alignItems:'center', justifyContent:'center', padding:'16px' }}>
               <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
               <div style={{ position:'relative', background:'white', borderRadius:'20px', width:'100%', maxWidth:'480px', boxShadow:'0 20px 60px rgba(0,0,0,0.25)', padding:'32px', textAlign:'center' }}>
-                <div style={{ fontSize:'48px', marginBottom:'16px' }}>{sent.type === 'ressurs' ? '📅' : '📦'}</div>
-                <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>
-                  {sent.type === 'ressurs' ? 'Sendt til ressursplan!' : 'Leveringsplan opprettet!'}
-                </h3>
-                <p style={{ margin:'0 0 8px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>
-                  {sent.type === 'ressurs'
-                    ? sent.mode === 'ansatte'
-                      ? `${sent.count} bookinger opprettet for ${selectedEmployees.length} ansatt${selectedEmployees.length > 1 ? 'e' : ''}.`
-                      : `${sent.count} reservasjoner opprettet for ${antallMann} mann.`
-                    : `${sent.count} materialleveranse${sent.count > 1 ? 'r' : ''} lagt til i ressursplanen.`}
-                </p>
-                <p style={{ margin:'0 0 24px', color:'#94a3b8', fontSize:'13px' }}>
-                  {sent.type === 'ressurs'
-                    ? sent.mode === 'ansatte'
-                      ? 'Åpne ressursplanleggeren for å se og justere bookingene.'
-                      : 'Åpne ressursplanleggeren for å se reservasjonene. Du kan tildele navngitte ansatte der.'
-                    : 'Åpne ressursplanleggeren og klikk «📦 Materiell» for å se leveringsplanen.'}
-                </p>
+                {(() => {
+                  const harRes = sent.type === 'ressurs' || sent.type === 'begge'
+                  const bookinger = sent.mode === 'ansatte'
+                    ? `${sent.count} booking${sent.count === 1 ? '' : 'er'} opprettet for ${selectedEmployees.length} ansatt${selectedEmployees.length > 1 ? 'e' : ''}.`
+                    : `${sent.count} reservasjon${sent.count === 1 ? '' : 'er'} opprettet for ${antallMann} mann.`
+                  const leveranser = (a) => `${a} materialleveranse${a === 1 ? '' : 'r'} lagt til i ressursplanen.`
+                  const tittel = sent.type === 'begge' ? 'Ressursplan og leveringsplan sendt!'
+                    : sent.type === 'ressurs' ? 'Sendt til ressursplan!' : 'Leveringsplan opprettet!'
+                  const brod = sent.type === 'begge' ? bookinger + ' ' + leveranser(sent.levCount)
+                    : harRes ? bookinger : leveranser(sent.count)
+                  const hint = sent.type === 'begge'
+                    ? 'Åpne ressursplanleggeren for å se bookingene. Leveransene ligger under «📦 Materiell».'
+                    : harRes
+                      ? (sent.mode === 'ansatte'
+                        ? 'Åpne ressursplanleggeren for å se og justere bookingene.'
+                        : 'Åpne ressursplanleggeren for å se reservasjonene. Du kan tildele navngitte ansatte der.')
+                      : 'Åpne ressursplanleggeren og klikk «📦 Materiell» for å se leveringsplanen.'
+                  return (
+                    <>
+                      <div style={{ fontSize:'48px', marginBottom:'16px' }}>{harRes ? '📅' : '📦'}</div>
+                      <h3 style={{ margin:'0 0 8px', fontSize:'20px', fontWeight:'700', color:'#0f172a' }}>{tittel}</h3>
+                      <p style={{ margin:'0 0 8px', color:'#64748b', fontSize:'14px', lineHeight:1.5 }}>{brod}</p>
+                      <p style={{ margin:'0 0 24px', color:'#94a3b8', fontSize:'13px' }}>{hint}</p>
+                    </>
+                  )
+                })()}
                 <div style={{ display:'flex', gap:'8px', justifyContent:'center' }}>
                   <button onClick={onClose} style={{ padding:'10px 24px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px' }}>Lukk</button>
                   <button onClick={() => { onClose(); if (typeof onNavigate === 'function') onNavigate('ressursplan') }}
@@ -85827,7 +85868,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     <button onClick={() => setShowProjectPicker(null)}
                       style={{ flex:1, padding:'12px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
                     {selectedProject ? (
-                      <button onClick={() => { const action = showProjectPicker; setShowProjectPicker(null); if (action === 'ressurs') doSendRessursplan(selectedProject); else doGenererLevering(selectedProject) }}
+                      <button onClick={() => { const action = showProjectPicker; setShowProjectPicker(null); if (action === 'levering') doGenererLevering(selectedProject); else doSendRessursplan(selectedProject, null, action === 'begge') }}
                         style={{ flex:2, padding:'12px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'13px', fontWeight:'700' }}>Bruk valgt prosjekt →</button>
                     ) : (
                       <button onClick={() => { setShowProjectPicker(null); onClose(); if (typeof onNavigate === 'function') onNavigate('prosjekter') }}
@@ -85999,9 +86040,9 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     <div style={{ display:'flex', gap:'8px' }}>
                       <button onClick={() => setFaseplanleggerMode(false)}
                         style={{ padding:'10px 16px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>← Tilbake</button>
-                      <button onClick={() => { setFaseplanleggerMode(false); handleAction('ressurs') }} disabled={sending || faserWithDates.length === 0}
+                      <button onClick={() => { setFaseplanleggerMode(false); handleAction(planModus === 'begge' ? 'begge' : 'ressurs') }} disabled={sending || faserWithDates.length === 0}
                         style={{ flex:1, padding:'10px', background:(sending || faserWithDates.length === 0)?'#94a3b8':'#059669', color:'white', border:'none', borderRadius:'10px', cursor:(sending || faserWithDates.length === 0)?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>
-                        ✅ Send til ressursplan
+                        {planModus === 'begge' ? '✅ Send ressursplan og leveringsplan' : '✅ Send til ressursplan'}
                       </button>
                     </div>
                   </div>
@@ -86227,12 +86268,23 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                     )}
                   </div>
 
-                  {/* Levering */}
-                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-end' }}>
+                  {/* Levering — feltet hører til leveringsplanen. Planlegger man bare
+                      ressursplanen, dimmes det PÅ PLASS: det beholder høyden sin, så
+                      knappene under står stille. */}
+                  <div style={{ display:'flex', gap:'12px', marginBottom:'12px', alignItems:'flex-end',
+                    opacity: planModus === 'ressurs' ? 0.45 : 1,
+                    pointerEvents: planModus === 'ressurs' ? 'none' : 'auto' }}>
                     <div style={{ width:'180px' }}>
                       <label style={{ display:'block', fontSize:'11px', fontWeight:'600', color:'#64748b', marginBottom:'4px' }}>Levering før oppstart (dager)</label>
                       <input type="number" min="0" max="14" value={leveringsdager} onChange={e => setLeveringsdager(parseInt(e.target.value) || 2)} style={{ ...qInp, textAlign:'center' }} />
-                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px' }}>Materialer leveres {leveringsdager} dager før arbeidet starter</div>
+                      {/* Fast hoyde: den lange teksten brytes til to linjer, den korte
+                          ikke. Uten minHeight ville knappene under hoppe 11 px hver gang
+                          feltet skifter tilstand. */}
+                      <div style={{ fontSize:'10px', color:'#94a3b8', marginTop:'3px', lineHeight:1.3, minHeight:'26px' }}>
+                        {planModus === 'ressurs'
+                          ? 'Gjelder bare leveringsplanen'
+                          : `Materialer leveres ${leveringsdager} dager før arbeidet starter`}
+                      </div>
                     </div>
                   </div>
 
@@ -86240,16 +86292,52 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                   <div style={{ display:'flex', gap:'10px', alignItems:'center' }}>
                     <button onClick={onClose} style={{ padding:'10px 20px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'13px', color:'#64748b' }}>Avbryt</button>
                     <div style={{ flex:1 }} />
-                    <button onClick={() => { initializeEditableFaser(); setFaseplanleggerMode(true) }} disabled={sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0)}
-                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px',
-                        background: sending || (tildelingsmodus === 'ansatte' && selectedEmployees.length === 0) ? '#94a3b8' : '#2563eb',
-                        color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
-                      {sending ? '⏳ Sender...' : tildelingsmodus === 'ansatte' ? `📋 Planlegg & send (${selectedEmployees.length} ansatte)` : `📋 Planlegg & send (${antallMann} mann)`}
-                    </button>
-                    <button onClick={() => handleAction('levering')} disabled={sending}
-                      style={{ flex:'0 0 auto', minWidth:'220px', padding:'12px 20px', background: sending ? '#6ee7b7' : '#059669', color:'white', border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700', textAlign:'center' }}>
-                      {sending ? '⏳ Genererer...' : `📦 Generer leveringsplan`}
-                    </button>
+                    {/* Én knapp, tre valg. De to gamle knappene så ut som alternativer,
+                        og det var nettopp problemet: en byggeplass trenger som regel
+                        begge planene. Undertekstene sier hva som skjer, fordi valgene
+                        oppfører seg ulikt — leveringen utføres nå, de to andre går
+                        videre til faseplanleggeren. */}
+                    {(() => {
+                      const manglerAnsatte = tildelingsmodus === 'ansatte' && selectedEmployees.length === 0
+                      const valgene = [
+                        { v:'ressurs',  navn:'📋 Ressursplan',  hjelp:'Booker folkene. Fasene justeres i neste steg.',      sperret: manglerAnsatte },
+                        { v:'levering', navn:'📦 Leveringsplan', hjelp:'Materialleveransene opprettes med én gang.',        sperret: false },
+                        { v:'begge',    navn:'🗓️ Begge',         hjelp:'Folk og leveranser sendes samlet fra neste steg.', sperret: manglerAnsatte },
+                      ]
+                      const velg = (v) => {
+                        setPlanMenyAapen(false)
+                        setPlanModus(v)
+                        if (v === 'levering') handleAction('levering')
+                        else { initializeEditableFaser(); setFaseplanleggerMode(true) }
+                      }
+                      return (
+                        <div style={{ position:'relative' }}>
+                          {planMenyAapen && (
+                            <>
+                              <div onMouseDown={() => setPlanMenyAapen(false)} style={{ position:'fixed', inset:0, zIndex:1 }} />
+                              <div style={{ position:'absolute', bottom:'calc(100% + 8px)', right:0, zIndex:2, width:'320px', maxWidth:'calc(100vw - 56px)', background:'white', border:'1px solid #e2e8f0', borderRadius:'12px', boxShadow:'0 12px 32px rgba(0,0,0,0.14)', overflow:'hidden' }}>
+                                {valgene.map((o, i) => (
+                                  <button key={o.v} onClick={() => velg(o.v)} disabled={o.sperret}
+                                    style={{ display:'block', width:'100%', textAlign:'left', padding:'11px 14px', background:'white',
+                                      border:'none', borderTop: i === 0 ? 'none' : '1px solid #f1f5f9',
+                                      cursor: o.sperret ? 'not-allowed' : 'pointer', opacity: o.sperret ? 0.45 : 1, fontFamily:'inherit' }}>
+                                    <div style={{ fontSize:'13.5px', fontWeight:'700', color:'#0f172a' }}>{o.navn}</div>
+                                    <div style={{ fontSize:'11.5px', color:'#64748b', marginTop:'2px', lineHeight:1.45 }}>
+                                      {o.sperret ? 'Velg minst én ansatt først.' : o.hjelp}
+                                    </div>
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
+                          <button onClick={() => setPlanMenyAapen(o => !o)} disabled={sending}
+                            style={{ minWidth:'190px', padding:'12px 20px', background: sending ? '#94a3b8' : '#2563eb', color:'white',
+                              border:'none', borderRadius:'10px', cursor: sending ? 'not-allowed' : 'pointer', fontSize:'13px', fontWeight:'700' }}>
+                            {sending ? '⏳ Sender...' : '🗓️ Planlegg ▾'}
+                          </button>
+                        </div>
+                      )
+                    })()}
                   </div>
                 </div>
               </div>
