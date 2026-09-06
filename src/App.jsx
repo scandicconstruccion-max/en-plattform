@@ -36498,6 +36498,241 @@ function slaaSammenMaterialer(...lister) {
   return rekkefolge.map(k => map.get(k))
 }
 
+// ─── MATERIALLEVERANSER — eget vindu over ressursplanen ─────────────────────
+// Var en stripe over Gantt som spiste en tredjedel av høyden og likevel kuttet
+// innholdet med «+3 flere…». Å gå gjennom leveranser er en egen arbeidsøkt —
+// «hva skulle kommet, hva mangler» — og den konkurrerer ikke med planen om
+// oppmerksomheten. Den erstatter den i noen minutter.
+//
+// Gruppert på TID, filtrert på prosjekt: spørsmålet er «hva skjer denne uka»,
+// ikke «hva skjer på Testveien». Forfalte ligger alltid øverst og forsvinner
+// ikke når man ser på en kortere periode — da ville de blitt usynlige nettopp
+// for den som ser framover.
+function MaterialleveranserModal({ materiellPlans, projects, employees = [], user, onClose, onOpenDetail, onSaved }) {
+  const appAlert = useAppAlert()
+  const [filterProsjekt, setFilterProsjekt] = useState('alle')
+  const [periode, setPeriode] = useState('30')   // 'uke' | '30' | 'alt'
+  const [sok, setSok] = useState('')
+  const [visLevert, setVisLevert] = useState(false)
+  const [lagrer, setLagrer] = useState(null)
+  // Lokal overstyring, så haken føles umiddelbar. onSaved() henter fasiten etterpå.
+  const [lokalLevert, setLokalLevert] = useState({})
+
+  const iDag = new Date().toISOString().split('T')[0]
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && !lagrer) onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, lagrer])
+
+  const navnPaa = React.useCallback((userId) => {
+    if (!userId) return null
+    const e = (employees || []).find(x => x.user_id === userId)
+    return e ? ((e.first_name || '') + ' ' + (e.last_name || '')).trim() || null : null
+  }, [employees])
+
+  const erLevert = (mp) => (mp.id in lokalLevert) ? !!lokalLevert[mp.id] : !!mp.levert_at
+
+  const dagerTil = (dato) => Math.round((new Date(dato + 'T12:00:00') - new Date(iDag + 'T12:00:00')) / 86400000)
+
+  const bolkFor = (mp) => {
+    if (erLevert(mp)) return 'levert'
+    const n = dagerTil(mp.date)
+    if (n < 0) return 'forfalt'
+    if (n === 0) return 'idag'
+    if (n <= 7) return 'uke'
+    return 'senere'
+  }
+
+  const naarTekst = (mp) => {
+    const n = dagerTil(mp.date)
+    const fmt = new Date(mp.date + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })
+    if (erLevert(mp)) return 'Levert ' + fmt
+    if (n < 0) return Math.abs(n) + (Math.abs(n) === 1 ? ' dag forsinket' : ' dager forsinket')
+    if (n === 0) return 'Leveres i dag'
+    if (n === 1) return 'Leveres i morgen'
+    return 'Om ' + n + ' dager · ' + fmt
+  }
+
+  // Parses én gang per leveranse, ikke per render av hver rad.
+  const beriket = React.useMemo(() => (materiellPlans || []).map(mp => {
+    const parsed = parseMateriellNotes(mp.notes || '')
+    const proj = projects.find(p => p.id === mp.project_id)
+    return { mp, tittel: parsed.title || 'Materialleveranse', varer: parsed.materials || [], prosjekt: proj }
+  }), [materiellPlans, projects])
+
+  const utvalg = React.useMemo(() => {
+    const q = sok.trim().toLowerCase()
+    return beriket.filter(({ mp, tittel, varer, prosjekt }) => {
+      if (filterProsjekt !== 'alle' && mp.project_id !== filterProsjekt) return false
+      if (erLevert(mp) && !visLevert) return false
+      if (!erLevert(mp)) {
+        const n = dagerTil(mp.date)
+        // Forfalte vises uansett periode — ellers forsvinner de for den som
+        // ser framover, og det er dem som krever handling.
+        if (n >= 0) {
+          if (periode === 'uke' && n > 7) return false
+          if (periode === '30' && n > 30) return false
+        }
+      }
+      if (q) {
+        const treff = tittel.toLowerCase().includes(q)
+          || (prosjekt?.name || '').toLowerCase().includes(q)
+          || varer.some(v => (v.varenavn || '').toLowerCase().includes(q))
+        if (!treff) return false
+      }
+      return true
+    })
+  }, [beriket, filterProsjekt, periode, sok, visLevert, lokalLevert])
+
+  const settLevert = async (mp, nyVerdi) => {
+    if (lagrer) return
+    // Constrainten krever at levert_av er satt når levert_at er det.
+    if (nyVerdi && !user?.id) {
+      await appAlert({ message: 'Kan ikke kvittere ut', subMessage: 'Fant ingen innlogget bruker å kvittere på vegne av.', kind: 'warn' })
+      return
+    }
+    setLagrer(mp.id)
+    setLokalLevert(v => ({ ...v, [mp.id]: nyVerdi }))
+    try {
+      const { error } = await supabase.from('resource_plans').update({
+        levert_at: nyVerdi ? new Date().toISOString() : null,
+        levert_av: nyVerdi ? user.id : null,
+        updated_at: new Date().toISOString(),
+      }).eq('id', mp.id)
+      if (error) throw error
+      if (typeof onSaved === 'function') onSaved()
+    } catch (e) {
+      setLokalLevert(v => { const n = { ...v }; delete n[mp.id]; return n })
+      await appAlert({ message: 'Kunne ikke lagre kvitteringen', subMessage: e.message, kind: 'error' })
+    } finally { setLagrer(null) }
+  }
+
+  const antForfalt = beriket.filter(({ mp }) => !erLevert(mp) && dagerTil(mp.date) < 0).length
+  const antLevert = beriket.filter(({ mp }) => erLevert(mp)).length
+
+  const BOLKER = [
+    { k:'forfalt', navn:'Forfalt',   bg:'#fef2f2', farge:'#dc2626', kant:'#fecaca' },
+    { k:'idag',    navn:'I dag',     bg:'#fffbeb', farge:'#d97706', kant:'#fde68a' },
+    { k:'uke',     navn:'Denne uka', bg:'#eff6ff', farge:'#2563eb', kant:'#bfdbfe' },
+    { k:'senere',  navn:'Senere',    bg:'#f8fafc', farge:'#64748b', kant:'#e2e8f0' },
+    { k:'levert',  navn:'Levert',    bg:'#f8fafc', farge:'#94a3b8', kant:'#e2e8f0' },
+  ]
+
+  const inp = { padding:'7px 10px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize:'12.5px',
+                fontFamily:'system-ui,sans-serif', color:'#0f172a', background:'white', outline:'none' }
+
+  return (
+    <div style={{ position:'fixed', inset:0, zIndex:120, display:'flex', alignItems:'center', justifyContent:'center', padding:'18px' }}>
+      <div style={{ position:'absolute', inset:0, background:'rgba(15,23,42,0.5)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
+      <div style={{ position:'relative', background:'white', borderRadius:'16px', width:'100%', maxWidth:'1000px',
+        height:'100%', maxHeight:'88vh', display:'flex', flexDirection:'column',
+        boxShadow:'0 24px 70px rgba(0,0,0,0.3)', overflow:'hidden', fontFamily:'system-ui,sans-serif' }}>
+
+        <div style={{ padding:'15px 20px', borderBottom:'1px solid #f1f5f9', display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:'14px', flexShrink:0 }}>
+          <div>
+            <h2 style={{ margin:'0 0 2px', fontSize:'16px', fontWeight:'800', color:'#0f172a' }}>📦 Materialleveranser</h2>
+            <div style={{ fontSize:'12px', color:'#64748b' }}>
+              {beriket.length} leveranse{beriket.length === 1 ? '' : 'r'}
+              {antForfalt > 0 ? ` · ${antForfalt} forfalt` : ''}
+              {antLevert > 0 ? ` · ${antLevert} levert` : ''}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background:'none', border:'none', fontSize:'22px', color:'#94a3b8', cursor:'pointer', lineHeight:1, padding:'0 2px' }}>×</button>
+        </div>
+
+        <div style={{ display:'flex', gap:'10px', alignItems:'center', padding:'10px 20px', background:'#f8fafc', borderBottom:'1px solid #f1f5f9', flexWrap:'wrap', flexShrink:0 }}>
+          <select value={filterProsjekt} onChange={e => setFilterProsjekt(e.target.value)} style={{ ...inp, cursor:'pointer' }}>
+            <option value="alle">Alle prosjekter</option>
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          <div style={{ display:'flex', gap:'2px', background:'#e9edeb', borderRadius:'8px', padding:'2px' }}>
+            {[['uke','Denne uka'],['30','30 dager'],['alt','Alt']].map(([v,l]) => (
+              <button key={v} onClick={() => setPeriode(v)}
+                style={{ border:'none', background: periode===v ? 'white' : 'transparent', padding:'6px 11px', borderRadius:'6px',
+                  fontSize:'12px', fontWeight: periode===v ? '700' : '600', color: periode===v ? '#0f172a' : '#64748b',
+                  cursor:'pointer', fontFamily:'inherit', boxShadow: periode===v ? '0 1px 2px rgba(0,0,0,0.06)' : 'none' }}>{l}</button>
+            ))}
+          </div>
+          <input type="search" value={sok} onChange={e => setSok(e.target.value)} placeholder="Søk i varer eller leveranse…"
+            style={{ ...inp, flex:1, minWidth:'140px' }} />
+          <label style={{ fontSize:'12px', color:'#64748b', display:'flex', alignItems:'center', gap:'6px', cursor:'pointer', whiteSpace:'nowrap' }}>
+            <input type="checkbox" checked={visLevert} onChange={e => setVisLevert(e.target.checked)} style={{ cursor:'pointer' }} />
+            Vis leverte
+          </label>
+        </div>
+
+        <div style={{ overflowY:'auto', flex:1, padding:'6px 20px 18px' }}>
+          {utvalg.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'44px 20px', color:'#94a3b8', fontSize:'13px', lineHeight:1.6 }}>
+              {beriket.length === 0
+                ? <>Ingen materialleveranser planlagt.<br/>Bruk «Planlegg» i kalkylen for å lage en leveringsplan.</>
+                : <>Ingen leveranser i dette utvalget.<br/>Prøv «Alt» eller et annet prosjekt.</>}
+            </div>
+          ) : BOLKER.map(b => {
+            const i = utvalg.filter(x => bolkFor(x.mp) === b.k).sort((a, c) => a.mp.date.localeCompare(c.mp.date))
+            if (i.length === 0) return null
+            return (
+              <div key={b.k} style={{ marginTop:'14px' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', padding:'7px 0 6px', position:'sticky', top:0, background:'white', zIndex:2 }}>
+                  <span style={{ fontSize:'11px', fontWeight:'800', textTransform:'uppercase', letterSpacing:'0.6px',
+                    padding:'3px 9px', borderRadius:'6px', background:b.bg, color:b.farge, border:`1px solid ${b.kant}` }}>{b.navn}</span>
+                  <span style={{ fontSize:'11.5px', color:'#94a3b8' }}>{i.length} leveranse{i.length === 1 ? '' : 'r'}</span>
+                </div>
+                {i.map(({ mp, tittel, varer, prosjekt }) => {
+                  const lev = erLevert(mp)
+                  const bolk = bolkFor(mp)
+                  const bg = lev ? '#f8fafc' : bolk === 'forfalt' ? '#fef2f2' : bolk === 'idag' ? '#fffbeb' : 'white'
+                  const kant = lev ? '#e2e8f0' : bolk === 'forfalt' ? '#fecaca' : bolk === 'idag' ? '#fde68a' : '#e2e8f0'
+                  const naarF = lev ? '#94a3b8' : bolk === 'forfalt' ? '#dc2626' : bolk === 'idag' ? '#d97706' : '#64748b'
+                  return (
+                    <div key={mp.id} style={{ display:'flex', gap:'12px', border:`1px solid ${kant}`, borderRadius:'11px',
+                      padding:'11px 13px', marginBottom:'7px', background:bg, alignItems:'flex-start', opacity: lev ? 0.55 : 1 }}>
+                      <button onClick={() => settLevert(mp, !lev)} disabled={lagrer === mp.id}
+                        aria-label={lev ? 'Angre levert' : 'Merk som levert'}
+                        title={lev ? 'Angre levert' : 'Merk som levert'}
+                        style={{ width:'22px', height:'22px', borderRadius:'7px', flexShrink:0, marginTop:'1px', padding:0,
+                          border: lev ? '2px solid #059669' : '2px solid #cbd5e1', background: lev ? '#059669' : 'white',
+                          color:'white', fontSize:'13px', fontWeight:'800', lineHeight:1,
+                          cursor: lagrer === mp.id ? 'wait' : 'pointer' }}>{lev ? '✓' : ''}</button>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'baseline', gap:'9px', flexWrap:'wrap' }}>
+                          <span onClick={() => onOpenDetail({ id: mp.id, title: tittel, notes: mp.notes || '', date: mp.date, project: prosjekt?.name })}
+                            style={{ fontSize:'13.5px', fontWeight:'700', color:'#0f172a', cursor:'pointer',
+                              textDecoration: lev ? 'line-through' : 'none' }}>{tittel}</span>
+                          {prosjekt && <span style={{ fontSize:'11.5px', color:'#64748b' }}>🏗️ {prosjekt.name}</span>}
+                          <span style={{ fontSize:'11.5px', fontWeight:'700', color:naarF, marginLeft:'auto', whiteSpace:'nowrap' }}>{naarTekst(mp)}</span>
+                        </div>
+                        {/* Alle varelinjene. Den gamle stripa kuttet på to og sa «+3 flere…»
+                            uansett hvor mange det egentlig var. */}
+                        {varer.length > 0 && (
+                          <div style={{ marginTop:'7px', display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(215px, 1fr))', gap:'2px 18px' }}>
+                            {varer.map((v, vi) => (
+                              <div key={vi} style={{ fontSize:'11.5px', color:'#475569', display:'flex', justifyContent:'space-between', gap:'10px', padding:'1px 0' }}>
+                                <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{v.varenavn}</span>
+                                <span style={{ color:'#94a3b8', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums' }}>{v.mengde}{v.enhet ? ' ' + v.enhet : ''}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div style={{ marginTop:'6px', fontSize:'11px', color:'#94a3b8', display:'flex', gap:'12px', flexWrap:'wrap' }}>
+                          <span>📅 {new Date(mp.date + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })}</span>
+                          <span>{varer.length} varelinje{varer.length === 1 ? '' : 'r'}</span>
+                          {lev && mp.levert_av && navnPaa(mp.levert_av) && <span>Kvittert av {navnPaa(mp.levert_av)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
 function MateriellRedigeringsModal({ detail, plans, materiellPlans, projects, onClose, onSaved }) {
   const alert = useAppAlert()
   const confirm = useConfirm()
@@ -36771,7 +37006,7 @@ function MateriellRedigeringsModal({ detail, plans, materiellPlans, projects, on
   const inp = { width:'100%', padding: isMob ? '11px 12px' : '7px 9px', border:'1px solid #e2e8f0', borderRadius:'8px', fontSize: isMob ? '16px' : '13px', fontFamily:'system-ui,sans-serif', outline:'none', boxSizing:'border-box', color:'#0f172a', minHeight: isMob ? '46px' : undefined }
 
   return (
-    <div style={{ position:'fixed', inset:0, zIndex:100, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? '0' : '16px', fontFamily:'system-ui,sans-serif' }}>
+    <div style={{ position:'fixed', inset:0, zIndex:130, display:'flex', alignItems: isMob ? 'stretch' : 'center', justifyContent:'center', padding: isMob ? '0' : '16px', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ position:'absolute', inset:0, background:'rgba(0,0,0,0.45)' }} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }} />
       <div style={{ position:'relative', background:'white', borderRadius: isMob ? '0' : '20px', width:'100%', maxWidth: isMob ? '100%' : '640px', height: isMob ? '100%' : undefined, maxHeight: isMob ? '100%' : '88vh', display:'flex', flexDirection:'column', boxShadow:'0 20px 60px rgba(0,0,0,0.2)', overflow:'hidden' }}>
         {/* Header */}
@@ -38087,49 +38322,20 @@ function RessursPage() {
       )}
 
       {/* Materiell panel — desktop */}
+      {/* Materialleveranser — DESKTOP. Var en stripe over Gantt som tok en
+          tredjedel av hoyden og likevel kuttet innholdet. Na et eget vindu
+          over planen; Gantt star urort bak i full hoyde. Mobilens bunnark
+          under er uendret. */}
       {!isMobRP && showMateriell && (
-        <div style={{ background:'#f0fdf4', borderBottom:'2px solid #bbf7d0', padding:'12px 20px', flexShrink:0, maxHeight:'260px', overflowY:'auto' }}>
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:'10px' }}>
-            <span style={{ fontSize:'14px', fontWeight:'700', color:'#059669' }}>📦 Materialleveranser</span>
-            <span style={{ fontSize:'11px', color:'#64748b' }}>{materiellPlans.length} leveranse{materiellPlans.length !== 1 ? 'r' : ''} planlagt</span>
-          </div>
-          {materiellPlans.length === 0 ? (
-            <p style={{ margin:0, color:'#94a3b8', fontSize:'12px', fontStyle:'italic' }}>Ingen materialleveranser planlagt. Bruk «Generer leveringsplan» i kalkulasjonsmodulen.</p>
-          ) : (
-            <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
-              {materiellPlans.sort((a,b) => a.date.localeCompare(b.date)).map(mp => {
-                const proj = projects.find(p => p.id === mp.project_id)
-                const daysLeft = Math.ceil((new Date(mp.date) - new Date()) / (1000*60*60*24))
-                const isPast = daysLeft < 0
-                const isUrgent = daysLeft >= 0 && daysLeft <= 3
-                const lines = (mp.notes || '').split('\n')
-                const title = lines[0] || 'Materialleveranse'
-                const matLines = lines.filter(l => l.match(/^\d|^[A-Z]/)).slice(0, 5)
-                return (
-                  <div key={mp.id} style={{ background:'white', borderRadius:'10px', padding:'10px 14px', border:`2px solid ${isPast ? '#fecaca' : isUrgent ? '#fde68a' : '#bbf7d0'}`, minWidth:'200px', maxWidth:'280px', cursor:'pointer' }}
-                    onClick={() => setMateriellDetail({ id: mp.id, title: title.replace('📦 Levering: ', '').replace('📦 ', ''), notes: mp.notes || '', date: mp.date, project: proj?.name })}>
-                    <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'3px' }}>
-                      <span style={{ fontSize:'13px' }}>📦</span>
-                      <span style={{ fontWeight:'700', fontSize:'12px', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{title.replace('📦 Levering: ', '').replace('📦 ', '')}</span>
-                    </div>
-                    <div style={{ fontSize:'11px', color: isPast ? '#dc2626' : isUrgent ? '#d97706' : '#059669', fontWeight:'700', marginBottom:'3px' }}>
-                      {isPast ? `Skulle vært levert for ${Math.abs(daysLeft)}d siden` : daysLeft === 0 ? 'Levering i dag!' : daysLeft === 1 ? 'Levering i morgen' : `Levering om ${daysLeft} dager`}
-                    </div>
-                    {matLines.length > 0 && (
-                      <div style={{ fontSize:'10px', color:'#64748b', lineHeight:1.4, marginBottom:'3px' }}>
-                        {matLines.slice(0, 2).map((l, i) => <div key={i} style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{l}</div>)}
-                        {matLines.length > 2 && <div style={{ fontStyle:'italic' }}>+ {matLines.length - 2} flere...</div>}
-                      </div>
-                    )}
-                    <div style={{ fontSize:'10px', color:'#94a3b8' }}>
-                      📅 {mp.date}{proj ? ` · 🏗️ ${proj.name}` : ''}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <MaterialleveranserModal
+          materiellPlans={materiellPlans}
+          projects={projects}
+          employees={employees}
+          user={user}
+          onClose={() => setShowMateriell(false)}
+          onOpenDetail={(md) => setMateriellDetail(md)}
+          onSaved={load}
+        />
       )}
 
       {/* Materiell bottom-sheet — mobil */}
