@@ -33054,7 +33054,7 @@ function MineOppgaverPanel({ user, mob, employees = [], kanMelde = true, onByttV
                 {apenKommentar === o.fase_id ? (
                   <div style={{ marginTop: '8px' }}>
                     <textarea value={kommentarTekst} onChange={e => setKommentarTekst(e.target.value)} rows={2} autoFocus
-                      placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «venter på rørlegger»' : 'Kort kommentar (valgfritt)'}
+                      placeholder={o.status === 'blokkert' ? 'Hva stopper jobben? F.eks. «rørlegger ikke ferdig», «feil materialer levert»' : 'Kort kommentar (valgfritt)'}
                       style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', border: '1px solid #e2e8f0', borderRadius: '10px', fontSize: mob ? '15px' : '13px', fontFamily: 'system-ui, sans-serif', resize: 'vertical', outline: 'none', color: '#0f172a' }} />
                     <button onClick={() => setSiFra(v => !v)} disabled={travel}
                       style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%', marginTop: '7px',
