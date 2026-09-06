@@ -36517,6 +36517,10 @@ function MaterialleveranserModal({ materiellPlans, projects, employees = [], use
   const [lagrer, setLagrer] = useState(null)
   // Lokal overstyring, så haken føles umiddelbar. onSaved() henter fasiten etterpå.
   const [lokalLevert, setLokalLevert] = useState({})
+  // Leveranser merket i DENNE økten. De blir stående synlig selv om «Vis
+  // leverte» er av — ellers forsvinner raden i samme klikk som merket den,
+  // og en feilklikk kan ikke angres uten å lete den fram igjen.
+  const [nyligMerket, setNyligMerket] = useState(new Set())
 
   const iDag = new Date().toISOString().split('T')[0]
 
@@ -36566,7 +36570,7 @@ function MaterialleveranserModal({ materiellPlans, projects, employees = [], use
     const q = sok.trim().toLowerCase()
     return beriket.filter(({ mp, tittel, varer, prosjekt }) => {
       if (filterProsjekt !== 'alle' && mp.project_id !== filterProsjekt) return false
-      if (erLevert(mp) && !visLevert) return false
+      if (erLevert(mp) && !visLevert && !nyligMerket.has(mp.id)) return false
       if (!erLevert(mp)) {
         const n = dagerTil(mp.date)
         // Forfalte vises uansett periode — ellers forsvinner de for den som
@@ -36584,7 +36588,7 @@ function MaterialleveranserModal({ materiellPlans, projects, employees = [], use
       }
       return true
     })
-  }, [beriket, filterProsjekt, periode, sok, visLevert, lokalLevert])
+  }, [beriket, filterProsjekt, periode, sok, visLevert, lokalLevert, nyligMerket])
 
   const settLevert = async (mp, nyVerdi) => {
     if (lagrer) return
@@ -36602,6 +36606,11 @@ function MaterialleveranserModal({ materiellPlans, projects, employees = [], use
         updated_at: new Date().toISOString(),
       }).eq('id', mp.id)
       if (error) throw error
+      setNyligMerket(prev => {
+        const neste = new Set(prev)
+        if (nyVerdi) neste.add(mp.id); else neste.delete(mp.id)
+        return neste
+      })
       if (typeof onSaved === 'function') onSaved()
     } catch (e) {
       setLokalLevert(v => { const n = { ...v }; delete n[mp.id]; return n })
@@ -36689,18 +36698,40 @@ function MaterialleveranserModal({ materiellPlans, projects, employees = [], use
                   return (
                     <div key={mp.id} style={{ display:'flex', gap:'12px', border:`1px solid ${kant}`, borderRadius:'11px',
                       padding:'11px 13px', marginBottom:'7px', background:bg, alignItems:'flex-start', opacity: lev ? 0.55 : 1 }}>
+                      {/* Knappen bærer sin egen etikett. Den nakne boksen sa ingenting
+                          om at et klikk skriver en kvittering med navn og dato — man
+                          måtte prøve seg fram. «Angre» når den er merket, fordi det er
+                          det den faktisk gjør: haken har alltid vært toveis. */}
                       <button onClick={() => settLevert(mp, !lev)} disabled={lagrer === mp.id}
-                        aria-label={lev ? 'Angre levert' : 'Merk som levert'}
-                        title={lev ? 'Angre levert' : 'Merk som levert'}
-                        style={{ width:'22px', height:'22px', borderRadius:'7px', flexShrink:0, marginTop:'1px', padding:0,
-                          border: lev ? '2px solid #059669' : '2px solid #cbd5e1', background: lev ? '#059669' : 'white',
-                          color:'white', fontSize:'13px', fontWeight:'800', lineHeight:1,
-                          cursor: lagrer === mp.id ? 'wait' : 'pointer' }}>{lev ? '✓' : ''}</button>
+                        title={lev ? 'Fjern kvitteringen' : 'Kvitter ut at leveransen har kommet'}
+                        style={{ flexShrink:0, marginTop:'1px', display:'inline-flex', alignItems:'center', gap:'6px',
+                          padding:'5px 10px 5px 7px', borderRadius:'8px', fontFamily:'inherit',
+                          fontSize:'11.5px', fontWeight:'700', whiteSpace:'nowrap', lineHeight:1,
+                          border: lev ? '1px solid #bbf7d0' : '1px solid #cbd5e1',
+                          background: lev ? '#ecfdf5' : 'white',
+                          color: lev ? '#047857' : '#475569',
+                          cursor: lagrer === mp.id ? 'wait' : 'pointer', opacity: lagrer === mp.id ? 0.6 : 1 }}>
+                        <span style={{ width:'16px', height:'16px', borderRadius:'5px', flexShrink:0,
+                          border: lev ? 'none' : '2px solid #cbd5e1', background: lev ? '#059669' : 'white',
+                          color:'white', fontSize:'11px', fontWeight:'800',
+                          display:'grid', placeItems:'center' }}>{lev ? '✓' : ''}</span>
+                        {lagrer === mp.id ? 'Lagrer…' : lev ? 'Angre' : 'Merk som levert'}
+                      </button>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ display:'flex', alignItems:'baseline', gap:'9px', flexWrap:'wrap' }}>
-                          <span onClick={() => onOpenDetail({ id: mp.id, title: tittel, notes: mp.notes || '', date: mp.date, project: prosjekt?.name })}
-                            style={{ fontSize:'13.5px', fontWeight:'700', color:'#0f172a', cursor:'pointer',
-                              textDecoration: lev ? 'line-through' : 'none' }}>{tittel}</span>
+                          {/* Tittelen så ut som vanlig tekst. Understreket viser at den
+                              fører videre, og blyanten sier hvor. */}
+                          <button onClick={() => onOpenDetail({ id: mp.id, title: tittel, notes: mp.notes || '', date: mp.date, project: prosjekt?.name })}
+                            title="Åpne leveransen for redigering"
+                            style={{ display:'inline-flex', alignItems:'baseline', gap:'5px', padding:0, border:'none', background:'none',
+                              fontFamily:'inherit', fontSize:'13.5px', fontWeight:'700', color:'#0f172a', cursor:'pointer',
+                              textDecoration: lev ? 'line-through' : 'underline', textDecorationColor:'#cbd5e1',
+                              textUnderlineOffset:'3px', textDecorationThickness:'1px', maxWidth:'100%', minWidth:0 }}
+                            onMouseOver={e => { if (!lev) e.currentTarget.style.textDecorationColor = '#2563eb' }}
+                            onMouseOut={e => { if (!lev) e.currentTarget.style.textDecorationColor = '#cbd5e1' }}>
+                            <span style={{ overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', minWidth:0 }}>{tittel}</span>
+                            <span style={{ fontSize:'10.5px', color:'#94a3b8', flexShrink:0 }}>✏️</span>
+                          </button>
                           {prosjekt && <span style={{ fontSize:'11.5px', color:'#64748b' }}>🏗️ {prosjekt.name}</span>}
                           <span style={{ fontSize:'11.5px', fontWeight:'700', color:naarF, marginLeft:'auto', whiteSpace:'nowrap' }}>{naarTekst(mp)}</span>
                         </div>
@@ -36718,7 +36749,10 @@ function MaterialleveranserModal({ materiellPlans, projects, employees = [], use
                         )}
                         <div style={{ marginTop:'6px', fontSize:'11px', color:'#94a3b8', display:'flex', gap:'12px', flexWrap:'wrap' }}>
                           <span>📅 {new Date(mp.date + 'T12:00:00').toLocaleDateString('nb-NO', { weekday:'short', day:'numeric', month:'short' })}</span>
-                          <span>{varer.length} varelinje{varer.length === 1 ? '' : 'r'}</span>
+                          {/* «Alle N varer» og ikke bare «N varelinjer»: den gamle stripa
+                              kuttet lista og sa «+3 flere…», så man kunne ikke vite om det
+                              var alt. Nå er det alt, og det skal stå. */}
+                          <span>{varer.length === 0 ? 'Ingen varelinjer' : `Alle ${varer.length} vare${varer.length === 1 ? '' : 'r'} vist`}</span>
                           {lev && mp.levert_av && navnPaa(mp.levert_av) && <span>Kvittert av {navnPaa(mp.levert_av)}</span>}
                         </div>
                       </div>
