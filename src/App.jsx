@@ -37970,10 +37970,11 @@ function RessursPage() {
               aria-label="Meny">
               <span>☰</span>
               {(() => {
-                // Prikken sier at det ligger noe bak menyen. Nå også når «+ Ny» og
-                // innstillingene bor der — ellers ser knappen tom ut.
+                // Prikken varsler: aktive filtre eller dobbeltbookinger. Den skal IKKE
+                // stå permanent — da slutter den å bety noe. At menyen har innhold
+                // sier «Opprett»-seksjonen i den og hinten nederst i lista.
                 const filterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
-                if (filterCount === 0 && doubleBookCount === 0 && !kanRedigereRessurs) return null
+                if (filterCount === 0 && doubleBookCount === 0) return null
                 return <span style={{ position:'absolute', top:'8px', right:'8px', width:'8px', height:'8px', borderRadius:'50%', background: doubleBookCount > 0 ? '#dc2626' : '#059669', border:'2px solid white' }}/>
               })()}
             </button>
@@ -38008,23 +38009,29 @@ function RessursPage() {
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
               {/* Ressurstypen bytter her i stedet for i toppraden. Ikonet viser hva
                   du ser på nå; trykk bytter til det andre. */}
-              <button onClick={()=>{ setResourceType(resourceType==='ansatte' ? 'maskiner' : 'ansatte'); setShowMateriell(false) }}
-                aria-label={resourceType==='ansatte' ? 'Bytt til maskiner' : 'Bytt til ansatte'}
-                title={resourceType==='ansatte' ? 'Bytt til maskiner' : 'Bytt til ansatte'}
-                style={{ width:'46px', height:'46px', flexShrink:0, borderRadius:'10px', border:'2px solid #e2e8f0',
-                  background:'white', cursor:'pointer', fontSize:'18px', display:'grid', placeItems:'center' }}>
-                {resourceType==='ansatte' ? '👷' : '🚜'}
-              </button>
+              <div style={{ display:'flex', gap:'2px', background:'#e9edeb', borderRadius:'10px', padding:'2px', flexShrink:0 }}>
+                {[['ansatte','👷','Ansatte'],['maskiner','🚜','Maskiner']].map(([v, ikon, merkelapp]) => (
+                  <button key={v} onClick={()=>{ setResourceType(v); setShowMateriell(false) }}
+                    aria-label={merkelapp} title={merkelapp}
+                    style={{ width:'44px', height:'44px', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'17px',
+                      display:'grid', placeItems:'center', fontFamily:'inherit',
+                      background: resourceType===v ? 'white' : 'transparent',
+                      boxShadow: resourceType===v ? '0 1px 2px rgba(0,0,0,0.08)' : 'none',
+                      opacity: resourceType===v ? 1 : 0.45 }}>
+                    {ikon}
+                  </button>
+                ))}
+              </div>
               {resourceType==='ansatte' && role !== 'ansatt' ? (
                 <>
               <div style={{ position:'relative', flex:1 }}>
-                <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)} style={{ width:'100%', padding:'12px 40px 12px 12px', border:`2px solid ${filterEmployee!=='alle'?'#059669':'#e2e8f0'}`, borderRadius:'10px', fontSize:'15px', fontWeight:'700', color:'#0f172a', background:'white', outline:'none', minHeight:'46px', appearance:'none', WebkitAppearance:'none', boxSizing:'border-box' }}>
+                <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)} style={{ width:'100%', padding:'12px 40px 12px 12px', border:`2px solid ${filterEmployee!=='alle'?'#059669':'#e2e8f0'}`, borderRadius:'10px', fontSize:'15px', fontWeight:'700', color:'#0f172a', background:'white', outline:'none', minHeight:'48px', appearance:'none', WebkitAppearance:'none', boxSizing:'border-box' }}>
                   <option value="alle">Vis alle ansatte ({employees.length})</option>
                   {employees.map(emp=><option key={emp.id} value={emp.id}>{emp.first_name} {emp.last_name}</option>)}
                 </select>
                 <span style={{ position:'absolute', right:'14px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'#059669', fontSize:'15px', fontWeight:'800' }}>▾</span>
               </div>
-              {filterEmployee!=='alle' && <button onClick={()=>setFilterEmployee('alle')} title="Nullstill" style={{ flexShrink:0, background:'#f1f5f9', border:'none', borderRadius:'10px', width:'46px', height:'46px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}>✕</button>}
+              {filterEmployee!=='alle' && <button onClick={()=>setFilterEmployee('alle')} title="Nullstill" style={{ flexShrink:0, background:'#f1f5f9', border:'none', borderRadius:'10px', width:'48px', height:'48px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}>✕</button>}
                 </>
               ) : (
                 <span style={{ flex:1, fontSize:'14px', fontWeight:'700', color:'#0f172a', paddingLeft:'2px' }}>
