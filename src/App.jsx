@@ -37532,7 +37532,9 @@ function RessursPage() {
     const ro = new ResizeObserver(mal)
     ro.observe(el)
     return () => ro.disconnect()
-  }, [isMobRP, ressursVisning, resourceType, filterEmployee, visMineOppgaver])
+    // loading: komponenten rendrer en laste-div foerst, og da finnes ikke
+    // toppRef ennaa. Uten den her ble hoyden maalt til 0 og aldri paa nytt.
+  }, [loading, isMobRP, ressursVisning, resourceType, filterEmployee, visMineOppgaver])
 
   // Scroll fra et element propagerer ikke til forfedre — heller ikke i
   // capture-fasen. Lytteren må stå på selve containeren, og de to visningene
@@ -37566,7 +37568,9 @@ function RessursPage() {
     return () => rot.removeEventListener('scroll', onScroll)
     // ressursVisning er med fordi containeren byttes ut naar man skifter fane.
     // toppHoyde er bevisst IKKE med: lytteren skal festes én gang og bli staaende.
-  }, [isMobRP, ressursVisning])
+    // loading maa derimot vaere med — foer den slaar om finnes ikke containeren,
+    // og da hadde lytteren aldri festet seg i det hele tatt.
+  }, [loading, isMobRP, ressursVisning])
 
   // Bytter man fane eller filter, skal toppen alltid være framme.
   useEffect(() => { setToppSkjult(false) }, [ressursVisning, resourceType, filterEmployee, isMobRP])
