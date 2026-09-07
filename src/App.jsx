@@ -35662,7 +35662,7 @@ function RessursGanttGrid({
 
 // ── MobilRessursView — feltmodus for håndverkere ──
 // Erstatter Gantt-grida på mobil (<768px). Bruker kortbasert layout gruppert per uke per dag.
-function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, onOpenBooking, onOpenPlanning, onOpenMilestone, onSeOppgave, getProjectColor, holidays, user, framdrift = {} }) {
+function MobilRessursView({ employees, machines, plans, projects, milestones, resourceType, filterEmployee, filterProject, kanRedigere = false, onOpenBooking, onOpenPlanning, onOpenMilestone, onSeOppgave, getProjectColor, holidays, user, framdrift = {} }) {
   // Hvilken ansatt-rad er MIN? Framdriftsmerket blir bare en vei inn til
   // «Mine oppgaver» på egne bookinger — ellers ville prosjektlederen trykket
   // på Olas merke og havnet i sine egne oppgaver.
@@ -35854,16 +35854,17 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
       {/* Måned-navigering — slank sticky stripe */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', position:'sticky', top:0, zIndex:5 }}>
         <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 12px' }}>
+          {/* 44 px er minstemålet for en tommel. Var 40. */}
           <button onClick={prevMonth} aria-label="Forrige måned"
-            style={{ background:'transparent', border:'none', borderRadius:'8px', width:'40px', height:'40px', cursor:'pointer', fontSize:'22px', color:'#475569', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>‹</button>
+            style={{ background:'transparent', border:'none', borderRadius:'8px', width:'44px', height:'44px', cursor:'pointer', fontSize:'22px', color:'#475569', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>‹</button>
           <div style={{ flex:1, minWidth:0, display:'flex', alignItems:'center', justifyContent:'center', gap:'7px' }}>
             <span style={{ fontSize:'15px', fontWeight:'700', color:'#0f172a', textTransform:'capitalize', whiteSpace:'nowrap' }}>{monthName}</span>
             {isCurrentMonth && <span title="Denne måneden" style={{ width:'7px', height:'7px', borderRadius:'50%', background:'#059669', flexShrink:0 }} />}
           </div>
           <button onClick={nextMonth} aria-label="Neste måned"
-            style={{ background:'transparent', border:'none', borderRadius:'8px', width:'40px', height:'40px', cursor:'pointer', fontSize:'22px', color:'#475569', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>›</button>
+            style={{ background:'transparent', border:'none', borderRadius:'8px', width:'44px', height:'44px', cursor:'pointer', fontSize:'22px', color:'#475569', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>›</button>
           <button onClick={goToToday}
-            style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'5px', height:'34px', padding:'0 12px', background:'#ecfdf5', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'999px', fontSize:'13px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap' }}>
+            style={{ flexShrink:0, display:'flex', alignItems:'center', gap:'5px', height:'44px', padding:'0 14px', background:'#ecfdf5', border:'1px solid #bbf7d0', color:'#059669', borderRadius:'999px', fontSize:'13px', fontWeight:'700', cursor:'pointer', whiteSpace:'nowrap' }}>
             📍 I dag
           </button>
         </div>
@@ -36049,7 +36050,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                     </div>
                     {!hasContent && !d.isPast && resourceType === 'ansatte' && (
                       <button onClick={e => { e.stopPropagation(); onOpenPlanning && onOpenPlanning({ date: d.date }) }}
-                        style={{ padding:'6px 12px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', flexShrink:0, minHeight:'36px', display:'flex', alignItems:'center', gap:'4px' }}>
+                        style={{ padding:'6px 14px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'8px', fontSize:'12px', fontWeight:'700', cursor:'pointer', flexShrink:0, minHeight:'44px', display:'flex', alignItems:'center', gap:'4px' }}>
                         <span>＋</span>
                         <span>Book</span>
                       </button>
@@ -36212,7 +36213,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                                 // meldingstråd. Trykk på selve kortet åpner fortsatt dagen.
                                 if (minEgen && onSeOppgave) return (
                                   <button onClick={e => { e.stopPropagation(); onSeOppgave() }}
-                                    style={{ ...merke, padding:'0 8px', minHeight:'30px', cursor:'pointer', fontFamily:'inherit' }}
+                                    style={{ ...merke, padding:'0 10px', minHeight:'44px', cursor:'pointer', fontFamily:'inherit' }}
                                     aria-label={`${verst.tekst} — se oppgaven`}>
                                     <span style={{ fontSize:'10px' }}>{verst.tegn}</span>{verst.tekst}<span style={{ opacity:0.7 }}>›</span>
                                   </button>
@@ -36271,7 +36272,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                           </div>
                           <div style={{ textAlign:'right', flexShrink:0 }}>
                             <div style={{ fontSize:'14px', fontWeight:'800', color }}>{totalHours}t</div>
-                            <div style={{ fontSize:'10px', color:'#94a3b8' }}>{bookings.length} bk</div>
+                            <div style={{ fontSize:'10px', color:'#94a3b8' }}>{bookings.length} booking{bookings.length !== 1 ? 'er' : ''}</div>
                           </div>
                         </div>
                       )
@@ -36284,6 +36285,16 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
         )
       })
       })()}
+
+      {/* Veien til å opprette. Den finnes tre steder fra før — trykk på en dag,
+          «＋ Book» på tomme dager, og knappen i tom måned — men ingen av dem sa
+          det. Nå står det. */}
+      {kanRedigere && resourceType === 'ansatte' && (
+        <div style={{ margin:'4px 12px 0', padding:'12px', border:'1px dashed #cbd5e1', borderRadius:'10px',
+          textAlign:'center', fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>
+          Trykk en dag for å planlegge
+        </div>
+      )}
 
       {/* Bunn-padding */}
       <div style={{ height:'40px' }} />
@@ -36329,7 +36340,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
                   </div>
                 </div>
                 <button onClick={() => setResourcePicker(null)}
-                  style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'36px', height:'36px', fontSize:'18px', color:'#64748b', cursor:'pointer', flexShrink:0 }}
+                  style={{ background:'#f1f5f9', border:'none', borderRadius:'8px', width:'44px', height:'44px', fontSize:'18px', color:'#64748b', cursor:'pointer', flexShrink:0 }}
                   aria-label="Lukk">×</button>
               </div>
             </div>
@@ -37715,8 +37726,9 @@ function RessursPage() {
           </h1>
           {cacheInfo.fraCache && <SistOppdatert lagretAt={cacheInfo.lagretAt} fraCache={cacheInfo.fraCache} />}
 
-          {/* Ansatte/Maskiner toggle — segmentert knappegruppe */}
-          <div style={{ display:'flex', background:'#f1f5f9', borderRadius:'7px', padding:'2px', gap:'2px', flexShrink:0 }}>
+          {/* Ansatte/Maskiner — på mobil flyttet ned til ansattvelgeren, siden
+              begge svarer på «hvem ser jeg på». */}
+          <div style={{ display: isMobRP ? 'none' : 'flex', background:'#f1f5f9', borderRadius:'7px', padding:'2px', gap:'2px', flexShrink:0 }}>
             {[['ansatte','👷','Ansatte'],['maskiner','🚜','Maskiner']].map(([v,emoji,label])=>(
               <button key={v} onClick={()=>{ setResourceType(v); if (isMobRP) setShowMateriell(false) }} title={label}
                 style={{ padding: isMobRP ? '7px 12px' : '4px 10px', border:'none', background:(resourceType===v && !(isMobRP && showMateriell))?'white':'transparent', color:(resourceType===v && !(isMobRP && showMateriell))?'#0f172a':'#94a3b8', fontWeight:resourceType===v?'600':'500', fontSize:'12px', cursor:'pointer', borderRadius:'5px', boxShadow: (resourceType===v && !(isMobRP && showMateriell))?'0 1px 2px rgba(0,0,0,0.05)':'none', transition:'all 0.15s', minHeight: isMobRP ? '36px' : 'auto', display:'inline-flex', alignItems:'center', gap:'5px', whiteSpace:'nowrap' }}>
@@ -37834,8 +37846,8 @@ function RessursPage() {
           {/* Skille */}
           {!isMobRP && <div style={{ height:'20px', width:'1px', background:'#e2e8f0' }} />}
 
-          {/* Settings-tannhjul */}
-          <div style={{ position:'relative', flexShrink:0 }}>
+          {/* Settings-tannhjul — skjult på mobil, der det allerede ligger i ⋯-menyen */}
+          <div style={{ position:'relative', flexShrink:0, display: isMobRP ? 'none' : 'block' }}>
             <button onClick={()=>setShowSettings(v=>!v)}
               style={{ width:'30px', height:'30px', borderRadius:'8px', border:`1px solid ${showSettings?'#059669':'#e2e8f0'}`, background:showSettings?'#f0fdf4':'white', cursor:'pointer', fontSize:'13px', display:'flex', alignItems:'center', justifyContent:'center', color:showSettings?'#059669':'#64748b' }}
               title="Innstillinger">⚙️</button>
@@ -37919,8 +37931,9 @@ function RessursPage() {
           </button>
           )}
 
-          {/* + Ny-dropdown (kun for admin/leder) */}
-          {kanRedigereRessurs && <div style={{ position:'relative', flexShrink:0 }}>
+          {/* + Ny-dropdown (kun for admin/leder). På mobil ligger den i ⋯-menyen,
+              og den nærmeste veien er uansett å trykke på dagen du mener. */}
+          {kanRedigereRessurs && <div style={{ position:'relative', flexShrink:0, display: isMobRP ? 'none' : 'block' }}>
             <button onClick={()=>setShowNyMeny(v=>!v)}
               style={{ padding:'6px 14px', background:'#059669', color:'white', border:'none', borderRadius:'8px', cursor:'pointer', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', gap:'5px' }}>
               <span style={{ fontSize:'13px' }}>＋</span>
@@ -37953,13 +37966,15 @@ function RessursPage() {
           {/* ☰ Meny-knapp — kun mobil */}
           {isMobRP && (
             <button onClick={()=>setShowMobilMenu(true)}
-              style={{ width:'36px', height:'36px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'16px', color:'#64748b', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}
+              style={{ width:'44px', height:'44px', border:'1px solid #e2e8f0', borderRadius:'8px', background:'white', cursor:'pointer', fontSize:'18px', color:'#64748b', flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', position:'relative' }}
               aria-label="Meny">
               <span>☰</span>
               {(() => {
+                // Prikken sier at det ligger noe bak menyen. Nå også når «+ Ny» og
+                // innstillingene bor der — ellers ser knappen tom ut.
                 const filterCount = (filterProject!=='alle' ? 1 : 0) + (filterEmployee!=='alle' && resourceType==='ansatte' ? 1 : 0)
-                if (filterCount === 0 && doubleBookCount === 0) return null
-                return <span style={{ position:'absolute', top:'6px', right:'6px', width:'8px', height:'8px', borderRadius:'50%', background: doubleBookCount > 0 ? '#dc2626' : '#059669', border:'2px solid white' }}/>
+                if (filterCount === 0 && doubleBookCount === 0 && !kanRedigereRessurs) return null
+                return <span style={{ position:'absolute', top:'8px', right:'8px', width:'8px', height:'8px', borderRadius:'50%', background: doubleBookCount > 0 ? '#dc2626' : '#059669', border:'2px solid white' }}/>
               })()}
             </button>
           )}
@@ -37989,9 +38004,19 @@ function RessursPage() {
             )}
             {/* Nedtrekkslista er for den som planlegger — skjult for rollen ansatt,
                 og for den som står i sine egne oppgaver. */}
-            {resourceType==='ansatte' && ressursVisning === 'plan' && role !== 'ansatt' && (
+            {ressursVisning === 'plan' && (
             <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
-              <span style={{ fontSize:'18px', flexShrink:0 }}>👤</span>
+              {/* Ressurstypen bytter her i stedet for i toppraden. Ikonet viser hva
+                  du ser på nå; trykk bytter til det andre. */}
+              <button onClick={()=>{ setResourceType(resourceType==='ansatte' ? 'maskiner' : 'ansatte'); setShowMateriell(false) }}
+                aria-label={resourceType==='ansatte' ? 'Bytt til maskiner' : 'Bytt til ansatte'}
+                title={resourceType==='ansatte' ? 'Bytt til maskiner' : 'Bytt til ansatte'}
+                style={{ width:'46px', height:'46px', flexShrink:0, borderRadius:'10px', border:'2px solid #e2e8f0',
+                  background:'white', cursor:'pointer', fontSize:'18px', display:'grid', placeItems:'center' }}>
+                {resourceType==='ansatte' ? '👷' : '🚜'}
+              </button>
+              {resourceType==='ansatte' && role !== 'ansatt' ? (
+                <>
               <div style={{ position:'relative', flex:1 }}>
                 <select value={filterEmployee} onChange={e=>setFilterEmployee(e.target.value)} style={{ width:'100%', padding:'12px 40px 12px 12px', border:`2px solid ${filterEmployee!=='alle'?'#059669':'#e2e8f0'}`, borderRadius:'10px', fontSize:'15px', fontWeight:'700', color:'#0f172a', background:'white', outline:'none', minHeight:'46px', appearance:'none', WebkitAppearance:'none', boxSizing:'border-box' }}>
                   <option value="alle">Vis alle ansatte ({employees.length})</option>
@@ -38000,6 +38025,12 @@ function RessursPage() {
                 <span style={{ position:'absolute', right:'14px', top:'50%', transform:'translateY(-50%)', pointerEvents:'none', color:'#059669', fontSize:'15px', fontWeight:'800' }}>▾</span>
               </div>
               {filterEmployee!=='alle' && <button onClick={()=>setFilterEmployee('alle')} title="Nullstill" style={{ flexShrink:0, background:'#f1f5f9', border:'none', borderRadius:'10px', width:'46px', height:'46px', fontSize:'16px', color:'#64748b', cursor:'pointer' }}>✕</button>}
+                </>
+              ) : (
+                <span style={{ flex:1, fontSize:'14px', fontWeight:'700', color:'#0f172a', paddingLeft:'2px' }}>
+                  {resourceType==='ansatte' ? 'Mine kolleger' : `Maskiner (${machines.filter(m=>m.status!=='Utrangert').length})`}
+                </span>
+              )}
             </div>
             )}
           </div>
@@ -38220,6 +38251,26 @@ function RessursPage() {
                     {weekMateriell > 0 && <span style={{ fontSize:'12px', color:'#64748b' }}>{weekMateriell} denne uken</span>}
                     <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
                   </button>
+
+                  {/* Seksjon: Opprett — det som lå i toppraden før. Trykk på en dag
+                      i lista gjør det samme og peker på riktig dato med én gang. */}
+                  {kanRedigereRessurs && (
+                    <>
+                      <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', margin:'14px 8px 4px' }}>Opprett</div>
+                      <button onClick={()=>{ setShowMobilMenu(false); setShowOppgaveModal(true) }}
+                        style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', minHeight:'48px', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', cursor:'pointer', textAlign:'left' }}>
+                        <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f0fdf4', color:'#059669', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>📋</span>
+                        <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Ny booking</span>
+                        <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
+                      </button>
+                      <button onClick={()=>{ setShowMobilMenu(false); setShowNewMilestone(new Date().toISOString().split('T')[0]) }}
+                        style={{ display:'flex', alignItems:'center', gap:'10px', width:'100%', minHeight:'48px', padding:'11px 10px', background:'transparent', border:'none', borderRadius:'8px', cursor:'pointer', textAlign:'left' }}>
+                        <span style={{ width:'32px', height:'32px', borderRadius:'8px', background:'#f5f3ff', color:'#7c3aed', display:'inline-flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>🏁</span>
+                        <span style={{ flex:1, fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>Ny milepæl</span>
+                        <span style={{ color:'#94a3b8', fontSize:'20px', fontWeight:'600' }}>›</span>
+                      </button>
+                    </>
+                  )}
 
                   {/* Seksjon: Planlegging */}
                   <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'700', textTransform:'uppercase', letterSpacing:'0.05em', margin:'14px 8px 4px' }}>Planlegging</div>
@@ -38446,6 +38497,7 @@ function RessursPage() {
       ) : isMobRP ? (
         <MobilRessursView
           framdrift={framdrift}
+          kanRedigere={kanRedigereRessurs}
           kanRedigere={kanRedigereRessurs}
           employees={employees}
           machines={machines}
