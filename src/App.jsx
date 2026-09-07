@@ -35850,7 +35850,7 @@ function MobilRessursView({ employees, machines, plans, projects, milestones, re
   const isCurrentMonth = viewMonth.getFullYear() === todayDate.getFullYear() && viewMonth.getMonth() === todayDate.getMonth()
 
   return (
-    <div style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
+    <div data-mobil-scroll style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
       {/* Måned-navigering — slank sticky stripe */}
       <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', position:'sticky', top:0, zIndex:5 }}>
         <div style={{ display:'flex', alignItems:'center', gap:'6px', padding:'8px 12px' }}>
@@ -37362,6 +37362,12 @@ function RessursPage() {
   const [fullscreen, setFullscreen] = useState(false)
   // Mobil-detektering — brukes gjennom hele komponenten til å tilpasse UI for håndverkere i felt
   const [isMobRP, setIsMobRP] = useState(typeof window !== 'undefined' && window.innerWidth < 640)
+  // Toppen glir bort ved scroll nedover, som adressefeltet i en mobilnettleser.
+  // Kontrollene brukes sjelden; kalenderen leses hele tiden.
+  const [toppSkjult, setToppSkjult] = useState(false)
+  const [toppHoyde, setToppHoyde] = useState(0)
+  const toppRef = React.useRef(null)
+  const rotRef = React.useRef(null)
   React.useEffect(() => {
     const handleResize = () => setIsMobRP(window.innerWidth < 640)
     window.addEventListener('resize', handleResize)
@@ -37516,6 +37522,45 @@ function RessursPage() {
   // som er galt; skjuler vi bryteren, sitter den ansatte fast i daglista og får
   // ingen forklaring. minEmployee er fortsatt riktig for alt annet.
   const visMineOppgaver = kanMeldeEgenFramdrift
+
+  useEffect(() => {
+    if (!isMobRP || !toppRef.current) { setToppHoyde(0); return }
+    const el = toppRef.current
+    const mal = () => setToppHoyde(el.offsetHeight)
+    mal()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(mal)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [isMobRP, ressursVisning, resourceType, filterEmployee, visMineOppgaver])
+
+  // Scroll fra et element propagerer ikke til forfedre — heller ikke i
+  // capture-fasen. Lytteren må stå på selve containeren, og de to visningene
+  // har hver sin. Markøren data-mobil-scroll peker ut den som er i bruk.
+  useEffect(() => {
+    if (!isMobRP || !rotRef.current || !toppHoyde) return
+    const rot = rotRef.current.querySelector('[data-mobil-scroll]')
+    if (!rot) return
+    let sisteY = 0
+    const onScroll = (e) => {
+      const y = e.target && e.target.scrollTop
+      if (typeof y !== 'number') return
+      const diff = y - sisteY
+      // Under terskelen er det skjelving, ikke en intensjon om å scrolle.
+      if (Math.abs(diff) < 6) return
+      sisteY = y
+      // Ned: skjul, men først når man er forbi toppen — ellers forsvinner den
+      // med én gang man rører lista. Opp: kom tilbake straks, ikke først på topp.
+      if (diff > 0 && y > toppHoyde) setToppSkjult(true)
+      else if (diff < 0) setToppSkjult(false)
+    }
+    rot.addEventListener('scroll', onScroll, { passive: true })
+    return () => rot.removeEventListener('scroll', onScroll)
+    // ressursVisning er med fordi containeren byttes ut naar man skifter fane.
+  }, [isMobRP, toppHoyde, ressursVisning])
+
+  // Bytter man fane eller filter, skal toppen alltid være framme.
+  useEffect(() => { setToppSkjult(false) }, [ressursVisning, resourceType, filterEmployee, isMobRP])
 
   // Filter resources
   let resources = resourceType==='ansatte' ? employees : machines.filter(m=>m.status!=='Utrangert')
@@ -37715,9 +37760,14 @@ function RessursPage() {
   const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
-    <div style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'calc(100vh - 56px)', overflow:'hidden', maxWidth:'100%', minWidth:0 }}>
+    <div ref={rotRef} style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'calc(100vh - 56px)', overflow:'hidden', maxWidth:'100%', minWidth:0 }}>
       {/* Header — modernisert (Float-inspirert, Fase 1) */}
-      <div style={{ background:'white', borderBottom:'1px solid #e2e8f0', flexShrink:0, boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
+      <div ref={toppRef} style={{ background:'white', borderBottom:'1px solid #e2e8f0', flexShrink:0,
+        marginTop: (isMobRP && toppSkjult && toppHoyde) ? `-${toppHoyde}px` : 0,
+        opacity: (isMobRP && toppSkjult) ? 0 : 1,
+        pointerEvents: (isMobRP && toppSkjult) ? 'none' : 'auto',
+        transition: isMobRP ? 'margin-top 0.22s cubic-bezier(0.4,0,0.2,1), opacity 0.16s ease' : 'none',
+        boxShadow:'0 1px 3px rgba(0,0,0,0.04)' }}>
         {/* Rad 1 — Hovedtoolbar (minimalistisk) */}
         <div style={{ display:'flex', alignItems:'center', gap:'10px', flexWrap:'wrap', padding:'10px 16px' }}>
           {/* Tittel */}
@@ -38491,7 +38541,7 @@ function RessursPage() {
           av den. Den ansatte skal se sine egne oppgaver, ikke lete etter dem i en
           Gantt han uansett ikke kan endre. */}
       {ressursVisning === 'mine' && visMineOppgaver ? (
-        <div style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
+        <div data-mobil-scroll style={{ flex:1, overflowY:'auto', background:'#f8fafc', minWidth:0 }}>
           <MineOppgaverPanel
             user={user}
             mob={isMobRP}
