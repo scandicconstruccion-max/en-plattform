@@ -34956,7 +34956,7 @@ function RessursGanttGrid({
                           top:'7px', bottom:'7px',
                           left:`${left}px`, width:`${width}px`,
                           borderRadius:'7px',
-                          background: bar.hasConflict ? '#fef2f2' : `${col}14`,
+                          background: bar.hasConflict ? '#fef2f2' : `${col}24`,
                           border: bar.hasConflict ? '1px solid #fecaca'
                             : bar.isUe ? '1px dashed #f59e0b'
                             : bar.isPlaceholder ? `1px dashed ${col}`
@@ -35105,7 +35105,7 @@ function RessursGanttGrid({
                               {visTimer && (
                                 <span style={{
                                   marginLeft:'auto', flexShrink:0, fontSize:'10.5px', fontWeight:'600',
-                                  color:'#94a3b8', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums',
+                                  color:'#475569', whiteSpace:'nowrap', fontVariantNumeric:'tabular-nums',
                                 }}>
                                   {bar.isUe
                                     ? `🤝 UE${dagerN > 0 ? ' · ' + dagerN + 'd' : ''}`
