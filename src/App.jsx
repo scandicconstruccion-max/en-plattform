@@ -37538,10 +37538,14 @@ function RessursPage() {
   // capture-fasen. Lytteren må stå på selve containeren, og de to visningene
   // har hver sin. Markøren data-mobil-scroll peker ut den som er i bruk.
   useEffect(() => {
-    if (!isMobRP || !rotRef.current || !toppHoyde) return
+    if (!isMobRP || !rotRef.current) return
     const rot = rotRef.current.querySelector('[data-mobil-scroll]')
     if (!rot) return
-    let sisteY = 0
+    // Lista auto-scroller til dagens kort ved montering, saa containeren staar
+    // typisk paa ~500 px foer noen har roert den. Startet vi paa 0, ville den
+    // foerste hendelsen — uansett retning — lese som et hopp nedover, og toppen
+    // kollapset av seg selv.
+    let sisteY = rot.scrollTop
     const onScroll = (e) => {
       const y = e.target && e.target.scrollTop
       if (typeof y !== 'number') return
@@ -37549,15 +37553,20 @@ function RessursPage() {
       // Under terskelen er det skjelving, ikke en intensjon om å scrolle.
       if (Math.abs(diff) < 6) return
       sisteY = y
+      // Maalt her og ikke lest fra state: da kan ikke en maaling som ikke har
+      // rukket aa bli skrevet tilbake sette hele mekanikken ut av spill.
+      const h = toppRef.current ? toppRef.current.offsetHeight : 0
       // Ned: skjul, men først når man er forbi toppen — ellers forsvinner den
       // med én gang man rører lista. Opp: kom tilbake straks, ikke først på topp.
-      if (diff > 0 && y > toppHoyde) setToppSkjult(true)
+      // setToppHoyde her holder marginTop i takt med den hoyden vi faktisk maalte.
+      if (diff > 0 && h && y > h) { setToppHoyde(h); setToppSkjult(true) }
       else if (diff < 0) setToppSkjult(false)
     }
     rot.addEventListener('scroll', onScroll, { passive: true })
     return () => rot.removeEventListener('scroll', onScroll)
     // ressursVisning er med fordi containeren byttes ut naar man skifter fane.
-  }, [isMobRP, toppHoyde, ressursVisning])
+    // toppHoyde er bevisst IKKE med: lytteren skal festes én gang og bli staaende.
+  }, [isMobRP, ressursVisning])
 
   // Bytter man fane eller filter, skal toppen alltid være framme.
   useEffect(() => { setToppSkjult(false) }, [ressursVisning, resourceType, filterEmployee, isMobRP])
@@ -37760,7 +37769,7 @@ function RessursPage() {
   const visibleDates = settings.showWeekends ? dates : dates.filter(d=>!isWeekend(d))
 
   return (
-    <div ref={rotRef} style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':'calc(100vh - 56px)', overflow:'hidden', maxWidth:'100%', minWidth:0 }}>
+    <div ref={rotRef} style={{ fontFamily:'system-ui,sans-serif', position:fullscreen?'fixed':'relative', inset:fullscreen?0:'auto', zIndex:fullscreen?200:'auto', background:'white', display:'flex', flexDirection:'column', height:fullscreen?'100vh':(isMobRP?'calc(100vh - 52px)':'calc(100vh - 56px)'), overflow:'hidden', maxWidth:'100%', minWidth:0 }}>
       {/* Header — modernisert (Float-inspirert, Fase 1) */}
       <div ref={toppRef} style={{ background:'white', borderBottom:'1px solid #e2e8f0', flexShrink:0,
         marginTop: (isMobRP && toppSkjult && toppHoyde) ? `-${toppHoyde}px` : 0,
@@ -38554,7 +38563,6 @@ function RessursPage() {
       ) : isMobRP ? (
         <MobilRessursView
           framdrift={framdrift}
-          kanRedigere={kanRedigereRessurs}
           kanRedigere={kanRedigereRessurs}
           employees={employees}
           machines={machines}
