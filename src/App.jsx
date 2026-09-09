@@ -46159,28 +46159,36 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
 
 // ─── CRM CSV/XLSX-IMPORT ──────────────────────────────────────────────────────
 // Målfelt i systemet som en filkolonne kan kobles til.
+// hjelp: én setning som sier hva feltet brukes TIL. Vises under nedtrekket når feltet
+// er valgt — feltnavnet alene sier ikke en ny bruker hvor «Tilbudsdato» hører hjemme,
+// eller hva som skiller den fra «Sist kontaktet».
 const CRM_IMPORT_FIELDS = [
-  { key:'name',             label:'Bedriftsnavn',              navnefelt:true },
-  { key:'privatnavn',       label:'Navn på privatperson',      navnefelt:true },
-  { key:'orgnr',            label:'Organisasjonsnummer' },
-  { key:'kontaktperson',    label:'Kontaktperson' },
-  { key:'email',            label:'E-post' },
-  { key:'phone',            label:'Telefon' },
-  { key:'website',          label:'Nettside' },
-  { key:'address',          label:'Adresse' },
-  { key:'postal_code',      label:'Postnummer' },
-  { key:'city',             label:'Kommune / Poststed / By' },
-  { key:'industry',         label:'Bransje' },
-  { key:'status',           label:'Status (tekst → mappes)' },
-  { key:'estimated_value',  label:'Estimert verdi (kr)' },
-  { key:'score',            label:'Score (kjøpspotensial)' },
-  { key:'neste_oppfolging', label:'Neste oppfølging (dato)' },
-  { key:'sist_kontaktet',   label:'Sist kontaktet / Første kontakt (dato)' },
-  { key:'tilbudsdato',      label:'Tilbudsdato (dato)' },
-  { key:'kontaktet_av',     label:'Kontaktet av' },
-  { key:'customer_number',  label:'Kundenummer (valgfritt)' },
-  { key:'notes',            label:'Notat' },
+  { key:'name',             label:'🏢 Bedriftsnavn',            navnefelt:true, hjelp:'Firmanavnet. Raden blir en bedrift, og navnet vises i kundelista.' },
+  { key:'privatnavn',       label:'👤 Navn på privatperson',    navnefelt:true, hjelp:'Personnavn. Er bedriftsnavnet tomt, blir dette kundenavnet — ellers lagres det som kontaktperson på bedriften.' },
+  { key:'orgnr',            label:'🔢 Organisasjonsnummer',     hjelp:'Valgfritt, men gjør duplikatsjekken sikker. To rader med samme org.nr er samme kunde.' },
+  { key:'kontaktperson',    label:'🧑‍💼 Kontaktperson',           hjelp:'Personen dere snakker med hos bedriften. Overstyrer navnet fra «Navn på privatperson».' },
+  { key:'email',            label:'📧 E-post',                  hjelp:'Brukes av e-postknappen på kundekortet.' },
+  { key:'phone',            label:'📞 Telefon',                 hjelp:'Brukes av ring-knappen på kundekortet.' },
+  { key:'website',          label:'🌐 Nettside' },
+  { key:'address',          label:'📍 Adresse',                 hjelp:'Gateadresse. Postnummer og sted har egne felt.' },
+  { key:'postal_code',      label:'📮 Postnummer' },
+  { key:'city',             label:'🏙️ Kommune / poststed / by', hjelp:'Det du kan filtrere på i kundelista.' },
+  { key:'industry',         label:'🏗️ Bransje' },
+  { key:'status',           label:'🎯 Lead-status',             hjelp:'Tekstverdiene i kolonnen. Du bestemmer i neste steg hva hver av dem skal bety.' },
+  { key:'estimated_value',  label:'💰 Estimert verdi (kr)' },
+  { key:'score',            label:'⭐ Score (kjøpspotensial)',   hjelp:'Tall. Lista kan sorteres på dette.' },
+  { key:'neste_oppfolging', label:'📅 Neste oppfølging (dato)', hjelp:'Legger raden i «Mine oppgaver» på den datoen.' },
+  { key:'sist_kontaktet',   label:'📞 Sist kontaktet (dato)',   hjelp:'Siste gang dere snakket sammen. Ikke det samme som tilbudsdato.' },
+  { key:'tilbudsdato',      label:'📄 Tilbudsdato (dato)',      hjelp:'Da tilbudet ble sendt. Brukes til å finne gamle ubesvarte tilbud — og til å avgjøre hvilken rad som vinner når samme kunde står i flere ark.' },
+  { key:'kontaktet_av',     label:'🙋 Kontaktet av',            hjelp:'Hvem hos dere som hadde kontakten.' },
+  { key:'customer_number',  label:'#️⃣ Kundenummer' },
+  { key:'notes',            label:'📝 Notat',                   hjelp:'Fritekst som vises på kundekortet.' },
 ]
+const CRM_FELT = Object.fromEntries(CRM_IMPORT_FIELDS.map(f => [f.key, f]))
+
+// Verdimappingen overlever at modalen lukkes, men ikke at fanen lastes på nytt.
+// Kjører du samme fil to ganger i én økt, slipper du å sette de samme statusene igjen.
+let _crmStatusMinne = {}
 
 // Systemets statuser en tekstverdi fra fila kan mappes til.
 const CRM_IMPORT_STATUS_CHOICES = Object.keys(CRM_STATUS) // lead, kontaktet, tilbud_sendt, vunnet, tapt, inaktiv
@@ -46326,7 +46334,15 @@ function CRMImportModal({ user, onClose, onDone }) {
   const [wbSheets, setWbSheets] = useState([])       // [{name, aoa, cols, rowCount}] — alle ark i fila
   const [valgteArk, setValgteArk] = useState(() => new Set()) // indekser i wbSheets
   const [headerRader, setHeaderRader] = useState({}) // {arkIdx: overskriftsradens indeks}
-  const [statusMap, setStatusMap] = useState({})     // {råtekst(lowercase): systemstatus}
+  // Startverdien hentes fra øktminnet, så en ny kjøring i samme økt slipper å sette
+  // de samme statusene om igjen.
+  const [statusMap, setStatusMap] = useState(() => ({ ..._crmStatusMinne }))
+  const [huskedeVerdier] = useState(() => new Set(Object.keys(_crmStatusMinne)))
+  // 'nyeste' = raden med nyeste tilbudsdato vinner (standard). 'forste' = rekkefølgen
+  // i fila avgjør, som før.
+  const [dupRegel, setDupRegel] = useState('nyeste')
+  const [visAlleDup, setVisAlleDup] = useState(false)
+  const [visUbrukte, setVisUbrukte] = useState({})    // {gruppenøkkel: true} — utvidet «ikke i bruk»
   const fileRef = React.useRef(null)
 
   // Gjett overskriftsraden: den av de 10 første radene med FLEST tekstceller.
@@ -46404,8 +46420,12 @@ function CRMImportModal({ user, onClose, onDone }) {
         alert({ message:`Overskriftsraden i «${s?.name}» er tom`, subMessage:'Velg en annen rad i det arket, eller ta bort avkrysningen.', kind:'warning' })
         return
       }
-      // Hopp over tomme rader midt i arket
-      const dataRows = aoa.slice(radIdx + 1).filter(r => r.some(c => String(c).trim() !== ''))
+      // Hopp over tomme rader midt i arket. Radnummeret fra regnearket følger med, så
+      // forhåndsvisningen kan peke på nøyaktig hvilken rad som vinner ved duplikat.
+      const dataRows = []
+      aoa.slice(radIdx + 1).forEach((r, i) => {
+        if (r.some(c => String(c).trim() !== '')) dataRows.push({ celler: r, radNr: radIdx + 2 + i })
+      })
       nyeArk.push({ navn: s.name, headers: hdr, rows: dataRows })
     }
     // Én mapping per overskriftsgruppe. Har to ark like overskrifter, deler de mapping
@@ -46445,6 +46465,50 @@ function CRMImportModal({ user, onClose, onDone }) {
   const feltMapping = (arkIdx) => mappingPerGruppe[nokkelForArk[arkIdx]] || []
   const feltExtra = (arkIdx) => extraPerGruppe[nokkelForArk[arkIdx]] || []
 
+  // Hvilke kolonner har faktisk innhold, og hva står i dem? Fila kan ha 168 kolonner
+  // der 14 har data — de tomme skal ikke fylle steg 2 med «(uten navn)»-rader.
+  // Samtidig: tre eksempelverdier under kolonnenavnet er det som avgjør om «Kundenavn»
+  // inneholder personer eller firmaer.
+  const kolonneFakta = React.useMemo(() => {
+    const ut = {}
+    grupper.forEach(g => {
+      const rader = g.arkIdx.flatMap(i => ark[i]?.rows || [])
+      ut[g.nokkel] = g.headers.map((h, i) => {
+        const verdier = []
+        for (const r of rader) {
+          const v = r.celler[i]
+          if (v != null && String(v).trim() !== '') { verdier.push(String(v).trim()); if (verdier.length === 3) break }
+        }
+        return { harData: verdier.length > 0, eksempler: verdier, tomOverskrift: !String(h || '').trim() }
+      })
+    })
+    return ut
+  }, [grupper, ark])
+
+  // To kolonner mot samme felt: recordFromRow tar den FØRSTE kolonnen som har verdi på
+  // raden, så den andre forsvinner stille. Her finnes kollisjonene, så steg 2 kan si fra.
+  const kollisjoner = React.useMemo(() => {
+    const ut = {}
+    grupper.forEach(g => {
+      const m = mappingPerGruppe[g.nokkel] || []
+      const per = new Map()
+      m.forEach((felt, i) => {
+        if (!felt || felt === '__extra__') return
+        per.set(felt, [...(per.get(felt) || []), i])
+      })
+      const kolliderer = {}
+      per.forEach((idxer, felt) => { if (idxer.length > 1) idxer.forEach(i => { kolliderer[i] = { felt, idxer } }) })
+      ut[g.nokkel] = kolliderer
+    })
+    return ut
+  }, [grupper, mappingPerGruppe])
+  const antallKollisjoner = grupper.reduce((n, g) => n + new Set(Object.values(kollisjoner[g.nokkel] || {}).map(k => k.felt)).size, 0)
+
+  const tilbakestillMapping = (nokkel, headers) => {
+    setMappingPerGruppe(m => ({ ...m, [nokkel]: headers.map(crmAutoMapHeader) }))
+    setExtraPerGruppe(m => ({ ...m, [nokkel]: headers.map(h => h) }))
+  }
+
   // Minstekravet er ETT navn per rad: enten bedriftsnavn eller navn på privatperson.
   // Org.nr er helt valgfritt. Kravet gjelder HVER gruppe — mangler én gruppe
   // navnekobling, ville alle radene i de arkene blitt hoppet over.
@@ -46466,7 +46530,7 @@ function CRMImportModal({ user, onClose, onDone }) {
       const idx = statusColForGruppe(nokkelForArk[i])
       if (idx < 0) return
       a.rows.forEach(r => {
-        const s = (r[idx] == null ? '' : String(r[idx])).trim()
+        const s = (r.celler[idx] == null ? '' : String(r.celler[idx])).trim()
         if (s) tell.set(s, (tell.get(s) || 0) + 1)
       })
     })
@@ -46478,7 +46542,7 @@ function CRMImportModal({ user, onClose, onDone }) {
     ark.forEach((a, i) => {
       const idx = statusColForGruppe(nokkelForArk[i])
       if (idx < 0) return
-      n += a.rows.filter(r => (r[idx] == null ? '' : String(r[idx])).trim() === '').length
+      n += a.rows.filter(r => (r.celler[idx] == null ? '' : String(r.celler[idx])).trim() === '').length
     })
     return n
   }, [ark, nokkelForArk, mappingPerGruppe])
@@ -46492,6 +46556,9 @@ function CRMImportModal({ user, onClose, onDone }) {
     })
   }, [statusRawValues])
   const uvalgteStatuser = statusRawValues.filter(({ verdi }) => !statusMap[verdi.toLowerCase()]).length
+  const antallHusket = statusRawValues.filter(({ verdi }) => huskedeVerdier.has(verdi.toLowerCase()) && statusMap[verdi.toLowerCase()]).length
+  // Skriv valgene til øktminnet fortløpende, så de er der neste gang modalen åpnes.
+  useEffect(() => { _crmStatusMinne = { ..._crmStatusMinne, ...statusMap } }, [statusMap])
   // Tomme celler og verdier brukeren ikke tok stilling til blir 'lead'.
   const resolveStatus = (raw) => {
     const v = (raw == null ? '' : String(raw)).trim().toLowerCase()
@@ -46524,14 +46591,16 @@ function CRMImportModal({ user, onClose, onDone }) {
   // ── Klassifiser alle rader (ny / duplikat / hoppet) ──
   const classified = React.useMemo(() => {
     if (step < 4) return []
-    // ÉN felles hukommelse for HELE importen, ikke én per ark. Blir disse nullstilt
-    // mellom arkene, importeres samme person én gang per ark den står i — og det er
-    // nettopp det som skjer når to ark i en fil overlapper.
-    const seenOrgnr = new Set()     // orgnr sett så langt i importen
-    const seenNavn = new Map()      // normalisert navn → Set av orgnr sett for det navnet ('' = rad uten orgnr)
+    // Dedupen går i to omganger. Først samles radene i grupper — én gruppe er «samme
+    // kunde». Deretter velges én vinner per gruppe. Streaming-varianten kunne bare
+    // beholde den første raden den møtte; med arkene i rekkefølgen 2023→2026 betyr det
+    // at den ELDSTE versjonen av en kunde overlever. Derfor er valget nå eksplisitt.
+    const grupperListe = []          // [{ orgnr:Set, navn:Set, medlemmer:[radindeks] }]
+    const orgnrIdx = new Map()       // orgnrNorm → gruppeindeks
+    const navnIdx = new Map()        // navnNorm → [gruppeindeks]
     const ut = []
     ark.forEach((a, arkIdx) => a.rows.forEach((row) => { ut.push((() => {
-      const { rec, extra } = recordFromRow(row, arkIdx)
+      const { rec, extra } = recordFromRow(row.celler, arkIdx)
       const arkNavn = a.navn
       const bedriftsnavn = crmTxt(rec.name)
       const privatnavn = crmTxt(rec.privatnavn)
@@ -46570,33 +46639,85 @@ function CRMImportModal({ user, onClose, onDone }) {
         notes: crmTxt(rec.notes),
         ekstra_felt: Object.keys(extra).length ? extra : null,
       }
-      const display = { name, orgnr: orgnrNorm || '—', type: erBedrift ? 'Bedrift' : 'Privat', ark:arkNavn }
-      // Med org.nr dedupliserer vi på org.nr, ellers på navnet — både mot basen og mot
-      // rader vi allerede har sett i importen, uansett hvilket ark de sto i.
+      const display = { name, orgnr: orgnrNorm || '—', type: erBedrift ? 'Bedrift' : 'Privat', ark:arkNavn, radNr: row.radNr }
       const navnNorm = crmNormNavn(name)
       const dupDb = orgnrNorm ? !!(existingOrgnr && existingOrgnr.has(orgnrNorm)) : !!(existingNames && existingNames.has(navnNorm))
-      // Navnet holdes for ALLE rader, ikke bare de uten org.nr. Ellers slipper samme
-      // firma gjennom to ganger når det står med org.nr i ett ark og uten i et annet —
-      // som er akkurat det som skjer i en fil der to ark dekker samme kundemasse.
-      // Unntaket: har begge radene org.nr og de er FORSKJELLIGE, er det to ulike
-      // selskaper som tilfeldigvis heter det samme, og begge skal med.
-      const tidligereOrgnr = seenNavn.get(navnNorm)
-      let dupFile = false
-      if (orgnrNorm && seenOrgnr.has(orgnrNorm)) dupFile = true
-      else if (tidligereOrgnr) {
-        const alleUlike = !!orgnrNorm && Array.from(tidligereOrgnr).every(o => o && o !== orgnrNorm)
-        dupFile = !alleUlike
-      }
-      if (orgnrNorm) seenOrgnr.add(orgnrNorm)
-      if (tidligereOrgnr) tidligereOrgnr.add(orgnrNorm); else seenNavn.set(navnNorm, new Set([orgnrNorm]))
-      // «Finnes i basen» og «går igjen i importen» er to helt ulike beskjeder til
-      // brukeren, og telles hver for seg. Basen vinner når begge slår til.
+      // Finnes raden i basen fra før, er den ute uansett — da er det ingen grunn til å
+      // la den konkurrere om å bli gruppevinner.
       if (dupDb) return { status:'duplikat', dupType:'base', reason: orgnrNorm ? 'Org.nr finnes allerede i basen' : 'Navnet finnes allerede i basen', ark:arkNavn, payload, display }
-      if (dupFile) return { status:'duplikat', dupType:'fil', reason: ark.length > 1 ? 'Går igjen i de valgte arkene' : 'Duplikat i fila', ark:arkNavn, payload, display }
-      return { status:'ny', ark:arkNavn, payload, display }
+
+      // Finn gruppen raden hører til. Org.nr binder hardest. Ellers navnet — men har
+      // begge radene org.nr og de er FORSKJELLIGE, er det to ulike selskaper som
+      // tilfeldigvis heter det samme, og de skal ikke slås sammen.
+      let gid = -1
+      if (orgnrNorm && orgnrIdx.has(orgnrNorm)) gid = orgnrIdx.get(orgnrNorm)
+      else {
+        for (const kand of (navnIdx.get(navnNorm) || [])) {
+          const g = grupperListe[kand]
+          const motstrid = !!orgnrNorm && g.orgnr.size > 0 && !g.orgnr.has(orgnrNorm) && Array.from(g.orgnr).every(o => o)
+          if (!motstrid) { gid = kand; break }
+        }
+      }
+      if (gid < 0) {
+        gid = grupperListe.length
+        grupperListe.push({ orgnr: new Set(), navn: new Set(), medlemmer: [] })
+        navnIdx.set(navnNorm, [...(navnIdx.get(navnNorm) || []), gid])
+      }
+      const g = grupperListe[gid]
+      g.orgnr.add(orgnrNorm); g.navn.add(navnNorm); g.medlemmer.push(ut.length)
+      if (orgnrNorm) orgnrIdx.set(orgnrNorm, gid)
+      // Status settes i andre omgang, når hele gruppen er kjent.
+      return { status:'ny', gid, ark:arkNavn, payload, display, sortDato: payload.tilbudsdato || '' }
     })()) }))
+
+    // ── Andre omgang: kår én vinner per gruppe ──────────────────────────────────
+    // «nyeste»: høyeste tilbudsdato vinner. En rad UTEN dato taper alltid mot en som
+    // har en — ellers ville en tom celle kunne slå ut et ekte tilbud fra i fjor. Har
+    // ingen i gruppen dato, faller vi tilbake på rekkefølgen i fila.
+    grupperListe.forEach(gr => {
+      const med = gr.medlemmer.filter(i => ut[i].status === 'ny')
+      if (med.length < 2) return
+      let vinner = med[0]
+      if (dupRegel === 'nyeste') {
+        for (const i of med) {
+          const a = ut[i].sortDato, b = ut[vinner].sortDato
+          if (a && !b) vinner = i
+          else if (a && b && a > b) vinner = i
+        }
+      }
+      const vDisp = ut[vinner].display
+      med.forEach(i => {
+        if (i === vinner) { ut[i].vantOver = med.length - 1; return }
+        ut[i].status = 'duplikat'
+        ut[i].dupType = 'fil'
+        ut[i].reason = ark.length > 1 ? 'Går igjen i de valgte arkene' : 'Duplikat i fila'
+        ut[i].taptMot = { ark: vDisp.ark, radNr: vDisp.radNr, dato: ut[vinner].sortDato }
+      })
+    })
     return ut
-  }, [step, ark, nokkelForArk, mappingPerGruppe, extraPerGruppe, existingOrgnr, existingNames, statusMap])
+  }, [step, ark, nokkelForArk, mappingPerGruppe, extraPerGruppe, existingOrgnr, existingNames, statusMap, dupRegel])
+
+  // Navn som opptrer flere ganger i importen, med vinneren først. Bygges fra
+  // classified, så den følger dupRegel automatisk når valget endres.
+  const dupGrupper = React.useMemo(() => {
+    const per = new Map()
+    classified.forEach(r => {
+      if (r.gid == null) return
+      if (!per.has(r.gid)) per.set(r.gid, [])
+      per.get(r.gid).push(r)
+    })
+    const ut = []
+    per.forEach(rader => {
+      if (rader.length < 2) return
+      ut.push({
+        navn: (rader.find(r => r.status === 'ny') || rader[0]).display?.name,
+        rader: rader
+          .map(r => ({ vinner: r.status === 'ny', ark: r.display?.ark, radNr: r.display?.radNr, dato: r.payload?.tilbudsdato, status: r.payload?.status }))
+          .sort((a, b) => (b.vinner ? 1 : 0) - (a.vinner ? 1 : 0)),
+      })
+    })
+    return ut.sort((a, b) => b.rader.length - a.rader.length)
+  }, [classified])
 
   const counts = React.useMemo(() => ({
     total: classified.length,
@@ -46649,6 +46770,7 @@ function CRMImportModal({ user, onClose, onDone }) {
       message:`Importere ${toImport.length} nye leads? (${counts.bedrift} bedrift, ${counts.privat} privat)`,
       subMessage: [
         ark.length > 1 ? `Fra ${ark.length} ark: ${arkListe}.` : '',
+        counts.dupFil ? `Der samme kunde går igjen, beholdes ${dupRegel === 'nyeste' ? 'raden med nyeste tilbudsdato' : 'den første raden i fila'}.` : '',
         hoppInfo ? `Hoppes over: ${hoppInfo}.` : '',
       ].filter(Boolean).join(' ') || undefined,
       confirmLabel:'Importer',
@@ -46699,7 +46821,7 @@ function CRMImportModal({ user, onClose, onDone }) {
   // Steg 3 (verdimapping) finnes bare når en kolonne faktisk er mappet til Lead-status.
   // STEG er rekka som vises og navigeres i — resten av koden slår opp i den i stedet
   // for å regne step±1, så et hoppet steg aldri kan bli en blindvei.
-  const STEG_NAVN = { 1:'Fil & ark', 2:'Koble kolonner', 3:'Verdier', 4:'Forhåndsvis', 5:'Importer' }
+  const STEG_NAVN = { 1:'Fil & ark', 2:'Koble kolonner', 3:'Status-verdier', 4:'Forhåndsvis', 5:'Importer' }
   const STEG = harStatusKolonne ? [1, 2, 3, 4, 5] : [1, 2, 4, 5]
   const stegIdx = STEG.indexOf(step)
   const nesteSteg = STEG[stegIdx + 1]
@@ -46735,13 +46857,30 @@ function CRMImportModal({ user, onClose, onDone }) {
           {/* STEG 1 — filvalg + ark + overskriftsrad */}
           {step === 1 && wbSheets.length === 0 && (
             <div style={{ textAlign:'center', padding:'30px 0' }}>
-              <div style={{ fontSize:'44px', marginBottom:'12px' }}>📄</div>
-              <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Velg CSV- eller Excel-fil</h3>
-              <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>Hver rad trenger bare et navn — bedriftsnavn eller navn på privatperson. Org.nr er valgfritt. Har fila flere ark, kan du ta med flere i samme import.</p>
-              <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display:'none' }} />
-              <button onClick={()=>fileRef.current?.click()} disabled={busy} style={{ padding:'12px 28px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor: busy?'wait':'pointer', fontSize:'15px', fontWeight:'700' }}>
-                {busy ? 'Leser fil...' : 'Velg fil'}
-              </button>
+              <div style={{ border:'2px dashed #e2e8f0', borderRadius:'16px', background:'#f8fafc', padding:'34px 20px' }}>
+                <div style={{ fontSize:'42px', marginBottom:'10px' }}>📄</div>
+                <h3 style={{ margin:'0 0 6px', color:'#0f172a', fontSize:'17px' }}>Velg en fil å importere</h3>
+                <p style={{ margin:'0 auto 20px', color:'#94a3b8', fontSize:'13.5px', lineHeight:1.6, maxWidth:'420px' }}>Excel (.xlsx, .xls) eller CSV. Har fila flere ark, velger du hvilke i neste steg.</p>
+                <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display:'none' }} />
+                <button onClick={()=>fileRef.current?.click()} disabled={busy} style={{ padding:'12px 28px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor: busy?'wait':'pointer', fontSize:'15px', fontWeight:'700' }}>
+                  {busy ? 'Leser fil...' : 'Velg fil'}
+                </button>
+              </div>
+              {/* Kravene står HER, ikke først i forhåndsvisningen. Det er billigere å
+                  vite hva som trengs før du har brukt tid på kolonnemappingen. */}
+              <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'12px', padding:'14px 16px', marginTop:'18px', textAlign:'left' }}>
+                <div style={{ fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'8px' }}>Det eneste vi krever</div>
+                {[
+                  ['Et navn per rad', ' — firmanavn eller personnavn. Rader uten navn hoppes over.'],
+                  ['Org.nr er valgfritt.', ' Har du det, blir duplikatsjekken sikrere.'],
+                  ['Resten er frivillig', ' — e-post, telefon, status, tilbudsdato tar du med hvis du har det.'],
+                ].map(([sterk, resten]) => (
+                  <div key={sterk} style={{ display:'flex', gap:'9px', alignItems:'flex-start', padding:'5px 0', fontSize:'13px', color:'#065f46', lineHeight:1.5 }}>
+                    <span style={{ width:'20px', height:'20px', borderRadius:'50%', background:'#059669', color:'white', fontSize:'11px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:'1px' }}>✓</span>
+                    <span><b>{sterk}</b>{resten}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
           {step === 1 && wbSheets.length > 0 && (
@@ -46805,12 +46944,31 @@ function CRMImportModal({ user, onClose, onDone }) {
               <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>
                 Fil: <b>{fileName}</b> · {ark.length} ark · {totaltRader} rader til sammen. Koble hver filkolonne til et felt.
               </p>
-              {manglerNavnKobling && (
-                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
-                  ⚠️ Koble minst én kolonne til <b>Bedriftsnavn</b> eller <b>Navn på privatperson</b>
-                  {grupper.length > 1 && <> — mangler i {gruppertUtenNavn.map(g => g.arkNavn.join(' + ')).join(', ')}</>}.
-                </div>
-              )}
+              {/* Status før du går videre — alle krav på ett sted, med hake eller
+                  utropstegn, slik at ingenting først oppdages i forhåndsvisningen. */}
+              {(() => {
+                const linjer = [
+                  { ok: !manglerNavnKobling, tekst: <>Minst én kolonne til <b>Bedriftsnavn</b> eller <b>Navn på privatperson</b> — rader uten navn hoppes over{manglerNavnKobling && grupper.length > 1 ? <> (mangler i {gruppertUtenNavn.map(g => g.arkNavn.join(' + ')).join(', ')})</> : null}</> },
+                  { ok: !!kilde.trim(), tekst: <>En <b>kilde</b> for importen, så du finner igjen radene senere</> },
+                  { ok: antallKollisjoner === 0, tekst: antallKollisjoner === 0
+                      ? <>Ingen kolonner peker på samme felt</>
+                      : <><b>{antallKollisjoner === 1 ? 'To kolonner peker på samme felt.' : `${antallKollisjoner} felt har flere kolonner mot seg.`}</b> Du kan gå videre, men bare én verdi blir lagret — se de gule radene under.</> },
+                ]
+                const altOk = linjer.every(l => l.ok)
+                return (
+                  <div style={{ background: altOk?'#f0fdf4':'#fffbeb', border:`1px solid ${altOk?'#bbf7d0':'#fde68a'}`, borderRadius:'12px', padding:'13px 16px', marginBottom:'16px' }}>
+                    <div style={{ fontSize:'13px', fontWeight:'700', color: altOk?'#065f46':'#92400e', marginBottom:'6px' }}>
+                      {altOk ? 'Alt klart — du kan gå videre' : 'Status før du går videre'}
+                    </div>
+                    {linjer.map((l, i) => (
+                      <div key={i} style={{ display:'flex', gap:'9px', alignItems:'flex-start', padding:'5px 0', fontSize:'13px', lineHeight:1.5, color: l.ok?'#065f46':'#92400e', fontWeight: l.ok?'400':'600' }}>
+                        <span style={{ width:'20px', height:'20px', borderRadius:'50%', background: l.ok?'#059669':'#fde68a', color: l.ok?'white':'#92400e', fontSize:'11px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, marginTop:'1px' }}>{l.ok?'✓':'!'}</span>
+                        <span>{l.tekst}</span>
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
               <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
                 <b style={{ color:'#374151' }}>Navnekolonnene:</b> har raden bedriftsnavn, blir den en <b>bedrift</b> — og navnet i «Navn på privatperson» lagres da som <b>kontaktperson</b>. Er bedriftsnavnet tomt, blir raden en <b>privatperson</b> med personnavnet som kundenavn. Har fila en egen kontaktperson-kolonne, er det den som gjelder.
               </div>
@@ -46825,45 +46983,98 @@ function CRMImportModal({ user, onClose, onDone }) {
               {grupper.map(g => {
                 const mapping = mappingPerGruppe[g.nokkel] || []
                 const extraLabels = extraPerGruppe[g.nokkel] || []
-                const forsteRad = (ark[g.arkIdx[0]]?.rows || [])[0]
+                const forsteRad = (ark[g.arkIdx[0]]?.rows || [])[0]?.celler
                 const settMapping = (i, v) => setMappingPerGruppe(m => ({ ...m, [g.nokkel]: (m[g.nokkel]||[]).map((x,idx)=> idx===i ? v : x) }))
                 const settExtra = (i, v) => setExtraPerGruppe(m => ({ ...m, [g.nokkel]: (m[g.nokkel]||[]).map((x,idx)=> idx===i ? v : x) }))
                 return (
                   <div key={g.nokkel} style={{ marginBottom:'18px' }}>
-                    {(grupper.length > 1 || ark.length > 1) && (
-                      <div style={{ background: grupper.length > 1 ? '#eff6ff' : '#f0fdf4', border:`1px solid ${grupper.length > 1 ? '#bfdbfe' : '#bbf7d0'}`, borderRadius:'10px', padding:'8px 12px', marginBottom:'8px' }}>
-                        <div style={{ fontSize:'12px', fontWeight:'700', color: grupper.length > 1 ? '#1e40af' : '#065f46' }}>
-                          {grupper.length > 1 ? '📄 ' : '✓ '}{g.arkNavn.join(' + ')}
-                        </div>
-                        <div style={{ fontSize:'11px', color: grupper.length > 1 ? '#3b82f6' : '#059669' }}>
-                          {grupper.length > 1
-                            ? <>Egne overskrifter — denne mappingen gjelder bare {g.arkNavn.length > 1 ? 'disse arkene' : 'dette arket'} ({g.rader} rader)</>
-                            : <>Alle de valgte arkene har samme overskrifter — denne mappingen gjelder alle ({g.rader} rader)</>}
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                      {g.headers.map((h, i) => (
-                        <div key={i} style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr auto 1fr', alignItems:'center', gap: mob?'6px':'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
-                          <div style={{ minWidth:0 }}>
-                            <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h || <span style={{ color:'#cbd5e1' }}>(uten navn)</span>}</div>
-                            <div style={{ fontSize:'11px', color:'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{forsteRad ? String(forsteRad[i] ?? '') : ''}</div>
-                          </div>
-                          {!mob && <span style={{ color:'#cbd5e1' }}>→</span>}
-                          <div style={{ display:'flex', flexDirection:'column', gap:'6px', minWidth:0 }}>
-                            <select value={mapping[i] || ''} onChange={e=>settMapping(i, e.target.value)} style={crmInp}>
-                              <option value="">— ikke importer —</option>
-                              {CRM_IMPORT_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
-                              <option value="__extra__">➕ Behold som ekstra felt</option>
-                            </select>
-                            {mapping[i] === '__extra__' && (
-                              <input value={extraLabels[i] ?? ''} onChange={e=>settExtra(i, e.target.value)}
-                                placeholder="Etikett for ekstra felt" style={{ ...crmInp, fontSize:'12px', padding:'7px 10px' }} />
-                            )}
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:'10px', marginBottom:'9px', flexWrap:'wrap' }}>
+                      {(grupper.length > 1 || ark.length > 1) ? (
+                        <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'8px 12px', flex:'1 1 240px', minWidth:0 }}>
+                          <div style={{ fontSize:'12px', fontWeight:'700', color:'#065f46' }}>✓ {g.arkNavn.join(' + ')}</div>
+                          <div style={{ fontSize:'11px', color:'#059669' }}>
+                            {grupper.length > 1
+                              ? <>Egne overskrifter — gjelder bare {g.arkNavn.length > 1 ? 'disse arkene' : 'dette arket'} ({g.rader} rader)</>
+                              : <>Alle valgte ark har samme overskrifter — gjelder alle {g.rader} radene</>}
                           </div>
                         </div>
-                      ))}
+                      ) : <span />}
+                      <button onClick={()=>tilbakestillMapping(g.nokkel, g.headers)}
+                        style={{ background:'none', border:'none', color:'#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer', padding:'4px 0', textDecoration:'underline', fontFamily:'inherit', flexShrink:0 }}>
+                        Tilbakestill koblingene
+                      </button>
                     </div>
+                    {(() => {
+                      const fakta = kolonneFakta[g.nokkel] || []
+                      const koll = kollisjoner[g.nokkel] || {}
+                      // Tomme kolonner uten kobling gjemmes. En fil med 168 kolonner der
+                      // 14 har innhold skal ikke gi 154 «(uten navn)»-rader å bla forbi.
+                      const erUbrukt = (i) => !fakta[i]?.harData && !mapping[i]
+                      const synlige = g.headers.map((h, i) => i).filter(i => !erUbrukt(i))
+                      const ubrukte = g.headers.map((h, i) => i).filter(erUbrukt)
+                      const apen = !!visUbrukte[g.nokkel]
+                      const koblingsrad = (i) => {
+                        const h = g.headers[i]
+                        const k = koll[i]
+                        const forst = k ? k.idxer[0] : -1
+                        const felt = CRM_FELT[mapping[i]]
+                        const ekspler = fakta[i]?.eksempler || []
+                        return (
+                          <div key={i} style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr auto 1.15fr', alignItems: mob?'stretch':'center', gap: mob?'7px':'14px', background: k?'#fffbeb':'#f8fafc', border:`1px solid ${k?'#fde68a':'#f1f5f9'}`, borderRadius:'12px', padding:'12px 15px' }}>
+                            <div style={{ minWidth:0 }}>
+                              <div style={{ fontSize:'13.5px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{h || <span style={{ color:'#cbd5e1' }}>(uten navn)</span>}</div>
+                              {/* Tre eksempler, ikke ett: det er slik du ser om «Kundenavn»
+                                  inneholder personer eller firmaer. */}
+                              <div style={{ fontSize:'11.5px', color:'#94a3b8', fontStyle:'italic', marginTop:'2px', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                                {ekspler.length ? ekspler.join(' · ') : <span style={{ fontStyle:'normal' }}>(tom i alle rader)</span>}
+                              </div>
+                            </div>
+                            {!mob && <span style={{ color:'#cbd5e1', textAlign:'center' }}>→</span>}
+                            <div style={{ display:'flex', flexDirection:'column', gap:'5px', minWidth:0 }}>
+                              <select value={mapping[i] || ''} onChange={e=>settMapping(i, e.target.value)} style={crmInp}>
+                                <option value="">— ikke importer —</option>
+                                {CRM_IMPORT_FIELDS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                                <option value="__extra__">➕ Behold som ekstra felt</option>
+                              </select>
+                              {mapping[i] === '__extra__' && (
+                                <input value={extraLabels[i] ?? ''} onChange={e=>settExtra(i, e.target.value)}
+                                  placeholder="Etikett for ekstra felt" style={{ ...crmInp, fontSize:'12px', padding:'7px 10px' }} />
+                              )}
+                              {k ? (
+                                <div style={{ fontSize:'11.5px', color:'#92400e', fontWeight:'600', lineHeight:1.5, display:'flex', gap:'6px', alignItems:'flex-start' }}>
+                                  <span>⚠️</span>
+                                  <span>{i === forst
+                                    ? <>Også <b>{k.idxer.filter(x=>x!==i).map(x=>g.headers[x] || '(uten navn)').join(', ')}</b> peker hit. <b>{h || '(uten navn)'}</b> leses først — er den tom på en rad, brukes den andre.</>
+                                    : <>Samme felt som <b>{g.headers[forst] || '(uten navn)'}</b>, og den leses først. Verdien her brukes bare der den andre er tom.</>}
+                                  </span>
+                                </div>
+                              ) : felt?.hjelp ? (
+                                <div style={{ fontSize:'11.5px', color:'#64748b', lineHeight:1.5 }}>{felt.hjelp}</div>
+                              ) : null}
+                            </div>
+                          </div>
+                        )
+                      }
+                      return (
+                        <div style={{ display:'flex', flexDirection:'column', gap:'9px' }}>
+                          {synlige.map(koblingsrad)}
+                          {ubrukte.length > 0 && (
+                            <div style={{ border:'1px solid #f1f5f9', borderRadius:'12px', overflow:'hidden' }}>
+                              <button onClick={()=>setVisUbrukte(v => ({ ...v, [g.nokkel]: !v[g.nokkel] }))}
+                                style={{ width:'100%', textAlign:'left', background:'#f8fafc', border:'none', padding:'11px 15px', cursor:'pointer', fontSize:'12.5px', fontWeight:'600', color:'#64748b', display:'flex', justifyContent:'space-between', gap:'10px', alignItems:'center', fontFamily:'inherit' }}>
+                                <span>{ubrukte.length} tomme kolonner er skjult</span>
+                                <span style={{ color:'#94a3b8' }}>{apen ? 'Skjul ▲' : 'Vis dem ▼'}</span>
+                              </button>
+                              {apen && (
+                                <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px', background:'white' }}>
+                                  {ubrukte.map(koblingsrad)}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}
@@ -46879,8 +47090,13 @@ function CRMImportModal({ user, onClose, onDone }) {
               <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#94a3b8' }}>
                 Verdier du lar stå på «Velg stadium» blir <b>Lead</b>{tommeStatusCeller ? <>, det samme blir {tommeStatusCeller} rad{tommeStatusCeller===1?'':'er'} med tom celle</> : ''}.
               </p>
+              {antallHusket > 0 && (
+                <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'12px', padding:'11px 15px', marginBottom:'12px', fontSize:'13px', color:'#065f46', lineHeight:1.5, display:'flex', gap:'9px' }}>
+                  <span>↩️</span><span><b>{antallHusket} {antallHusket===1?'valg er':'valg er'} hentet fra en tidligere import i denne økta.</b> Du kan overstyre dem — endringene huskes til du laster siden på nytt.</span>
+                </div>
+              )}
               {uvalgteStatuser > 0 && (
-                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'12px', padding:'11px 15px', marginBottom:'12px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
                   ⚠️ {uvalgteStatuser} av {statusRawValues.length} verdier er ikke satt. De blir <b>Lead</b> hvis du går videre.
                 </div>
               )}
@@ -46890,8 +47106,13 @@ function CRMImportModal({ user, onClose, onDone }) {
                   return (
                     <div key={verdi} style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr auto 1fr', alignItems:'center', gap: mob ? '8px' : '12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
                       <div style={{ minWidth:0 }}>
-                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>«{verdi}»</div>
-                        <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600' }}>{antall} rad{antall===1?'':'er'}</div>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          «{verdi}»
+                          {huskedeVerdier.has(verdi.toLowerCase()) && valgt && (
+                            <span style={{ fontSize:'10.5px', fontWeight:'700', color:'#059669', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'2px 7px', marginLeft:'6px', whiteSpace:'nowrap' }}>↩ husket</span>
+                          )}
+                        </div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600' }}>{antall} rad{antall===1?'':'er'}{totaltRader ? ` · ${Math.round(antall/totaltRader*100)} %` : ''}</div>
                       </div>
                       {!mob && <span style={{ color:'#cbd5e1' }}>→</span>}
                       <select value={valgt} onChange={e=>{ const val=e.target.value; setStatusMap(m => ({ ...m, [verdi.toLowerCase()]: val })) }}
@@ -46925,6 +47146,62 @@ function CRMImportModal({ user, onClose, onDone }) {
                   </div>
                 ))}
               </div>
+              {/* Hvilken rad vinner når samme kunde står flere steder? Med arkene i
+                  rekkefølgen 2023→2026 ville «første rad i fila» beholdt den ELDSTE
+                  versjonen. Derfor er nyeste tilbudsdato standard — og valget står her,
+                  ved siden av tallene det påvirker. */}
+              {counts.dupFil > 0 && (
+                <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'12px', padding:'13px 16px', marginBottom:'16px' }}>
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'3px' }}>Når samme kunde står flere steder — hvilken rad beholdes?</div>
+                  <div style={{ fontSize:'12px', color:'#94a3b8', marginBottom:'10px', lineHeight:1.5 }}>Gjelder {counts.dupFil} {counts.dupFil===1?'rad':'rader'}. Resten forkastes — ingen data slås sammen.</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'7px' }}>
+                    {[
+                      ['nyeste', '📄 Nyeste tilbudsdato vinner', 'Rader uten tilbudsdato taper mot rader som har en. Har ingen dato, avgjør rekkefølgen i fila.'],
+                      ['forste', '📑 Første rad i fila vinner', 'Arkene leses ovenfra og ned i den rekkefølgen de står i regnearket.'],
+                    ].map(([verdi, tit, forkl]) => (
+                      <label key={verdi} style={{ display:'flex', gap:'10px', alignItems:'flex-start', padding:'10px 12px', border:`2px solid ${dupRegel===verdi?'#059669':'#e2e8f0'}`, background: dupRegel===verdi?'#f0fdf4':'white', borderRadius:'10px', cursor:'pointer' }}>
+                        <input type="radio" name="dupregel" checked={dupRegel===verdi} onChange={()=>setDupRegel(verdi)} style={{ width:'16px', height:'16px', accentColor:'#059669', flexShrink:0, marginTop:'2px', cursor:'pointer' }} />
+                        <span style={{ minWidth:0 }}>
+                          <span style={{ display:'block', fontSize:'13px', fontWeight:'700', color: dupRegel===verdi?'#065f46':'#374151' }}>{tit}</span>
+                          <span style={{ display:'block', fontSize:'11.5px', color: dupRegel===verdi?'#059669':'#94a3b8', lineHeight:1.5, marginTop:'1px' }}>{forkl}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Hvilke navn går igjen, og hvilken rad overlever? Uten dette skjer valget usynlig. */}
+              {dupGrupper.length > 0 && (
+                <div style={{ marginBottom:'18px' }}>
+                  <div style={{ fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'3px' }}>Går igjen — dette beholdes</div>
+                  <div style={{ fontSize:'12px', color:'#94a3b8', marginBottom:'10px' }}>{dupGrupper.length} navn står flere steder.</div>
+                  {(visAlleDup ? dupGrupper : dupGrupper.slice(0, 5)).map((d, i) => (
+                    <div key={i} style={{ border:'1px solid #f1f5f9', borderRadius:'12px', padding:'11px 15px', marginBottom:'8px', background:'white' }}>
+                      <div style={{ fontSize:'13.5px', fontWeight:'700', marginBottom:'6px', overflow:'hidden', textOverflow:'ellipsis' }}>{d.navn}</div>
+                      {d.rader.map((r, j) => (
+                        <div key={j} style={{ display:'flex', gap:'9px', alignItems:'baseline', fontSize:'12.5px', padding:'5px 0', borderTop: j?'1px dashed #f1f5f9':'none', flexWrap:'wrap' }}>
+                          <span style={{ fontSize:'10.5px', fontWeight:'700', borderRadius:'999px', padding:'2px 8px', whiteSpace:'nowrap', flexShrink:0,
+                            background: r.vinner?'#f0fdf4':'#f1f5f9', color: r.vinner?'#065f46':'#94a3b8', border: r.vinner?'1px solid #bbf7d0':'1px solid transparent' }}>
+                            {r.vinner ? '✓ beholdes' : 'forkastes'}
+                          </span>
+                          <span style={{ color:'#64748b', minWidth:0 }}>
+                            {ark.length > 1 ? <b>{r.ark}</b> : null}{ark.length > 1 && r.radNr ? ', ' : ''}{r.radNr ? `rad ${r.radNr}` : ''}
+                            {r.dato ? ` · tilbudsdato ${r.dato}` : ' · uten tilbudsdato'}
+                            {r.status ? ` · ${CRM_STATUS[r.status]?.label || r.status}` : ''}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {dupGrupper.length > 5 && (
+                    <button onClick={()=>setVisAlleDup(v=>!v)} style={{ background:'none', border:'none', color:'#059669', fontSize:'12.5px', fontWeight:'700', cursor:'pointer', padding:'4px 2px', fontFamily:'inherit' }}>
+                      {visAlleDup ? 'Vis færre ▲' : `Vis alle ${dupGrupper.length} ▼`}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {harStatusKolonne && statusRawValues.length > 0 && (
                 <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px' }}>
                   <p style={{ margin:'0 0 6px', fontSize:'12px', fontWeight:'700', color:'#64748b' }}>Statusmapping fra «{statusKolonneNavn()}»</p>
