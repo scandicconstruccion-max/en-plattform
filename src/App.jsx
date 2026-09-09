@@ -45936,17 +45936,17 @@ const CRM_IMPORT_FIELDS = [
 
 // Systemets statuser en tekstverdi fra fila kan mappes til.
 const CRM_IMPORT_STATUS_CHOICES = Object.keys(CRM_STATUS) // lead, kontaktet, tilbud_sendt, vunnet, tapt, inaktiv
-// Gjett systemstatus ut fra tekstverdien i fila.
+// Forhåndsutfyll verdimappingen bare når tekstverdien ER stadiet — eksakt treff mot
+// nøkkelen eller etiketten, uten hensyn til store/små bokstaver. Ingen ordliste med
+// bransjeuttrykk her: hva «Purret 2. gang» eller «Befaring avtalt» betyr er noe bare
+// den som eier fila vet, og det avgjør de i verdimapping-steget. Tom streng = ikke
+// gjettet, og feltet står på «Velg stadium».
 function crmGuessStatus(raw) {
   const s = (raw == null ? '' : String(raw)).toLowerCase().trim()
-  if (!s) return 'lead'
-  if (/vunnet|kunde|won|signert|avtale/.test(s)) return 'vunnet'
-  if (/tapt|lost|avslag|nei takk/.test(s)) return 'tapt'
-  if (/ikke aktuell|inaktiv|død|daud|arkiv|not relevant/.test(s)) return 'inaktiv'
-  if (/tilbud|pris|offer|quote/.test(s)) return 'tilbud_sendt'
-  if (/kontakt|forsøkt|forsokt|ringt|purret|dialog|oppfølg|oppfoelg/.test(s)) return 'kontaktet'
-  if (/ny|new|lead|prospekt|emne/.test(s)) return 'lead'
-  return 'lead'
+  if (!s) return ''
+  return CRM_IMPORT_STATUS_CHOICES.find(k =>
+    k.toLowerCase() === s || String(CRM_STATUS[k].label).toLowerCase() === s
+  ) || ''
 }
 
 // Foreslå automatisk kobling ut fra kolonnenavnet.
@@ -46140,25 +46140,38 @@ function CRMImportModal({ user, onClose, onDone }) {
 
   // Statusmapping: distinkte tekstverdier i status-kolonnen → systemstatus
   const statusColIdx = mapping.indexOf('status')
+  // Unike verdier i status-kolonnen, lest fra HELE arket, med antall rader per verdi.
+  // Flest først: de store bunkene er de som faktisk avgjør hvordan importen ser ut.
   const statusRawValues = React.useMemo(() => {
     if (statusColIdx < 0) return []
-    const set = new Set()
-    rows.forEach(r => { const s = (r[statusColIdx] == null ? '' : String(r[statusColIdx])).trim(); if (s) set.add(s) })
-    return Array.from(set).sort((a, b) => a.localeCompare(b, 'nb'))
+    const tell = new Map()
+    rows.forEach(r => {
+      const s = (r[statusColIdx] == null ? '' : String(r[statusColIdx])).trim()
+      if (s) tell.set(s, (tell.get(s) || 0) + 1)
+    })
+    return Array.from(tell, ([verdi, antall]) => ({ verdi, antall }))
+      .sort((a, b) => b.antall - a.antall || a.verdi.localeCompare(b.verdi, 'nb'))
   }, [rows, statusColIdx])
-  // Foreslå statusmapping automatisk for nye tekstverdier
+  const tommeStatusCeller = React.useMemo(() => {
+    if (statusColIdx < 0) return 0
+    return rows.filter(r => (r[statusColIdx] == null ? '' : String(r[statusColIdx])).trim() === '').length
+  }, [rows, statusColIdx])
+  // Foreslå verdimapping automatisk for nye tekstverdier
   useEffect(() => {
     if (!statusRawValues.length) return
     setStatusMap(prev => {
       const next = { ...prev }
-      statusRawValues.forEach(v => { const k = v.toLowerCase(); if (!(k in next)) next[k] = crmGuessStatus(v) })
+      statusRawValues.forEach(({ verdi }) => { const k = verdi.toLowerCase(); if (!(k in next)) next[k] = crmGuessStatus(verdi) })
       return next
     })
   }, [statusRawValues])
+  const uvalgteStatuser = statusRawValues.filter(({ verdi }) => !statusMap[verdi.toLowerCase()]).length
+  // Tomme celler og verdier brukeren ikke tok stilling til blir 'lead'.
   const resolveStatus = (raw) => {
     const v = (raw == null ? '' : String(raw)).trim().toLowerCase()
     if (!v) return 'lead'
-    return statusMap[v] || 'lead'
+    const valgt = statusMap[v]
+    return (valgt && CRM_STATUS[valgt]) ? valgt : 'lead'
   }
 
   // Bygg én rå-post fra en filrad ut fra mapping (første ikke-tomme vinner ved dublett-kobling).
@@ -46183,7 +46196,7 @@ function CRMImportModal({ user, onClose, onDone }) {
 
   // ── Klassifiser alle rader (ny / duplikat / hoppet) ──
   const classified = React.useMemo(() => {
-    if (step < 3) return []
+    if (step < 4) return []
     const seenOrgnr = new Set() // orgnr sett i denne fila
     const seenNavn = new Set()  // normaliserte navn sett i denne fila (rader uten orgnr)
     return rows.map((row) => {
@@ -46198,14 +46211,16 @@ function CRMImportModal({ user, onClose, onDone }) {
       if (CRM_SUMLINJE_RE.test(name.trim())) {
         return { status:'hoppet', reason:'Sumlinje', display:{ name, orgnr: orgnrNorm || '—' } }
       }
-      // Er bedriftsnavnet utfylt er raden en bedrift, og kontaktperson-kolonnen gir mening.
-      // Ellers er raden en privatperson, og navnet er selve kunden.
+      // Er bedriftsnavnet utfylt er raden en bedrift, og personnavnet på raden er
+      // kontaktpersonen der. Er det tomt, er personnavnet selve kunden. Samme kolonne
+      // dekker altså begge roller — det er den vanlige formen på et kunderegister.
+      // Har fila to separate kolonner, vinner den eksplisitte Kontaktperson-kolonnen.
       const erBedrift = !!bedriftsnavn
       const payload = {
         status: resolveStatus(rec.status), type: erBedrift ? 'bedrift' : 'privat',
         name,
         orgnr: orgnrNorm || null,
-        kontaktperson: erBedrift ? crmTxt(rec.kontaktperson) : null,
+        kontaktperson: erBedrift ? (crmTxt(rec.kontaktperson) || privatnavn) : null,
         customer_number: crmTxt(rec.customer_number),
         email: crmTxt(rec.email),
         phone: crmTxt(rec.phone),
@@ -46257,19 +46272,19 @@ function CRMImportModal({ user, onClose, onDone }) {
       console.log(`[CRM-import] Duplikatsjekk mot ${data.length} eksisterende kunder (${orgnrSet.size} med org.nr, ${navnSet.size} unike navn)`)
       setExistingOrgnr(orgnrSet)
       setExistingNames(navnSet)
-      setStep(3)
+      setStep(4)
     } catch (err) {
       console.error('[CRM-import] Kunne ikke hente eksisterende kunder:', err)
       // Uten lista kan ingenting flagges som duplikat mot basen. Det må sies fra om —
       // ellers ser forhåndsvisningen ut som om alt er nytt, og du importerer dubletter.
       setExistingOrgnr(new Set())
       setExistingNames(new Set())
-      setStep(3)
+      setStep(4)
       alert({ message:'Kunne ikke hente eksisterende kunder', subMessage:'Forhåndsvisningen kan ikke sjekke mot basen — rader som allerede finnes vises som nye.', kind:'warning' })
     } finally { setBusy(false) }
   }
 
-  // ── Steg 4: kjør import i batcher på 100 ──
+  // ── Steg 5: kjør import i batcher på 100 ──
   const runImport = async () => {
     const toImport = classified.filter(r => r.status === 'ny')
     const preSkipped = classified.filter(r => r.status === 'hoppet')
@@ -46280,7 +46295,7 @@ function CRMImportModal({ user, onClose, onDone }) {
     ].filter(Boolean).join(' og ')
     const ok = await confirm({ message:`Importere ${toImport.length} nye leads? (${counts.bedrift} bedrift, ${counts.privat} privat)`, subMessage: hoppInfo ? `${hoppInfo} hoppes over.` : undefined, confirmLabel:'Importer' })
     if (!ok) return
-    setImporting(true); setStep(4); setProgress(0); setImportTotal(toImport.length)
+    setImporting(true); setStep(5); setProgress(0); setImportTotal(toImport.length)
     // company_id settes eksplisitt så RLS/synlighet er garantert. Kilden MÅ være
     // auth_company_id() — under en støtteøkt peker profilens bedrift og den
     // bedriften databasen skriver til på hver sin kunde.
@@ -46321,7 +46336,15 @@ function CRMImportModal({ user, onClose, onDone }) {
     setImporting(false)
   }
 
-  const stepLabels = ['Fil & ark', 'Koble kolonner', 'Forhåndsvis', 'Importer']
+  const mob = typeof window !== 'undefined' && window.innerWidth < 768
+  // Steg 3 (verdimapping) finnes bare når en kolonne faktisk er mappet til Lead-status.
+  // STEG er rekka som vises og navigeres i — resten av koden slår opp i den i stedet
+  // for å regne step±1, så et hoppet steg aldri kan bli en blindvei.
+  const STEG_NAVN = { 1:'Fil & ark', 2:'Koble kolonner', 3:'Verdier', 4:'Forhåndsvis', 5:'Importer' }
+  const STEG = statusColIdx >= 0 ? [1, 2, 3, 4, 5] : [1, 2, 4, 5]
+  const stegIdx = STEG.indexOf(step)
+  const nesteSteg = STEG[stegIdx + 1]
+  const forrigeSteg = STEG[stegIdx - 1]
   const badge = (s) => {
     const c = s === 'ny' ? { bg:'#f0fdf4', color:'#16a34a', t:'Ny' } : s === 'duplikat' ? { bg:'#fffbeb', color:'#d97706', t:'Duplikat' } : { bg:'#f1f5f9', color:'#64748b', t:'Hoppet' }
     return <span style={{ background:c.bg, color:c.color, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>{c.t}</span>
@@ -46338,10 +46361,12 @@ function CRMImportModal({ user, onClose, onDone }) {
             <button onClick={onClose} disabled={importing} style={{ background:'none', border:'none', fontSize:'22px', cursor: importing?'not-allowed':'pointer', color:'#94a3b8' }}>×</button>
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
-            {stepLabels.map((l, i) => (
-              <div key={l} style={{ flex:1, display:'flex', alignItems:'center', gap:'6px' }}>
-                <span style={{ width:'22px', height:'22px', borderRadius:'50%', background: step >= i+1 ? '#059669' : '#e2e8f0', color: step >= i+1 ? 'white' : '#94a3b8', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</span>
-                <span style={{ fontSize:'12px', fontWeight: step === i+1 ? '700' : '500', color: step === i+1 ? '#0f172a' : '#94a3b8' }}>{l}</span>
+            {STEG.map((s, i) => (
+              <div key={s} style={{ flex: mob ? '0 0 auto' : 1, display:'flex', alignItems:'center', gap:'6px', minWidth:0 }}>
+                <span style={{ width:'22px', height:'22px', borderRadius:'50%', background: stegIdx >= i ? '#059669' : '#e2e8f0', color: stegIdx >= i ? 'white' : '#94a3b8', fontSize:'12px', fontWeight:'700', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>{i+1}</span>
+                {(!mob || step === s) && (
+                  <span style={{ fontSize:'12px', fontWeight: step === s ? '700' : '500', color: step === s ? '#0f172a' : '#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{STEG_NAVN[s]}</span>
+                )}
               </div>
             ))}
           </div>
@@ -46403,9 +46428,12 @@ function CRMImportModal({ user, onClose, onDone }) {
               </p>
               {manglerNavnKobling && (
                 <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
-                  ⚠️ Koble minst én kolonne til <b>Bedriftsnavn</b> eller <b>Navn på privatperson</b>. Rader med bedriftsnavn blir bedrift, rader med bare personnavn blir privatperson.
+                  ⚠️ Koble minst én kolonne til <b>Bedriftsnavn</b> eller <b>Navn på privatperson</b>.
                 </div>
               )}
+              <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>
+                <b style={{ color:'#374151' }}>Navnekolonnene:</b> har raden bedriftsnavn, blir den en <b>bedrift</b> — og navnet i «Navn på privatperson» lagres da som <b>kontaktperson</b>. Er bedriftsnavnet tomt, blir raden en <b>privatperson</b> med personnavnet som kundenavn. Har fila en egen kontaktperson-kolonne, er det den som gjelder.
+              </div>
               <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
                 <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#065f46', marginBottom:'6px' }}>Kilde for denne importen <span style={{ color:'#dc2626' }}>*</span></label>
                 <input value={kilde} onChange={e=>setKilde(e.target.value)} placeholder="F.eks. «Proff.no bygg mai 2026»" style={{ ...crmInp, borderColor: kilde.trim() ? '#bbf7d0' : '#fca5a5' }} />
@@ -46433,28 +46461,47 @@ function CRMImportModal({ user, onClose, onDone }) {
                   </div>
                 ))}
               </div>
-              {statusColIdx >= 0 && statusRawValues.length > 0 && (
-                <div style={{ marginTop:'16px', borderTop:'1px solid #f1f5f9', paddingTop:'14px' }}>
-                  <label style={{ display:'block', fontSize:'13px', fontWeight:'700', color:'#374151', marginBottom:'4px' }}>Statusmapping</label>
-                  <p style={{ margin:'0 0 10px', fontSize:'12px', color:'#94a3b8' }}>Koble tekstverdiene i status-kolonnen til systemets statuser. Umappet → lead.</p>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                    {statusRawValues.map(v => (
-                      <div key={v} style={{ display:'grid', gridTemplateColumns:'1fr auto 1fr', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'8px 14px' }}>
-                        <span style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>«{v}»</span>
-                        <span style={{ color:'#cbd5e1' }}>→</span>
-                        <select value={statusMap[v.toLowerCase()] || 'lead'} onChange={e=>{ const val=e.target.value; setStatusMap(m => ({ ...m, [v.toLowerCase()]: val })) }} style={crmInp}>
-                          {CRM_IMPORT_STATUS_CHOICES.map(k => <option key={k} value={k}>{CRM_STATUS[k].emoji} {CRM_STATUS[k].label}</option>)}
-                        </select>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
-          {/* STEG 3 — forhåndsvisning */}
+          {/* STEG 3 — verdimapping for Lead-status (vises kun når en kolonne er mappet dit) */}
           {step === 3 && (
+            <div>
+              <p style={{ margin:'0 0 4px', fontSize:'13px', color:'#64748b' }}>
+                Kolonnen <b>{headers[statusColIdx] || '(uten navn)'}</b> har {statusRawValues.length} ulike verdier. Bestem hvilket stadium hver av dem blir.
+              </p>
+              <p style={{ margin:'0 0 14px', fontSize:'12px', color:'#94a3b8' }}>
+                Verdier du lar stå på «Velg stadium» blir <b>Lead</b>{tommeStatusCeller ? <>, det samme blir {tommeStatusCeller} rad{tommeStatusCeller===1?'':'er'} med tom celle</> : ''}.
+              </p>
+              {uvalgteStatuser > 0 && (
+                <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
+                  ⚠️ {uvalgteStatuser} av {statusRawValues.length} verdier er ikke satt. De blir <b>Lead</b> hvis du går videre.
+                </div>
+              )}
+              <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                {statusRawValues.map(({ verdi, antall }) => {
+                  const valgt = statusMap[verdi.toLowerCase()] || ''
+                  return (
+                    <div key={verdi} style={{ display:'grid', gridTemplateColumns: mob ? '1fr' : '1fr auto 1fr', alignItems:'center', gap: mob ? '8px' : '12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px' }}>
+                      <div style={{ minWidth:0 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>«{verdi}»</div>
+                        <div style={{ fontSize:'11px', color:'#94a3b8', fontWeight:'600' }}>{antall} rad{antall===1?'':'er'}</div>
+                      </div>
+                      {!mob && <span style={{ color:'#cbd5e1' }}>→</span>}
+                      <select value={valgt} onChange={e=>{ const val=e.target.value; setStatusMap(m => ({ ...m, [verdi.toLowerCase()]: val })) }}
+                        style={{ ...crmInp, borderColor: valgt ? '#e2e8f0' : '#fde68a' }}>
+                        <option value="">Velg stadium (→ Lead)</option>
+                        {CRM_IMPORT_STATUS_CHOICES.map(k => <option key={k} value={k}>{CRM_STATUS[k].emoji} {CRM_STATUS[k].label}</option>)}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* STEG 4 — forhåndsvisning */}
+          {step === 4 && (
             <div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(104px,1fr))', gap:'10px', marginBottom:'16px' }}>
                 {[
@@ -46472,6 +46519,27 @@ function CRMImportModal({ user, onClose, onDone }) {
                   </div>
                 ))}
               </div>
+              {statusColIdx >= 0 && statusRawValues.length > 0 && (
+                <div style={{ background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px' }}>
+                  <p style={{ margin:'0 0 6px', fontSize:'12px', fontWeight:'700', color:'#64748b' }}>Statusmapping fra «{headers[statusColIdx] || '(uten navn)'}»</p>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                    {statusRawValues.map(({ verdi, antall }) => {
+                      const k = statusMap[verdi.toLowerCase()] || 'lead'
+                      const st = CRM_STATUS[k] || CRM_STATUS.lead
+                      return (
+                        <span key={verdi} style={{ fontSize:'11px', fontWeight:'600', color:st.color, background:st.bg, border:`1px solid ${st.border}`, borderRadius:'999px', padding:'3px 9px', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          «{verdi}» ({antall}) → {st.emoji} {st.label}
+                        </span>
+                      )
+                    })}
+                    {tommeStatusCeller > 0 && (
+                      <span style={{ fontSize:'11px', fontWeight:'600', color:'#64748b', background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'999px', padding:'3px 9px' }}>
+                        tom celle ({tommeStatusCeller}) → 🎯 Lead
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
               <p style={{ margin:'0 0 8px', fontSize:'13px', color:'#64748b' }}>Første 10 rader slik de lagres{statusColIdx < 0 ? <> (alle blir <b>lead</b>)</> : ''}:</p>
               <div style={{ overflowX:'auto', border:'1px solid #f1f5f9', borderRadius:'10px' }}>
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
@@ -46488,7 +46556,7 @@ function CRMImportModal({ user, onClose, onDone }) {
                         <td style={{ padding:'8px 10px', fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{r.display?.name}</td>
                         <td style={{ padding:'8px 10px', color:'#64748b', whiteSpace:'nowrap' }}>{r.status==='hoppet' ? <span style={{ color:'#94a3b8' }}>{r.reason}</span> : (r.display?.type === 'Privat' ? '👤 Privat' : '🏢 Bedrift')}</td>
                         <td style={{ padding:'8px 10px', fontFamily:'ui-monospace,monospace' }}>{r.display?.orgnr}</td>
-                        <td style={{ padding:'8px 10px', color:'#64748b', whiteSpace:'nowrap' }}>{r.payload?.status ? (CRM_STATUS[r.payload.status]?.label || r.payload.status) : ''}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b', whiteSpace:'nowrap' }}>{r.payload?.status ? `${CRM_STATUS[r.payload.status]?.emoji || ''} ${CRM_STATUS[r.payload.status]?.label || r.payload.status}`.trim() : ''}</td>
                         <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.email || ''}</td>
                         <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.phone || ''}</td>
                         <td style={{ padding:'8px 10px', color:'#64748b' }}>{[r.payload?.postal_code, r.payload?.city].filter(Boolean).join(' ')}</td>
@@ -46514,8 +46582,8 @@ function CRMImportModal({ user, onClose, onDone }) {
             </div>
           )}
 
-          {/* STEG 4 — import / oppsummering */}
-          {step === 4 && (
+          {/* STEG 5 — import / oppsummering */}
+          {step === 5 && (
             <div style={{ padding:'10px 0' }}>
               {!summary ? (
                 <div style={{ textAlign:'center', padding:'30px 0' }}>
@@ -46575,21 +46643,25 @@ function CRMImportModal({ user, onClose, onDone }) {
         {/* Footer-navigasjon */}
         <div style={{ padding:'14px 24px', borderTop:'1px solid #f1f5f9', display:'flex', justifyContent:'space-between', alignItems:'center', flexShrink:0 }}>
           <div>
-            {step > 1 && step < 4 && !importing && (
-              <button onClick={()=>setStep(step-1)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>← Tilbake</button>
+            {step > 1 && step < 5 && !importing && forrigeSteg && (
+              <button onClick={()=>setStep(forrigeSteg)} style={{ padding:'9px 18px', border:'1px solid #e2e8f0', borderRadius:'10px', background:'white', cursor:'pointer', fontSize:'14px', fontWeight:'600', color:'#374151' }}>← Tilbake</button>
             )}
           </div>
           <div style={{ display:'flex', gap:'8px' }}>
             {step === 1 && wbSheets.length > 0 && (
               <button onClick={applySheetHeader} style={{ padding:'9px 22px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>Fortsett til kolonnemapping →</button>
             )}
+            {/* Fra steg 2 går veien til verdimapping når en statuskolonne er mappet, ellers rett til forhåndsvisning. */}
             {step === 2 && (
-              <button onClick={goToPreview} disabled={busy || manglerNavnKobling || !kilde.trim()} style={{ padding:'9px 22px', background: (busy || manglerNavnKobling || !kilde.trim())?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: (busy || manglerNavnKobling || !kilde.trim())?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{busy?'Laster…':'Forhåndsvis →'}</button>
+              <button onClick={()=> nesteSteg === 3 ? setStep(3) : goToPreview()} disabled={busy || manglerNavnKobling || !kilde.trim()} style={{ padding:'9px 22px', background: (busy || manglerNavnKobling || !kilde.trim())?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: (busy || manglerNavnKobling || !kilde.trim())?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{busy?'Laster…':(nesteSteg === 3 ? 'Sett status-verdier →' : 'Forhåndsvis →')}</button>
             )}
             {step === 3 && (
+              <button onClick={goToPreview} disabled={busy} style={{ padding:'9px 22px', background: busy?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: busy?'wait':'pointer', fontSize:'14px', fontWeight:'700' }}>{busy?'Laster…':'Forhåndsvis →'}</button>
+            )}
+            {step === 4 && (
               <button onClick={runImport} disabled={counts.ny===0} style={{ padding:'9px 22px', background: counts.ny===0?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: counts.ny===0?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>Importer {counts.ny} leads</button>
             )}
-            {step === 4 && summary && (
+            {step === 5 && summary && (
               <button onClick={onDone} style={{ padding:'9px 22px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>Ferdig</button>
             )}
           </div>
