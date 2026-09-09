@@ -44157,6 +44157,7 @@ function readCrmSort() {
 // ── MAIN PAGE ─────────────────────────────────────────────────────────────────
 function CRMPage() {
   const alert = useAppAlert()
+  const confirm = useConfirm()
   const { user } = useAuth()
   const [customers, setCustomers] = useState([])
   const [contacts, setContacts] = useState([])
@@ -44182,6 +44183,9 @@ function CRMPage() {
   const [visAssistent, setVisAssistent] = useState(false)
   const [visOppgaver, setVisOppgaver] = useState(false)
   const [hurtigRediger, setHurtigRediger] = useState(null) // lead for hurtigredigering fra lista
+  const [velgeModus, setVelgeModus] = useState(false)  // avkrysning i lista for masse-sletting
+  const [valgte, setValgte] = useState(() => new Set()) // id-er merket for sletting
+  const [sletter, setSletter] = useState(false)
   const [sortBy, setSortBy] = useState(readCrmSort)
   const [listBusy, setListBusy] = useState(false)      // lista lastes på nytt (filter/søk/sort)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -44198,8 +44202,8 @@ function CRMPage() {
   // sanitizeSearch er løftet til modulnivå — deles med kryssmodul-velgeren.
 
   // Bygg lista-spørring: filter + søk + sortering skjer i DB, ikke på et 1000-raders uttrekk.
-  const buildListQuery = (withCount) => {
-    let q = supabase.from('customers').select('*', withCount ? { count:'exact' } : undefined)
+  const buildListQuery = (withCount, kolonner = '*') => {
+    let q = supabase.from('customers').select(kolonner, withCount ? { count:'exact' } : undefined)
     // Statusfilter: 'aktive' = kontaktet + tilbud_sendt (samme definisjon som KPI-kortet)
     if (filterStatus === 'aktive') q = q.in('status', ['kontaktet', 'tilbud_sendt'])
     else if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
@@ -44238,6 +44242,169 @@ function CRMPage() {
       if (!initedRef.current) { initedRef.current = true; setLoading(false) }
       reset ? setListBusy(false) : setLoadingMore(false)
     }
+  }
+
+  // ── Masse-sletting av leads ────────────────────────────────────────────────
+  // Bygget for én situasjon: en import gikk galt og radene må vekk før de tas inn på
+  // nytt. Utvalget gjøres derfor primært på kilde — det er kilden som identifiserer
+  // en import. Alt annet enn rene leads er fredet, og sperrene under er ubetingede:
+  // de gjelder uansett hva brukeren har huket av.
+  const BOLK = 100
+
+  const bolker = (arr, n = BOLK) => {
+    const ut = []
+    for (let i = 0; i < arr.length; i += n) ut.push(arr.slice(i, i + n))
+    return ut
+  }
+
+  // Hent id-ene til ALLE rader som matcher dagens filter — ikke bare de innlastede
+  // 100. Paginert, så 1000-radersgrensen ikke kutter utvalget.
+  const hentAlleIdFraFilter = async () => {
+    const SIDE = 1000
+    const ut = []
+    for (let fra = 0; fra < 200000; fra += SIDE) { // taket sikrer mot evig løkke
+      const { data, error } = await buildListQuery(false, 'id').range(fra, fra + SIDE - 1)
+      if (error) throw error
+      const bolk = data || []
+      ut.push(...bolk.map(r => r.id))
+      if (bolk.length < SIDE) break
+    }
+    return ut
+  }
+
+  const merkAlleFraFilter = async () => {
+    setSletter(true)
+    try {
+      const ids = await hentAlleIdFraFilter()
+      setValgte(new Set(ids))
+    } catch (e) {
+      console.error('[CRM] Kunne ikke hente hele utvalget:', e)
+      alert({ message:'Kunne ikke hente hele utvalget', subMessage: e?.message, kind:'error' })
+    } finally { setSletter(false) }
+  }
+
+  // Hvilke av id-ene har en tilknytning som gjør dem umulige å slette? Ingen av disse
+  // tabellene har fremmednøkkel til customers, så databasen stopper ingenting — sperren
+  // MÅ ligge her. endringsmeldinger har ingen customer_id i det hele tatt; den henger på
+  // project_id/order_id, og treffes derfor gjennom prosjektet eller ordren.
+  const finnTilknyttede = async (ids) => {
+    const sperret = new Map() // id → hva den henger fast i
+    const merk = (kundeId, hva) => {
+      if (!kundeId) return
+      const fra = sperret.get(kundeId)
+      if (!fra) sperret.set(kundeId, new Set([hva])); else fra.add(hva)
+    }
+    // 50 om gangen: dette er en sikkerhetssperre, og den må ikke kunne treffe
+    // 1000-radersgrensen og dermed OVERSE en tilknytning. Ser vi likevel en full side,
+    // stopper vi hele slettingen i stedet for å gjette — fail closed.
+    for (const bolk of bolker(ids, 50)) {
+      const svar = await Promise.all([
+        supabase.from('projects').select('customer_id').in('customer_id', bolk),
+        supabase.from('quotes').select('customer_id').in('customer_id', bolk),
+        supabase.from('orders').select('customer_id').in('customer_id', bolk),
+        supabase.from('invoices').select('customer_id').in('customer_id', bolk),
+      ])
+      const navn = ['prosjekt', 'tilbud', 'ordre', 'faktura']
+      svar.forEach((res, i) => {
+        if (res.error) throw new Error(`Kunne ikke sjekke ${navn[i]}: ${res.error.message}`)
+        const rader = res.data || []
+        if (rader.length >= 1000) throw new Error(`Sjekken av ${navn[i]} traff radgrensen — avbrutt uten å slette noe`)
+        rader.forEach(r => merk(r.customer_id, navn[i]))
+      })
+    }
+    return sperret
+  }
+
+  const slettValgte = async () => {
+    const ids = Array.from(valgte)
+    if (!ids.length) return
+    setSletter(true)
+    try {
+      // 1) Hent fasit fra basen — utvalget kan være gammelt, og er_kunde kan ha endret
+      //    seg siden lista ble lastet. Vi stoler ikke på radene i minnet.
+      const rader = []
+      for (const bolk of bolker(ids)) {
+        const { data, error } = await supabase.from('customers').select('id,name,er_kunde,kilde').in('id', bolk)
+        if (error) throw error
+        rader.push(...(data || []))
+      }
+      // 2) Sperre 1: ekte kunder slettes aldri av dette verktøyet.
+      const erKunde = rader.filter(r => r.er_kunde)
+      const kandidater = rader.filter(r => !r.er_kunde)
+      // 3) Sperre 2: alt som henger på prosjekt/tilbud/ordre/faktura fredes.
+      const sperret = await finnTilknyttede(kandidater.map(r => r.id))
+      const slettbare = kandidater.filter(r => !sperret.has(r.id))
+      const holdtTilbake = kandidater.filter(r => sperret.has(r.id))
+
+      if (!slettbare.length) {
+        await alert({
+          message: 'Ingen av radene kan slettes',
+          subMessage: `${erKunde.length} er ekte kunder og ${holdtTilbake.length} har prosjekt, tilbud, ordre eller faktura knyttet til seg.`,
+          kind: 'warning',
+        })
+        return
+      }
+
+      const kilderIUtvalg = Array.from(new Set(slettbare.map(r => r.kilde || '(uten kilde)')))
+      const arsaker = []
+      if (erKunde.length) arsaker.push(`${erKunde.length} er ekte kunde${erKunde.length>1?'r':''} (er_kunde)`)
+      if (holdtTilbake.length) {
+        const hva = Array.from(new Set(holdtTilbake.flatMap(r => Array.from(sperret.get(r.id))))).join(', ')
+        arsaker.push(`${holdtTilbake.length} har tilknyttet ${hva}`)
+      }
+      const ok = await confirm({
+        message: `Slette ${slettbare.length} lead${slettbare.length>1?'s':''} for godt?`,
+        subMessage: [
+          `Kilde: ${kilderIUtvalg.join(' · ')}.`,
+          'Aktiviteter, kontaktpersoner og CRM-dokumenter på disse radene slettes med.',
+          arsaker.length ? `Holdes tilbake: ${arsaker.join('; ')}.` : 'Ingen rader holdes tilbake.',
+          'Dette kan ikke angres.',
+        ].join(' '),
+        danger: true,
+        confirmLabel: `Slett ${slettbare.length}`,
+      })
+      if (!ok) return
+
+      // 4) Rydd barnerader FØR kunden. crm_activities har CASCADE i basen, men den
+      //    slettes eksplisitt likevel: står prod uten den fremmednøkkelen, ville vi
+      //    ellers latt aktiviteter ligge igjen uten eier. crm_contacts og
+      //    crm_documents har ingen fremmednøkkel i det hele tatt — uten dette blir de
+      //    foreldreløse.
+      const slettIds = slettbare.map(r => r.id)
+      let slettet = 0
+      const feil = []
+      for (const bolk of bolker(slettIds)) {
+        try {
+          for (const tabell of ['crm_activities', 'crm_contacts', 'crm_documents']) {
+            const { error } = await supabase.from(tabell).delete().in('customer_id', bolk)
+            if (error) throw new Error(`${tabell}: ${error.message}`)
+          }
+          const { data, error } = await supabase.from('customers').delete().in('id', bolk).select('id')
+          if (error) throw new Error(`customers: ${error.message}`)
+          slettet += (data || []).length // faktisk antall rader basen kvitterte for
+        } catch (e) {
+          console.error('[CRM] Sletting feilet for en bolk:', e)
+          feil.push(e.message || String(e))
+        }
+      }
+
+      invalidateCustomerCache()
+      setValgte(new Set())
+      setVelgeModus(false)
+      await refreshAll()
+      await alert({
+        message: `${slettet} lead${slettet===1?'':'s'} slettet`,
+        subMessage: [
+          slettet !== slettIds.length ? `${slettIds.length - slettet} av ${slettIds.length} ble ikke slettet.` : '',
+          arsaker.length ? `Holdt tilbake av sperrene: ${arsaker.join('; ')}.` : '',
+          feil.length ? `Feil: ${feil.join(' | ')}` : '',
+        ].filter(Boolean).join(' ') || undefined,
+        kind: feil.length ? 'error' : 'success',
+      })
+    } catch (e) {
+      console.error('[CRM] Masse-sletting feilet:', e)
+      alert({ message:'Slettingen feilet', subMessage: e?.message, kind:'error' })
+    } finally { setSletter(false) }
   }
 
   // KPI-tall via egne count-spørringer — korrekte uansett 1000-grensen, uavhengig av lista-filteret.
@@ -44310,6 +44477,9 @@ function CRMPage() {
   useEffect(()=>{ loadKpis(); loadForfalt(); loadAux(); loadFacets() },[])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
   useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
+  // Bytter du filter, gjelder ikke utvalget lenger. Å la 81 merkede rader fra en annen
+  // kilde ligge igjen bak en sletteknapp er nettopp slik feilslettinger skjer.
+  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
 
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
   const activeKpi = visOppfolging ? 'oppfolging'
@@ -44475,7 +44645,46 @@ function CRMPage() {
             ))}
           </div>
           <span style={{ fontSize:'13px', color:'#94a3b8' }}>{listCount.toLocaleString('nb-NO')} kunder{listBusy?' …':''}</span>
+          {view==='liste' && (
+            <button onClick={()=>{ setVelgeModus(v=>!v); setValgte(new Set()) }} title="Merk flere leads for sletting"
+              style={{ background: velgeModus?'#0f172a':'#f1f5f9', color: velgeModus?'white':'#64748b', border:'none', borderRadius:'8px', padding:'9px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer', flex: mob?'1 1 100%':'none' }}>
+              {velgeModus ? '✕ Avslutt merking' : '☑️ Velg flere'}
+            </button>
+          )}
         </div>
+
+        {/* Handlingslinje for masse-sletting — vises kun i merkemodus */}
+        {velgeModus && view==='liste' && (
+          <div style={{ background:'#0f172a', borderRadius:'14px', padding:'12px 16px', display:'flex', gap:'8px', alignItems:'center', flexWrap:'wrap', position:'sticky', top:'8px', zIndex:20 }}>
+            <span style={{ color:'white', fontSize:'14px', fontWeight:'700', flex: mob?'1 1 100%':'none' }}>
+              {valgte.size} merket{sletter ? ' …' : ''}
+            </span>
+            <button onClick={()=>setValgte(new Set(customers.map(c=>c.id)))} disabled={sletter}
+              style={{ background:'rgba(255,255,255,0.12)', color:'white', border:'none', borderRadius:'8px', padding:'8px 12px', fontSize:'12px', fontWeight:'600', cursor: sletter?'wait':'pointer', flex: mob?'1 1 45%':'none' }}>
+              Merk de {customers.length} viste
+            </button>
+            {listCount > customers.length && (
+              <button onClick={merkAlleFraFilter} disabled={sletter}
+                style={{ background:'rgba(255,255,255,0.12)', color:'white', border:'none', borderRadius:'8px', padding:'8px 12px', fontSize:'12px', fontWeight:'600', cursor: sletter?'wait':'pointer', flex: mob?'1 1 45%':'none' }}>
+                Merk alle {listCount.toLocaleString('nb-NO')} i filteret
+              </button>
+            )}
+            {valgte.size > 0 && (
+              <button onClick={()=>setValgte(new Set())} disabled={sletter}
+                style={{ background:'transparent', color:'#94a3b8', border:'1px solid rgba(255,255,255,0.2)', borderRadius:'8px', padding:'8px 12px', fontSize:'12px', fontWeight:'600', cursor: sletter?'wait':'pointer', flex: mob?'1 1 45%':'none' }}>
+                Nullstill
+              </button>
+            )}
+            <button onClick={slettValgte} disabled={sletter || valgte.size===0}
+              style={{ marginLeft: mob?'0':'auto', background: (sletter||valgte.size===0)?'#7f1d1d':'#dc2626', color:'white', border:'none', borderRadius:'8px', padding:'9px 16px', fontSize:'13px', fontWeight:'700', cursor: (sletter||valgte.size===0)?'not-allowed':'pointer', flex: mob?'1 1 100%':'none' }}>
+              {sletter ? 'Jobber…' : `🗑 Slett ${valgte.size} merkede`}
+            </button>
+            <p style={{ margin:0, flexBasis:'100%', fontSize:'11px', color:'#94a3b8', lineHeight:1.4 }}>
+              Ekte kunder og leads med prosjekt, tilbud, ordre eller faktura slettes aldri — de holdes tilbake og telles i bekreftelsen.
+              {filterKilde==='alle' && <> Filtrer på <b style={{ color:'#cbd5e1' }}>kilde</b> for å treffe én import.</>}
+            </p>
+          </div>
+        )}
 
         {/* LISTE VIEW */}
         {view==='liste' && (
@@ -44493,10 +44702,18 @@ function CRMPage() {
                 const openTasks=custActivities.filter(a=>a.type==='task'&&!a.completed)
                 const cfg=CRM_STATUS[c.status]||CRM_STATUS.lead
                 const typCfg=CRM_TYPE[c.type]||CRM_TYPE.bedrift
+                const merket = valgte.has(c.id)
+                // I merkemodus åpner ikke raden kundekortet — hele raden er en stor
+                // treffflate for avkrysningen, som er det eneste som fungerer på mobil.
+                const velg = () => setValgte(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n })
                 return (
-                  <div key={c.id} onClick={()=>setSelected(c)}
-                    style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap:'16px', transition:'box-shadow 0.15s' }}
+                  <div key={c.id} onClick={()=> velgeModus ? velg() : setSelected(c)}
+                    style={{ background: merket?'#fef2f2':'white', borderRadius:'14px', border:`1px solid ${merket?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap: mob?'10px':'16px', transition:'box-shadow 0.15s' }}
                     onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
+                    {velgeModus && (
+                      <input type="checkbox" checked={merket} onChange={velg} onClick={e=>e.stopPropagation()}
+                        style={{ width:'20px', height:'20px', accentColor:'#dc2626', flexShrink:0, cursor:'pointer' }} />
+                    )}
                     <div style={{ width:'44px', height:'44px', borderRadius:'12px', background:cfg.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'20px', flexShrink:0 }}>{typCfg?.emoji}</div>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
@@ -44519,8 +44736,11 @@ function CRMPage() {
                       <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtVal(c.estimated_value)}</div>
                       <div style={{ fontSize:'11px', color:'#94a3b8' }}>est. verdi</div>
                     </div>}
-                    <button onClick={(e)=>{ e.stopPropagation(); setHurtigRediger(c) }} title="Rediger raskt" style={{ flexShrink:0, background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'9px', padding:'7px 10px', fontSize:'13px', cursor:'pointer' }}>✏️</button>
-                    <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>
+                    {velgeModus && c.er_kunde && (
+                      <span title="Ekte kunde — slettes aldri av masse-slettingen" style={{ flexShrink:0, fontSize:'11px', fontWeight:'700', color:'#16a34a', background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'3px 9px', whiteSpace:'nowrap' }}>🔒 Kunde</span>
+                    )}
+                    {!velgeModus && <button onClick={(e)=>{ e.stopPropagation(); setHurtigRediger(c) }} title="Rediger raskt" style={{ flexShrink:0, background:'white', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'9px', padding:'7px 10px', fontSize:'13px', cursor:'pointer' }}>✏️</button>}
+                    {!velgeModus && <span style={{ color:'#94a3b8', fontSize:'18px' }}>›</span>}
                   </div>
                 )
               })}
