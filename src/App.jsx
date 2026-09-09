@@ -45042,6 +45042,8 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [cts, setCts] = useState(contacts)
   const [acts, setActs] = useState(activities)
   const [docs, setDocs] = useState([])
+  const [dragDok, setDragDok] = useState(false)      // fil dras over dokumentfanen
+  const [lasterOppDok, setLasterOppDok] = useState(false)
   const [tab, setTab] = useState('oversikt')
   const [editing, setEditing] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
@@ -45150,23 +45152,48 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
     } finally { setLeggerTilIKundeoversikt(false) }
   }
 
-  const uploadDoc = async (e) => {
-    const file=e.target.files?.[0]; if(!file) return
+  // Tar imot både filvelgeren og filer sluppet på kortet. Flere filer om gangen: når
+  // du først drar noe inn, drar du sjelden nøyaktig én.
+  const lastOppFiler = async (filer) => {
+    const liste = Array.from(filer || []).filter(Boolean)
+    if (!liste.length) return
+    setLasterOppDok(true)
+    const feilet = []
+    let ok = 0
     try {
-      // Nøkkelen renses — Supabase Storage avviser æ, ø og å. Navnet som VISES i lista
-      // er derimot originalen: den lagres i crm_documents.name og røres ikke.
-      const path=`crm/${c.id}/${Date.now()}_${trygtFilnavn(file.name)}`
-      const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
-      if(upErr) throw upErr
-      const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
-      const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id })
-      if (dbErr) throw dbErr
+      for (const file of liste) {
+        try {
+          // Nøkkelen renses — Supabase Storage avviser æ, ø og å. Navnet som VISES i
+          // lista er derimot originalen: den lagres i crm_documents.name og røres ikke.
+          const path = `crm/${c.id}/${Date.now()}_${trygtFilnavn(file.name)}`
+          const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+          if (upErr) throw upErr
+          const { data:{ publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
+          const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id })
+          if (dbErr) throw dbErr
+          ok++
+        } catch (err) {
+          console.error('[CRM] Opplasting feilet for', file.name, err)
+          feilet.push({ navn: file.name, grunn: filFeilTekst(err) })
+        }
+      }
       loadDetails()
-    } catch(err) {
-      console.error('[CRM] Opplasting feilet:', err)
-      await alert({ message:`Kunne ikke laste opp «${file.name}»`, subMessage: filFeilTekst(err), kind:'error' })
+    } finally { setLasterOppDok(false) }
+    // Én dialog for hele slippet, ikke én per fil.
+    if (feilet.length === 1) {
+      await alert({ message:`Kunne ikke laste opp «${feilet[0].navn}»`, subMessage: feilet[0].grunn, kind:'error' })
+    } else if (feilet.length > 1) {
+      await alert({
+        message: `${feilet.length} av ${liste.length} filer ble ikke lastet opp`,
+        subMessage: `${ok} gikk gjennom. Feilet: ${feilet.map(f => `«${f.navn}» — ${f.grunn}`).join(' ')}`,
+        kind: 'error',
+      })
     }
-    e.target.value=''
+  }
+  const uploadDoc = async (e) => { await lastOppFiler(e.target.files); e.target.value='' }
+  const slippDok = async (e) => {
+    e.preventDefault(); setDragDok(false)
+    await lastOppFiler(e.dataTransfer?.files)
   }
 
   const deleteDoc = async (id) => {
@@ -45362,7 +45389,17 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>👤 Kontaktpersoner</h3>
                 <button onClick={()=>setShowNewContact(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
               </div>
-              {cts.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen kontakter ennå</p>:(
+              {cts.length===0?(
+                // Samme grep som dokumentfanen: tomtilstanden ER knappen. Kursiv grå
+                // tekst forteller bare at det er tomt — den sier ikke hva du gjør med det.
+                <button onClick={()=>setShowNewContact(true)} style={{ width:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'5px', padding:'30px 16px', border:'1.5px dashed #cbd5e1', borderRadius:'12px', cursor:'pointer', background:'#f8fafc', fontFamily:'inherit', transition:'all .12s' }}
+                  onMouseEnter={e=>{ e.currentTarget.style.borderColor='#059669'; e.currentTarget.style.background='#f0fdf4' }}
+                  onMouseLeave={e=>{ e.currentTarget.style.borderColor='#cbd5e1'; e.currentTarget.style.background='#f8fafc' }}>
+                  <span style={{ fontSize:'26px' }}>👤</span>
+                  <span style={{ fontSize:'13.5px', fontWeight:'700', color:'#64748b' }}>Ingen kontaktpersoner ennå</span>
+                  <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Trykk for å legge til den du snakker med hos {c.name}</span>
+                </button>
+              ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                   {cts.map(ct=>(
                     <div key={ct.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'12px', padding:'12px 16px', border:'1px solid #f1f5f9' }}>
@@ -45392,7 +45429,15 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Koblede tilbud og fakturaer</h3>
                 <button onClick={()=>setShowQuotePicker(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Hent tilbud</button>
               </div>
-              {linkedQuotes.length===0&&linkedInvoices.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen koblede tilbud eller fakturaer. Bruk "Hent tilbud" for å koble til eksisterende tilbud.</p>:(
+              {linkedQuotes.length===0&&linkedInvoices.length===0?(
+                <button onClick={()=>setShowQuotePicker(true)} style={{ width:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'5px', padding:'30px 16px', border:'1.5px dashed #cbd5e1', borderRadius:'12px', cursor:'pointer', background:'#f8fafc', fontFamily:'inherit', transition:'all .12s' }}
+                  onMouseEnter={e=>{ e.currentTarget.style.borderColor='#059669'; e.currentTarget.style.background='#f0fdf4' }}
+                  onMouseLeave={e=>{ e.currentTarget.style.borderColor='#cbd5e1'; e.currentTarget.style.background='#f8fafc' }}>
+                  <span style={{ fontSize:'26px' }}>📋</span>
+                  <span style={{ fontSize:'13.5px', fontWeight:'700', color:'#64748b' }}>Ingen koblede tilbud eller fakturaer</span>
+                  <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Trykk for å koble et tilbud som allerede finnes, til denne kunden</span>
+                </button>
+              ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {linkedQuotes.map(q=>{
                     const total=(q.chapters||[]).reduce((a,ch)=>{const s=(ch.posts||[]).reduce((x,p)=>(parseFloat(p.qty)||0)*((parseFloat(p.unitPriceWork)||0)+(parseFloat(p.unitPriceMaterial)||0))+x,0);return a+s*(1+(parseFloat(ch.markup)||0)/100)},0)
@@ -45422,13 +45467,34 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 
           {/* DOKUMENTER */}
           {tab==='dokumenter'&&(
-            <div style={crmCard}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px' }}>
+            // Hele kortet er slippsone. Å måtte treffe en liten knapp med en fil i
+            // hånda er unødvendig presisjonsarbeid — slipper du den et sted på kortet,
+            // er meningen tydelig nok. dragenter/over må begge stoppes for at
+            // nettleseren ikke skal åpne fila i fanen i stedet.
+            <div style={{ ...crmCard, position:'relative', border: dragDok ? '2px dashed #059669' : crmCard.border, background: dragDok ? '#f0fdf4' : crmCard.background, transition:'background .12s, border-color .12s' }}
+              onDragEnter={e=>{ if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragDok(true) } }}
+              onDragOver={e=>{ if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragDok(true) } }}
+              onDragLeave={e=>{ if (!e.currentTarget.contains(e.relatedTarget)) setDragDok(false) }}
+              onDrop={slippDok}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', gap:'10px', flexWrap:'wrap' }}>
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📁 Dokumenter</h3>
-                <button onClick={()=>fileInputRef.current?.click()} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📎 Last opp</button>
-                <input ref={fileInputRef} type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display:'none' }} onChange={uploadDoc} />
+                <button onClick={()=>fileInputRef.current?.click()} disabled={lasterOppDok} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor: lasterOppDok?'wait':'pointer' }}>
+                  {lasterOppDok ? '⏳ Laster opp…' : '📎 Last opp'}
+                </button>
+                <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display:'none' }} onChange={uploadDoc} />
               </div>
-              {docs.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen dokumenter lastet opp</p>:(
+              {docs.length===0?(
+                // Tomtilstanden er invitasjonen. Klikkbar, så den virker likt med mus,
+                // med fil i hånda og med tommel på mobil — der finnes ingen dra-og-slipp.
+                <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'5px', padding:'30px 16px', border:`1.5px dashed ${dragDok?'#059669':'#cbd5e1'}`, borderRadius:'12px', cursor: lasterOppDok?'wait':'pointer', background: dragDok?'#f0fdf4':'#f8fafc', transition:'all .12s' }}>
+                  <span style={{ fontSize:'26px' }}>{dragDok ? '⬇️' : '📂'}</span>
+                  <span style={{ fontSize:'13.5px', fontWeight:'700', color: dragDok?'#059669':'#64748b' }}>
+                    {lasterOppDok ? 'Laster opp…' : dragDok ? 'Slipp filene her' : 'Ingen dokumenter ennå'}
+                  </span>
+                  {!dragDok && !lasterOppDok && <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Dra filer hit, eller trykk for å velge</span>}
+                  <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" disabled={lasterOppDok} style={{ display:'none' }} onChange={uploadDoc} />
+                </label>
+              ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {docs.map(d=>{
                     const isImage=d.file_type?.startsWith('image/')
