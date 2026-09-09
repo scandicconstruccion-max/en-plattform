@@ -44119,10 +44119,17 @@ const crmCard = { background:'white', borderRadius:'16px', border:'1px solid #f1
 // den sier ikke hva du gjør med det, og på mobil er den heller ikke noe å trykke på.
 // Uten onClick blir det en ren opplysning, ikke en knapp: et filterresultat skal ikke
 // se klikkbart ut når det ikke er det.
-function TomTilstand({ emoji, tittel, hjelp, onClick, aktiv = false }) {
+// kompakt: for små seksjoner inne i et skjema, der en full boks ville tatt over.
+function TomTilstand({ emoji, tittel, hjelp, onClick, aktiv = false, kompakt = false }) {
   const [hover, setHover] = useState(false)
   const fremhev = aktiv || (hover && !!onClick)
-  const innhold = (
+  const innhold = kompakt ? (
+    <>
+      <span style={{ fontSize:'15px' }}>{emoji}</span>
+      <span style={{ fontSize:'12px', fontWeight:'600', color: fremhev?'#059669':'#64748b' }}>{tittel}</span>
+      {hjelp && <span style={{ fontSize:'12px', color:'#94a3b8' }}>{hjelp}</span>}
+    </>
+  ) : (
     <>
       <span style={{ fontSize:'26px' }}>{emoji}</span>
       <span style={{ fontSize:'13.5px', fontWeight:'700', color: fremhev?'#059669':'#64748b' }}>{tittel}</span>
@@ -44130,13 +44137,17 @@ function TomTilstand({ emoji, tittel, hjelp, onClick, aktiv = false }) {
     </>
   )
   const stil = {
-    width:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
-    gap:'5px', padding:'30px 16px', border:`1.5px dashed ${fremhev?'#059669':'#cbd5e1'}`, borderRadius:'12px',
-    background: fremhev?'#f0fdf4':'#f8fafc', fontFamily:'inherit', transition:'all .12s',
+    width:'100%', display:'flex', alignItems:'center', border:`1.5px dashed ${fremhev?'#059669':'#cbd5e1'}`,
+    borderRadius:'12px', background: fremhev?'#f0fdf4':'#f8fafc', fontFamily:'inherit', transition:'all .12s',
+    ...(kompakt
+      ? { flexDirection:'row', justifyContent:'flex-start', gap:'8px', padding:'10px 12px', flexWrap:'wrap', textAlign:'left' }
+      : { flexDirection:'column', justifyContent:'center', gap:'5px', padding:'30px 16px' }),
   }
   if (!onClick) return <div style={stil}>{innhold}</div>
+  // type="button" er ikke pynt: uten den er en <button> inne i et <form> en
+  // submit-knapp, og et klikk her ville sendt inn hele skjemaet.
   return (
-    <button onClick={onClick} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{ ...stil, cursor:'pointer' }}>
+    <button type="button" onClick={onClick} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{ ...stil, cursor:'pointer' }}>
       {innhold}
     </button>
   )
@@ -46293,7 +46304,11 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
               <label style={{ fontSize:'13px', fontWeight:'600', color:'#374151' }}>Ekstra felt</label>
               <button type="button" onClick={addEkstra} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'6px 12px', fontSize:'12px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
             </div>
-            {ekstraFelt.length===0 ? <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', fontStyle:'italic' }}>Ingen ekstra felt. Legg til egne etikett/verdi-par.</p> : (
+            {ekstraFelt.length===0 ? (
+              <TomTilstand kompakt emoji="➕" tittel="Ingen ekstra felt"
+                hjelp="Trykk for å legge til egne etikett/verdi-par"
+                onClick={addEkstra} />
+            ) : (
               <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                 {ekstraFelt.map((e,i)=>(
                   <div key={i} style={{ display:'flex', gap:'8px', alignItems:'center' }}>
