@@ -5715,6 +5715,55 @@ const EXPLICIT_DATE_FIELDS = new Set([
   'neste_revisjon', 'dato', 'reminder_date',
 ])
 
+// ─── FILNAVN → STORAGE-NØKKEL ────────────────────────────────────────────────
+// Supabase Storage validerer objektnøkler mot et snevert tegnsett. Regexen deres er
+// /^(\w|\/|!|-|\.|\*|'|\(|\)| |&|\$|@|=|;|:|\+|,|\?)*$/ — og \w uten unicode-flagg er
+// bare [A-Za-z0-9_]. Æ, Ø og Å faller altså utenfor, og opplastingen svarer
+// «Invalid key» med hele nøkkelen i meldinga. «Elvålsgutua 66.pdf» feiler.
+//
+// Husets gamle mønster, file.name.replace(/[^a-zA-Z0-9._-]/g,'_'), fikser feilen men
+// gjør «Elvålsgutua» til «Elv_lsgutua». Her translittereres de norske tegnene i stedet
+// — æ→ae, ø→oe, å→aa — så nøkkelen fortsatt er til å lese. Rekkefølgen er ikke
+// tilfeldig: å MÅ oversettes før normalize('NFD'), for NFD splitter å i «a» + ring og
+// ville gjort den til bare «a».
+//
+// Det VISTE filnavnet skal aldri gå gjennom denne — originalen lagres i databasen.
+// Kombinerende diakritiske tegn (U+0300-U+036F). Bygget fra kodepunkter, ikke
+// skrevet direkte: usynlige tegn i kildekoden er ingen god idé.
+const DIAKRITISKE = new RegExp('[' + String.fromCharCode(0x0300) + '-' + String.fromCharCode(0x036f) + ']', 'g')
+const FILNAVN_TRANSLIT = { 'æ':'ae','ø':'oe','å':'aa','Æ':'Ae','Ø':'Oe','Å':'Aa','ä':'ae','ö':'oe','ü':'ue','Ä':'Ae','Ö':'Oe','Ü':'Ue','ß':'ss','ñ':'n','Ñ':'N' }
+function trygtFilnavn(navn) {
+  const s = String(navn ?? '').trim()
+  const punkt = s.lastIndexOf('.')
+  const harExt = punkt > 0 && punkt < s.length - 1
+  const rens = (t) => t
+    .replace(/[æøåÆØÅäöüÄÖÜßñÑ]/g, m => FILNAVN_TRANSLIT[m] || m)
+    .normalize('NFD').replace(DIAKRITISKE, '')       // e-akutt -> e, u-trema -> u
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9._-]/g, '')                    // strengere enn Supabase krever
+    .replace(/_{2,}/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '')
+  let stamme = rens(harExt ? s.slice(0, punkt) : s)
+  const ext = harExt ? rens(s.slice(punkt + 1)).toLowerCase().slice(0, 12) : ''
+  if (stamme.length > 80) stamme = stamme.slice(0, 80).replace(/[._-]+$/, '')
+  // Blir det ingenting igjen — et navn som «漢字.pdf» eller «###.pdf» — er det bedre å
+  // laste opp under et nøytralt navn enn å feile. Nøkkelen har tidsstempel foran uansett.
+  if (!stamme) stamme = 'fil'
+  return ext ? `${stamme}.${ext}` : stamme
+}
+
+// Oversett en opplastingsfeil til noe en bruker kan gjøre noe med. Den rå
+// storage-nøkkelen hører hjemme i konsollen, ikke i en dialog.
+function filFeilTekst(e) {
+  const m = String(e?.message || e || '')
+  if (/invalid key/i.test(m)) return 'Filnavnet inneholder tegn lagringen ikke godtar. Gi fila et enklere navn og prøv igjen.'
+  if (/exceeded the maximum allowed size|payload too large|413/i.test(m)) return 'Fila er for stor for opplasting.'
+  if (/already exists|duplicate/i.test(m)) return 'En fil med samme navn ble lastet opp akkurat nå. Prøv en gang til.'
+  if (/network|fetch|timeout|failed to fetch/i.test(m)) return 'Mistet forbindelsen under opplastingen. Sjekk nettet og prøv igjen.'
+  if (/row-level security|not authorized|permission/i.test(m)) return 'Du har ikke tilgang til å laste opp her.'
+  return 'Ukjent feil under opplastingen. Prøv igjen — står det seg, ta kontakt med support.'
+}
+
 function sanitizeUuidFields(obj) {
   // Bakoverkompatibelt alias — kaller den nye generelle saniteringen.
   return sanitizeDbPayload(obj)
@@ -15703,8 +15752,10 @@ function ConfirmProvider({ children }) {
               <div style={{ width:'44px', height:'44px', borderRadius:'12px', background: visual.bg, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'22px', marginBottom:'14px' }}>
                 {visual.emoji}
               </div>
-              <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3 }}>{dialog.message}</h3>
-              {dialog.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5 }}>{dialog.subMessage}</p>}
+              {/* overflowWrap: lange filnavn og URL-er har ingen naturlige brytepunkter
+                  og sprengte dialogen på 375px. */}
+              <h3 style={{ margin:'0 0 6px', fontSize:'17px', fontWeight:'700', color:'#0f172a', lineHeight:1.3, overflowWrap:'anywhere' }}>{dialog.message}</h3>
+              {dialog.subMessage && <p style={{ margin:'0 0 4px', fontSize:'14px', color:'#64748b', lineHeight:1.5, overflowWrap:'anywhere' }}>{dialog.subMessage}</p>}
 
               {/* Strukturerte detaljer — stats-blokker + notes (Patch 14 popup-redesign) */}
               {dialog.details && (
@@ -18490,7 +18541,7 @@ function UESvarPage() {
                 <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display:'none' }} onChange={async (e) => {
                   const file = e.target.files?.[0]; if (!file) return
                   try {
-                    const path = `ue-vedlegg/${Date.now()}_${file.name}`
+                    const path = `ue-vedlegg/${Date.now()}_${trygtFilnavn(file.name)}`
                     const { error } = await supabase.storage.from('project-files').upload(path, file)
                     if (error) throw error
                     const { data: urlData } = supabase.storage.from('project-files').getPublicUrl(path)
@@ -19741,7 +19792,7 @@ function AnbudImportFordelModal({ projects, user, onClose, onSaved }) {
   const leggTil = (nye) => { if (nye?.length) setPoster(p => [...p, ...nye]) }
   const lastOppKilde = async (file) => {
     try {
-      const trygt = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const trygt = trygtFilnavn(file.name)
       const path = `anbud/import/${Date.now()}-${trygt}`
       const { error } = await supabase.storage.from('plattform-files').upload(path, file, { cacheControl: '3600', upsert: false })
       if (error) throw error
@@ -20265,7 +20316,7 @@ function AnbudEditorModal({ type, projects, user, initial, onClose, onSaved }) {
   const lastOppFiler = async (files) => {
     const nye = []
     for (const file of files) {
-      const trygtNavn = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const trygtNavn = trygtFilnavn(file.name)
       const path = `anbud/${(form.tender_number||'ANB').replace(/[^A-Za-z0-9_-]/g,'_')}/${Date.now()}-${trygtNavn}`
       const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file, { cacheControl:'3600', upsert:false })
       if (upErr) throw upErr
@@ -20621,7 +20672,7 @@ function InviterUEModal({ tender, user, onClose, onSaved }) {
     setLasterVedlegg(true)
     try {
       for (const file of files) {
-        const trygt = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+        const trygt = trygtFilnavn(file.name)
         const path = `anbud/vedlegg/${Date.now()}-${trygt}`
         const { error } = await supabase.storage.from('plattform-files').upload(path, file, { cacheControl: '3600', upsert: false })
         if (error) throw error
@@ -21882,7 +21933,7 @@ function EndringsmeldingPage() {
     const handleImageUpload = async (e) => {
       const file = e.target.files?.[0]; if (!file) return
       try {
-        const path = `endringsmeldinger/${Date.now()}_${file.name}`
+        const path = `endringsmeldinger/${Date.now()}_${trygtFilnavn(file.name)}`
         const { error } = await supabase.storage.from('plattform-files').upload(path, file)
         if (error) throw error
         const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
@@ -21894,7 +21945,7 @@ function EndringsmeldingPage() {
     const handleVedleggUpload = async (e) => {
       const file = e.target.files?.[0]; if (!file) return
       try {
-        const path = `endringsmeldinger/${Date.now()}_${file.name}`
+        const path = `endringsmeldinger/${Date.now()}_${trygtFilnavn(file.name)}`
         const { error } = await supabase.storage.from('plattform-files').upload(path, file)
         if (error) throw error
         const { data } = supabase.storage.from('plattform-files').getPublicUrl(path)
@@ -42462,7 +42513,7 @@ function ChatWindow({ channel, user, employees, members, projects, onRefresh, on
     const file=e.target.files?.[0]; if(!file) return
     setSending(true)
     try {
-      const path=`chat/${channel.id}/${Date.now()}_${file.name}`
+      const path=`chat/${channel.id}/${Date.now()}_${trygtFilnavn(file.name)}`
       const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
       if(upErr) throw upErr
       const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
@@ -45102,13 +45153,19 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const uploadDoc = async (e) => {
     const file=e.target.files?.[0]; if(!file) return
     try {
-      const path=`crm/${c.id}/${Date.now()}_${file.name}`
+      // Nøkkelen renses — Supabase Storage avviser æ, ø og å. Navnet som VISES i lista
+      // er derimot originalen: den lagres i crm_documents.name og røres ikke.
+      const path=`crm/${c.id}/${Date.now()}_${trygtFilnavn(file.name)}`
       const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
       if(upErr) throw upErr
       const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
-      await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id })
+      const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id })
+      if (dbErr) throw dbErr
       loadDetails()
-    } catch(e) { alert('Opplasting feilet: '+e.message) }
+    } catch(err) {
+      console.error('[CRM] Opplasting feilet:', err)
+      await alert({ message:`Kunne ikke laste opp «${file.name}»`, subMessage: filFeilTekst(err), kind:'error' })
+    }
     e.target.value=''
   }
 
@@ -45382,7 +45439,14 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                           <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
                           <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
                         </div>
-                        <button onClick={()=>deleteDoc(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px' }}>🗑️</button>
+                        {/* download-attributtet virker ikke her: storage ligger på et
+                            annet domene enn appen, og da ignorerer nettleseren det.
+                            Supabase sin ?download= setter Content-Disposition i stedet,
+                            så fila lagres med originalnavnet — med æ, ø og å — og ikke
+                            med den rensede storage-nøkkelen. */}
+                        <a href={`${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`}
+                          title={`Last ned «${d.name}»`} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', textDecoration:'none', flexShrink:0 }}>⬇️</a>
+                        <button onClick={()=>deleteDoc(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', flexShrink:0 }}>🗑️</button>
                       </div>
                     )
                   })}
@@ -51038,7 +51102,7 @@ function BefaringDetaljer({ inspection: init, projects, user, onBack }) {
     const file=e.target.files?.[0]; if(!file) return
     setSaving(true)
     try {
-      const path=`befaring/${ins.id}/${Date.now()}_${file.name}`
+      const path=`befaring/${ins.id}/${Date.now()}_${trygtFilnavn(file.name)}`
       const _id = nyId()
       const rad = { id: _id, inspection_id: ins.id, name: file.name, file_type: file.type }
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -54920,7 +54984,7 @@ function FDVDocModal({ projects, components, user, onClose, onSaved, initial }) 
     try {
       let fileUrl=initial?.file_url||null, fileName=initial?.file_name||null, fileType=initial?.file_type||null
       if (file) {
-        const path=`fdv/${Date.now()}_${file.name}`
+        const path=`fdv/${Date.now()}_${trygtFilnavn(file.name)}`
         const {error:upErr}=await supabase.storage.from('plattform-files').upload(path,file)
         if(upErr) throw upErr
         const {data:{publicUrl}}=supabase.storage.from('plattform-files').getPublicUrl(path)
@@ -58151,7 +58215,7 @@ function MinBedriftPage() {
     const file = e.target.files?.[0]; if (!file) return
     setLogoUploading(true)
     try {
-      const path = `logos/${Date.now()}_${file.name}`
+      const path = `logos/${Date.now()}_${trygtFilnavn(file.name)}`
       const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
       if (upErr) throw upErr
       const { data: { publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
@@ -85895,7 +85959,7 @@ td{padding:4px 8px;border-bottom:1px solid #f1f5f9} .r{text-align:right} .b{font
                                 + Vedlegg
                                 <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display:'none' }} onChange={async (e) => {
                                   const file = e.target.files?.[0]; if (!file) return
-                                  const path = `ue-vedlegg/${Date.now()}_${file.name}`
+                                  const path = `ue-vedlegg/${Date.now()}_${trygtFilnavn(file.name)}`
                                   const { error } = await supabase.storage.from('project-files').upload(path, file)
                                   if (error) { await appAlert({ message: 'En feil oppstod', subMessage: error.message, kind: 'error' }); return }
                                   const { data: { publicUrl } } = supabase.storage.from('project-files').getPublicUrl(path)
