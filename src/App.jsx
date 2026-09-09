@@ -30172,7 +30172,11 @@ function AnsattDetaljer({ employee: init, projects, user, onBack }) {
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📜 Sertifikater og kompetanse</h3>
                 <button onClick={()=>setShowAddCert(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
               </div>
-              {certs.length===0 ? <p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen sertifikater registrert</p> : (
+              {certs.length===0 ? (
+                <TomTilstand emoji="📜" tittel="Ingen sertifikater registrert"
+                  hjelp="Trykk for å registrere kurs, sertifikat eller kompetansebevis"
+                  onClick={()=>setShowAddCert(true)} />
+              ) : (
                 <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                   {certs.map(c=>{
                     const days=certDaysLeft(c.expiry_date)
@@ -44111,6 +44115,33 @@ function crmLesOppgaveVindu() {
 const crmInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const crmCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
+// Tomtilstand som ER handlingen. En kursiv grå linje forteller bare at det er tomt —
+// den sier ikke hva du gjør med det, og på mobil er den heller ikke noe å trykke på.
+// Uten onClick blir det en ren opplysning, ikke en knapp: et filterresultat skal ikke
+// se klikkbart ut når det ikke er det.
+function TomTilstand({ emoji, tittel, hjelp, onClick, aktiv = false }) {
+  const [hover, setHover] = useState(false)
+  const fremhev = aktiv || (hover && !!onClick)
+  const innhold = (
+    <>
+      <span style={{ fontSize:'26px' }}>{emoji}</span>
+      <span style={{ fontSize:'13.5px', fontWeight:'700', color: fremhev?'#059669':'#64748b' }}>{tittel}</span>
+      {hjelp && <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center', lineHeight:1.5 }}>{hjelp}</span>}
+    </>
+  )
+  const stil = {
+    width:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+    gap:'5px', padding:'30px 16px', border:`1.5px dashed ${fremhev?'#059669':'#cbd5e1'}`, borderRadius:'12px',
+    background: fremhev?'#f0fdf4':'#f8fafc', fontFamily:'inherit', transition:'all .12s',
+  }
+  if (!onClick) return <div style={stil}>{innhold}</div>
+  return (
+    <button onClick={onClick} onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} style={{ ...stil, cursor:'pointer' }}>
+      {innhold}
+    </button>
+  )
+}
+
 function CrmStatusBadge({ status }) {
   const cfg = CRM_STATUS[status]||CRM_STATUS.lead
   return <span style={{ background:cfg.bg, color:cfg.color, border:`1px solid ${cfg.border}`, padding:'3px 10px', borderRadius:'999px', fontSize:'12px', fontWeight:'600' }}>{cfg.emoji} {cfg.label}</span>
@@ -45350,7 +45381,11 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
                 <button onClick={()=>setShowNewActivity(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
               </div>
-              {acts.length===0?<p style={{ color:'#94a3b8', fontSize:'14px', fontStyle:'italic' }}>Ingen aktiviteter ennå</p>:(
+              {acts.length===0?(
+                <TomTilstand emoji="📝" tittel="Ingen aktiviteter ennå"
+                  hjelp="Trykk for å loggføre en samtale, et møte eller en oppgave"
+                  onClick={()=>setShowNewActivity(true)} />
+              ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                   {acts.map(a=>{
                     const atCfg=ACTIVITY_TYPES[a.type]
@@ -45392,13 +45427,9 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               {cts.length===0?(
                 // Samme grep som dokumentfanen: tomtilstanden ER knappen. Kursiv grå
                 // tekst forteller bare at det er tomt — den sier ikke hva du gjør med det.
-                <button onClick={()=>setShowNewContact(true)} style={{ width:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'5px', padding:'30px 16px', border:'1.5px dashed #cbd5e1', borderRadius:'12px', cursor:'pointer', background:'#f8fafc', fontFamily:'inherit', transition:'all .12s' }}
-                  onMouseEnter={e=>{ e.currentTarget.style.borderColor='#059669'; e.currentTarget.style.background='#f0fdf4' }}
-                  onMouseLeave={e=>{ e.currentTarget.style.borderColor='#cbd5e1'; e.currentTarget.style.background='#f8fafc' }}>
-                  <span style={{ fontSize:'26px' }}>👤</span>
-                  <span style={{ fontSize:'13.5px', fontWeight:'700', color:'#64748b' }}>Ingen kontaktpersoner ennå</span>
-                  <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Trykk for å legge til den du snakker med hos {c.name}</span>
-                </button>
+                <TomTilstand emoji="👤" tittel="Ingen kontaktpersoner ennå"
+                  hjelp={`Trykk for å legge til den du snakker med hos ${c.name}`}
+                  onClick={()=>setShowNewContact(true)} />
               ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                   {cts.map(ct=>(
@@ -45430,13 +45461,9 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                 <button onClick={()=>setShowQuotePicker(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>📋 Hent tilbud</button>
               </div>
               {linkedQuotes.length===0&&linkedInvoices.length===0?(
-                <button onClick={()=>setShowQuotePicker(true)} style={{ width:'100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'5px', padding:'30px 16px', border:'1.5px dashed #cbd5e1', borderRadius:'12px', cursor:'pointer', background:'#f8fafc', fontFamily:'inherit', transition:'all .12s' }}
-                  onMouseEnter={e=>{ e.currentTarget.style.borderColor='#059669'; e.currentTarget.style.background='#f0fdf4' }}
-                  onMouseLeave={e=>{ e.currentTarget.style.borderColor='#cbd5e1'; e.currentTarget.style.background='#f8fafc' }}>
-                  <span style={{ fontSize:'26px' }}>📋</span>
-                  <span style={{ fontSize:'13.5px', fontWeight:'700', color:'#64748b' }}>Ingen koblede tilbud eller fakturaer</span>
-                  <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Trykk for å koble et tilbud som allerede finnes, til denne kunden</span>
-                </button>
+                <TomTilstand emoji="📋" tittel="Ingen koblede tilbud eller fakturaer"
+                  hjelp="Trykk for å koble et tilbud som allerede finnes, til denne kunden"
+                  onClick={()=>setShowQuotePicker(true)} />
               ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {linkedQuotes.map(q=>{
@@ -45486,14 +45513,12 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               {docs.length===0?(
                 // Tomtilstanden er invitasjonen. Klikkbar, så den virker likt med mus,
                 // med fil i hånda og med tommel på mobil — der finnes ingen dra-og-slipp.
-                <label style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap:'5px', padding:'30px 16px', border:`1.5px dashed ${dragDok?'#059669':'#cbd5e1'}`, borderRadius:'12px', cursor: lasterOppDok?'wait':'pointer', background: dragDok?'#f0fdf4':'#f8fafc', transition:'all .12s' }}>
-                  <span style={{ fontSize:'26px' }}>{dragDok ? '⬇️' : '📂'}</span>
-                  <span style={{ fontSize:'13.5px', fontWeight:'700', color: dragDok?'#059669':'#64748b' }}>
-                    {lasterOppDok ? 'Laster opp…' : dragDok ? 'Slipp filene her' : 'Ingen dokumenter ennå'}
-                  </span>
-                  {!dragDok && !lasterOppDok && <span style={{ fontSize:'12px', color:'#94a3b8', textAlign:'center' }}>Dra filer hit, eller trykk for å velge</span>}
-                  <input type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" disabled={lasterOppDok} style={{ display:'none' }} onChange={uploadDoc} />
-                </label>
+                <TomTilstand
+                  emoji={dragDok ? '⬇️' : '📂'}
+                  tittel={lasterOppDok ? 'Laster opp…' : dragDok ? 'Slipp filene her' : 'Ingen dokumenter ennå'}
+                  hjelp={dragDok || lasterOppDok ? '' : 'Dra filer hit, eller trykk for å velge'}
+                  aktiv={dragDok}
+                  onClick={()=>fileInputRef.current?.click()} />
               ):(
                 <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
                   {docs.map(d=>{
@@ -55187,7 +55212,11 @@ function FDVComponentDetaljer({ comp, documents, projects, user, onClose, onRefr
                 {d.file_url&&<button onClick={()=>åpneDokument(d)} style={{ padding:'5px 10px',background:'#f0fdf4',color:'#059669',borderRadius:'7px',fontSize:'12px',fontWeight:'600',textDecoration:'none',border:'none',cursor:'pointer',fontFamily:'inherit' }}>↓</button>}
               </div>
             ))}
-            {documents.length===0&&<p style={{ color:'#94a3b8',fontSize:'13px',fontStyle:'italic' }}>Ingen dokumenter knyttet til denne komponenten</p>}
+            {documents.length===0 && (
+              <TomTilstand emoji="📄" tittel="Ingen dokumenter på denne komponenten"
+                hjelp="Trykk for å legge til FDV-dokumentasjon, datablad eller bruksanvisning"
+                onClick={()=>setShowUploadDoc(true)} />
+            )}
           </div>
         </div>
         {editing&&<FDVComponentModal projects={projects} user={user} initial={comp} onClose={()=>setEditing(false)} onSaved={()=>{setEditing(false);onRefresh();onClose()}} />}
