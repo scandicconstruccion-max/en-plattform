@@ -45913,8 +45913,9 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
 // ─── CRM CSV/XLSX-IMPORT ──────────────────────────────────────────────────────
 // Målfelt i systemet som en filkolonne kan kobles til.
 const CRM_IMPORT_FIELDS = [
-  { key:'name',             label:'Bedriftsnavn *',            required:true },
-  { key:'orgnr',            label:'Organisasjonsnummer *',     required:true },
+  { key:'name',             label:'Bedriftsnavn',              navnefelt:true },
+  { key:'privatnavn',       label:'Navn på privatperson',      navnefelt:true },
+  { key:'orgnr',            label:'Organisasjonsnummer' },
   { key:'kontaktperson',    label:'Kontaktperson' },
   { key:'email',            label:'E-post' },
   { key:'phone',            label:'Telefon' },
@@ -45968,6 +45969,7 @@ function crmAutoMapHeader(h) {
   if (t(/kontaktetav|ansvarlig|selger|saksbehandler|kontoeier|^eier/)) return 'kontaktet_av'
   if (t(/score|kjopspotensial|kjoepspotensial|potensial|leadscore/)) return 'score'
   if (t(/^status$|leadstatus|kundestatus|stadium|fase/)) return 'status'
+  if (t(/privatperson|privatnavn|personnavn|privatkunde/)) return 'privatnavn'
   if (t(/bedriftsnavn|firmanavn|selskapsnavn|bedrift|firma|selskap|company/) || t(/^navn/) || t(/kundenavn/) || t(/^kunde$/)) return 'name'
   if (t(/notat|merknad|kommentar|note/)) return 'notes'
   return ''
@@ -46005,6 +46007,41 @@ function crmNormOrgnr(v) {
   if (v == null) return ''
   return String(v).replace(/\D/g, '')
 }
+// Sumlinjer nederst i eksportfiler («Total», «Totalt:», «Sum», «Grand Total») skal
+// ikke bli leads. Ankrene MÅ stå i begge ender av HVER gren: | binder svakest av alt
+// i et mønster, så /^total|sum$/ leses som (^total) ELLER (sum$) — og da ryker
+// «Totalentreprenør AS» på den første grenen og «Konsum» på den andre. Derfor ligger
+// alternativene inne i en gruppe med ^ …$ utenpå: hele cellen må være sumlinja.
+const CRM_SUMLINJE_RE = /^\s*(grand\s+)?(totalt?|sum(mer)?)\s*:?\s*$/i
+// Navn som er identiske utenom store/små bokstaver og mellomrom regnes som samme
+// lead — brukes til duplikatsjekk på rader uten org.nr.
+function crmNormNavn(v) {
+  return String(v ?? '').toLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+// Duplikatsjekken i importen må se HELE kundebasen. Supabase returnerer maks 1000
+// rader per spørring, så et enkelt select så under 10 % av en base på 14 500 — og
+// dedupliseringen mot basen virket i praksis ikke. Samme bolke-mønster som
+// hentEgneKunder: stabil sortering på (name, id) så like navn ikke bytter side
+// mellom bolkene. Kun orgnr og name hentes — resten av raden er 14 500 ganger
+// unødvendig over nettet. Ingen er_kunde-filter: CRM-leads har er_kunde=false, og
+// de skal telle som duplikater like mye som ekte kunder. RLS scoper til egen bedrift.
+async function crmHentEksisterendeKunder() {
+  const SIDE = 1000
+  const ut = []
+  for (let fra = 0; fra < 200000; fra += SIDE) { // taket er en sikring mot evig løkke
+    const { data, error } = await supabase.from('customers')
+      .select('orgnr,name')
+      .order('name')
+      .order('id', { ascending: true })   // stabil sortering: like navn må ikke bytte side
+      .range(fra, fra + SIDE - 1)
+    if (error) throw error
+    const bolk = data || []
+    ut.push(...bolk)
+    if (bolk.length < SIDE) break
+  }
+  return ut
+}
 
 function CRMImportModal({ user, onClose, onDone }) {
   const alert = useAppAlert()
@@ -46017,6 +46054,7 @@ function CRMImportModal({ user, onClose, onDone }) {
   const [extraLabels, setExtraLabels] = useState([]) // per filkolonne: etikett når mapping==='__extra__'
   const [kilde, setKilde] = useState('') // kilde for hele importen (påkrevd), settes på alle rader
   const [existingOrgnr, setExistingOrgnr] = useState(null) // Set med normaliserte orgnr fra DB
+  const [existingNames, setExistingNames] = useState(null) // Set med normaliserte navn fra DB (dupsjekk uten orgnr)
   const [busy, setBusy] = useState(false)
   const [importing, setImporting] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -46028,7 +46066,24 @@ function CRMImportModal({ user, onClose, onDone }) {
   const [statusMap, setStatusMap] = useState({})     // {råtekst(lowercase): systemstatus}
   const fileRef = React.useRef(null)
 
-  const firstNonEmptyRowIdx = (aoa) => { const i = (aoa||[]).findIndex(r => r.some(c => String(c).trim() !== '')); return i < 0 ? 0 : i }
+  // Gjett overskriftsraden: den av de 10 første radene med FLEST tekstceller.
+  // Eksportfiler har ofte en summeringslinje («Totalt: 235521000») over overskriftene,
+  // og med «første ikke-tomme rad» ble hele kolonnemappingen ubrukelig. Rene tall og
+  // datoer teller ikke — overskrifter er tekst. Ved likhet vinner den øverste raden.
+  const firstNonEmptyRowIdx = (aoa) => {
+    const kandidater = (aoa || []).slice(0, 10)
+    const tekstceller = (r) => (r || []).filter(c => {
+      if (c == null || c instanceof Date) return false
+      const s = String(c).trim()
+      if (s === '') return false
+      return !/^[-+]?[\d\s.,]+\s*(kr|%)?$/i.test(s) // rene tall/beløp er ikke overskrifter
+    }).length
+    let best = -1, bestScore = 0
+    kandidater.forEach((r, i) => { const sc = tekstceller(r); if (sc > bestScore) { bestScore = sc; best = i } })
+    if (best >= 0) return best
+    const i = (aoa || []).findIndex(r => r.some(c => String(c).trim() !== ''))
+    return i < 0 ? 0 : i
+  }
 
   // ── Steg 1: les fil — parse ALLE ark, foreslå arket med flest kolonner ──
   const handleFile = async (e) => {
@@ -46079,7 +46134,9 @@ function CRMImportModal({ user, onClose, onDone }) {
   }
 
   const mappedFields = new Set(mapping.filter(Boolean))
-  const missingRequired = CRM_IMPORT_FIELDS.filter(f => f.required && !mappedFields.has(f.key))
+  // Minstekravet er ETT navn per rad: enten bedriftsnavn eller navn på privatperson.
+  // Org.nr er helt valgfritt.
+  const manglerNavnKobling = !mappedFields.has('name') && !mappedFields.has('privatnavn')
 
   // Statusmapping: distinkte tekstverdier i status-kolonnen → systemstatus
   const statusColIdx = mapping.indexOf('status')
@@ -46124,22 +46181,31 @@ function CRMImportModal({ user, onClose, onDone }) {
     return { rec, extra }
   }
 
-  // ── Klassifiser alle rader (ny / duplikat / feilet) ──
+  // ── Klassifiser alle rader (ny / duplikat / hoppet) ──
   const classified = React.useMemo(() => {
     if (step < 3) return []
-    const seen = new Set() // orgnr sett i denne fila
+    const seenOrgnr = new Set() // orgnr sett i denne fila
+    const seenNavn = new Set()  // normaliserte navn sett i denne fila (rader uten orgnr)
     return rows.map((row) => {
       const { rec, extra } = recordFromRow(row)
-      const name = crmTxt(rec.name)
+      const bedriftsnavn = crmTxt(rec.name)
+      const privatnavn = crmTxt(rec.privatnavn)
+      const name = bedriftsnavn || privatnavn
       const orgnrNorm = crmNormOrgnr(rec.orgnr)
-      if (!name || !orgnrNorm) {
-        return { status:'feilet', reason: !name ? 'Mangler bedriftsnavn' : 'Mangler org.nr', display:{ name: name || '(uten navn)', orgnr: orgnrNorm || '—' } }
+      if (!name) {
+        return { status:'hoppet', reason:'Mangler navn', display:{ name:'(uten navn)', orgnr: orgnrNorm || '—' } }
       }
+      if (CRM_SUMLINJE_RE.test(name.trim())) {
+        return { status:'hoppet', reason:'Sumlinje', display:{ name, orgnr: orgnrNorm || '—' } }
+      }
+      // Er bedriftsnavnet utfylt er raden en bedrift, og kontaktperson-kolonnen gir mening.
+      // Ellers er raden en privatperson, og navnet er selve kunden.
+      const erBedrift = !!bedriftsnavn
       const payload = {
-        status: resolveStatus(rec.status), type:'bedrift',
+        status: resolveStatus(rec.status), type: erBedrift ? 'bedrift' : 'privat',
         name,
-        orgnr: orgnrNorm,
-        kontaktperson: crmTxt(rec.kontaktperson),
+        orgnr: orgnrNorm || null,
+        kontaktperson: erBedrift ? crmTxt(rec.kontaktperson) : null,
         customer_number: crmTxt(rec.customer_number),
         email: crmTxt(rec.email),
         phone: crmTxt(rec.phone),
@@ -46156,43 +46222,63 @@ function CRMImportModal({ user, onClose, onDone }) {
         notes: crmTxt(rec.notes),
         ekstra_felt: Object.keys(extra).length ? extra : null,
       }
-      const dupDb = existingOrgnr && existingOrgnr.has(orgnrNorm)
-      const dupFile = seen.has(orgnrNorm)
-      seen.add(orgnrNorm)
-      if (dupDb || dupFile) return { status:'duplikat', reason: dupDb ? 'Org.nr finnes allerede' : 'Duplikat i fila', payload, display:{ name, orgnr: orgnrNorm } }
-      return { status:'ny', payload, display:{ name, orgnr: orgnrNorm } }
+      const display = { name, orgnr: orgnrNorm || '—', type: erBedrift ? 'Bedrift' : 'Privat' }
+      // Med org.nr dedupliserer vi på org.nr, ellers på navnet — både mot basen og
+      // mot rader lenger opp i samme fil.
+      const navnNorm = crmNormNavn(name)
+      const dupDb = orgnrNorm ? !!(existingOrgnr && existingOrgnr.has(orgnrNorm)) : !!(existingNames && existingNames.has(navnNorm))
+      const dupFile = orgnrNorm ? seenOrgnr.has(orgnrNorm) : seenNavn.has(navnNorm)
+      if (orgnrNorm) seenOrgnr.add(orgnrNorm); else seenNavn.add(navnNorm)
+      if (dupDb || dupFile) return { status:'duplikat', reason: dupDb ? (orgnrNorm ? 'Org.nr finnes allerede' : 'Navnet finnes allerede') : 'Duplikat i fila', payload, display }
+      return { status:'ny', payload, display }
     })
-  }, [step, rows, mapping, extraLabels, headers, existingOrgnr, statusMap])
+  }, [step, rows, mapping, extraLabels, headers, existingOrgnr, existingNames, statusMap])
 
   const counts = React.useMemo(() => ({
     total: classified.length,
     ny: classified.filter(r => r.status === 'ny').length,
+    bedrift: classified.filter(r => r.status === 'ny' && r.payload?.type === 'bedrift').length,
+    privat: classified.filter(r => r.status === 'ny' && r.payload?.type === 'privat').length,
     duplikat: classified.filter(r => r.status === 'duplikat').length,
-    feilet: classified.filter(r => r.status === 'feilet').length,
+    hoppetNavn: classified.filter(r => r.status === 'hoppet' && r.reason === 'Mangler navn').length,
+    hoppetSum: classified.filter(r => r.status === 'hoppet' && r.reason === 'Sumlinje').length,
+    hoppet: classified.filter(r => r.status === 'hoppet').length,
   }), [classified])
 
   // ── Gå til forhåndsvisning: hent eksisterende orgnr fra DB (RLS scoper til egen bedrift) ──
   const goToPreview = async () => {
-    if (missingRequired.length) { alert({ message:'Koble påkrevde felt først: ' + missingRequired.map(f=>f.label.replace(' *','')).join(', '), kind:'warning' }); return }
+    if (manglerNavnKobling) { alert({ message:'Koble minst én kolonne til Bedriftsnavn eller Navn på privatperson', kind:'warning' }); return }
     if (!kilde.trim()) { alert({ message:'Kilde for importen er påkrevd', kind:'warning' }); return }
     setBusy(true)
     try {
-      const { data } = await supabase.from('customers').select('orgnr')
-      setExistingOrgnr(new Set((data || []).map(r => crmNormOrgnr(r.orgnr)).filter(Boolean)))
+      const data = await crmHentEksisterendeKunder()
+      const orgnrSet = new Set(data.map(r => crmNormOrgnr(r.orgnr)).filter(Boolean))
+      const navnSet = new Set(data.map(r => crmNormNavn(r.name)).filter(Boolean))
+      console.log(`[CRM-import] Duplikatsjekk mot ${data.length} eksisterende kunder (${orgnrSet.size} med org.nr, ${navnSet.size} unike navn)`)
+      setExistingOrgnr(orgnrSet)
+      setExistingNames(navnSet)
       setStep(3)
     } catch (err) {
       console.error('[CRM-import] Kunne ikke hente eksisterende kunder:', err)
+      // Uten lista kan ingenting flagges som duplikat mot basen. Det må sies fra om —
+      // ellers ser forhåndsvisningen ut som om alt er nytt, og du importerer dubletter.
       setExistingOrgnr(new Set())
+      setExistingNames(new Set())
       setStep(3)
+      alert({ message:'Kunne ikke hente eksisterende kunder', subMessage:'Forhåndsvisningen kan ikke sjekke mot basen — rader som allerede finnes vises som nye.', kind:'warning' })
     } finally { setBusy(false) }
   }
 
   // ── Steg 4: kjør import i batcher på 100 ──
   const runImport = async () => {
     const toImport = classified.filter(r => r.status === 'ny')
-    const preInvalid = classified.filter(r => r.status === 'feilet')
+    const preSkipped = classified.filter(r => r.status === 'hoppet')
     if (!toImport.length) { alert({ message:'Ingen nye rader å importere', kind:'warning' }); return }
-    const ok = await confirm({ message:`Importere ${toImport.length} nye leads?`, subMessage: counts.duplikat ? `${counts.duplikat} duplikat(er) hoppes over.` : undefined, confirmLabel:'Importer' })
+    const hoppInfo = [
+      counts.duplikat ? `${counts.duplikat} duplikat` : '',
+      counts.hoppet ? `${counts.hoppet} uten navn/sumlinje` : '',
+    ].filter(Boolean).join(' og ')
+    const ok = await confirm({ message:`Importere ${toImport.length} nye leads? (${counts.bedrift} bedrift, ${counts.privat} privat)`, subMessage: hoppInfo ? `${hoppInfo} hoppes over.` : undefined, confirmLabel:'Importer' })
     if (!ok) return
     setImporting(true); setStep(4); setProgress(0); setImportTotal(toImport.length)
     // company_id settes eksplisitt så RLS/synlighet er garantert. Kilden MÅ være
@@ -46222,10 +46308,13 @@ function CRMImportModal({ user, onClose, onDone }) {
     invalidateCustomerCache()
     setSummary({
       imported,
+      bedrift: toImport.filter(r => r.payload.type === 'bedrift').length,
+      privat: toImport.filter(r => r.payload.type === 'privat').length,
       duplikat: counts.duplikat,
-      feilet: preInvalid.length + errors.length,
+      hoppet: preSkipped.length,
+      feilet: errors.length,
       errors: [
-        ...preInvalid.map(r => ({ name: r.display.name, orgnr: r.display.orgnr, reason: r.reason })),
+        ...preSkipped.map(r => ({ name: r.display.name, orgnr: r.display.orgnr, reason: r.reason })),
         ...errors,
       ],
     })
@@ -46234,8 +46323,8 @@ function CRMImportModal({ user, onClose, onDone }) {
 
   const stepLabels = ['Fil & ark', 'Koble kolonner', 'Forhåndsvis', 'Importer']
   const badge = (s) => {
-    const c = s === 'ny' ? { bg:'#f0fdf4', color:'#16a34a', t:'Ny' } : s === 'duplikat' ? { bg:'#fffbeb', color:'#d97706', t:'Duplikat' } : { bg:'#fef2f2', color:'#dc2626', t:'Feil' }
-    return <span style={{ background:c.bg, color:c.color, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700' }}>{c.t}</span>
+    const c = s === 'ny' ? { bg:'#f0fdf4', color:'#16a34a', t:'Ny' } : s === 'duplikat' ? { bg:'#fffbeb', color:'#d97706', t:'Duplikat' } : { bg:'#f1f5f9', color:'#64748b', t:'Hoppet' }
+    return <span style={{ background:c.bg, color:c.color, padding:'2px 8px', borderRadius:'999px', fontSize:'11px', fontWeight:'700', whiteSpace:'nowrap' }}>{c.t}</span>
   }
 
   return (
@@ -46264,7 +46353,7 @@ function CRMImportModal({ user, onClose, onDone }) {
             <div style={{ textAlign:'center', padding:'30px 0' }}>
               <div style={{ fontSize:'44px', marginBottom:'12px' }}>📄</div>
               <h3 style={{ margin:'0 0 6px', color:'#0f172a' }}>Velg CSV- eller Excel-fil</h3>
-              <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>Org.nr og bedriftsnavn er påkrevd. Ark og overskriftsrad velger du i neste steg.</p>
+              <p style={{ margin:'0 0 20px', color:'#94a3b8', fontSize:'14px' }}>Hver rad trenger bare et navn — bedriftsnavn eller navn på privatperson. Org.nr er valgfritt. Ark og overskriftsrad velger du i neste steg.</p>
               <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFile} style={{ display:'none' }} />
               <button onClick={()=>fileRef.current?.click()} disabled={busy} style={{ padding:'12px 28px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor: busy?'wait':'pointer', fontSize:'15px', fontWeight:'700' }}>
                 {busy ? 'Leser fil...' : 'Velg fil'}
@@ -46312,9 +46401,9 @@ function CRMImportModal({ user, onClose, onDone }) {
               <p style={{ margin:'0 0 14px', fontSize:'13px', color:'#64748b' }}>
                 Fil: <b>{fileName}</b> · {rows.length} rader · {headers.length} kolonner. Koble hver filkolonne til et felt.
               </p>
-              {missingRequired.length > 0 && (
+              {manglerNavnKobling && (
                 <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:'10px', padding:'10px 14px', marginBottom:'14px', fontSize:'13px', color:'#92400e', fontWeight:'600' }}>
-                  ⚠️ Påkrevd felt mangler kobling: {missingRequired.map(f=>f.label.replace(' *','')).join(', ')}
+                  ⚠️ Koble minst én kolonne til <b>Bedriftsnavn</b> eller <b>Navn på privatperson</b>. Rader med bedriftsnavn blir bedrift, rader med bare personnavn blir privatperson.
                 </div>
               )}
               <div style={{ background:'#f0fdf4', border:'1px solid #bbf7d0', borderRadius:'10px', padding:'12px 14px', marginBottom:'14px' }}>
@@ -46367,16 +46456,19 @@ function CRMImportModal({ user, onClose, onDone }) {
           {/* STEG 3 — forhåndsvisning */}
           {step === 3 && (
             <div>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:'10px', marginBottom:'16px' }}>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(104px,1fr))', gap:'10px', marginBottom:'16px' }}>
                 {[
                   { label:'Totalt', value:counts.total, color:'#0f172a', bg:'#f8fafc' },
                   { label:'Nye', value:counts.ny, color:'#16a34a', bg:'#f0fdf4' },
+                  { label:'🏢 Blir bedrift', value:counts.bedrift, color:'#0369a1', bg:'#f0f9ff' },
+                  { label:'👤 Blir privat', value:counts.privat, color:'#7c3aed', bg:'#faf5ff' },
                   { label:'Duplikat (hoppes over)', value:counts.duplikat, color:'#d97706', bg:'#fffbeb' },
-                  { label:'Feil (mangler data)', value:counts.feilet, color:'#dc2626', bg:'#fef2f2' },
+                  { label:'Hoppet over', value:counts.hoppet, color:'#64748b', bg:'#f1f5f9', sub: counts.hoppet ? [counts.hoppetNavn ? `${counts.hoppetNavn} mangler navn` : '', counts.hoppetSum ? `${counts.hoppetSum} sumlinje` : ''].filter(Boolean).join(' · ') : '' },
                 ].map(s => (
-                  <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'12px 14px' }}>
+                  <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'12px 14px', minWidth:0 }}>
                     <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{s.label}</div>
                     <div style={{ fontSize:'24px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                    {s.sub ? <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>{s.sub}</div> : null}
                   </div>
                 ))}
               </div>
@@ -46385,7 +46477,7 @@ function CRMImportModal({ user, onClose, onDone }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                   <thead>
                     <tr style={{ background:'#f8fafc', textAlign:'left' }}>
-                      {['#','Rad','Navn','Org.nr','Lead-status','E-post','Tlf','Poststed','Score','Neste oppf.'].map(h => <th key={h} style={{ padding:'8px 10px', color:'#64748b', fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>)}
+                      {['#','Rad','Navn','Type','Org.nr','Lead-status','E-post','Tlf','Poststed','Score','Neste oppf.'].map(h => <th key={h} style={{ padding:'8px 10px', color:'#64748b', fontWeight:'700', whiteSpace:'nowrap' }}>{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -46394,6 +46486,7 @@ function CRMImportModal({ user, onClose, onDone }) {
                         <td style={{ padding:'8px 10px', color:'#94a3b8' }}>{i+1}</td>
                         <td style={{ padding:'8px 10px' }}>{badge(r.status)}</td>
                         <td style={{ padding:'8px 10px', fontWeight:'600', color:'#0f172a', whiteSpace:'nowrap' }}>{r.display?.name}</td>
+                        <td style={{ padding:'8px 10px', color:'#64748b', whiteSpace:'nowrap' }}>{r.status==='hoppet' ? <span style={{ color:'#94a3b8' }}>{r.reason}</span> : (r.display?.type === 'Privat' ? '👤 Privat' : '🏢 Bedrift')}</td>
                         <td style={{ padding:'8px 10px', fontFamily:'ui-monospace,monospace' }}>{r.display?.orgnr}</td>
                         <td style={{ padding:'8px 10px', color:'#64748b', whiteSpace:'nowrap' }}>{r.payload?.status ? (CRM_STATUS[r.payload.status]?.label || r.payload.status) : ''}</td>
                         <td style={{ padding:'8px 10px', color:'#64748b' }}>{r.payload?.email || ''}</td>
@@ -46407,6 +46500,17 @@ function CRMImportModal({ user, onClose, onDone }) {
                 </table>
               </div>
               {counts.total > 10 && <p style={{ margin:'8px 0 0', fontSize:'12px', color:'#94a3b8' }}>… og {counts.total - 10} rader til.</p>}
+              {counts.hoppet > 0 && (
+                <div style={{ marginTop:'14px', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'10px 14px' }}>
+                  <p style={{ margin:'0 0 6px', fontSize:'12px', fontWeight:'700', color:'#64748b' }}>Hoppet over ({counts.hoppet}){counts.hoppetNavn ? ` · ${counts.hoppetNavn} mangler navn` : ''}{counts.hoppetSum ? ` · ${counts.hoppetSum} sumlinje` : ''}</p>
+                  <div style={{ display:'flex', flexWrap:'wrap', gap:'6px' }}>
+                    {classified.filter(r => r.status === 'hoppet').slice(0, 12).map((r, i) => (
+                      <span key={i} style={{ fontSize:'11px', color:'#64748b', background:'white', border:'1px solid #e2e8f0', borderRadius:'999px', padding:'3px 9px', maxWidth:'100%', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{r.display?.name} · {r.reason}</span>
+                    ))}
+                    {counts.hoppet > 12 && <span style={{ fontSize:'11px', color:'#94a3b8', padding:'3px 4px' }}>+{counts.hoppet - 12} til</span>}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -46430,21 +46534,23 @@ function CRMImportModal({ user, onClose, onDone }) {
                     <div style={{ fontSize:'40px', marginBottom:'8px' }}>✅</div>
                     <h3 style={{ margin:0, color:'#0f172a' }}>Import fullført</h3>
                   </div>
-                  <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'10px', marginBottom:'18px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(104px,1fr))', gap:'10px', marginBottom:'18px' }}>
                     {[
-                      { label:'Importert', value:summary.imported, color:'#16a34a', bg:'#f0fdf4' },
-                      { label:'Hoppet over (duplikat)', value:summary.duplikat, color:'#d97706', bg:'#fffbeb' },
+                      { label:'Importert', value:summary.imported, color:'#16a34a', bg:'#f0fdf4', sub:`${summary.bedrift} bedrift · ${summary.privat} privat` },
+                      { label:'Duplikat', value:summary.duplikat, color:'#d97706', bg:'#fffbeb' },
+                      { label:'Hoppet over', value:summary.hoppet, color:'#64748b', bg:'#f1f5f9' },
                       { label:'Feilet', value:summary.feilet, color:'#dc2626', bg:'#fef2f2' },
                     ].map(s => (
-                      <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px' }}>
+                      <div key={s.label} style={{ background:s.bg, borderRadius:'12px', padding:'14px', minWidth:0 }}>
                         <div style={{ fontSize:'11px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase' }}>{s.label}</div>
                         <div style={{ fontSize:'26px', fontWeight:'800', color:s.color }}>{s.value}</div>
+                        {s.sub ? <div style={{ fontSize:'10px', color:'#94a3b8', fontWeight:'600' }}>{s.sub}</div> : null}
                       </div>
                     ))}
                   </div>
                   {summary.errors.length > 0 && (
                     <div>
-                      <p style={{ margin:'0 0 8px', fontSize:'13px', fontWeight:'700', color:'#dc2626' }}>Feilede rader ({summary.errors.length}):</p>
+                      <p style={{ margin:'0 0 8px', fontSize:'13px', fontWeight:'700', color:'#64748b' }}>Rader som ikke ble importert ({summary.errors.length}):</p>
                       <div style={{ maxHeight:'200px', overflowY:'auto', border:'1px solid #fecaca', borderRadius:'10px' }}>
                         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:'12px' }}>
                           <tbody>
@@ -46478,7 +46584,7 @@ function CRMImportModal({ user, onClose, onDone }) {
               <button onClick={applySheetHeader} style={{ padding:'9px 22px', background:'#059669', color:'white', border:'none', borderRadius:'10px', cursor:'pointer', fontSize:'14px', fontWeight:'700' }}>Fortsett til kolonnemapping →</button>
             )}
             {step === 2 && (
-              <button onClick={goToPreview} disabled={busy || missingRequired.length>0 || !kilde.trim()} style={{ padding:'9px 22px', background: (busy || missingRequired.length>0 || !kilde.trim())?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: (busy || missingRequired.length>0 || !kilde.trim())?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{busy?'Laster…':'Forhåndsvis →'}</button>
+              <button onClick={goToPreview} disabled={busy || manglerNavnKobling || !kilde.trim()} style={{ padding:'9px 22px', background: (busy || manglerNavnKobling || !kilde.trim())?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: (busy || manglerNavnKobling || !kilde.trim())?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>{busy?'Laster…':'Forhåndsvis →'}</button>
             )}
             {step === 3 && (
               <button onClick={runImport} disabled={counts.ny===0} style={{ padding:'9px 22px', background: counts.ny===0?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'10px', cursor: counts.ny===0?'not-allowed':'pointer', fontSize:'14px', fontWeight:'700' }}>Importer {counts.ny} leads</button>
