@@ -44145,6 +44145,11 @@ const CRM_SORT = {
   score_desc:    { label:'🎯 Score (høyest først)',        col:'score',            asc:false },
   neste_asc:     { label:'📅 Neste oppfølging (tidligst)', col:'neste_oppfolging', asc:true  },
   kontaktet_asc: { label:'📞 Sist kontaktet (eldst først)',col:'sist_kontaktet',   asc:true  },
+  // Eldste tilbud først er hovedgrunnen til at feltet finnes: det er slik gamle,
+  // ubesvarte tilbud kommer til overflaten. buildListQuery sender nullsFirst:false
+  // på begge, så rader uten tilbudsdato havner sist uansett retning.
+  tilbud_asc:    { label:'📄 Tilbudsdato (eldste først)',   col:'tilbudsdato',      asc:true  },
+  tilbud_desc:   { label:'📄 Tilbudsdato (nyeste først)',   col:'tilbudsdato',      asc:false },
   navn_asc:      { label:'🔤 Navn (A–Å)',                   col:'name',             asc:true  },
   nyeste:        { label:'🆕 Nyeste først',                 col:'created_at',       asc:false },
 }
@@ -44172,6 +44177,8 @@ function CRMPage() {
   const [filterIndustry, setFilterIndustry] = useState('alle')
   const [filterKilde, setFilterKilde] = useState('alle')
   const [filterKommune, setFilterKommune] = useState('alle')
+  const [tilbudFra, setTilbudFra] = useState('')  // periodefilter på tilbudsdato, begge valgfrie
+  const [tilbudTil, setTilbudTil] = useState('')
   const [visOppfolging, setVisOppfolging] = useState(false) // KPI-kort «Til oppfølging i dag» aktivt
   const [kilder, setKilder] = useState([])       // distinkte kilder (fra DB)
   const [kommuner, setKommuner] = useState([])   // distinkte kommuner/steder (fra DB, city-feltet)
@@ -44211,6 +44218,10 @@ function CRMPage() {
     if (filterIndustry !== 'alle') q = q.eq('industry', filterIndustry)
     if (filterKilde !== 'alle') q = q.eq('kilde', filterKilde)
     if (filterKommune !== 'alle') q = q.eq('city', filterKommune) // geografi ligger i city (poststed)
+    // Periodefilter på tilbudsdato — begge ender valgfrie. Bare fra = alt etter,
+    // bare til = alt før. Filtreres i DB, så «N kunder» og pagineringen stemmer.
+    if (tilbudFra) q = q.gte('tilbudsdato', tilbudFra)
+    if (tilbudTil) q = q.lte('tilbudsdato', tilbudTil)
     if (visOppfolging) q = q.not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag) // forfalt eller i dag
     const term = sanitizeSearch(debSearch)
     if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,city.ilike.%${term}%,orgnr.ilike.%${term}%`)
@@ -44476,10 +44487,10 @@ function CRMPage() {
   // Init: KPI + hjelpedata + facetter én gang
   useEffect(()=>{ loadKpis(); loadForfalt(); loadAux(); loadFacets() },[])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
-  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
+  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, visOppfolging, debSearch])
   // Bytter du filter, gjelder ikke utvalget lenger. Å la 81 merkede rader fra en annen
   // kilde ligge igjen bak en sletteknapp er nettopp slik feilslettinger skjer.
-  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, visOppfolging, debSearch])
+  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, visOppfolging, debSearch])
 
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
   const activeKpi = visOppfolging ? 'oppfolging'
@@ -44513,7 +44524,7 @@ function CRMPage() {
     })
   },[activities])
 
-  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !visOppfolging
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !tilbudFra && !tilbudTil && !visOppfolging
 
   const exportCSV = async () => {
     // Eksporterer HELE det filtrerte datasettet (paginert henting), ikke bare det som er lastet i lista.
@@ -44635,10 +44646,24 @@ function CRMPage() {
             <option value="alle">Alle kommuner</option>
             {kommuner.map(k=><option key={k} value={k}>{k}</option>)}
           </select>
+          {/* Periodefilter på tilbudsdato. På mobil legger de to feltene seg som ett
+              par på egen rad — to datofelt ved siden av de andre nedtrekkene ville
+              sprengt 375px. */}
+          <div title="Tilbudsdato fra–til" style={{ display:'flex', alignItems:'center', gap:'6px', flexWrap:'wrap', flex: mob?'1 1 100%':'none', background:(tilbudFra||tilbudTil)?'#eff6ff':'transparent', border:`1px solid ${(tilbudFra||tilbudTil)?'#bfdbfe':'transparent'}`, borderRadius:'10px', padding:(tilbudFra||tilbudTil)?'3px 7px':'3px 0' }}>
+            {/* På mobil tar etiketten hele bredden, så de to datofeltene får dele
+                resten av raden. Med etikett og felt på samme linje sprakk 375px. */}
+            <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', whiteSpace:'nowrap', flexShrink:0, flexBasis: mob?'100%':'auto' }}>📄 Tilbudsdato</span>
+            <input type="date" value={tilbudFra} onChange={e=>setTilbudFra(e.target.value)} title="Tilbudsdato fra og med" style={{ ...crmInp, padding:'7px 8px', fontSize:'12px', minWidth:0, flex:'1 1 0', maxWidth: mob?'none':'140px' }} />
+            <span style={{ fontSize:'12px', color:'#cbd5e1', flexShrink:0 }}>–</span>
+            <input type="date" value={tilbudTil} onChange={e=>setTilbudTil(e.target.value)} title="Tilbudsdato til og med" style={{ ...crmInp, padding:'7px 8px', fontSize:'12px', minWidth:0, flex:'1 1 0', maxWidth: mob?'none':'140px' }} />
+            {(tilbudFra||tilbudTil) && (
+              <button onClick={()=>{ setTilbudFra(''); setTilbudTil('') }} title="Fjern periodefilteret" style={{ background:'none', border:'none', color:'#64748b', fontSize:'15px', cursor:'pointer', padding:'0 2px', flexShrink:0 }}>×</button>
+            )}
+          </div>
           <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth: mob?'none':'200px', flex: mob?'1 1 45%':'none' }}>
             {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
-          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setTilbudFra('');setTilbudTil('');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
@@ -45198,7 +45223,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging?`${c.neste_oppfolging}${c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}${c.oppfolging_type&&CRM_OPPFOLGING_TYPER[c.oppfolging_type]?` · ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].emoji} ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].label}`:''}${c.oppfolging_notat?` — ${c.oppfolging_notat}`:''}`:null],['Sist kontaktet',c.sist_kontaktet||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
+                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging?`${c.neste_oppfolging}${c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}${c.oppfolging_type&&CRM_OPPFOLGING_TYPER[c.oppfolging_type]?` · ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].emoji} ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].label}`:''}${c.oppfolging_notat?` — ${c.oppfolging_notat}`:''}`:null],['Sist kontaktet',c.sist_kontaktet||null],['Tilbudsdato',c.tilbudsdato||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
                     <CrmInfoFelt key={k} label={k} value={v} copyValue={cv} />
                   ))}
                 </div>
@@ -46009,7 +46034,7 @@ function MineOppgaver({ user, startAapen, onOpenKunde, onBack }) {
 function CRMEditorModal({ user, initial, onClose, onSaved }) {
   const alert = useAppAlert()
   const isEdit=!!initial
-  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', kontaktperson:initial?.kontaktperson||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'', score:initial?.score??'', neste_oppfolging:initial?.neste_oppfolging||'', oppfolging_tid:initial?.oppfolging_tid||'', oppfolging_type:initial?.oppfolging_type||'ring', oppfolging_notat:initial?.oppfolging_notat||'', kontaktet_av:initial?.kontaktet_av||'' })
+  const [form, setForm] = useState({ customer_number:initial?.customer_number||'', name:initial?.name||'', type:initial?.type||'lead', status:initial?.status||'lead', orgnr:initial?.orgnr||'', kontaktperson:initial?.kontaktperson||'', industry:initial?.industry||'', email:initial?.email||'', phone:initial?.phone||'', website:initial?.website||'', address:initial?.address||'', postal_code:initial?.postal_code||'', city:initial?.city||'', estimated_value:initial?.estimated_value||'', notes:initial?.notes||'', score:initial?.score??'', neste_oppfolging:initial?.neste_oppfolging||'', oppfolging_tid:initial?.oppfolging_tid||'', oppfolging_type:initial?.oppfolging_type||'ring', oppfolging_notat:initial?.oppfolging_notat||'', kontaktet_av:initial?.kontaktet_av||'', tilbudsdato:initial?.tilbudsdato||'' })
   const [saving, setSaving] = useState(false)
   // Ekstra felt (JSONB) som frie etikett/verdi-par
   const [ekstraFelt, setEkstraFelt] = useState(() => {
@@ -46039,6 +46064,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
         oppfolging_type:harOppf ? form.oppfolging_type : null,
         oppfolging_notat:harOppf ? (form.oppfolging_notat?.trim()||null) : null,
         kontaktet_av:form.kontaktet_av?.trim()||null,
+        tilbudsdato:form.tilbudsdato||null, // tom streng er ikke en gyldig date i Postgres
         ekstra_felt:Object.keys(ekstraObj).length?ekstraObj:null,
         updated_at:new Date().toISOString()}
       if (isEdit) { const {error}=await supabase.from('customers').update(payload).eq('id',initial.id); if(error) throw error }
@@ -46104,6 +46130,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
           <div>{lbl('Score (kjøpspotensial)')}<input type="number" min="0" max="100" value={form.score} onChange={e=>set('score',e.target.value)} placeholder="0–100" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}><CrmOppfolgingFelter form={form} set={set} /></div>
+          <div>{lbl('Tilbudsdato')}<input type="date" value={form.tilbudsdato} onChange={e=>set('tilbudsdato',e.target.value)} title="Når tilbudet ble sendt" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Kontaktet av')}<input value={form.kontaktet_av} onChange={e=>set('kontaktet_av',e.target.value)} placeholder="Hvem hos oss som sist hadde kontakt" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
           <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>
@@ -46149,6 +46176,7 @@ const CRM_IMPORT_FIELDS = [
   { key:'score',            label:'Score (kjøpspotensial)' },
   { key:'neste_oppfolging', label:'Neste oppfølging (dato)' },
   { key:'sist_kontaktet',   label:'Sist kontaktet / Første kontakt (dato)' },
+  { key:'tilbudsdato',      label:'Tilbudsdato (dato)' },
   { key:'kontaktet_av',     label:'Kontaktet av' },
   { key:'customer_number',  label:'Kundenummer (valgfritt)' },
   { key:'notes',            label:'Notat' },
@@ -46184,6 +46212,9 @@ function crmAutoMapHeader(h) {
   if (t(/bransje|industri|sektor|naering/)) return 'industry'
   if (t(/estimertverdi|omsetning|verdikr/) || t(/^verdi/) || t(/value/)) return 'estimated_value'
   if (t(/nesteoppfolging|nesteoppfoelging|nestekontakt|oppfolging|oppfoelging|followup/)) return 'neste_oppfolging'
+  // Tilbudsdato før sist_kontaktet: en kolonne som nevner tilbud er tilbudsdato, ikke
+  // en kontaktdato. Det var sammenblandingen av de to som gjorde feltet nødvendig.
+  if (t(/tilbudsdato|tilbudsendt|datotilbud|sendttilbud|offerdate|quotedate|tilbuddato/)) return 'tilbudsdato'
   if (t(/sistkontaktet|sistkontakt|sistekontakt|lastcontact|forstekontakt|foerstekontakt|firstcontact/)) return 'sist_kontaktet'
   if (t(/kontaktperson|kontaktnavn|contactperson|contactname/)) return 'kontaktperson'
   if (t(/kontaktetav|ansvarlig|selger|saksbehandler|kontoeier|^eier/)) return 'kontaktet_av'
@@ -46453,6 +46484,7 @@ function CRMImportModal({ user, onClose, onDone }) {
         score: crmToInt(rec.score),
         neste_oppfolging: crmToISODate(rec.neste_oppfolging),
         sist_kontaktet: crmToISODate(rec.sist_kontaktet),
+        tilbudsdato: crmToISODate(rec.tilbudsdato),
         kontaktet_av: crmTxt(rec.kontaktet_av),
         notes: crmTxt(rec.notes),
         ekstra_felt: Object.keys(extra).length ? extra : null,
