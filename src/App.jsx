@@ -45934,13 +45934,19 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                         style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap' }}>
                         <span draggable
                           onDragStart={e=>{
-                            e.dataTransfer.setData('text/ep-dokument', d.id)
-                            // DownloadURL: «mimetype:filnavn:absolutt-url». Får et slipp
-                            // ut av nettleseren til å levere den ekte fila, med
-                            // originalnavnet — æ, ø og å inkludert. Chrome og Edge.
+                            // DownloadURL settes FØRST og er hovedformatet: «mimetype:
+                            // filnavn:absolutt-url». Chrome laster da ned fila og gir
+                            // mottakeren en ekte fil, med originalnavnet — æ, ø og å
+                            // inkludert. Rekkefølgen kan påvirke hva mottakeren plukker.
                             const url = `${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`
                             e.dataTransfer.setData('DownloadURL', `${d.file_type || 'application/octet-stream'}:${d.name || 'dokument'}:${url}`)
-                            e.dataTransfer.effectAllowed = 'copyMove'
+                            // Intern flytting mellom mapper. Egen type, så den aldri
+                            // forveksles med noe en ekstern app forstår.
+                            e.dataTransfer.setData('text/ep-dokument', d.id)
+                            // 'copy' framfor 'copyMove': mot Outlook og Utforsker er
+                            // dette en kopiering, og enkelte mottakere avviser et drag
+                            // de tolker som flytting.
+                            e.dataTransfer.effectAllowed = 'copy'
                           }}
                           onDragEnd={()=>setDragMappe(null)}
                           title="Dra herfra — til en mappe for å flytte, eller ut av nettleseren for å legge fila ved en e-post"
