@@ -45950,11 +45950,11 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                           }}
                           onDragEnd={()=>setDragMappe(null)}
                           title="Dra herfra — til en mappe for å flytte, eller ut av nettleseren for å legge fila ved en e-post"
-                          onMouseEnter={e=>{ e.currentTarget.style.background='#e2e8f0' }}
-                          onMouseLeave={e=>{ e.currentTarget.style.background='transparent' }}
-                          style={{ fontSize:'20px', flexShrink:0, cursor:'grab', userSelect:'none', padding:'2px 5px', borderRadius:'8px', background:'transparent', transition:'background .12s' }}>{isImage?'🖼️':'📄'}</span>
+                          onMouseEnter={e=>{ e.currentTarget.style.background='#e2e8f0'; e.currentTarget.style.borderColor='#94a3b8' }}
+                          onMouseLeave={e=>{ e.currentTarget.style.background='#f1f5f9'; e.currentTarget.style.borderColor='#e2e8f0' }}
+                          style={{ fontSize:'20px', flexShrink:0, cursor:'grab', userSelect:'none', padding:'4px 7px', borderRadius:'9px', background:'#f1f5f9', border:'1px solid #e2e8f0', transition:'all .12s', lineHeight:1 }}>{isImage?'🖼️':'📄'}</span>
                         <div style={{ flex:'1 1 150px', minWidth:0 }}>
-                          <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
+                          <a href={d.file_url} target="_blank" rel="noreferrer" onDragStart={e=>e.preventDefault()} style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
                           <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
                         </div>
                         {/* Flytting er en nedtrekksliste, ikke dra-og-slipp: det er det
@@ -45972,7 +45972,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                             så fila lagres med originalnavnet — med æ, ø og å — og ikke
                             med den rensede storage-nøkkelen. */}
                         <a href={`${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`}
-                          title={`Last ned «${d.name}»`} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', textDecoration:'none', flexShrink:0 }}>⬇️</a>
+                          title={`Last ned «${d.name}»`} onDragStart={e=>e.preventDefault()} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', textDecoration:'none', flexShrink:0 }}>⬇️</a>
                         <button onClick={()=>deleteDoc(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', flexShrink:0 }}>🗑️</button>
                       </div>
                     )
