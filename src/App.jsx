@@ -44173,27 +44173,48 @@ function DatoVelger({ value, onChange, retning = 'begge', plassholder = 'Ikke sa
 
   // Panelet må ligge i document.body med position:fixed — ellers klippes det av
   // overflow i modalene det brukes i. Samme grep som EmployeeNameSelect.
-  useEffect(() => {
+  //
+  // Høyden MÅLES etter at panelet er tegnet, den anslås ikke. Panelet er rundt 700 px
+  // med skrivefelt, hurtigvalg, årsrekke, måneder og seks ukerader — et for lavt
+  // anslag gjør at det legges under feltet og henger nedenfor skjermkanten.
+  const [panelH, setPanelH] = useState(0)
+  React.useLayoutEffect(() => {
+    if (!apen || !panelRef.current) return
+    const h = panelRef.current.offsetHeight
+    if (h && Math.abs(h - panelH) > 2) setPanelH(h)
+  })
+
+  // useLayoutEffect, ikke useEffect: posisjonen settes før nettleseren maler, så
+  // panelet ikke rekker å vises ett sted og hoppe til et annet når høyden er målt.
+  React.useLayoutEffect(() => {
     if (!apen) return
     const oppdater = () => {
       if (!vertRef.current) return
       const r = vertRef.current.getBoundingClientRect()
-      const h = 430                      // omtrentlig panelhøyde
-      const plassUnder = window.innerHeight - r.bottom
-      const oppover = plassUnder < h && r.top > plassUnder
+      const vh = window.innerHeight
+      const h = Math.min(panelH || 700, vh - 16)
+      const LUFT = 8
+      let top = r.bottom + 6
+      if (top + h > vh - LUFT) {
+        const over = r.top - h - 6
+        // Får det ikke plass under, prøv over. Får det ikke plass der heller — som i
+        // en modal midt på skjermen — sentreres det i stedet for å henge ut nederst.
+        top = over >= LUFT ? over : Math.max(LUFT, Math.round((vh - h) / 2))
+      }
       setRect({
-        top: oppover ? Math.max(8, r.top - h - 6) : r.bottom + 6,
+        top,
         left: Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - 384)),
         // 376 er bredt nok til at seks årstall får luft rundt seg. Smalere, og
         // «2026» fyller knappen helt ut til kanten.
         bredde: Math.max(r.width, 376),
+        maks: vh - 16,
       })
     }
     oppdater()
     window.addEventListener('scroll', oppdater, true)
     window.addEventListener('resize', oppdater)
     return () => { window.removeEventListener('scroll', oppdater, true); window.removeEventListener('resize', oppdater) }
-  }, [apen])
+  }, [apen, panelH])
 
   // Klikk utenfor og Esc lukker. Esc fanges på dokumentet så den virker uansett hvor
   // fokus står i panelet.
@@ -44250,7 +44271,7 @@ function DatoVelger({ value, onChange, retning = 'begge', plassholder = 'Ikke sa
   }, [seAar, seMnd])
 
   const panel = (apen && rect) && (
-    <div ref={panelRef} style={{ position:'fixed', top:`${rect.top}px`, left:`${rect.left}px`, width:`${rect.bredde}px`, maxWidth:'calc(100vw - 16px)', background:'white', border:'1px solid #e2e8f0', borderRadius:'16px', boxShadow:'0 16px 44px rgba(15,23,42,0.18)', zIndex:100000, padding:'14px', fontFamily:'system-ui,sans-serif' }}>
+    <div ref={panelRef} style={{ position:'fixed', top:`${rect.top}px`, left:`${rect.left}px`, width:`${rect.bredde}px`, maxWidth:'calc(100vw - 16px)', maxHeight:`${rect.maks}px`, overflowY:'auto', background:'white', border:'1px solid #e2e8f0', borderRadius:'16px', boxShadow:'0 16px 44px rgba(15,23,42,0.18)', zIndex:100000, padding:'14px', fontFamily:'system-ui,sans-serif' }}>
       <div style={{ marginBottom:'12px' }}>
         <input ref={skrivRef} value={skrevet} onChange={e=>{
             const v = e.target.value; setSkrevet(v)
