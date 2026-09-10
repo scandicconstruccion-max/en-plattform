@@ -44959,7 +44959,12 @@ function CRMPage() {
 
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, maxWidth: mob?'none':'240px', flex: mob?'1 1 100%':'1' }} />
+          {/* flex-basis 240px, ikke 0. Med «flex:1» ble basis 0, og siden nedtrekkene
+              ved siden av har faste bredder, krympet søkefeltet til noen få tegn når
+              raden ble full — akkurat der du trenger å se hele navnet du skriver.
+              Nå beholder det 240px og vokser til 380 når det er plass; blir det for
+              trangt, brytes hele feltet til egen linje i stedet for å bli ubrukelig. */}
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, minWidth:'200px', maxWidth: mob?'none':'380px', flex: mob?'1 1 100%':'1 1 240px' }} />
           <select value={filterStatus} onChange={e=>{ setVisOppfolging(false); setFilterStatus(e.target.value) }} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
             <option value="aktive">📋 Aktive (kontaktet + tilbud)</option>
