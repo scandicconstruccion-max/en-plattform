@@ -45086,6 +45086,11 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [docs, setDocs] = useState([])
   const [dragDok, setDragDok] = useState(false)      // fil dras over dokumentfanen
   const [lasterOppDok, setLasterOppDok] = useState(false)
+  const [mapper, setMapper] = useState([])           // crm_document_folders for denne kunden
+  const [apneMapper, setApneMapper] = useState({})   // {folder_id: true} — utvidet i lista
+  const [nyMappeNavn, setNyMappeNavn] = useState(null) // null = skjult, '' = skjema åpent
+  const [redigerMappe, setRedigerMappe] = useState(null) // {id, navn} under omdøping
+  const [lastOppTilMappe, setLastOppTilMappe] = useState('') // mappe neste opplasting havner i
   const [tab, setTab] = useState('oversikt')
   const [editing, setEditing] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
@@ -45109,12 +45114,16 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const cfg = CRM_STATUS[c.status] || CRM_STATUS.lead
 
   const loadDetails = async () => {
-    const [ct, act, doc] = await Promise.all([
+    const [ct, act, doc, mp] = await Promise.all([
       supabase.from('crm_contacts').select('*').eq('customer_id',c.id).then(r=>r.data||[]),
       supabase.from('crm_activities').select('*').eq('customer_id',c.id).order('created_at',{ascending:false}).then(r=>r.data||[]),
       supabase.from('crm_documents').select('*').eq('customer_id',c.id).order('created_at',{ascending:false}).then(r=>r.data||[]),
+      // Mapper er nytt: har ikke SQL-en kjørt ennå, svarer basen med feil her.
+      // Da faller vi tilbake på tom liste og dokumentfanen ser ut som før, i
+      // stedet for at hele kundekortet blir stående tomt.
+      supabase.from('crm_document_folders').select('*').eq('customer_id',c.id).order('name').then(r=>r.data||[]).catch(()=>[]),
     ])
-    setCts(ct); setActs(act); setDocs(doc)
+    setCts(ct); setActs(act); setDocs(doc); setMapper(mp || [])
   }
   useEffect(()=>{ loadDetails() },[c.id])
 
@@ -45211,7 +45220,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
           const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
           if (upErr) throw upErr
           const { data:{ publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
-          const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id })
+          const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id, folder_id: lastOppTilMappe || null })
           if (dbErr) throw dbErr
           ok++
         } catch (err) {
@@ -45236,6 +45245,85 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const slippDok = async (e) => {
     e.preventDefault(); setDragDok(false)
     await lastOppFiler(e.dataTransfer?.files)
+  }
+
+  // ── Mapper på dokumenter ───────────────────────────────────────────────────
+  // Mappen er en rad-egenskap, ikke en sti. Å flytte et dokument er én UPDATE av
+  // folder_id — storage-nøkkelen og URL-en er de samme før og etter.
+  const mappeNavnFinnes = (navn, unntattId) =>
+    mapper.some(m => m.id !== unntattId && String(m.name||'').trim().toLowerCase() === navn.trim().toLowerCase())
+
+  const opprettMappe = async () => {
+    const navn = String(nyMappeNavn || '').trim()
+    if (!navn) { await alert({ message:'Mappen trenger et navn', kind:'warning' }); return }
+    if (mappeNavnFinnes(navn)) { await alert({ message:`«${navn}» finnes allerede`, subMessage:'Gi mappen et annet navn.', kind:'warning' }); return }
+    try {
+      const companyId = await hentSkrivebedriftId()
+      const { data, error } = await supabase.from('crm_document_folders')
+        .insert(medBedriftId({ customer_id:c.id, name:navn, created_by:user?.id }, companyId)).select('id').single()
+      if (error) throw error
+      setNyMappeNavn(null)
+      if (data?.id) setApneMapper(v => ({ ...v, [data.id]: true }))
+      loadDetails()
+    } catch (e) {
+      console.error('[CRM] Kunne ikke opprette mappe:', e)
+      await alert({ message:'Kunne ikke opprette mappen', subMessage: e?.message, kind:'error' })
+    }
+  }
+
+  const lagreMappeNavn = async () => {
+    const navn = String(redigerMappe?.navn || '').trim()
+    if (!navn) { await alert({ message:'Mappen trenger et navn', kind:'warning' }); return }
+    if (mappeNavnFinnes(navn, redigerMappe.id)) { await alert({ message:`«${navn}» finnes allerede`, subMessage:'Gi mappen et annet navn.', kind:'warning' }); return }
+    try {
+      const { error } = await supabase.from('crm_document_folders').update({ name:navn }).eq('id', redigerMappe.id)
+      if (error) throw error
+      setRedigerMappe(null)
+      loadDetails()
+    } catch (e) {
+      console.error('[CRM] Kunne ikke endre mappenavn:', e)
+      await alert({ message:'Kunne ikke endre navnet', subMessage: e?.message, kind:'error' })
+    }
+  }
+
+  const slettMappe = async (m) => {
+    const antall = docs.filter(d => d.folder_id === m.id).length
+    const ok = await confirm({
+      message: `Slette mappen «${m.name}»?`,
+      // Det viktigste i denne dialogen er at dokumentene BLIR: ingen skal tro at
+      // de sletter innholdet ved å rydde bort en mappe.
+      subMessage: antall
+        ? `De ${antall} dokumentene i mappen blir liggende — de flyttes til «Ingen mappe». Kun mappen forsvinner.`
+        : 'Mappen er tom. Kun mappen forsvinner.',
+      danger: true,
+      confirmLabel: 'Slett mappen',
+    })
+    if (!ok) return
+    try {
+      // Dokumentene løses eksplisitt fra mappen FØR sletting. Fremmednøkkelen har
+      // ON DELETE SET NULL, men vi stoler ikke på at prod har den — uten dette
+      // ville dokumentene i verste fall blitt hengende på en mappe som er borte.
+      const { error: løsErr } = await supabase.from('crm_documents').update({ folder_id:null }).eq('folder_id', m.id)
+      if (løsErr) throw løsErr
+      const { error } = await supabase.from('crm_document_folders').delete().eq('id', m.id)
+      if (error) throw error
+      loadDetails()
+    } catch (e) {
+      console.error('[CRM] Kunne ikke slette mappe:', e)
+      await alert({ message:'Kunne ikke slette mappen', subMessage: e?.message, kind:'error' })
+    }
+  }
+
+  const flyttDok = async (dokId, folderId) => {
+    try {
+      const { error } = await supabase.from('crm_documents').update({ folder_id: folderId || null }).eq('id', dokId)
+      if (error) throw error
+      if (folderId) setApneMapper(v => ({ ...v, [folderId]: true }))
+      loadDetails()
+    } catch (e) {
+      console.error('[CRM] Kunne ikke flytte dokument:', e)
+      await alert({ message:'Kunne ikke flytte dokumentet', subMessage: e?.message, kind:'error' })
+    }
   }
 
   const deleteDoc = async (id) => {
@@ -45514,14 +45602,38 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               onDragOver={e=>{ if (e.dataTransfer?.types?.includes('Files')) { e.preventDefault(); setDragDok(true) } }}
               onDragLeave={e=>{ if (!e.currentTarget.contains(e.relatedTarget)) setDragDok(false) }}
               onDrop={slippDok}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'16px', gap:'10px', flexWrap:'wrap' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'12px', gap:'10px', flexWrap:'wrap' }}>
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📁 Dokumenter</h3>
-                <button onClick={()=>fileInputRef.current?.click()} disabled={lasterOppDok} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor: lasterOppDok?'wait':'pointer' }}>
-                  {lasterOppDok ? '⏳ Laster opp…' : '📎 Last opp'}
-                </button>
+                <div style={{ display:'flex', gap:'8px', flexWrap:'wrap' }}>
+                  <button onClick={()=>setNyMappeNavn(nyMappeNavn===null?'':null)} style={{ background:'#f8fafc', color:'#64748b', border:'1px solid #e2e8f0', borderRadius:'8px', padding:'7px 12px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>
+                    {nyMappeNavn===null ? '📂 Ny mappe' : '✕ Avbryt'}
+                  </button>
+                  <button onClick={()=>fileInputRef.current?.click()} disabled={lasterOppDok} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor: lasterOppDok?'wait':'pointer' }}>
+                    {lasterOppDok ? '⏳ Laster opp…' : '📎 Last opp'}
+                  </button>
+                </div>
                 <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.dwg,.dxf,.ifc,.zip,.rar,image/*" style={{ display:'none' }} onChange={uploadDoc} />
               </div>
-              {docs.length===0?(
+              {/* Ny mappe — skjemaet står der knappen er, ikke i en egen dialog. */}
+              {nyMappeNavn!==null && (
+                <div style={{ display:'flex', gap:'8px', marginBottom:'12px', flexWrap:'wrap' }}>
+                  <input autoFocus value={nyMappeNavn} onChange={e=>setNyMappeNavn(e.target.value)}
+                    onKeyDown={e=>{ if(e.key==='Enter') opprettMappe(); if(e.key==='Escape') setNyMappeNavn(null) }}
+                    placeholder="Navn på mappen, f.eks. «Tilbud 2026»" style={{ ...crmInp, flex:'1 1 200px' }} />
+                  <button onClick={opprettMappe} style={{ background:'#059669', color:'white', border:'none', borderRadius:'10px', padding:'9px 18px', fontSize:'13px', fontWeight:'700', cursor:'pointer', flexShrink:0 }}>Opprett</button>
+                </div>
+              )}
+              {/* Hvor havner neste opplasting? Vises bare når det finnes mapper å velge. */}
+              {mapper.length>0 && (
+                <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'14px', flexWrap:'wrap', background:'#f8fafc', border:'1px solid #f1f5f9', borderRadius:'10px', padding:'8px 12px' }}>
+                  <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', whiteSpace:'nowrap' }}>Last opp til</span>
+                  <select value={lastOppTilMappe} onChange={e=>setLastOppTilMappe(e.target.value)} style={{ ...crmInp, flex:'1 1 160px', padding:'7px 10px', fontSize:'12.5px' }}>
+                    <option value="">📄 Ingen mappe</option>
+                    {mapper.map(m => <option key={m.id} value={m.id}>📂 {m.name}</option>)}
+                  </select>
+                </div>
+              )}
+              {docs.length===0 && mapper.length===0 ?(
                 // Tomtilstanden er invitasjonen. Klikkbar, så den virker likt med mus,
                 // med fil i hånda og med tommel på mobil — der finnes ingen dra-og-slipp.
                 <TomTilstand
@@ -45531,16 +45643,26 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                   aktiv={dragDok}
                   onClick={()=>fileInputRef.current?.click()} />
               ):(
-                <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
-                  {docs.map(d=>{
-                    const isImage=d.file_type?.startsWith('image/')
+                (() => {
+                  // Én rad, brukt både i «Ingen mappe» og inne i hver mappe.
+                  const dokRad = (d) => {
+                    const isImage = d.file_type?.startsWith('image/')
                     return (
-                      <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9' }}>
-                        <span style={{ fontSize:'20px' }}>{isImage?'🖼️':'📄'}</span>
-                        <div style={{ flex:1, minWidth:0 }}>
+                      <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap' }}>
+                        <span style={{ fontSize:'20px', flexShrink:0 }}>{isImage?'🖼️':'📄'}</span>
+                        <div style={{ flex:'1 1 150px', minWidth:0 }}>
                           <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
                           <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
                         </div>
+                        {/* Flytting er en nedtrekksliste, ikke dra-og-slipp: det er det
+                            eneste som virker likt med mus og med tommel. */}
+                        {mapper.length>0 && (
+                          <select value={d.folder_id || ''} onChange={e=>flyttDok(d.id, e.target.value)} title="Flytt til mappe"
+                            style={{ ...crmInp, width:'auto', maxWidth:'160px', flex:'0 1 auto', padding:'6px 8px', fontSize:'12px' }}>
+                            <option value="">📄 Ingen mappe</option>
+                            {mapper.map(m => <option key={m.id} value={m.id}>📂 {m.name}</option>)}
+                          </select>
+                        )}
                         {/* download-attributtet virker ikke her: storage ligger på et
                             annet domene enn appen, og da ignorerer nettleseren det.
                             Supabase sin ?download= setter Content-Disposition i stedet,
@@ -45551,8 +45673,59 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                         <button onClick={()=>deleteDoc(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', flexShrink:0 }}>🗑️</button>
                       </div>
                     )
-                  })}
-                </div>
+                  }
+                  const utenMappe = docs.filter(d => !d.folder_id)
+                  return (
+                    <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
+                      {/* Løse dokumenter øverst — de er som regel de nyeste. */}
+                      {utenMappe.length>0 && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                          {mapper.length>0 && <div style={{ fontSize:'11.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em' }}>Ingen mappe · {utenMappe.length}</div>}
+                          {utenMappe.map(dokRad)}
+                        </div>
+                      )}
+                      {mapper.map(m => {
+                        const iMappen = docs.filter(d => d.folder_id === m.id)
+                        const apen = !!apneMapper[m.id]
+                        const rediger = redigerMappe?.id === m.id
+                        return (
+                          <div key={m.id} style={{ border:'1px solid #f1f5f9', borderRadius:'12px', overflow:'hidden' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', background:'#f8fafc', padding:'10px 12px', flexWrap:'wrap' }}>
+                              {rediger ? (
+                                <>
+                                  <input autoFocus value={redigerMappe.navn} onChange={e=>setRedigerMappe(r=>({ ...r, navn:e.target.value }))}
+                                    onKeyDown={e=>{ if(e.key==='Enter') lagreMappeNavn(); if(e.key==='Escape') setRedigerMappe(null) }}
+                                    style={{ ...crmInp, flex:'1 1 160px', padding:'7px 10px', fontSize:'13px' }} />
+                                  <button onClick={lagreMappeNavn} style={{ background:'#059669', color:'white', border:'none', borderRadius:'8px', padding:'7px 12px', fontSize:'12px', fontWeight:'700', cursor:'pointer', flexShrink:0 }}>Lagre</button>
+                                  <button onClick={()=>setRedigerMappe(null)} style={{ background:'none', border:'none', color:'#64748b', fontSize:'12px', fontWeight:'600', cursor:'pointer', flexShrink:0 }}>Avbryt</button>
+                                </>
+                              ) : (
+                                <>
+                                  <button onClick={()=>setApneMapper(v=>({ ...v, [m.id]: !apen }))}
+                                    style={{ flex:'1 1 140px', minWidth:0, display:'flex', alignItems:'center', gap:'9px', background:'none', border:'none', cursor:'pointer', padding:0, fontFamily:'inherit', textAlign:'left' }}>
+                                    <span style={{ fontSize:'13px', color:'#64748b', width:'12px', flexShrink:0 }}>{apen ? '▾' : '▸'}</span>
+                                    <span style={{ fontSize:'17px', flexShrink:0 }}>📂</span>
+                                    <span style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{m.name}</span>
+                                    <span style={{ fontSize:'11.5px', color:'#94a3b8', fontWeight:'600', flexShrink:0 }}>{iMappen.length}</span>
+                                  </button>
+                                  <button onClick={()=>setRedigerMappe({ id:m.id, navn:m.name })} title="Gi nytt navn" style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'13px', flexShrink:0 }}>✏️</button>
+                                  <button onClick={()=>slettMappe(m)} title="Slett mappen" style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'13px', flexShrink:0 }}>🗑️</button>
+                                </>
+                              )}
+                            </div>
+                            {apen && (
+                              <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px', background:'white' }}>
+                                {iMappen.length ? iMappen.map(dokRad) : (
+                                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>Mappen er tom. Velg den under «Last opp til», eller flytt et dokument hit med nedtrekkslista på raden.</p>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )
+                })()
               )}
             </div>
           )}
