@@ -45902,7 +45902,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                     {mapper.map(m => <option key={m.id} value={m.id}>📂 {m.name}</option>)}
                   </select>
                   <span style={{ flexBasis:'100%', fontSize:'11px', color:'#94a3b8', lineHeight:1.5 }}>
-                    Gjelder «Last opp»-knappen. Slipper du filer rett på en mappe, havner de der i stedet. Et dokument kan dras til en annen mappe — eller ut av nettleseren, rett inn i en e-post.
+                    Gjelder «Last opp»-knappen. Slipper du filer rett på en mappe, havner de der i stedet. Vil du flytte et dokument, eller legge det ved en e-post, drar du i ikonet 📄 til venstre på raden.
                   </span>
                 </div>
               )}
@@ -45924,29 +45924,29 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                       // draggable: raden kan dras rett inn i en mappe. dataTransfer
                       // merkes med vår egen type, så et slipp kan skilles fra filer
                       // som kommer utenfra.
-                      <div key={d.id} draggable
-                        onDragStart={e=>{
-                          // Drar du i filnavnet, har nettleseren allerede lagt inn
-                          // text/uri-list — og da lager Outlook en .url-snarvei i
-                          // stedet for å ta imot fila. clearData tømmer det før vi
-                          // legger inn vårt eget. (draggable={false} på lenka løste
-                          // også dette, men da startet ikke draget i det hele tatt —
-                          // nettleseren nekter å starte drag der du tar tak.)
-                          e.dataTransfer.clearData()
-                          // Intern flytting mellom mapper.
-                          e.dataTransfer.setData('text/ep-dokument', d.id)
-                          // DownloadURL gjør at et slipp UT av nettleseren — til Outlook,
-                          // Utforsker, hva som helst — gir den ekte fila og ikke en
-                          // .url-snarvei. Formatet er «mimetype:filnavn:absolutt-url»,
-                          // og navnet er originalen med æ, ø og å. Chrome og Edge
-                          // støtter dette; Firefox og Safari gjør det ikke.
-                          const url = `${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`
-                          e.dataTransfer.setData('DownloadURL', `${d.file_type || 'application/octet-stream'}:${d.name || 'dokument'}:${url}`)
-                          e.dataTransfer.effectAllowed = 'copyMove'
-                        }}
-                        onDragEnd={()=>setDragMappe(null)}
-                        style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap', cursor:'grab' }}>
-                        <span title="Dra til en mappe for å flytte — eller ut av nettleseren for å legge fila ved en e-post" style={{ fontSize:'20px', flexShrink:0, cursor:'grab' }}>{isImage?'🖼️':'📄'}</span>
+                      // Draget ligger på ikonet, ikke på raden. Raden inneholder en
+                      // <a>, og et drag som starter på en lenke har allerede fått
+                      // text/uri-list av nettleseren — da lager Outlook en .url-snarvei.
+                      // Å rydde i det (clearData / draggable=false) fikk Chrome til å
+                      // forkaste draget helt. Et <span> har ingen egen dragoppførsel,
+                      // så her er dataTransfer vår alene.
+                      <div key={d.id}
+                        style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap' }}>
+                        <span draggable
+                          onDragStart={e=>{
+                            e.dataTransfer.setData('text/ep-dokument', d.id)
+                            // DownloadURL: «mimetype:filnavn:absolutt-url». Får et slipp
+                            // ut av nettleseren til å levere den ekte fila, med
+                            // originalnavnet — æ, ø og å inkludert. Chrome og Edge.
+                            const url = `${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`
+                            e.dataTransfer.setData('DownloadURL', `${d.file_type || 'application/octet-stream'}:${d.name || 'dokument'}:${url}`)
+                            e.dataTransfer.effectAllowed = 'copyMove'
+                          }}
+                          onDragEnd={()=>setDragMappe(null)}
+                          title="Dra herfra — til en mappe for å flytte, eller ut av nettleseren for å legge fila ved en e-post"
+                          onMouseEnter={e=>{ e.currentTarget.style.background='#e2e8f0' }}
+                          onMouseLeave={e=>{ e.currentTarget.style.background='transparent' }}
+                          style={{ fontSize:'20px', flexShrink:0, cursor:'grab', userSelect:'none', padding:'2px 5px', borderRadius:'8px', background:'transparent', transition:'background .12s' }}>{isImage?'🖼️':'📄'}</span>
                         <div style={{ flex:'1 1 150px', minWidth:0 }}>
                           <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
                           <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
@@ -46020,7 +46020,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                             {apen && (
                               <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px', background:'white' }}>
                                 {iMappen.length ? iMappen.map(dokRad) : (
-                                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>Mappen er tom. Slipp filer rett her, dra et dokument hit fra lista, eller velg mappen under «Last opp til».</p>
+                                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>Mappen er tom. Slipp filer rett her, dra et dokument hit i ikonet 📄, eller velg mappen under «Last opp til».</p>
                                 )}
                               </div>
                             )}
