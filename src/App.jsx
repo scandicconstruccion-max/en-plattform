@@ -45332,6 +45332,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [acts, setActs] = useState(activities)
   const [docs, setDocs] = useState([])
   const [dragDok, setDragDok] = useState(false)      // fil dras over dokumentfanen
+  const [dragMappe, setDragMappe] = useState(null)   // mappen det dras over: id, '__ingen__' eller null
   const [lasterOppDok, setLasterOppDok] = useState(false)
   const [mapper, setMapper] = useState([])           // crm_document_folders for denne kunden
   const [apneMapper, setApneMapper] = useState({})   // {folder_id: true} — utvidet i lista
@@ -45452,7 +45453,10 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 
   // Tar imot både filvelgeren og filer sluppet på kortet. Flere filer om gangen: når
   // du først drar noe inn, drar du sjelden nøyaktig én.
-  const lastOppFiler = async (filer) => {
+  // maalMappe: mappen filene skal i. Slippes de paa en mappe, er det DEN som gjelder
+  // — ikke det som staar i «Last opp til».
+  const lastOppFiler = async (filer, maalMappe) => {
+    const mappe = maalMappe !== undefined ? maalMappe : lastOppTilMappe
     const liste = Array.from(filer || []).filter(Boolean)
     if (!liste.length) return
     setLasterOppDok(true)
@@ -45467,7 +45471,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
           const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
           if (upErr) throw upErr
           const { data:{ publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
-          const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id, folder_id: lastOppTilMappe || null })
+          const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id, folder_id: mappe || null })
           if (dbErr) throw dbErr
           ok++
         } catch (err) {
@@ -45489,10 +45493,29 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
     }
   }
   const uploadDoc = async (e) => { await lastOppFiler(e.target.files); e.target.value='' }
-  const slippDok = async (e) => {
-    e.preventDefault(); setDragDok(false)
-    await lastOppFiler(e.dataTransfer?.files)
+
+  // Ett slipp kan vaere to ting: filer fra maskinen, eller et dokument som allerede
+  // ligger i lista og skal flyttes. Vi ser paa innholdet, ikke paa hvor det kom fra.
+  const slippPaa = async (e, mappeId) => {
+    e.preventDefault(); e.stopPropagation()
+    setDragDok(false); setDragMappe(null)
+    const filer = e.dataTransfer?.files
+    if (filer && filer.length) { await lastOppFiler(filer, mappeId); return }
+    const dokId = e.dataTransfer?.getData('text/ep-dokument')
+    if (dokId) {
+      const d = docs.find(x => x.id === dokId)
+      if (d && (d.folder_id || '') !== (mappeId || '')) await flyttDok(dokId, mappeId)
+    }
   }
+  const slippDok = (e) => slippPaa(e, lastOppTilMappe)
+
+  // Felles drag-handlers for en slippsone. mappeId er null for «Ingen mappe».
+  const soneProps = (mappeId) => ({
+    onDragEnter: (e) => { e.preventDefault(); e.stopPropagation(); setDragMappe(mappeId ?? '__ingen__') },
+    onDragOver:  (e) => { e.preventDefault(); e.stopPropagation(); setDragMappe(mappeId ?? '__ingen__') },
+    onDragLeave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) setDragMappe(null) },
+    onDrop:      (e) => slippPaa(e, mappeId),
+  })
 
   // ── Mapper på dokumenter ───────────────────────────────────────────────────
   // Mappen er en rad-egenskap, ikke en sti. Å flytte et dokument er én UPDATE av
@@ -45878,6 +45901,9 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                     <option value="">📄 Ingen mappe</option>
                     {mapper.map(m => <option key={m.id} value={m.id}>📂 {m.name}</option>)}
                   </select>
+                  <span style={{ flexBasis:'100%', fontSize:'11px', color:'#94a3b8', lineHeight:1.5 }}>
+                    Gjelder «Last opp»-knappen. Slipper du filer rett på en mappe, havner de der i stedet — og et dokument kan dras fra én mappe til en annen.
+                  </span>
                 </div>
               )}
               {docs.length===0 && mapper.length===0 ?(
@@ -45895,8 +45921,14 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                   const dokRad = (d) => {
                     const isImage = d.file_type?.startsWith('image/')
                     return (
-                      <div key={d.id} style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap' }}>
-                        <span style={{ fontSize:'20px', flexShrink:0 }}>{isImage?'🖼️':'📄'}</span>
+                      // draggable: raden kan dras rett inn i en mappe. dataTransfer
+                      // merkes med vår egen type, så et slipp kan skilles fra filer
+                      // som kommer utenfra.
+                      <div key={d.id} draggable
+                        onDragStart={e=>{ e.dataTransfer.setData('text/ep-dokument', d.id); e.dataTransfer.effectAllowed = 'move' }}
+                        onDragEnd={()=>setDragMappe(null)}
+                        style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap', cursor:'grab' }}>
+                        <span title="Dra for å flytte til en mappe" style={{ fontSize:'20px', flexShrink:0 }}>{isImage?'🖼️':'📄'}</span>
                         <div style={{ flex:'1 1 150px', minWidth:0 }}>
                           <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
                           <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
@@ -45925,10 +45957,12 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                   return (
                     <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
                       {/* Løse dokumenter øverst — de er som regel de nyeste. */}
-                      {utenMappe.length>0 && (
-                        <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>
+                      {(utenMappe.length>0 || mapper.length>0) && (
+                        <div {...soneProps(null)} style={{ display:'flex', flexDirection:'column', gap:'8px', borderRadius:'12px', padding: dragMappe==='__ingen__'?'8px':'0', border: dragMappe==='__ingen__'?'2px dashed #059669':'2px dashed transparent', background: dragMappe==='__ingen__'?'#f0fdf4':'transparent', transition:'all .12s' }}>
                           {mapper.length>0 && <div style={{ fontSize:'11.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.04em' }}>Ingen mappe · {utenMappe.length}</div>}
-                          {utenMappe.map(dokRad)}
+                          {utenMappe.length>0 ? utenMappe.map(dokRad) : (
+                            <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', padding:'4px 2px' }}>Ingen løse dokumenter. Slipp filer her for å laste dem opp uten mappe.</p>
+                          )}
                         </div>
                       )}
                       {mapper.map(m => {
@@ -45936,8 +45970,13 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                         const apen = !!apneMapper[m.id]
                         const rediger = redigerMappe?.id === m.id
                         return (
-                          <div key={m.id} style={{ border:'1px solid #f1f5f9', borderRadius:'12px', overflow:'hidden' }}>
-                            <div style={{ display:'flex', alignItems:'center', gap:'8px', background:'#f8fafc', padding:'10px 12px', flexWrap:'wrap' }}>
+                          // Hele mappen er slippsone — både overskriften og innholdet.
+                          // Slipper du filer her, lastes de opp RETT i denne mappen,
+                          // uten omveien om «Last opp til». Drar du en dokumentrad hit,
+                          // flyttes den.
+                          <div key={m.id} {...soneProps(m.id)}
+                            style={{ border: dragMappe===m.id ? '2px dashed #059669' : '1px solid #f1f5f9', borderRadius:'12px', overflow:'hidden', background: dragMappe===m.id ? '#f0fdf4' : 'transparent', transition:'all .12s' }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:'8px', background: dragMappe===m.id ? '#f0fdf4' : '#f8fafc', padding:'10px 12px', flexWrap:'wrap' }}>
                               {rediger ? (
                                 <>
                                   <input autoFocus value={redigerMappe.navn} onChange={e=>setRedigerMappe(r=>({ ...r, navn:e.target.value }))}
@@ -45963,7 +46002,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                             {apen && (
                               <div style={{ padding:'10px 12px', display:'flex', flexDirection:'column', gap:'8px', background:'white' }}>
                                 {iMappen.length ? iMappen.map(dokRad) : (
-                                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>Mappen er tom. Velg den under «Last opp til», eller flytt et dokument hit med nedtrekkslista på raden.</p>
+                                  <p style={{ margin:0, fontSize:'12px', color:'#94a3b8', lineHeight:1.5 }}>Mappen er tom. Slipp filer rett her, dra et dokument hit fra lista, eller velg mappen under «Last opp til».</p>
                                 )}
                               </div>
                             )}
