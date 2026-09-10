@@ -44115,6 +44115,225 @@ function crmLesOppgaveVindu() {
 const crmInp = { width:'100%', padding:'9px 12px', border:'1px solid #e2e8f0', borderRadius:'10px', fontSize:'14px', outline:'none', boxSizing:'border-box', background:'white', color:'#0f172a', fontFamily:'system-ui,sans-serif' }
 const crmCard = { background:'white', borderRadius:'16px', border:'1px solid #f1f5f9', padding:'20px 24px', boxShadow:'0 1px 4px rgba(0,0,0,0.04)' }
 
+// ─── DATOVELGER ──────────────────────────────────────────────────────────────
+// <input type="date"> lar deg ikke skrive «15.02.23», og nettleserens egen kalender
+// krever 36 klikk på «forrige måned» for å nå mars 2023. Brukerne her jobber 3–4 år
+// tilbake (gamle tilbud) og opptil 2 år frem (frister) — et spenn på seks år, som er
+// lite nok til at hele årsrekken kan ligge fremme i stedet for å blas gjennom.
+//
+// Verdien inn og ut er ISO (yyyy-mm-dd), nøyaktig som <input type="date">. Dette er
+// en endring i hvordan datoer TASTES INN, ikke i hva som lagres.
+const DV_MND = ['jan','feb','mar','apr','mai','jun','jul','aug','sep','okt','nov','des']
+const DV_MND_LANG = ['januar','februar','mars','april','mai','juni','juli','august','september','oktober','november','desember']
+const DV_UKEDAG = ['ma','ti','on','to','fr','lø','sø']
+const dvTo = (n) => String(n).padStart(2, '0')
+const dvTilIso = (d) => d ? `${d.getFullYear()}-${dvTo(d.getMonth()+1)}-${dvTo(d.getDate())}` : ''
+const dvFraIso = (s) => {
+  if (!s) return null
+  const [a, m, d] = String(s).split('-').map(Number)
+  if (!a || !m || !d) return null
+  return new Date(a, m-1, d)
+}
+const dvVisning = (s) => { const d = dvFraIso(s); return d ? `${dvTo(d.getDate())}.${dvTo(d.getMonth()+1)}.${d.getFullYear()}` : '' }
+
+// Tolker det brukeren taster. Godtar . / - og mellomrom som skilletegn, og helt uten.
+// Tosifret år: 70–99 blir 1900-tallet, resten 2000-tallet. Returnerer null for noe
+// som ikke er en ekte dato — 31.02 finnes ikke, uansett hvor fint det ser ut.
+function dvTolk(tekst) {
+  const t = String(tekst ?? '').trim()
+  if (!t) return null
+  let d, m, a
+  const m1 = t.match(/^(\d{1,2})[.\/\-\s]+(\d{1,2})[.\/\-\s]*(\d{2}|\d{4})?$/)
+  if (m1) { d = +m1[1]; m = +m1[2]; a = m1[3] !== undefined ? +m1[3] : new Date().getFullYear() }
+  else {
+    const m2 = t.match(/^(\d{2})(\d{2})(\d{2}|\d{4})$/)
+    if (!m2) return null
+    d = +m2[1]; m = +m2[2]; a = +m2[3]
+  }
+  if (a < 100) a = a >= 70 ? 1900 + a : 2000 + a
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null
+  const dato = new Date(a, m-1, d)
+  if (dato.getMonth() !== m-1 || dato.getDate() !== d) return null
+  return dato
+}
+
+// retning styrer hurtigvalgene: en frist peker fremover, en tilbudsdato bakover.
+function DatoVelger({ value, onChange, retning = 'begge', plassholder = 'Ikke satt', kanTommes = true, style, title, disabled }) {
+  const [apen, setApen] = useState(false)
+  const [skrevet, setSkrevet] = useState('')
+  const [rect, setRect] = useState(null)
+  const idag = React.useMemo(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()) }, [])
+  const valgt = dvFraIso(value)
+  const [seAar, setSeAar] = useState(() => (dvFraIso(value) || idag).getFullYear())
+  const [seMnd, setSeMnd] = useState(() => (dvFraIso(value) || idag).getMonth())
+  const [vindu, setVindu] = useState(() => (dvFraIso(value) || idag).getFullYear() - 3)
+  const vertRef = React.useRef(null)
+  const panelRef = React.useRef(null)
+  const skrivRef = React.useRef(null)
+
+  // Panelet må ligge i document.body med position:fixed — ellers klippes det av
+  // overflow i modalene det brukes i. Samme grep som EmployeeNameSelect.
+  useEffect(() => {
+    if (!apen) return
+    const oppdater = () => {
+      if (!vertRef.current) return
+      const r = vertRef.current.getBoundingClientRect()
+      const h = 430                      // omtrentlig panelhøyde
+      const plassUnder = window.innerHeight - r.bottom
+      const oppover = plassUnder < h && r.top > plassUnder
+      setRect({
+        top: oppover ? Math.max(8, r.top - h - 6) : r.bottom + 6,
+        left: Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - 348)),
+        bredde: Math.max(r.width, 320),
+      })
+    }
+    oppdater()
+    window.addEventListener('scroll', oppdater, true)
+    window.addEventListener('resize', oppdater)
+    return () => { window.removeEventListener('scroll', oppdater, true); window.removeEventListener('resize', oppdater) }
+  }, [apen])
+
+  // Klikk utenfor og Esc lukker. Esc fanges på dokumentet så den virker uansett hvor
+  // fokus står i panelet.
+  useEffect(() => {
+    if (!apen) return
+    const utenfor = (e) => {
+      if (vertRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return
+      setApen(false); setSkrevet('')
+    }
+    const paaTast = (e) => { if (e.key === 'Escape') { e.stopPropagation(); setApen(false); setSkrevet('') } }
+    document.addEventListener('mousedown', utenfor)
+    document.addEventListener('keydown', paaTast, true)
+    return () => { document.removeEventListener('mousedown', utenfor); document.removeEventListener('keydown', paaTast, true) }
+  }, [apen])
+
+  const apne = () => {
+    if (disabled) return
+    const d = dvFraIso(value) || idag
+    setSeAar(d.getFullYear()); setSeMnd(d.getMonth()); setVindu(d.getFullYear() - 3)
+    setSkrevet(''); setApen(true)
+    setTimeout(() => skrivRef.current?.focus(), 0)
+  }
+  const velg = (iso) => { onChange(iso); setApen(false); setSkrevet('') }
+  const flytt = (n, enhet) => {
+    const x = new Date(idag)
+    if (enhet === 'd') x.setDate(x.getDate() + n)
+    else if (enhet === 'm') x.setMonth(x.getMonth() + n)
+    else x.setFullYear(x.getFullYear() + n)
+    return x
+  }
+  const hurtig = retning === 'fremover'
+    ? [['I dag', idag], ['Om en uke', flytt(7,'d')], ['Om en måned', flytt(1,'m')], ['Om 3 mnd', flytt(3,'m')]]
+    : retning === 'bakover'
+      ? [['I dag', idag], ['En uke siden', flytt(-7,'d')], ['En måned siden', flytt(-1,'m')], ['Ett år siden', flytt(-1,'a')]]
+      : [['I dag', idag], ['Om en uke', flytt(7,'d')], ['En måned siden', flytt(-1,'m')]]
+
+  const skrivTolket = skrevet ? dvTolk(skrevet) : null
+  const skrivFeil = !!skrevet && !skrivTolket
+
+  const knapp = { padding:'7px 2px', border:'1px solid #e2e8f0', borderRadius:'9px', background:'white', fontSize:'12.5px', fontWeight:'600', color:'#64748b', cursor:'pointer', fontFamily:'inherit' }
+  const knappValgt = { ...knapp, background:'#059669', borderColor:'#059669', color:'white' }
+
+  // Dagsrutenettet for måneden som vises, med utfyllende dager fra nabomånedene.
+  const celler = React.useMemo(() => {
+    const start = (new Date(seAar, seMnd, 1).getDay() + 6) % 7   // mandag først
+    const iMnd = new Date(seAar, seMnd+1, 0).getDate()
+    const forrige = new Date(seAar, seMnd, 0).getDate()
+    const ut = []
+    for (let i = start-1; i >= 0; i--) ut.push({ d: forrige-i, utenfor:true, dato:new Date(seAar, seMnd-1, forrige-i) })
+    for (let i = 1; i <= iMnd; i++) ut.push({ d:i, dato:new Date(seAar, seMnd, i) })
+    let n = 1
+    while (ut.length % 7) { ut.push({ d:n, utenfor:true, dato:new Date(seAar, seMnd+1, n) }); n++ }
+    return ut
+  }, [seAar, seMnd])
+
+  const panel = (apen && rect) && (
+    <div ref={panelRef} style={{ position:'fixed', top:`${rect.top}px`, left:`${rect.left}px`, width:`${rect.bredde}px`, maxWidth:'calc(100vw - 16px)', background:'white', border:'1px solid #e2e8f0', borderRadius:'16px', boxShadow:'0 16px 44px rgba(15,23,42,0.18)', zIndex:100000, padding:'14px', fontFamily:'system-ui,sans-serif' }}>
+      <div style={{ marginBottom:'12px' }}>
+        <input ref={skrivRef} value={skrevet} onChange={e=>{
+            const v = e.target.value; setSkrevet(v)
+            const d = dvTolk(v)
+            if (d) { setSeAar(d.getFullYear()); setSeMnd(d.getMonth()); setVindu(d.getFullYear()-3) }
+          }}
+          onKeyDown={e=>{ if (e.key==='Enter') { e.preventDefault(); const d = dvTolk(skrevet); if (d) velg(dvTilIso(d)) } }}
+          placeholder="dd.mm.åååå" inputMode="numeric" autoComplete="off"
+          style={{ width:'100%', padding:'11px 12px', border:`1.5px solid ${skrivFeil?'#dc2626':'#e2e8f0'}`, borderRadius:'10px', fontSize:'15px', fontFamily:'inherit', background: skrivFeil?'#fef2f2':'white', boxSizing:'border-box' }} />
+        <div style={{ margin:'5px 2px 0', fontSize:'11.5px', color:'#94a3b8', display:'flex', justifyContent:'space-between', gap:'8px' }}>
+          <span>Skriv <b style={{ fontFamily:'ui-monospace,monospace' }}>15.02.23</b> eller <b style={{ fontFamily:'ui-monospace,monospace' }}>15.02.2023</b></span>
+          {skrevet && (skrivFeil
+            ? <span style={{ color:'#dc2626', fontWeight:'600', whiteSpace:'nowrap' }}>forstår ikke</span>
+            : <span style={{ color:'#059669', fontWeight:'600', whiteSpace:'nowrap' }}>✓ {dvVisning(dvTilIso(skrivTolket))}</span>)}
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:'6px', flexWrap:'wrap', marginBottom:'12px' }}>
+        {hurtig.map(([n, dt]) => (
+          <button key={n} type="button" onClick={()=>velg(dvTilIso(dt))} style={{ background:'#f0fdf4', color:'#065f46', border:'1px solid #bbf7d0', borderRadius:'999px', padding:'6px 11px', fontSize:'12px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>{n}</button>
+        ))}
+      </div>
+      <div style={{ marginBottom:'10px' }}>
+        <div style={{ fontSize:'10.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'5px' }}>År</div>
+        <div style={{ display:'flex', gap:'4px' }}>
+          <button type="button" onClick={()=>setVindu(v=>v-1)} title="Tidligere år" style={{ ...knapp, flex:'0 0 26px', background:'#f8fafc', color:'#cbd5e1', fontWeight:'700' }}>‹</button>
+          {[0,1,2,3,4,5].map(i => (
+            <button key={i} type="button" onClick={()=>setSeAar(vindu+i)} style={{ ...(vindu+i===seAar?knappValgt:knapp), flex:1, minWidth:0 }}>{vindu+i}</button>
+          ))}
+          <button type="button" onClick={()=>setVindu(v=>v+1)} title="Senere år" style={{ ...knapp, flex:'0 0 26px', background:'#f8fafc', color:'#cbd5e1', fontWeight:'700' }}>›</button>
+        </div>
+      </div>
+      <div style={{ marginBottom:'10px' }}>
+        <div style={{ fontSize:'10.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'5px' }}>Måned</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(6,1fr)', gap:'4px' }}>
+          {DV_MND.map((m, i) => <button key={m} type="button" onClick={()=>setSeMnd(i)} style={{ ...(i===seMnd?knappValgt:knapp), fontSize:'12px' }}>{m}</button>)}
+        </div>
+      </div>
+      <div>
+        <div style={{ fontSize:'10.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'5px' }}>{DV_MND_LANG[seMnd]} {seAar}</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'3px', marginBottom:'3px' }}>
+          {DV_UKEDAG.map(u => <span key={u} style={{ textAlign:'center', fontSize:'10.5px', fontWeight:'700', color:'#94a3b8', padding:'2px 0' }}>{u}</span>)}
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'3px' }}>
+          {celler.map((c, i) => {
+            const iso = dvTilIso(c.dato)
+            const erIdag = iso === dvTilIso(idag)
+            const erValgt = !!value && iso === value
+            const helg = (i % 7) >= 5
+            return (
+              <button key={i} type="button" onClick={()=>velg(iso)}
+                style={{ minHeight:'42px', border:`1px solid ${erValgt?'#059669':(erIdag?'#059669':'transparent')}`, borderRadius:'10px',
+                  background: erValgt?'#059669':'white', color: erValgt?'white':(c.utenfor?'#cbd5e1':(erIdag?'#059669':(helg?'#94a3b8':'#374151'))),
+                  fontSize:'13.5px', fontWeight: (erValgt||erIdag)?'700':'500', cursor:'pointer', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {c.d}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:'8px', marginTop:'12px', paddingTop:'11px', borderTop:'1px solid #f1f5f9' }}>
+        {kanTommes
+          ? <button type="button" onClick={()=>velg('')} style={{ background:'none', border:'none', borderRadius:'9px', padding:'8px 14px', fontSize:'12.5px', fontWeight:'600', color:'#64748b', cursor:'pointer', fontFamily:'inherit' }}>Tøm feltet</button>
+          : <span />}
+        <button type="button" onClick={()=>{ setApen(false); setSkrevet('') }} style={{ background:'#059669', color:'white', border:'none', borderRadius:'9px', padding:'8px 14px', fontSize:'12.5px', fontWeight:'600', cursor:'pointer', fontFamily:'inherit' }}>Ferdig</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div ref={vertRef} style={{ position:'relative', width:'100%' }}>
+      <button type="button" onClick={apne} disabled={disabled} title={title}
+        style={{ display:'flex', alignItems:'center', gap:'8px', width:'100%', padding:'10px 12px', border:`1px solid ${apen?'#059669':'#e2e8f0'}`, borderRadius:'10px', background: disabled?'#f8fafc':'white', cursor: disabled?'not-allowed':'pointer', fontFamily:'inherit', fontSize:'13.5px', textAlign:'left', boxShadow: apen?'0 0 0 3px #f0fdf4':'none', boxSizing:'border-box', ...style }}>
+        <span style={{ fontSize:'15px', flexShrink:0 }}>📅</span>
+        <span style={{ flex:1, minWidth:0, color: value?'#0f172a':'#94a3b8', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{value ? dvVisning(value) : plassholder}</span>
+        {value && kanTommes && !disabled && (
+          <span role="button" tabIndex={-1} title="Tøm feltet"
+            onClick={e=>{ e.stopPropagation(); onChange('') }}
+            style={{ color:'#94a3b8', fontSize:'16px', lineHeight:1, padding:'0 2px', flexShrink:0, cursor:'pointer' }}>×</span>
+        )}
+      </button>
+      {typeof document !== 'undefined' && panel ? createPortal(panel, document.body) : null}
+    </div>
+  )
+}
+
 // Tomtilstand som ER handlingen. En kursiv grå linje forteller bare at det er tomt —
 // den sier ikke hva du gjør med det, og på mobil er den heller ikke noe å trykke på.
 // Uten onClick blir det en ren opplysning, ikke en knapp: et filterresultat skal ikke
@@ -44746,9 +44965,9 @@ function CRMPage() {
             {/* På mobil tar etiketten hele bredden, så de to datofeltene får dele
                 resten av raden. Med etikett og felt på samme linje sprakk 375px. */}
             <span style={{ fontSize:'12px', color:'#64748b', fontWeight:'600', whiteSpace:'nowrap', flexShrink:0, flexBasis: mob?'100%':'auto' }}>📄 Tilbudsdato</span>
-            <input type="date" value={tilbudFra} onChange={e=>setTilbudFra(e.target.value)} title="Tilbudsdato fra og med" style={{ ...crmInp, padding:'7px 8px', fontSize:'12px', minWidth:0, flex:'1 1 0', maxWidth: mob?'none':'140px' }} />
+            <div style={{ minWidth:0, flex:'1 1 0', maxWidth: mob?'none':'150px' }}><DatoVelger value={tilbudFra} onChange={setTilbudFra} retning="bakover" plassholder="Fra" title="Tilbudsdato fra og med" style={{ padding:'7px 9px', fontSize:'12px' }} /></div>
             <span style={{ fontSize:'12px', color:'#cbd5e1', flexShrink:0 }}>–</span>
-            <input type="date" value={tilbudTil} onChange={e=>setTilbudTil(e.target.value)} title="Tilbudsdato til og med" style={{ ...crmInp, padding:'7px 8px', fontSize:'12px', minWidth:0, flex:'1 1 0', maxWidth: mob?'none':'140px' }} />
+            <div style={{ minWidth:0, flex:'1 1 0', maxWidth: mob?'none':'150px' }}><DatoVelger value={tilbudTil} onChange={setTilbudTil} retning="bakover" plassholder="Til" title="Tilbudsdato til og med" style={{ padding:'7px 9px', fontSize:'12px' }} /></div>
             {(tilbudFra||tilbudTil) && (
               <button onClick={()=>{ setTilbudFra(''); setTilbudTil('') }} title="Fjern periodefilteret" style={{ background:'none', border:'none', color:'#64748b', fontSize:'15px', cursor:'pointer', padding:'0 2px', flexShrink:0 }}>×</button>
             )}
@@ -46001,7 +46220,7 @@ function CrmOppfolgingFelter({ form, set }) {
     <div style={{ background:'#f8fafc', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'12px 14px', display:'flex', flexDirection:'column', gap:'10px' }}>
       <div style={{ fontSize:'12px', fontWeight:'700', color:'#0f172a' }}>📅 Neste oppfølging</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'8px' }}>
-        <div>{lbl('Dato')}<input type="date" value={form.neste_oppfolging||''} onChange={e=>set('neste_oppfolging', e.target.value)} style={crmInp} /></div>
+        <div>{lbl('Dato')}<DatoVelger value={form.neste_oppfolging||''} onChange={v=>set('neste_oppfolging', v)} retning="fremover" plassholder="Ingen oppfølging" /></div>
         <div>{lbl('Klokkeslett (valgfritt)')}<input type="time" value={form.oppfolging_tid||''} onChange={e=>set('oppfolging_tid', e.target.value)} style={crmInp} /></div>
       </div>
       <div>
@@ -46469,7 +46688,7 @@ function CRMEditorModal({ user, initial, onClose, onSaved }) {
           <div>{lbl('By')}<input value={form.city} onChange={e=>set('city',e.target.value)} placeholder="By" style={crmInp} /></div>
           <div>{lbl('Score (kjøpspotensial)')}<input type="number" min="0" max="100" value={form.score} onChange={e=>set('score',e.target.value)} placeholder="0–100" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}><CrmOppfolgingFelter form={form} set={set} /></div>
-          <div>{lbl('Tilbudsdato')}<input type="date" value={form.tilbudsdato} onChange={e=>set('tilbudsdato',e.target.value)} title="Når tilbudet ble sendt" style={crmInp} /></div>
+          <div>{lbl('Tilbudsdato')}<DatoVelger value={form.tilbudsdato} onChange={v=>set('tilbudsdato', v)} retning="bakover" plassholder="Ikke satt" title="Når tilbudet ble sendt" /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Kontaktet av')}<input value={form.kontaktet_av} onChange={e=>set('kontaktet_av',e.target.value)} placeholder="Hvem hos oss som sist hadde kontakt" style={crmInp} /></div>
           <div style={{ gridColumn:'1/-1' }}>{lbl('Notater')}<textarea value={form.notes} onChange={e=>set('notes',e.target.value)} rows={3} placeholder="Interne notater..." style={{ ...crmInp,resize:'none' }} /></div>
           <div style={{ gridColumn:'1/-1', borderTop:'1px solid #f1f5f9', paddingTop:'12px' }}>
@@ -47792,8 +48011,8 @@ function ActivityModal({ customerId, defaultType, initial, user, onClose, onSave
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Tittel *</label><input value={form.title} onChange={e=>set('title',e.target.value)} placeholder="Beskriv aktiviteten" style={crmInp} /></div>
           <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Beskrivelse</label><textarea value={form.description} onChange={e=>set('description',e.target.value)} rows={3} style={{ ...crmInp,resize:'none' }} /></div>
           <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'10px' }}>
-            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Dato</label><input type="date" value={form.date} onChange={e=>set('date',e.target.value)} style={crmInp} /></div>
-            {form.type==='task'&&<div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Frist</label><input type="date" value={form.due_date} onChange={e=>set('due_date',e.target.value)} style={crmInp} /></div>}
+            <div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Dato</label><DatoVelger value={form.date} onChange={v=>set('date', v)} retning="begge" plassholder="Velg dato" /></div>
+            {form.type==='task'&&<div><label style={{ display:'block',fontSize:'13px',fontWeight:'600',color:'#374151',marginBottom:'6px' }}>Frist</label><DatoVelger value={form.due_date} onChange={v=>set('due_date', v)} retning="fremover" plassholder="Ingen frist" /></div>}
           </div>
           <div style={{ display:'flex',justifyContent:'flex-end',gap:'10px',borderTop:'1px solid #f1f5f9',paddingTop:'14px' }}>
             <button onClick={onClose} style={{ padding:'10px 18px',border:'1px solid #e2e8f0',borderRadius:'10px',background:'white',cursor:'pointer',fontSize:'14px',fontWeight:'600',color:'#374151' }}>Avbryt</button>
