@@ -45902,7 +45902,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                     {mapper.map(m => <option key={m.id} value={m.id}>📂 {m.name}</option>)}
                   </select>
                   <span style={{ flexBasis:'100%', fontSize:'11px', color:'#94a3b8', lineHeight:1.5 }}>
-                    Gjelder «Last opp»-knappen. Slipper du filer rett på en mappe, havner de der i stedet — og et dokument kan dras fra én mappe til en annen.
+                    Gjelder «Last opp»-knappen. Slipper du filer rett på en mappe, havner de der i stedet. Et dokument kan dras til en annen mappe — eller ut av nettleseren, rett inn i en e-post.
                   </span>
                 </div>
               )}
@@ -45925,12 +45925,23 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                       // merkes med vår egen type, så et slipp kan skilles fra filer
                       // som kommer utenfra.
                       <div key={d.id} draggable
-                        onDragStart={e=>{ e.dataTransfer.setData('text/ep-dokument', d.id); e.dataTransfer.effectAllowed = 'move' }}
+                        onDragStart={e=>{
+                          // Intern flytting mellom mapper.
+                          e.dataTransfer.setData('text/ep-dokument', d.id)
+                          // DownloadURL gjør at et slipp UT av nettleseren — til Outlook,
+                          // Utforsker, hva som helst — gir den ekte fila og ikke en
+                          // .url-snarvei. Formatet er «mimetype:filnavn:absolutt-url»,
+                          // og navnet er originalen med æ, ø og å. Chrome og Edge
+                          // støtter dette; Firefox og Safari gjør det ikke.
+                          const url = `${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`
+                          e.dataTransfer.setData('DownloadURL', `${d.file_type || 'application/octet-stream'}:${d.name || 'dokument'}:${url}`)
+                          e.dataTransfer.effectAllowed = 'copyMove'
+                        }}
                         onDragEnd={()=>setDragMappe(null)}
                         style={{ display:'flex', alignItems:'center', gap:'12px', background:'#f8fafc', borderRadius:'10px', padding:'10px 14px', border:'1px solid #f1f5f9', flexWrap:'wrap', cursor:'grab' }}>
-                        <span title="Dra for å flytte til en mappe" style={{ fontSize:'20px', flexShrink:0 }}>{isImage?'🖼️':'📄'}</span>
+                        <span title="Dra til en mappe for å flytte — eller ut av nettleseren for å legge fila ved en e-post" style={{ fontSize:'20px', flexShrink:0, cursor:'grab' }}>{isImage?'🖼️':'📄'}</span>
                         <div style={{ flex:'1 1 150px', minWidth:0 }}>
-                          <a href={d.file_url} target="_blank" rel="noreferrer" style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
+                          <a href={d.file_url} target="_blank" rel="noreferrer" draggable={false} style={{ fontWeight:'600', fontSize:'13px', color:'#2563eb', textDecoration:'none', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', display:'block' }}>{d.name}</a>
                           <div style={{ fontSize:'11px', color:'#94a3b8' }}>{new Date(d.created_at).toLocaleDateString('nb-NO')}</div>
                         </div>
                         {/* Flytting er en nedtrekksliste, ikke dra-og-slipp: det er det
@@ -45948,7 +45959,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                             så fila lagres med originalnavnet — med æ, ø og å — og ikke
                             med den rensede storage-nøkkelen. */}
                         <a href={`${d.file_url}${d.file_url?.includes('?') ? '&' : '?'}download=${encodeURIComponent(d.name || 'dokument')}`}
-                          title={`Last ned «${d.name}»`} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', textDecoration:'none', flexShrink:0 }}>⬇️</a>
+                          title={`Last ned «${d.name}»`} draggable={false} style={{ background:'none', border:'none', cursor:'pointer', color:'#64748b', fontSize:'14px', textDecoration:'none', flexShrink:0 }}>⬇️</a>
                         <button onClick={()=>deleteDoc(d.id)} style={{ background:'none', border:'none', cursor:'pointer', color:'#dc2626', fontSize:'14px', flexShrink:0 }}>🗑️</button>
                       </div>
                     )
