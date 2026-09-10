@@ -44183,8 +44183,10 @@ function DatoVelger({ value, onChange, retning = 'begge', plassholder = 'Ikke sa
       const oppover = plassUnder < h && r.top > plassUnder
       setRect({
         top: oppover ? Math.max(8, r.top - h - 6) : r.bottom + 6,
-        left: Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - 348)),
-        bredde: Math.max(r.width, 320),
+        left: Math.min(Math.max(8, r.left), Math.max(8, window.innerWidth - 384)),
+        // 376 er bredt nok til at seks årstall får luft rundt seg. Smalere, og
+        // «2026» fyller knappen helt ut til kanten.
+        bredde: Math.max(r.width, 376),
       })
     }
     oppdater()
@@ -44272,12 +44274,12 @@ function DatoVelger({ value, onChange, retning = 'begge', plassholder = 'Ikke sa
       </div>
       <div style={{ marginBottom:'10px' }}>
         <div style={{ fontSize:'10.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', marginBottom:'5px' }}>År</div>
-        <div style={{ display:'flex', gap:'4px' }}>
-          <button type="button" onClick={()=>setVindu(v=>v-1)} title="Tidligere år" style={{ ...knapp, flex:'0 0 26px', background:'#f8fafc', color:'#cbd5e1', fontWeight:'700' }}>‹</button>
+        <div style={{ display:'flex', gap:'3px' }}>
+          <button type="button" onClick={()=>setVindu(v=>v-1)} title="Tidligere år" style={{ ...knapp, flex:'0 0 20px', padding:'8px 0', background:'#f8fafc', color:'#cbd5e1', fontWeight:'700' }}>‹</button>
           {[0,1,2,3,4,5].map(i => (
-            <button key={i} type="button" onClick={()=>setSeAar(vindu+i)} style={{ ...(vindu+i===seAar?knappValgt:knapp), flex:1, minWidth:0 }}>{vindu+i}</button>
+            <button key={i} type="button" onClick={()=>setSeAar(vindu+i)} style={{ ...(vindu+i===seAar?knappValgt:knapp), flex:1, minWidth:0, padding:'8px 4px' }}>{vindu+i}</button>
           ))}
-          <button type="button" onClick={()=>setVindu(v=>v+1)} title="Senere år" style={{ ...knapp, flex:'0 0 26px', background:'#f8fafc', color:'#cbd5e1', fontWeight:'700' }}>›</button>
+          <button type="button" onClick={()=>setVindu(v=>v+1)} title="Senere år" style={{ ...knapp, flex:'0 0 20px', padding:'8px 0', background:'#f8fafc', color:'#cbd5e1', fontWeight:'700' }}>›</button>
         </div>
       </div>
       <div style={{ marginBottom:'10px' }}>
