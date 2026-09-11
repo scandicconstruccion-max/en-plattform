@@ -5756,6 +5756,9 @@ function trygtFilnavn(navn) {
 // storage-nøkkelen hører hjemme i konsollen, ikke i en dialog.
 function filFeilTekst(e) {
   const m = String(e?.message || e || '')
+  // Fila er åpen i Word/Excel (låst), eller ble endret etter at den ble valgt: nettleseren
+  // får ikke lest den. Det er ikke et nettverksproblem, selv om fetch sier «Failed to fetch».
+  if (e?.name === 'NotReadableError' || /could not be read|notreadable|upload_file_changed/i.test(m)) return 'Fila kunne ikke leses. Den er trolig åpen i Word eller et annet program — lukk den og prøv igjen.'
   if (/invalid key/i.test(m)) return 'Filnavnet inneholder tegn lagringen ikke godtar. Gi fila et enklere navn og prøv igjen.'
   if (/exceeded the maximum allowed size|payload too large|413/i.test(m)) return 'Fila er for stor for opplasting.'
   if (/already exists|duplicate/i.test(m)) return 'En fil med samme navn ble lastet opp akkurat nå. Prøv en gang til.'
@@ -45489,7 +45492,11 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
           // Nøkkelen renses — Supabase Storage avviser æ, ø og å. Navnet som VISES i
           // lista er derimot originalen: den lagres i crm_documents.name og røres ikke.
           const path = `crm/${c.id}/${Date.now()}_${trygtFilnavn(file.name)}`
-          const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, file)
+          // Les fila inn i minnet FØR opplasting. En fil som er åpen i Word er låst; da feilet
+          // selve opplastingen med «Failed to fetch» og så ut som et nettbrudd. Leses den
+          // først, kommer en presis NotReadableError som filFeilTekst kan forklare.
+          const innhold = new File([await file.arrayBuffer()], file.name, { type: file.type })
+          const { error: upErr } = await supabase.storage.from('plattform-files').upload(path, innhold)
           if (upErr) throw upErr
           const { data:{ publicUrl } } = supabase.storage.from('plattform-files').getPublicUrl(path)
           const { error: dbErr } = await supabase.from('crm_documents').insert({ customer_id:c.id, name:file.name, file_url:publicUrl, file_type:file.type, uploaded_by:user?.id, folder_id: mappe || null })
