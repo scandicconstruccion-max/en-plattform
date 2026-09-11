@@ -44099,6 +44099,26 @@ const CRM_OPPFOLGING_TYPER = {
 function crmDatoPlussDager(n) { const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().split('T')[0] }
 // Varsle CRM-badgen om at oppfølging er endret (fullført/satt) — badgen henter da på nytt
 function crmVarsleOppfolging() { try { window.dispatchEvent(new CustomEvent('crm-oppfolging-endret')) } catch(_) {} }
+
+// Fullfør en avtalt oppfølging på KUNDEN (customers.neste_oppfolging) — ikke en
+// oppgave i crm_activities, som har sin egen completed-flagg. Handlingen loggføres
+// som en aktivitet, oppfølgingsfeltene ryddes, og sist_kontaktet settes til i dag.
+// Brukes av «Mine oppgaver» og av kundekortet, så de to alltid gjør det samme.
+async function crmFullforKundeOppfolging({ customerId, oppfolgingType, notat, userId }) {
+  const today = new Date().toISOString().split('T')[0]
+  const t = CRM_OPPFOLGING_TYPER[oppfolgingType]
+  let navn = null
+  try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', userId).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
+  const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:customerId, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: notat||null, date: today, created_by: userId })
+  if (aErr) throw aErr
+  const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
+  if (navn) upd.kontaktet_av = navn
+  const { error: cErr } = await supabase.from('customers').update(upd).eq('id', customerId)
+  if (cErr) throw cErr
+  invalidateCustomerCache()
+  crmVarsleOppfolging()
+  return upd
+}
 // Valgbart tidsvindu for «Mine oppgaver»
 const CRM_OPPGAVE_VINDUER = [
   { dager:0,  label:'I dag' },
@@ -45343,6 +45363,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const [editing, setEditing] = useState(false)
   const [showNewContact, setShowNewContact] = useState(false)
   const [showNewActivity, setShowNewActivity] = useState(false)
+  const [fullforerOppf, setFullforerOppf] = useState(false) // fullfører avtalt oppfølging
   const [editAct, setEditAct] = useState(null) // aktivitet under redigering
   const [showQuotePicker, setShowQuotePicker] = useState(false)
   const [usersById, setUsersById] = useState({})
@@ -45625,6 +45646,20 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
   const linkedQuotes = quotes.filter(q=>(q.customer_id&&q.customer_id===c.id)||(q.customer_name&&q.customer_name.toLowerCase().trim()===c.name.toLowerCase().trim()))
   const linkedInvoices = invoices.filter(i=>(i.customer_id&&i.customer_id===c.id)||(i.customer_name&&i.customer_name.toLowerCase().trim()===c.name.toLowerCase().trim()))
   const openTasks = acts.filter(a=>a.type==='task'&&!a.completed)
+  // En avtalt oppfølging på kunden ER en åpen oppgave — «Mine oppgaver» viser den som
+  // det. Sammendraget skal telle likt, ellers står det 0 mens du har én på vent.
+  const antallApneOppgaver = openTasks.length + (c.neste_oppfolging ? 1 : 0)
+  const fullforOppfolging = async () => {
+    setFullforerOppf(true)
+    try {
+      const upd = await crmFullforKundeOppfolging({ customerId:c.id, oppfolgingType:c.oppfolging_type, notat:c.oppfolging_notat, userId:user?.id })
+      setC(v => ({ ...v, ...upd }))
+      loadDetails()
+    } catch (e) {
+      console.error('[CRM] Kunne ikke fullføre oppfølging:', e)
+      await alert({ message:'Kunne ikke fullføre oppfølgingen', subMessage: e?.message, kind:'error' })
+    } finally { setFullforerOppf(false) }
+  }
   const today = new Date().toISOString().split('T')[0]
 
   const tabs = [
@@ -45750,6 +45785,34 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
                 <button onClick={()=>setShowNewActivity(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
               </div>
+              {/* Planlagt oppfølging ligger på kunden (customers.neste_oppfolging), ikke i
+                  crm_activities — derfor dukket den ikke opp i loggen under. Den vises
+                  her som et eget kort, uten å lagres dobbelt: en kopi i crm_activities
+                  ville blitt telt to ganger i «Mine oppgaver». */}
+              {c.neste_oppfolging && (() => {
+                const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+                const idagIso = new Date().toISOString().split('T')[0]
+                const forfalt = c.neste_oppfolging < idagIso
+                const erIdag = c.neste_oppfolging === idagIso
+                return (
+                  <div style={{ background: forfalt?'#fef2f2':'#fffbeb', border:`1px solid ${forfalt?'#fecaca':'#fde68a'}`, borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
+                    <span style={{ fontSize:'22px', flexShrink:0 }}>{t?.emoji || '📅'}</span>
+                    <div style={{ flex:'1 1 180px', minWidth:0 }}>
+                      <div style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#92400e', textTransform:'uppercase', letterSpacing:'.04em' }}>
+                        {forfalt ? 'Forfalt oppfølging' : erIdag ? 'Oppfølging i dag' : 'Planlagt oppfølging'}
+                      </div>
+                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginTop:'2px' }}>
+                        {t?.label || 'Oppfølging'} · {dvVisning(c.neste_oppfolging)}{c.oppfolging_tid ? ` kl. ${String(c.oppfolging_tid).slice(0,5)}` : ''}
+                      </div>
+                      {c.oppfolging_notat && <div style={{ fontSize:'12.5px', color:'#64748b', marginTop:'2px', overflowWrap:'anywhere' }}>{c.oppfolging_notat}</div>}
+                    </div>
+                    <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
+                      <button onClick={()=>setEditing(true)} style={{ padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'9px', background:'white', cursor:'pointer', fontSize:'12.5px', fontWeight:'600', color:'#374151' }}>✏️ Endre</button>
+                      <button onClick={fullforOppfolging} disabled={fullforerOppf} style={{ padding:'8px 14px', border:'none', borderRadius:'9px', background: fullforerOppf?'#6ee7b7':'#059669', color:'white', cursor: fullforerOppf?'wait':'pointer', fontSize:'12.5px', fontWeight:'700' }}>{fullforerOppf ? 'Lagrer…' : '✓ Fullført'}</button>
+                    </div>
+                  </div>
+                )
+              })()}
               {acts.length===0?(
                 <TomTilstand emoji="📝" tittel="Ingen aktiviteter ennå"
                   hjelp="Trykk for å loggføre en samtale, et møte eller en oppgave"
@@ -46038,7 +46101,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
           </div>
           <div style={crmCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Sammendrag</h3>
-            {[['Aktiviteter',acts.length],['Kontakter',cts.length],['Dokumenter',docs.length],['Åpne oppgaver',openTasks.length],['Tilbud',linkedQuotes.length],['Fakturaer',linkedInvoices.length]].map(([k,v],i)=>(
+            {[['Aktiviteter',acts.length],['Kontakter',cts.length],['Dokumenter',docs.length],['Åpne oppgaver',antallApneOppgaver],['Tilbud',linkedQuotes.length],['Fakturaer',linkedInvoices.length]].map(([k,v],i)=>(
               <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
                 <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{v}</span>
               </div>
@@ -46529,17 +46592,7 @@ function MineOppgaver({ user, startAapen, onOpenKunde, onBack }) {
         const { error } = await supabase.from('crm_activities').update({ completed: true }).eq('id', r.oppgave_id)
         if (error) throw error
       } else {
-        const t = CRM_OPPFOLGING_TYPER[r.oppfolging_type]
-        let navn = null
-        try { const { data:p } = await supabase.from('user_profiles').select('full_name').eq('id', user?.id).single(); navn = (p?.full_name||'').trim()||null } catch(_) {}
-        const { error: aErr } = await supabase.from('crm_activities').insert({ customer_id:r.customer_id, type: t?.aktivitet||'note', title: 'Oppfølging fullført'+(t?` – ${t.label}`:''), description: r.notat||null, date: today, created_by: user?.id })
-        if (aErr) throw aErr
-        const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, sist_kontaktet:today, updated_at:new Date().toISOString() }
-        if (navn) upd.kontaktet_av = navn
-        const { error: cErr } = await supabase.from('customers').update(upd).eq('id', r.customer_id)
-        if (cErr) throw cErr
-        invalidateCustomerCache()
-        crmVarsleOppfolging()
+        await crmFullforKundeOppfolging({ customerId:r.customer_id, oppfolgingType:r.oppfolging_type, notat:r.notat, userId:user?.id })
       }
       const boette = bucketFor(r)
       setRader(rr => ({ ...rr, [boette]: (rr[boette] || []).filter(x => x.oppgave_id !== r.oppgave_id) }))
