@@ -45664,7 +45664,9 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
 
   const tabs = [
     { id:'oversikt', label:'Oversikt', emoji:'📊' },
-    { id:'aktiviteter', label:`Aktiviteter (${acts.length})`, emoji:'📋' },
+    // Telleren tar med den planlagte oppfølgingen, siden den vises øverst i fanen.
+    // Uten den sto det «(0)» mens fanen hadde et kort, og det så ut som den manglet.
+    { id:'aktiviteter', label:`Aktiviteter (${acts.length + (c.neste_oppfolging ? 1 : 0)})`, emoji:'📋' },
     { id:'kontakter', label:`Kontakter (${cts.length})`, emoji:'👤' },
     { id:'tilbud', label:`Tilbud (${linkedQuotes.length})`, emoji:'📋' },
     { id:'dokumenter', label:`Dokumenter (${docs.length})`, emoji:'📁' },
