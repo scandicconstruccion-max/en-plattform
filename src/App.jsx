@@ -45660,7 +45660,25 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
       await alert({ message:'Kunne ikke fullføre oppfølgingen', subMessage: e?.message, kind:'error' })
     } finally { setFullforerOppf(false) }
   }
+  // Søppelkassa på en planlagt oppfølging: den forsvinner UTEN å loggføres som
+  // utført — til forskjell fra «Fullført», som skriver «Oppfølging fullført» i loggen.
+  const fjernOppfolging = async () => {
+    const ok = await confirm({ message:'Fjerne planlagt oppfølging?', subMessage:'Den slettes uten å loggføres som utført. Har du gjort den, trykk «Fullført» i stedet.', danger:true, confirmLabel:'Fjern' })
+    if (!ok) return
+    try {
+      const upd = { neste_oppfolging:null, oppfolging_type:null, oppfolging_notat:null, oppfolging_tid:null, updated_at:new Date().toISOString() }
+      const { error } = await supabase.from('customers').update(upd).eq('id', c.id)
+      if (error) throw error
+      setC(v => ({ ...v, ...upd }))
+      invalidateCustomerCache()
+      crmVarsleOppfolging()
+    } catch (e) {
+      console.error('[CRM] Kunne ikke fjerne oppfølging:', e)
+      await alert({ message:'Kunne ikke fjerne oppfølgingen', subMessage: e?.message, kind:'error' })
+    }
+  }
   const today = new Date().toISOString().split('T')[0]
+  const antallForfalt = openTasks.filter(a=>a.due_date&&a.due_date<today).length + (c.neste_oppfolging&&c.neste_oppfolging<today ? 1 : 0)
 
   const tabs = [
     { id:'oversikt', label:'Oversikt', emoji:'📊' },
@@ -45744,7 +45762,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
               <div style={crmCard}>
                 <h3 style={{ margin:'0 0 14px', fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>ℹ️ Informasjon</h3>
                 <div style={{ display:'grid', gridTemplateColumns: typeof window !== 'undefined' && window.innerWidth < 768 ? '1fr' : '1fr 1fr', gap:'10px' }}>
-                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging?`${c.neste_oppfolging}${c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}${c.oppfolging_type&&CRM_OPPFOLGING_TYPER[c.oppfolging_type]?` · ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].emoji} ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].label}`:''}${c.oppfolging_notat?` — ${c.oppfolging_notat}`:''}`:null],['Sist kontaktet',c.sist_kontaktet||null],['Tilbudsdato',c.tilbudsdato||null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
+                  {[['Navn',c.name,c.name],['Type',CRM_TYPE[c.type]?.label],['Org.nr',c.orgnr,c.orgnr],['Kontaktperson',c.kontaktperson],['Bransje',c.industry,c.industry],['E-post',c.email,c.email],['Telefon',c.phone,c.phone],['Nettside',c.website],['Adresse',c.address],['Postnr/By',c.postal_code&&c.city?`${c.postal_code} ${c.city}`:c.city||c.postal_code],['Estimert verdi',c.estimated_value?fmtVal(c.estimated_value):null],['Score',c.score!=null&&c.score!==''?`🎯 ${c.score}`:null,c.score!=null&&c.score!==''?String(c.score):null],['Neste oppfølging',c.neste_oppfolging?`${dvVisning(c.neste_oppfolging)||c.neste_oppfolging}${c.oppfolging_tid?` kl. ${String(c.oppfolging_tid).slice(0,5)}`:''}${c.oppfolging_type&&CRM_OPPFOLGING_TYPER[c.oppfolging_type]?` · ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].emoji} ${CRM_OPPFOLGING_TYPER[c.oppfolging_type].label}`:''}${c.oppfolging_notat?` — ${c.oppfolging_notat}`:''}`:null],['Sist kontaktet',c.sist_kontaktet?(dvVisning(c.sist_kontaktet)||c.sist_kontaktet):null],['Tilbudsdato',c.tilbudsdato?(dvVisning(c.tilbudsdato)||c.tilbudsdato):null],['Kontaktet av',c.kontaktet_av||null],['Kilde',c.kilde||null,c.kilde||null]].filter(r=>r[1]).map(([k,v,cv])=>(
                     <CrmInfoFelt key={k} label={k} value={v} copyValue={cv} />
                   ))}
                 </div>
@@ -45768,11 +45786,11 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                   <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'700', color:'#92400e' }}>⏰ Åpne oppgaver ({openTasks.length})</h3>
                   {openTasks.map(a=>(
                     <div key={a.id} style={{ display:'flex', alignItems:'center', gap:'10px', padding:'8px 0', borderBottom:'1px solid #fde68a' }}>
-                      <input type="checkbox" checked={a.completed} onChange={()=>toggleTask(a)} style={{ width:'16px', height:'16px', accentColor:'#059669', cursor:'pointer' }} />
-                      <div style={{ flex:1 }}>
-                        <div style={{ fontSize:'13px', fontWeight:'600', color:'#0f172a' }}>{a.title}</div>
-                        {a.due_date&&<div style={{ fontSize:'11px', color:a.due_date<today?'#dc2626':'#64748b', fontWeight:a.due_date<today?'700':'400' }}>Frist: {a.due_date}{a.due_date<today?' ⚠️ FORFALT':''}</div>}
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:'13px', fontWeight:'700', color:'#0f172a', overflowWrap:'anywhere' }}>{a.title}</div>
+                        {a.due_date&&<div style={{ fontSize:'11px', color:a.due_date<today?'#dc2626':'#92400e', fontWeight:a.due_date<today?'700':'400' }}>{a.due_date<today?'Forfalt':'Frist'} {a.due_date===today?'i dag':dvVisning(a.due_date)}</div>}
                       </div>
+                      <button type="button" onClick={()=>toggleTask(a)} style={{ padding:'6px 10px', border:'1px solid #059669', borderRadius:'9px', background:'#059669', color:'white', cursor:'pointer', fontSize:'12px', fontWeight:'700', whiteSpace:'nowrap', flexShrink:0 }}>✓ Fullført</button>
                     </div>
                   ))}
                 </div>
@@ -45787,67 +45805,103 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
                 <h3 style={{ margin:0, fontSize:'14px', fontWeight:'700', color:'#0f172a' }}>📋 Aktivitetslogg</h3>
                 <button onClick={()=>setShowNewActivity(true)} style={{ background:'#f0fdf4', color:'#059669', border:'none', borderRadius:'8px', padding:'7px 14px', fontSize:'13px', fontWeight:'600', cursor:'pointer' }}>+ Legg til</button>
               </div>
-              {/* Planlagt oppfølging ligger på kunden (customers.neste_oppfolging), ikke i
-                  crm_activities — derfor dukket den ikke opp i loggen under. Den vises
-                  her som et eget kort, uten å lagres dobbelt: en kopi i crm_activities
-                  ville blitt telt to ganger i «Mine oppgaver». */}
-              {c.neste_oppfolging && (() => {
-                const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
-                const idagIso = new Date().toISOString().split('T')[0]
-                const forfalt = c.neste_oppfolging < idagIso
-                const erIdag = c.neste_oppfolging === idagIso
+              {/* Én radmal for alt i fanen: planlagt oppfølging, oppgaver og loggførte
+                  aktiviteter ser like ut. Fargen sier status — gul: åpen, rød: forfalt,
+                  grå: utført eller loggført. Oppfølgingen ligger på kunden
+                  (customers.neste_oppfolging), ikke i crm_activities, og lagres ikke
+                  dobbelt: en kopi ville blitt telt to ganger i «Mine oppgaver». */}
+              {(() => {
+                const knapp = { padding:'7px 12px', border:'1px solid #e2e8f0', borderRadius:'9px', background:'white', cursor:'pointer', fontSize:'12.5px', fontWeight:'600', color:'#374151', whiteSpace:'nowrap' }
+                const knappGronn = { ...knapp, background:'#059669', borderColor:'#059669', color:'white', fontWeight:'700' }
+                const knappSlett = { border:'none', background:'none', cursor:'pointer', padding:'6px 4px', fontSize:'15px', color:'#dc2626' }
+                const flate = {
+                  apen:    { background:'#fffbeb', border:'1px solid #fde68a' },
+                  forfalt: { background:'#fef2f2', border:'1px solid #fecaca' },
+                  gjort:   { background:'#f8fafc', border:'1px solid #f1f5f9' },
+                }
+                const pille = (tekst, farge) => <span style={{ background:farge+'18', color:farge, fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', whiteSpace:'nowrap' }}>{tekst}</span>
+                const frist = (iso, tid) => {
+                  if (!iso) return null
+                  const over = iso < today
+                  return <span style={{ color: over?'#dc2626':'#92400e', fontWeight: over?'700':'400' }}>{over ? 'Forfalt' : 'Frist'} {iso===today ? 'i dag' : dvVisning(iso)}{tid ? ` kl. ${String(tid).slice(0,5)}` : ''}</span>
+                }
+                const hvemNar = (a) => <span>👤 {crmBrukerNavn(usersById, a.created_by)} — {fmtCrmTidspunkt(a.created_at) || dvVisning(a.date)}{a.redigert_at ? <span title={`Redigert av ${crmBrukerNavn(usersById, a.redigert_av)} ${fmtCrmTidspunkt(a.redigert_at)}`} style={{ fontStyle:'italic' }}> (redigert)</span> : ''}</span>
+                const endre = (a) => kanEndreAktivitet(a) && <button type="button" onClick={()=>setEditAct(a)} style={knapp}>✏️ Endre</button>
+                const slett = (a) => kanSletteAktivitet(a) && <button type="button" onClick={()=>slettAktivitet(a)} title="Slett" style={knappSlett}>🗑️</button>
+                const rad = ({ key, emoji, farge, tittel, ferdig, merke, beskrivelse, meta, status, knapper }) => (
+                  <div key={key} style={{ display:'flex', alignItems:'center', flexWrap:'wrap', gap:'10px 12px', padding:'12px 14px', borderRadius:'12px', ...flate[status] }}>
+                    <div style={{ width:'32px', height:'32px', borderRadius:'8px', background:farge+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0, alignSelf:'flex-start' }}>{emoji}</div>
+                    <div style={{ flex:'1 1 220px', minWidth:0 }}>
+                      <div style={{ display:'flex', flexWrap:'wrap', alignItems:'center', gap:'3px 8px', marginBottom:'3px' }}>
+                        <span style={{ fontWeight:'700', fontSize:'13px', lineHeight:1.35, color: ferdig?'#94a3b8':'#0f172a', textDecoration: ferdig?'line-through':'none', overflowWrap:'anywhere' }}>{tittel}</span>
+                        {merke}
+                      </div>
+                      {beskrivelse && <p style={{ margin:'0 0 4px', fontSize:'12px', color:'#64748b', lineHeight:1.5, overflowWrap:'anywhere' }}>{beskrivelse}</p>}
+                      <div style={{ display:'flex', gap:'4px 10px', flexWrap:'wrap', fontSize:'11px', color:'#94a3b8' }}>{meta}</div>
+                    </div>
+                    {/* Til høyre på brede skjermer; på mobil brytes knappene under teksten, på linje med den. */}
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', flexShrink:0, marginLeft: isMobBD ? '44px' : 'auto' }}>{knapper}</div>
+                  </div>
+                )
+                const oppfolgingRad = () => {
+                  const t = CRM_OPPFOLGING_TYPER[c.oppfolging_type]
+                  const at = ACTIVITY_TYPES[t?.aktivitet]
+                  return rad({
+                    key:'oppfolging', emoji: t?.emoji || '📅', farge: at?.color || '#059669',
+                    tittel: t?.label || 'Oppfølging', merke: pille('Oppfølging', '#059669'),
+                    beskrivelse: c.oppfolging_notat, meta: frist(c.neste_oppfolging, c.oppfolging_tid),
+                    status: c.neste_oppfolging < today ? 'forfalt' : 'apen',
+                    knapper: <>
+                      <button type="button" onClick={()=>setEditing(true)} style={knapp}>✏️ Endre</button>
+                      <button type="button" onClick={fullforOppfolging} disabled={fullforerOppf} style={{ ...knappGronn, ...(fullforerOppf ? { background:'#6ee7b7', borderColor:'#6ee7b7', cursor:'wait' } : {}) }}>{fullforerOppf ? 'Lagrer…' : '✓ Fullført'}</button>
+                      <button type="button" onClick={fjernOppfolging} title="Fjern oppfølgingen uten å loggføre den" style={knappSlett}>🗑️</button>
+                    </>,
+                  })
+                }
+                const oppgaveRad = (a) => {
+                  const at = ACTIVITY_TYPES.task
+                  const apen = !a.completed
+                  return rad({
+                    key:a.id, emoji:at.emoji, farge:at.color, tittel:a.title, ferdig:!apen,
+                    merke: apen ? pille(at.label, at.color) : <span style={{ fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', whiteSpace:'nowrap' }}>✓ Fullført</span>,
+                    beskrivelse:a.description, meta:<>{hvemNar(a)}{apen && frist(a.due_date)}</>,
+                    status: !apen ? 'gjort' : a.due_date && a.due_date < today ? 'forfalt' : 'apen',
+                    knapper: <>
+                      {!apen && <button type="button" onClick={()=>toggleTask(a)} title="Gjør oppgaven åpen igjen" style={knapp}>↺ Angre</button>}
+                      {endre(a)}
+                      {apen && <button type="button" onClick={()=>toggleTask(a)} style={knappGronn}>✓ Fullført</button>}
+                      {slett(a)}
+                    </>,
+                  })
+                }
+                const loggRad = (a) => {
+                  const at = ACTIVITY_TYPES[a.type] || ACTIVITY_TYPES.note
+                  return rad({ key:a.id, emoji:at.emoji, farge:at.color, tittel:a.title, merke:pille(at.label, at.color), beskrivelse:a.description, meta:hvemNar(a), status:'gjort', knapper:<>{endre(a)}{slett(a)}</> })
+                }
+                // Å gjøre sorteres etter frist, så forfalte havner øverst; uten frist nederst.
+                const gjore = [
+                  ...(c.neste_oppfolging ? [{ dato:c.neste_oppfolging, oppf:true }] : []),
+                  ...openTasks.map(a => ({ dato:a.due_date || '9999-12-31', a })),
+                ].sort((x, y) => x.dato < y.dato ? -1 : x.dato > y.dato ? 1 : 0)
+                const historikk = acts.filter(a => !(a.type==='task' && !a.completed))
+                const gruppe = (tekst, innhold) => (
+                  <div>
+                    <div style={{ display:'flex', alignItems:'center', gap:'8px', fontSize:'11.5px', fontWeight:'700', color:'#94a3b8', textTransform:'uppercase', letterSpacing:'.05em', margin:'4px 0 8px' }}>{tekst}<span style={{ flex:1, height:'1px', background:'#f1f5f9' }} /></div>
+                    <div style={{ display:'flex', flexDirection:'column', gap:'8px' }}>{innhold}</div>
+                  </div>
+                )
+                if (!gjore.length && !historikk.length) return (
+                  <TomTilstand emoji="📝" tittel="Ingen aktiviteter ennå"
+                    hjelp="Trykk for å loggføre en samtale, et møte eller en oppgave"
+                    onClick={()=>setShowNewActivity(true)} />
+                )
                 return (
-                  <div style={{ background: forfalt?'#fef2f2':'#fffbeb', border:`1px solid ${forfalt?'#fecaca':'#fde68a'}`, borderRadius:'12px', padding:'12px 14px', marginBottom:'14px', display:'flex', alignItems:'center', gap:'12px', flexWrap:'wrap' }}>
-                    <span style={{ fontSize:'22px', flexShrink:0 }}>{t?.emoji || '📅'}</span>
-                    <div style={{ flex:'1 1 180px', minWidth:0 }}>
-                      <div style={{ fontSize:'11px', fontWeight:'700', color: forfalt?'#dc2626':'#92400e', textTransform:'uppercase', letterSpacing:'.04em' }}>
-                        {forfalt ? 'Forfalt oppfølging' : erIdag ? 'Oppfølging i dag' : 'Planlagt oppfølging'}
-                      </div>
-                      <div style={{ fontSize:'14px', fontWeight:'700', color:'#0f172a', marginTop:'2px' }}>
-                        {t?.label || 'Oppfølging'} · {dvVisning(c.neste_oppfolging)}{c.oppfolging_tid ? ` kl. ${String(c.oppfolging_tid).slice(0,5)}` : ''}
-                      </div>
-                      {c.oppfolging_notat && <div style={{ fontSize:'12.5px', color:'#64748b', marginTop:'2px', overflowWrap:'anywhere' }}>{c.oppfolging_notat}</div>}
-                    </div>
-                    <div style={{ display:'flex', gap:'8px', flexShrink:0, flexWrap:'wrap' }}>
-                      <button onClick={()=>setEditing(true)} style={{ padding:'8px 12px', border:'1px solid #e2e8f0', borderRadius:'9px', background:'white', cursor:'pointer', fontSize:'12.5px', fontWeight:'600', color:'#374151' }}>✏️ Endre</button>
-                      <button onClick={fullforOppfolging} disabled={fullforerOppf} style={{ padding:'8px 14px', border:'none', borderRadius:'9px', background: fullforerOppf?'#6ee7b7':'#059669', color:'white', cursor: fullforerOppf?'wait':'pointer', fontSize:'12.5px', fontWeight:'700' }}>{fullforerOppf ? 'Lagrer…' : '✓ Fullført'}</button>
-                    </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'18px' }}>
+                    {gjore.length > 0 && gruppe(`Å gjøre · ${gjore.length}`, gjore.map(x => x.oppf ? oppfolgingRad() : oppgaveRad(x.a)))}
+                    {historikk.length > 0 && gruppe(`Historikk · ${historikk.length}`, historikk.map(a => a.type==='task' ? oppgaveRad(a) : loggRad(a)))}
                   </div>
                 )
               })()}
-              {acts.length===0?(
-                <TomTilstand emoji="📝" tittel="Ingen aktiviteter ennå"
-                  hjelp="Trykk for å loggføre en samtale, et møte eller en oppgave"
-                  onClick={()=>setShowNewActivity(true)} />
-              ):(
-                <div style={{ display:'flex', flexDirection:'column', gap:'10px' }}>
-                  {acts.map(a=>{
-                    const atCfg=ACTIVITY_TYPES[a.type]
-                    const isTask=a.type==='task'
-                    return (
-                      <div key={a.id} style={{ display:'flex', gap:'12px', padding:'12px 14px', background:'#f8fafc', borderRadius:'12px', border:`1px solid ${isTask&&a.due_date<today&&!a.completed?'#fecaca':'#f1f5f9'}` }}>
-                        <div style={{ width:'32px', height:'32px', borderRadius:'8px', background:atCfg?.color+'18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:'16px', flexShrink:0 }}>{atCfg?.emoji}</div>
-                        <div style={{ flex:1 }}>
-                          <div style={{ display:'flex', alignItems:'center', gap:'8px', marginBottom:'3px' }}>
-                            {isTask&&<input type="checkbox" checked={a.completed} onChange={()=>toggleTask(a)} style={{ width:'14px', height:'14px', accentColor:'#059669', cursor:'pointer' }} />}
-                            <span style={{ fontWeight:'700', fontSize:'13px', color:'#0f172a', textDecoration:isTask&&a.completed?'line-through':'none' }}>{a.title}</span>
-                            <span style={{ background:atCfg?.color+'18', color:atCfg?.color, fontSize:'10px', fontWeight:'700', padding:'2px 7px', borderRadius:'999px' }}>{atCfg?.label}</span>
-                          </div>
-                          {a.description&&<p style={{ margin:'0 0 4px', fontSize:'12px', color:'#64748b', lineHeight:1.5 }}>{a.description}</p>}
-                          <div style={{ display:'flex', gap:'10px', flexWrap:'wrap', fontSize:'11px', color:'#94a3b8' }}>
-                            <span>👤 {crmBrukerNavn(usersById, a.created_by)} — {fmtCrmTidspunkt(a.created_at) || a.date}{a.redigert_at ? <span title={`Redigert av ${crmBrukerNavn(usersById, a.redigert_av)} ${fmtCrmTidspunkt(a.redigert_at)}`} style={{ fontStyle:'italic' }}> (redigert)</span> : ''}</span>
-                            {a.due_date&&<span style={{ color:a.due_date<today&&!a.completed?'#dc2626':'#64748b', fontWeight:a.due_date<today&&!a.completed?'700':'400' }}>Frist: {a.due_date}</span>}
-                          </div>
-                        </div>
-                        <div style={{ display:'flex', gap:'4px', flexShrink:0, alignItems:'flex-start' }}>
-                          {kanEndreAktivitet(a)&&<button onClick={()=>setEditAct(a)} title="Rediger" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', padding:'2px 4px', color:'#64748b' }}>✏️</button>}
-                          {kanSletteAktivitet(a)&&<button onClick={()=>slettAktivitet(a)} title="Slett" style={{ background:'none', border:'none', cursor:'pointer', fontSize:'14px', padding:'2px 4px', color:'#dc2626' }}>🗑️</button>}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
             </div>
           )}
 
@@ -46103,7 +46157,7 @@ function CRMDetaljer({ customer: init, contacts, activities, projects, quotes, i
           </div>
           <div style={crmCard}>
             <h3 style={{ margin:'0 0 12px', fontSize:'14px', fontWeight:'600', color:'#0f172a' }}>📊 Sammendrag</h3>
-            {[['Aktiviteter',acts.length],['Kontakter',cts.length],['Dokumenter',docs.length],['Åpne oppgaver',antallApneOppgaver],['Tilbud',linkedQuotes.length],['Fakturaer',linkedInvoices.length]].map(([k,v],i)=>(
+            {[['Aktiviteter',acts.length],['Kontakter',cts.length],['Dokumenter',docs.length],['Å gjøre',antallApneOppgaver],['Hvorav forfalt',antallForfalt],['Tilbud',linkedQuotes.length],['Fakturaer',linkedInvoices.length]].map(([k,v],i)=>(
               <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderBottom:'1px solid #f8fafc', fontSize:'13px' }}>
                 <span style={{ color:'#94a3b8' }}>{k}</span><span style={{ fontWeight:'700', color:'#0f172a' }}>{v}</span>
               </div>
