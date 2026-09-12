@@ -44063,6 +44063,11 @@ const CRM_STATUS = {
 // komme til å bety hver sin ting.
 const CRM_STATUS_GRUPPER = { aktive:['kontaktet','tilbud_sendt'], avsluttet:['tapt','inaktiv'] }
 
+// Har kunden tilbudsdato, men står som en av disse, henger ikke status og virkelighet
+// sammen: tilbudet ER sendt. Brukes av varselet, av utvalget og som sperre i selve
+// oppdateringen, så de tre aldri kan gå i utakt.
+const CRM_TILBUD_UAVKLART = ['lead', 'kontaktet']
+
 // CRM_TYPE brukes for LOOKUP (CRM_TYPE[c.type]) og må dekke alle verdier
 // som kan finnes i customers.type — inkl. legacy-verdier fra gamle crm_customers.
 const CRM_TYPE = {
@@ -44554,6 +44559,9 @@ function CRMPage() {
   const [visOppgaver, setVisOppgaver] = useState(false)
   const [hurtigRediger, setHurtigRediger] = useState(null) // lead for hurtigredigering fra lista
   const [velgeModus, setVelgeModus] = useState(false)  // avkrysning i lista for masse-sletting
+  const [visStatusAvvik, setVisStatusAvvik] = useState(false) // viser kunder med tilbudsdato uten status
+  const [statusAvvik, setStatusAvvik] = useState(0)           // hvor mange det gjelder
+  const [setterStatus, setSetterStatus] = useState(false)
   const [valgte, setValgte] = useState(() => new Set()) // id-er merket for sletting
   const [sletter, setSletter] = useState(false)
   const [sortBy, setSortBy] = useState(readCrmSort)
@@ -44577,6 +44585,7 @@ function CRMPage() {
   // Score var standard før, men på importerte lister har nesten ingen kunde score.
   // Da falt rekkefølgen tilbake på «sist endret», og lista så tilfeldig sortert ut.
   const autoSortValg = (() => {
+    if (visStatusAvvik) return { key:'tilbud_asc', hvorfor:'du rydder i tilbud uten status — eldste først' }
     if (tilbudFra || tilbudTil) return { key:'tilbud_asc',  hvorfor:'du filtrerer på tilbudsdato' }
     if (filterStatus === 'lead') return { key:'score_desc', hvorfor:'leads sorteres på kjøpspotensial' }
     if (filterStatus === 'aktive' || filterStatus === 'kontaktet' || filterStatus === 'tilbud_sendt') return { key:'neste_asc', hvorfor:'aktive: den som skal følges opp først, øverst' }
@@ -44611,6 +44620,8 @@ function CRMPage() {
     // og brukes av både kortene og nedtrekket, så de to aldri kan bety noe forskjellig.
     if (CRM_STATUS_GRUPPER[filterStatus]) q = q.in('status', CRM_STATUS_GRUPPER[filterStatus])
     else if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
+    // Varselet «tilbudsdato uten status» — samme avgrensning som varselet teller.
+    if (visStatusAvvik) q = q.not('tilbudsdato', 'is', null).in('status', CRM_TILBUD_UAVKLART)
     q = medFellesFilter(q)
     const so = CRM_SORT[effektivSort] || CRM_SORT[CRM_SORT_DEFAULT] || CRM_SORT.neste_asc
     q = q.order(so.col, { ascending: so.asc, nullsFirst: false })
@@ -44800,6 +44811,44 @@ function CRMPage() {
     } finally { setSletter(false) }
   }
 
+  // Retter opp statusen på kunder som HAR tilbudsdato, men står som lead eller kontaktet.
+  // Endrer bare status — tilbudsdato, sist kontaktet, oppfølging og notater røres ikke.
+  // Sperrene ligger BÅDE i utvalget og i selve update-spørringen: skifter en rad status
+  // mens du står i bekreftelsen, blir den ikke overskrevet likevel.
+  const settTilbudSendt = async () => {
+    setSetterStatus(true)
+    try {
+      const ids = valgte.size ? Array.from(valgte) : await hentAlleIdFraFilter()
+      if (!ids.length) { await alert({ message:'Ingen kunder å endre', kind:'info' }); return }
+      const utvalg = new Set(ids)
+      const navn = customers.filter(c => utvalg.has(c.id)).slice(0, 5).map(c => c.name)
+      const ok = await confirm({
+        message: `Sette status til «Tilbud sendt» for ${ids.length} ${ids.length===1?'kunde':'kunder'}?`,
+        subMessage: `Statusen endres fra Lead og Kontaktet${navn.length?` — bl.a. ${navn.join(', ')}`:''}${ids.length>navn.length?` og ${ids.length-navn.length} til`:''}. Alt annet står urørt: tilbudsdato, sist kontaktet, planlagt oppfølging og notater. Vunnet, tapt og inaktiv er ikke med, selv om de har tilbudsdato. Det finnes ingen samlet angreknapp — status kan settes tilbake på den enkelte kunden.`,
+        confirmLabel: `Sett «Tilbud sendt» (${ids.length})`,
+      })
+      if (!ok) return
+      let endret = 0
+      for (const bolk of bolker(ids)) {
+        const { data, error } = await supabase.from('customers')
+          .update({ status:'tilbud_sendt', updated_at:new Date().toISOString() })
+          .in('id', bolk)
+          .in('status', CRM_TILBUD_UAVKLART)        // sperre: avklarte statuser røres aldri
+          .not('tilbudsdato', 'is', null)           // sperre: bare kunder som faktisk har tilbud
+          .select('id')
+        if (error) throw error
+        endret += (data || []).length
+      }
+      setVisStatusAvvik(false); setVelgeModus(false); setValgte(new Set())
+      invalidateCustomerCache()
+      await refreshAll()
+      await alert({ message:`${endret} ${endret===1?'kunde':'kunder'} fikk status «Tilbud sendt»`, kind:'success' })
+    } catch (e) {
+      console.error('[CRM] settTilbudSendt', e)
+      await alert({ message:'Kunne ikke endre status', subMessage: e?.message, kind:'error' })
+    } finally { setSetterStatus(false) }
+  }
+
   // KPI-tall via egne count-spørringer — korrekte uansett 1000-grensen. De bruker SAMME
   // filtre som lista, bortsett fra status, slik at kortene er en fordeling av det du
   // faktisk ser på. Før talte de hele databasen: da sto «Aktive» på 47 mens lista viste 8.
@@ -44813,6 +44862,9 @@ function CRMPage() {
         base().eq('status', 'vunnet'),
         base().in('status', CRM_STATUS_GRUPPER.avsluttet),
       ])
+      // Egen telling: har tilbudsdato, men står som lead/kontaktet.
+      const { count: avvik } = await base().not('tilbudsdato', 'is', null).in('status', CRM_TILBUD_UAVKLART)
+      setStatusAvvik(avvik || 0)
       setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, avsluttet: avs.count||0 })
     } catch(e) { console.error('[CRM] loadKpis', e) }
   }
@@ -44844,14 +44896,15 @@ function CRMPage() {
   // ikke med: tallene skal stå stille mens du klikker deg mellom kortene.
   useEffect(()=>{ loadKpis() },[filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, debSearch])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
-  useEffect(()=>{ loadList(true) },[effektivSort, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, debSearch])
+  useEffect(()=>{ loadList(true) },[effektivSort, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, visStatusAvvik, debSearch])
   // Bytter du filter, gjelder ikke utvalget lenger. Å la 81 merkede rader fra en annen
   // kilde ligge igjen bak en sletteknapp er nettopp slik feilslettinger skjer.
-  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, debSearch])
+  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, visStatusAvvik, debSearch])
 
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av statusfilteret
-  const activeKpi = filterStatus === 'lead' ? 'leads'
+  const activeKpi = visStatusAvvik ? null
+    : filterStatus === 'lead' ? 'leads'
     : filterStatus === 'aktive' ? 'aktive'
     : filterStatus === 'vunnet' ? 'vunnet'
     : filterStatus === 'avsluttet' ? 'avsluttet'
@@ -44879,7 +44932,7 @@ function CRMPage() {
     })
   },[activities])
 
-  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !tilbudFra && !tilbudTil
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !tilbudFra && !tilbudTil && !visStatusAvvik
   // Filtrene som endrer KPI-tallene — alt unntatt status. Brukes til å si fra når
   // kortene viser et utvalg og ikke hele CRM.
   const kpiFiltrert = !!(debSearch || filterType!=='alle' || filterIndustry!=='alle' || filterKilde!=='alle' || filterKommune!=='alle' || tilbudFra || tilbudTil)
@@ -44977,6 +45030,43 @@ function CRMPage() {
       </div>
 
       <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
+        {/* «Tilbudsdato uten status»: kunden har fått tilbud, men står som lead eller
+            kontaktet. Varselet teller innenfor de samme filtrene som kortene og lista,
+            så handlingen bak det gjelder nøyaktig det utvalget du ser på. */}
+        {statusAvvik > 0 && !visStatusAvvik && view==='liste' && (
+          <button type="button" onClick={()=>{ setFilterStatus('alle'); setVelgeModus(false); setValgte(new Set()); setVisStatusAvvik(true) }}
+            title="Vis disse kundene"
+            style={{ width:'100%', textAlign:'left', font:'inherit', background:'#fffbeb', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fde68a', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', flexWrap:'wrap' }}>
+            <span style={{ fontSize:'18px', flexShrink:0 }}>📋</span>
+            <span style={{ flex:'1 1 240px', minWidth:0 }}>
+              <span style={{ display:'block', fontSize:'14px', fontWeight:'600', color:'#92400e' }}>{statusAvvik} {statusAvvik===1?'kunde har':'kunder har'} tilbudsdato, men status «Lead» eller «Kontaktet»</span>
+              <span style={{ display:'block', fontSize:'12.5px', color:'#a16207', marginTop:'2px' }}>Har du sendt tilbud, hører de hjemme under «Tilbud sendt». Vunnet, tapt og inaktiv røres ikke.</span>
+            </span>
+            <span style={{ fontSize:'13px', fontWeight:'700', color:'#92400e', flexShrink:0, whiteSpace:'nowrap' }}>Se dem →</span>
+          </button>
+        )}
+
+        {/* Handlingslinje for den opprydningen — vises kun mens du ser på utvalget. */}
+        {visStatusAvvik && view==='liste' && (
+          <div style={{ background:'#ecfdf5', border:'1px solid #a7f3d0', borderRadius:'14px', padding:'12px 16px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
+            <span style={{ flex:'1 1 240px', minWidth:0, fontSize:'13.5px', fontWeight:'600', color:'#065f46' }}>
+              {valgte.size ? `${valgte.size} merket` : `Gjelder alle ${listCount.toLocaleString('nb-NO')} i utvalget`} — bare status endres
+            </span>
+            <button type="button" onClick={()=>{ setVelgeModus(v=>!v); setValgte(new Set()) }} disabled={setterStatus}
+              style={{ background:'white', color:'#065f46', border:'1px solid #a7f3d0', borderRadius:'9px', padding:'8px 12px', fontSize:'12.5px', fontWeight:'600', cursor:'pointer', flex: mob?'1 1 45%':'none' }}>
+              {velgeModus ? '✕ Avslutt merking' : '☑️ Velg enkeltvis'}
+            </button>
+            <button type="button" onClick={()=>{ setVisStatusAvvik(false); setVelgeModus(false); setValgte(new Set()) }} disabled={setterStatus}
+              style={{ background:'none', color:'#047857', border:'none', padding:'8px 6px', fontSize:'12.5px', fontWeight:'700', cursor:'pointer', textDecoration:'underline', flex: mob?'1 1 45%':'none' }}>
+              Vis alle igjen
+            </button>
+            <button type="button" onClick={settTilbudSendt} disabled={setterStatus}
+              style={{ marginLeft: mob?'0':'auto', background: setterStatus?'#6ee7b7':'#059669', color:'white', border:'none', borderRadius:'9px', padding:'9px 16px', fontSize:'13px', fontWeight:'700', cursor: setterStatus?'wait':'pointer', flex: mob?'1 1 100%':'none' }}>
+              {setterStatus ? 'Jobber…' : `📋 Sett status til «Tilbud sendt»${valgte.size?` (${valgte.size})`:''}`}
+            </button>
+          </div>
+        )}
+
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
           {/* flex-basis 240px, ikke 0. Med «flex:1» ble basis 0, og siden nedtrekkene
@@ -45043,7 +45133,7 @@ function CRMPage() {
               )}
             </div>
           </div>
-          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setTilbudFra('');setTilbudTil('')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setTilbudFra('');setTilbudTil('');setVisStatusAvvik(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
@@ -45124,6 +45214,10 @@ function CRMPage() {
                       <div style={{ display:'flex', alignItems:'center', gap:'8px', flexWrap:'wrap', marginBottom:'4px' }}>
                         <span style={{ fontWeight:'700', color:'#0f172a', fontSize:'15px' }}>{c.name}</span>
                         <CrmStatusBadge status={c.status} />
+                        {visStatusAvvik && CRM_TILBUD_UAVKLART.includes(c.status) && <>
+                          <span style={{ fontSize:'12px', color:'#94a3b8' }}>→</span>
+                          <span style={{ background:'#fffbeb', color:'#d97706', border:'1px solid #fde68a', fontSize:'12px', fontWeight:'700', padding:'2px 9px', borderRadius:'999px' }}>📋 Tilbud sendt</span>
+                        </>}
                         {c.score!=null&&c.score!==''&&<CrmScoreBadge score={c.score} />}
                         {c.industry&&<span style={{ fontSize:'12px', color:'#94a3b8', background:'#f8fafc', padding:'2px 8px', borderRadius:'999px', border:'1px solid #f1f5f9' }}>{c.industry}</span>}
                         {c.kilde&&<span title="Kilde" style={{ fontSize:'12px', color:'#64748b', background:'#f1f5f9', padding:'2px 8px', borderRadius:'999px' }}>📥 {c.kilde}</span>}
