@@ -44058,6 +44058,11 @@ const CRM_STATUS = {
   inaktiv:       { label:'Inaktiv',       emoji:'💤', color:'#94a3b8', bg:'#f8fafc', border:'#e2e8f0' },
 }
 
+// «Aktive» og «Avsluttet» finnes ikke i databasen — de er samlinger av statuser.
+// Definert her, brukt av både KPI-kortene og statusfilteret, så de to aldri kan
+// komme til å bety hver sin ting.
+const CRM_STATUS_GRUPPER = { aktive:['kontaktet','tilbud_sendt'], avsluttet:['tapt','inaktiv'] }
+
 // CRM_TYPE brukes for LOOKUP (CRM_TYPE[c.type]) og må dekke alle verdier
 // som kan finnes i customers.type — inkl. legacy-verdier fra gamle crm_customers.
 const CRM_TYPE = {
@@ -44511,9 +44516,10 @@ const CRM_SORT = {
   navn_asc:      { label:'🔤 Navn (A–Å)',                   col:'name',             asc:true  },
   nyeste:        { label:'🆕 Nyeste først',                 col:'created_at',       asc:false },
 }
-const CRM_SORT_DEFAULT = 'score_desc'
+// Standard er «auto»: sorteringen velges ut fra hva du ser på (se autoSortValg).
+const CRM_SORT_DEFAULT = 'auto'
 function readCrmSort() {
-  try { const v = window.localStorage.getItem('crm_sort'); if (v && CRM_SORT[v]) return v } catch(_) {}
+  try { const v = window.localStorage.getItem('crm_sort'); if (v === 'auto' || (v && CRM_SORT[v])) return v } catch(_) {}
   return CRM_SORT_DEFAULT
 }
 
@@ -44537,7 +44543,6 @@ function CRMPage() {
   const [filterKommune, setFilterKommune] = useState('alle')
   const [tilbudFra, setTilbudFra] = useState('')  // periodefilter på tilbudsdato, begge valgfrie
   const [tilbudTil, setTilbudTil] = useState('')
-  const [visOppfolging, setVisOppfolging] = useState(false) // KPI-kort «Til oppfølging i dag» aktivt
   const [kilder, setKilder] = useState([])       // distinkte kilder (fra DB)
   const [kommuner, setKommuner] = useState([])   // distinkte kommuner/steder (fra DB, city-feltet)
   const [search, setSearch] = useState('')
@@ -44556,8 +44561,8 @@ function CRMPage() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [debSearch, setDebSearch] = useState('')       // debouncet søk (går til DB)
   const [listCount, setListCount] = useState(0)        // antall rader som matcher filteret (DB count)
-  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, oppfolging:0 })
-  const [forfaltCount, setForfaltCount] = useState(0)
+  const [kpi, setKpi] = useState({ total:0, leads:0, active:0, vunnet:0, avsluttet:0 })
+  const [oppfolgingCount, setOppfolgingCount] = useState(0) // oppgaver + oppfølginger: forfalt eller frist i dag
   const idag = new Date().toISOString().split('T')[0] // for oppfølging ≤ i dag
   const [page, setPage] = useState(0)
   const PAGE_SIZE = 100
@@ -44566,12 +44571,25 @@ function CRMPage() {
   // PostgREST-or() bruker komma/parentes som skilletegn — fjern dem fra søket så filteret ikke brekker
   // sanitizeSearch er løftet til modulnivå — deles med kryssmodul-velgeren.
 
-  // Bygg lista-spørring: filter + søk + sortering skjer i DB, ikke på et 1000-raders uttrekk.
-  const buildListQuery = (withCount, kolonner = '*') => {
-    let q = supabase.from('customers').select(kolonner, withCount ? { count:'exact' } : undefined)
-    // Statusfilter: 'aktive' = kontaktet + tilbud_sendt (samme definisjon som KPI-kortet)
-    if (filterStatus === 'aktive') q = q.in('status', ['kontaktet', 'tilbud_sendt'])
-    else if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
+  // Sorteringen følger det du ser på. Første regel som passer, vinner:
+  //   1. ditt eget valg (står til du trykker ↺)   2. tilbudsdato-filteret
+  //   3. statuskortet                             4. standard
+  // Score var standard før, men på importerte lister har nesten ingen kunde score.
+  // Da falt rekkefølgen tilbake på «sist endret», og lista så tilfeldig sortert ut.
+  const autoSortValg = (() => {
+    if (tilbudFra || tilbudTil) return { key:'tilbud_asc',  hvorfor:'du filtrerer på tilbudsdato' }
+    if (filterStatus === 'lead') return { key:'score_desc', hvorfor:'leads sorteres på kjøpspotensial' }
+    if (filterStatus === 'aktive' || filterStatus === 'kontaktet' || filterStatus === 'tilbud_sendt') return { key:'neste_asc', hvorfor:'aktive: den som skal følges opp først, øverst' }
+    if (filterStatus === 'avsluttet' || filterStatus === 'tapt' || filterStatus === 'inaktiv') return { key:'tilbud_desc', hvorfor:'avsluttet: nyeste tilbud er mest aktuelt å ta opp igjen' }
+    if (filterStatus === 'vunnet') return { key:'nyeste', hvorfor:'vunnet: nyeste først' }
+    return { key:'neste_asc', hvorfor:'ingen filtre — neste oppfølging først' }
+  })()
+  const effektivSort = sortBy === 'auto' ? autoSortValg.key : sortBy
+
+  // Filtrene som gjelder BÅDE lista og KPI-kortene — alt unntatt status. Status holdes
+  // utenfor med vilje: kortene ER statusfordelingen, og de må stå stille mens du klikker
+  // deg mellom dem. Slik summerer de fem statuskortene alltid til «N kunder» i lista.
+  const medFellesFilter = (q) => {
     if (filterType !== 'alle') q = q.eq('type', filterType)
     if (filterIndustry !== 'alle') q = q.eq('industry', filterIndustry)
     if (filterKilde !== 'alle') q = q.eq('kilde', filterKilde)
@@ -44580,18 +44598,23 @@ function CRMPage() {
     // bare til = alt før. Filtreres i DB, så «N kunder» og pagineringen stemmer.
     if (tilbudFra) q = q.gte('tilbudsdato', tilbudFra)
     if (tilbudTil) q = q.lte('tilbudsdato', tilbudTil)
-    if (visOppfolging) q = q.not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag) // forfalt eller i dag
     const term = sanitizeSearch(debSearch)
     if (term) q = q.or(`name.ilike.%${term}%,email.ilike.%${term}%,phone.ilike.%${term}%,city.ilike.%${term}%,orgnr.ilike.%${term}%`)
-    if (visOppfolging) {
-      // «Til oppfølging»-kortet: eldste oppfølgingsdato først
-      q = q.order('neste_oppfolging', { ascending: true, nullsFirst: false }).order('id', { ascending: true })
-    } else {
-      const so = CRM_SORT[sortBy] || CRM_SORT[CRM_SORT_DEFAULT]
-      q = q.order(so.col, { ascending: so.asc, nullsFirst: false })
-      if (so.col !== 'updated_at') q = q.order('updated_at', { ascending: false })
-      if (so.col !== 'id') q = q.order('id', { ascending: true }) // deterministisk paginering
-    }
+    return q
+  }
+
+  // Bygg lista-spørring: filter + søk + sortering skjer i DB, ikke på et 1000-raders uttrekk.
+  const buildListQuery = (withCount, kolonner = '*') => {
+    let q = supabase.from('customers').select(kolonner, withCount ? { count:'exact' } : undefined)
+    // Samlestatusene finnes ikke i databasen: de er definert ett sted (CRM_STATUS_GRUPPER)
+    // og brukes av både kortene og nedtrekket, så de to aldri kan bety noe forskjellig.
+    if (CRM_STATUS_GRUPPER[filterStatus]) q = q.in('status', CRM_STATUS_GRUPPER[filterStatus])
+    else if (filterStatus !== 'alle') q = q.eq('status', filterStatus)
+    q = medFellesFilter(q)
+    const so = CRM_SORT[effektivSort] || CRM_SORT[CRM_SORT_DEFAULT] || CRM_SORT.neste_asc
+    q = q.order(so.col, { ascending: so.asc, nullsFirst: false })
+    if (so.col !== 'updated_at') q = q.order('updated_at', { ascending: false })
+    if (so.col !== 'id') q = q.order('id', { ascending: true }) // deterministisk paginering
     return q
   }
 
@@ -44776,99 +44799,72 @@ function CRMPage() {
     } finally { setSletter(false) }
   }
 
-  // KPI-tall via egne count-spørringer — korrekte uansett 1000-grensen, uavhengig av lista-filteret.
+  // KPI-tall via egne count-spørringer — korrekte uansett 1000-grensen. De bruker SAMME
+  // filtre som lista, bortsett fra status, slik at kortene er en fordeling av det du
+  // faktisk ser på. Før talte de hele databasen: da sto «Aktive» på 47 mens lista viste 8.
   const loadKpis = async () => {
     try {
-      const base = () => supabase.from('customers').select('id', { count:'exact', head:true })
-      const [tot, lead, akt, vun, oppf] = await Promise.all([
+      const base = () => medFellesFilter(supabase.from('customers').select('id', { count:'exact', head:true }))
+      const [tot, lead, akt, vun, avs] = await Promise.all([
         base(),
         base().eq('status', 'lead'),
-        base().in('status', ['kontaktet', 'tilbud_sendt']),
+        base().in('status', CRM_STATUS_GRUPPER.aktive),
         base().eq('status', 'vunnet'),
-        base().not('neste_oppfolging', 'is', null).lte('neste_oppfolging', idag), // forfalt eller i dag
+        base().in('status', CRM_STATUS_GRUPPER.avsluttet),
       ])
-      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, oppfolging: oppf.count||0 })
+      setKpi({ total: tot.count||0, leads: lead.count||0, active: akt.count||0, vunnet: vun.count||0, avsluttet: avs.count||0 })
     } catch(e) { console.error('[CRM] loadKpis', e) }
   }
 
-  // Forfalt-banneret. Egen spørring mot det samme viewet som «Forfalt»-seksjonen
-  // i Mine oppgaver bruker, med samme avgrensning (forfaller < i dag), slik at
-  // de to tallene ikke kan sprike. Dekker BEGGE oppgavekildene.
-  // Står utenfor loadKpis med egen try/catch: mangler viewet i basen, skal det
-  // ta med seg banneret alene — ikke resten av KPI-tallene.
-  const loadForfalt = async () => {
+  // Kortet «Til oppfølging». Spør det samme viewet som «Mine oppgaver», så de to
+  // tallene ikke kan sprike, og dekker BEGGE oppgavekildene: oppgaver i crm_activities
+  // og avtalte oppfølginger på kunden. Avgrensningen er «forfalt eller frist i dag».
+  // Kundefiltrene gjelder ikke her — en oppgave er ikke en kunde, og viewet har ikke
+  // kundens bransje eller tilbudsdato. Kortet står derfor for seg selv etter en strek.
+  // Egen try/catch: mangler viewet i basen, skal det ta med seg dette kortet alene.
+  const loadOppfolgingCount = async () => {
     try {
       const { count, error } = await supabase.from(CRM_OPPGAVE_VIEW)
         .select('oppgave_id', { count:'exact', head:true })
-        .lt('forfaller', idag)
+        .lte('forfaller', idag)
       if (error) throw error
-      setForfaltCount(count || 0)
-    } catch(e) { console.error(`[CRM] loadForfalt (mangler viewet ${CRM_OPPGAVE_VIEW}?)`, e); setForfaltCount(0) }
-  }
-
-  // Hjelpedata (kontakter/aktiviteter/prosjekter/tilbud/faktura) — brukes til badges/kort.
-  const loadAux = async () => {
-    const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
-    const [ct, act, proj, q, inv] = await Promise.all([
-      supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
-      safeQuery('crm_activities'),
-      supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
-      safeQuery('quotes'),
-      safeQuery('invoices'),
-    ])
-    setContacts(ct); setActivities(act); setProjects(proj); setQuotes(q); setInvoices(inv)
-  }
-
-  // Distinkte kilder + kommuner til filter-nedtrekkene. Bruker DB-aggregat (grupperer
-  // på kolonnen) så vi får unike verdier uten å hente alle 14 500 radene. Fallback: uttrekk + dedup.
-  const loadFacets = async () => {
-    const hentDistinkt = async (col) => {
-      try {
-        const { data, error } = await supabase.from('customers').select(`${col}, n:id.count()`).not(col, 'is', null).order(col, { ascending: true })
-        if (error) throw error
-        return (data || []).map(r => r[col]).filter(v => v != null && String(v).trim() !== '')
-      } catch(_) {
-        // Fallback (kappet på 1000) hvis aggregat ikke er tilgjengelig
-        const { data } = await supabase.from('customers').select(col).not(col, 'is', null).order(col, { ascending: true })
-        return Array.from(new Set((data || []).map(r => r[col]).filter(v => v != null && String(v).trim() !== '')))
-      }
-    }
-    const [ks, kom] = await Promise.all([hentDistinkt('kilde'), hentDistinkt('city')])
-    setKilder(ks); setKommuner(kom)
+      setOppfolgingCount(count || 0)
+    } catch(e) { console.error(`[CRM] loadOppfolgingCount (mangler viewet ${CRM_OPPGAVE_VIEW}?)`, e); setOppfolgingCount(0) }
   }
 
   // Full oppfriskning etter endringer (ny/rediger/import/status).
-  const refreshAll = async () => { await Promise.all([ loadList(true), loadKpis(), loadForfalt(), loadAux(), loadFacets() ]) }
+  const refreshAll = async () => { await Promise.all([ loadList(true), loadKpis(), loadOppfolgingCount(), loadAux(), loadFacets() ]) }
 
   // Debounce søk så vi ikke spør DB per tastetrykk
   useEffect(()=>{ const t = setTimeout(()=>setDebSearch(search), 350); return ()=>clearTimeout(t) },[search])
   // Init: KPI + hjelpedata + facetter én gang
-  useEffect(()=>{ loadKpis(); loadForfalt(); loadAux(); loadFacets() },[])
+  useEffect(()=>{ loadOppfolgingCount(); loadAux(); loadFacets() },[])
+  // Kortene følger filtrene og må derfor hentes på nytt når filtrene endres. Status er
+  // ikke med: tallene skal stå stille mens du klikker deg mellom kortene.
+  useEffect(()=>{ loadKpis() },[filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, debSearch])
   // Lista lastes på nytt når filter/søk/sortering endres — alt skjer i DB-spørringen
-  useEffect(()=>{ loadList(true) },[sortBy, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, visOppfolging, debSearch])
+  useEffect(()=>{ loadList(true) },[effektivSort, filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, debSearch])
   // Bytter du filter, gjelder ikke utvalget lenger. Å la 81 merkede rader fra en annen
   // kilde ligge igjen bak en sletteknapp er nettopp slik feilslettinger skjer.
-  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, visOppfolging, debSearch])
+  useEffect(()=>{ setValgte(new Set()) },[filterStatus, filterType, filterIndustry, filterKilde, filterKommune, tilbudFra, tilbudTil, debSearch])
 
   // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av eksisterende filter-state
-  const activeKpi = visOppfolging ? 'oppfolging'
-    : filterStatus === 'lead' ? 'leads'
+  // Hvilket KPI-kort er aktivt (for visuell markering) — utledet av statusfilteret
+  const activeKpi = filterStatus === 'lead' ? 'leads'
     : filterStatus === 'aktive' ? 'aktive'
     : filterStatus === 'vunnet' ? 'vunnet'
+    : filterStatus === 'avsluttet' ? 'avsluttet'
     : filterStatus === 'alle' ? 'total' : null
   // Klikk på KPI-kort → styrer SAMME filter-state som «Alle statuser»-nedtrekket (ikke parallell filtrering)
   const klikkKpi = (target) => {
-    if (target === 'total') { setVisOppfolging(false); setFilterStatus('alle'); return }
-    if (target === 'oppfolging') {
-      if (visOppfolging) { setVisOppfolging(false) }
-      else { setVisOppfolging(true); setFilterStatus('alle') }
-      return
-    }
-    const val = target === 'leads' ? 'lead' : target === 'aktive' ? 'aktive' : 'vunnet'
-    setVisOppfolging(false)
+    if (target === 'total') { setFilterStatus('alle'); return }
+    // «Til oppfølging» teller oppgaver OG avtalte oppfølginger — to kilder som ikke
+    // begge bor i kundetabellen. Kortet filtrerer derfor ikke lista, det åpner Mine
+    // oppgaver, der begge kildene vises og tallet stemmer med det du ser.
+    if (target === 'oppfolging') { setVisOppgaver({ apne:'overdue' }); return }
+    const val = target === 'leads' ? 'lead' : target // 'aktive' | 'vunnet' | 'avsluttet'
     setFilterStatus(prev => prev === val ? 'alle' : val) // klikk samme kort igjen → nullstill
   }
-
   // Check overdue tasks and create notifications
   useEffect(()=>{
     if (!user||activities.length===0) return
@@ -44882,7 +44878,10 @@ function CRMPage() {
     })
   },[activities])
 
-  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !tilbudFra && !tilbudTil && !visOppfolging
+  const noFilters = !debSearch && filterStatus==='alle' && filterType==='alle' && filterIndustry==='alle' && filterKilde==='alle' && filterKommune==='alle' && !tilbudFra && !tilbudTil
+  // Filtrene som endrer KPI-tallene — alt unntatt status. Brukes til å si fra når
+  // kortene viser et utvalg og ikke hele CRM.
+  const kpiFiltrert = !!(debSearch || filterType!=='alle' || filterIndustry!=='alle' || filterKilde!=='alle' || filterKommune!=='alle' || tilbudFra || tilbudTil)
 
   const exportCSV = async () => {
     // Eksporterer HELE det filtrerte datasettet (paginert henting), ikke bare det som er lastet i lista.
@@ -44931,55 +44930,52 @@ function CRMPage() {
               <button onClick={()=>setShowImport(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'white', color:'#0f172a', border:'1px solid #e2e8f0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📥 Importer CSV</button>
             </div>
             {quotes.length > 0 ? <button onClick={()=>setShowImportQuotes(true)} style={{ padding:'10px 16px', background:'#eff6ff', color:'#2563eb', border:'1px solid #bfdbfe', borderRadius:'12px', cursor:'pointer', fontSize:'13px', fontWeight:'600', whiteSpace:'nowrap' }}>📋 Fra tilbud ({quotes.length})</button> : <span style={{ fontSize:'11px',color:'#94a3b8',padding:'10px' }}>({quotes.length} tilbud)</span>}
-            <button onClick={()=>setVisOppgaver(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>✅ Mine oppgaver{kpi.oppfolging>0?` (${kpi.oppfolging})`:''}</button>
+            <button onClick={()=>setVisOppgaver(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>✅ Mine oppgaver{oppfolgingCount>0?` (${oppfolgingCount})`:''}</button>
             <button onClick={()=>setVisAssistent(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#f0fdf4', color:'#059669', border:'1px solid #bbf7d0', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>📋 Dagens kontakter</button>
             <button onClick={()=>setShowNew(true)} style={{ padding: mob?'9px 14px':'10px 20px', background:'#059669', color:'white', border:'none', borderRadius:'12px', cursor:'pointer', fontSize: mob?'13px':'14px', fontWeight:'700', whiteSpace:'nowrap' }}>{mob?'+ Ny kunde':'+ Ny kunde / lead'}</button>
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ display:'grid', gridTemplateColumns: mob ? 'repeat(2,1fr)' : 'repeat(5,1fr)', gap:'10px' }}>
+        {/* Stats. Kortene er statusfordelingen av det du ser på: de bruker samme filtre
+            som lista (unntatt status), og de fem første summerer til Totalt. «Til
+            oppfølging» står for seg selv etter en tynn strek — det går på tvers av
+            status og teller oppgaver, ikke kunder. */}
+        <div style={{ display:'grid', gridTemplateColumns: mob ? 'repeat(2,1fr)' : 'repeat(5,1fr) 12px 1.1fr', gap:'10px', alignItems:'stretch' }}>
           {[
-            { key:'total',      label:'Totalt', value:kpi.total, emoji:'👥', color:'#0f172a', bg:'#f8fafc' },
-            { key:'leads',      label:'Leads', value:kpi.leads, emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
-            { key:'aktive',     label:'Aktive', value:kpi.active, emoji:'📋', color:'#d97706', bg:'#fffbeb' },
-            { key:'vunnet',     label:'Vunnet', value:kpi.vunnet, emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
-            { key:'oppfolging', label:'Til oppfølging i dag', value:kpi.oppfolging, emoji:'📅', color:'#dc2626', bg:'#fef2f2' },
+            { key:'total',      label:'Totalt',        value:kpi.total,       emoji:'👥', color:'#0f172a', bg:'#f8fafc', sub: kpiFiltrert ? 'i utvalget' : 'i hele CRM' },
+            { key:'leads',      label:'Leads',         value:kpi.leads,       emoji:'🎯', color:'#64748b', bg:'#f8fafc' },
+            { key:'aktive',     label:'Aktive',        value:kpi.active,      emoji:'📋', color:'#d97706', bg:'#fffbeb', sub:'kontaktet + tilbud sendt' },
+            { key:'vunnet',     label:'Vunnet',        value:kpi.vunnet,      emoji:'🏆', color:'#16a34a', bg:'#f0fdf4' },
+            { key:'avsluttet',  label:'Avsluttet',     value:kpi.avsluttet,   emoji:'🗂️', color:'#64748b', bg:'#f8fafc', sub:'tapt + inaktiv' },
+            { key:'strek' },
+            { key:'oppfolging', label:'Til oppfølging', value:oppfolgingCount, emoji:'📅', color:'#dc2626', bg:'#fef2f2', sub:'forfalt eller frist i dag' },
           ].map(s=>{
+            if (s.key === 'strek') return <span key="strek" aria-hidden="true" style={{ display: mob?'none':'block', width:'1px', background:'#e2e8f0', justifySelf:'center', margin:'8px 0' }} />
             const valgt = activeKpi === s.key
             return (
-            <button key={s.key} onClick={()=>klikkKpi(s.key)} title={valgt ? 'Klikk for å nullstille' : 'Klikk for å filtrere'}
-              style={{ textAlign:'left', background: valgt ? '#f0fdf4' : s.bg, borderRadius:'12px', padding:'14px 16px', cursor:'pointer',
+            <button key={s.key} onClick={()=>klikkKpi(s.key)} title={s.key==='oppfolging' ? 'Åpne Mine oppgaver' : valgt ? 'Klikk for å nullstille' : 'Klikk for å filtrere'}
+              style={{ textAlign:'left', background: valgt ? '#f0fdf4' : s.bg, borderRadius:'12px', padding: valgt?'13px 15px':'14px 16px', cursor:'pointer', minWidth:0,
+                gridColumn: mob && (s.key==='total'||s.key==='oppfolging') ? '1 / -1' : 'auto',
                 border: valgt ? '2px solid #059669' : '1px solid #f1f5f9', boxShadow: valgt ? '0 0 0 3px rgba(5,150,105,0.12)' : 'none',
                 fontFamily:'inherit', transition:'border-color 0.12s, box-shadow 0.12s' }}>
               <div style={{ display:'flex', alignItems:'center', gap:'6px', marginBottom:'4px' }}>
                 <span style={{ fontSize:'16px' }}>{s.emoji}</span>
-                <span style={{ fontSize:'11px', fontWeight:'700', color: valgt ? '#059669' : '#94a3b8', textTransform:'uppercase' }}>{s.label}</span>
+                <span style={{ fontSize:'11px', fontWeight:'700', color: valgt ? '#059669' : '#94a3b8', textTransform:'uppercase', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.label}</span>
               </div>
               <div style={{ fontSize:'22px', fontWeight:'800', color:s.color }}>{s.value}</div>
+              {s.sub && <div style={{ fontSize:'11.5px', color:'#94a3b8', marginTop:'2px' }}>{s.sub}</div>}
             </button>
             )
           })}
         </div>
+        {/* Regnestykket er kvitteringen på at kortene og lista viser det samme utvalget. */}
+        <div style={{ marginTop:'10px', fontSize:'12.5px', color:'#94a3b8', display:'flex', gap:'8px', flexWrap:'wrap', alignItems:'center' }}>
+          {kpiFiltrert && <span style={{ background:'#eff6ff', color:'#1d4ed8', border:'1px solid #bfdbfe', borderRadius:'999px', padding:'2px 10px', fontWeight:'600', fontSize:'12px' }}>Tallene følger filtrene</span>}
+          <span>{kpi.leads} leads + {kpi.active} aktive + {kpi.vunnet} vunnet + {kpi.avsluttet} avsluttet = <strong style={{ color:'#475569' }}>{kpi.total}</strong></span>
+        </div>
       </div>
 
       <div style={{ padding: mob?'14px':'20px 32px', display:'flex', flexDirection:'column', gap:'16px' }}>
-        {/* Forfalt-banner — inngang til Mine oppgaver med Forfalt-seksjonen åpen.
-            Ekte <button>: gir tastaturfokus, og Enter/mellomrom uten egen
-            tastaturhåndtering. Vises ikke i det hele tatt når tallet er 0. */}
-        {forfaltCount>0&&(
-          <button type="button"
-            onClick={()=>setVisOppgaver({ apne:'overdue' })}
-            title="Åpne Mine oppgaver med forfalte oppgaver"
-            style={{ width:'100%', textAlign:'left', font:'inherit', background:'#fef2f2', borderRadius:'12px', padding:'12px 18px', border:'1px solid #fecaca', display:'flex', alignItems:'center', gap:'10px', cursor:'pointer', transition:'background 0.12s, border-color 0.12s' }}
-            onMouseEnter={e=>{ e.currentTarget.style.background='#fee2e2'; e.currentTarget.style.borderColor='#fca5a5' }}
-            onMouseLeave={e=>{ e.currentTarget.style.background='#fef2f2'; e.currentTarget.style.borderColor='#fecaca' }}>
-            <span style={{ fontSize:'18px', flexShrink:0 }}>🚨</span>
-            <span style={{ fontSize:'14px', fontWeight:'600', color:'#dc2626', flex:1, minWidth:0 }}>{forfaltCount} forfalt oppgave{forfaltCount>1?'r':''} krever oppfølging</span>
-            <span style={{ fontSize:'13px', fontWeight:'700', color:'#dc2626', flexShrink:0, whiteSpace:'nowrap' }}>Se dem →</span>
-          </button>
-        )}
-
         {/* Controls */}
         <div style={{ background:'white', borderRadius:'14px', border:'1px solid #f1f5f9', padding:'14px 18px', display:'flex', gap:'10px', alignItems:'center', flexWrap:'wrap' }}>
           {/* flex-basis 240px, ikke 0. Med «flex:1» ble basis 0, og siden nedtrekkene
@@ -44988,9 +44984,10 @@ function CRMPage() {
               Nå beholder det 240px og vokser til 380 når det er plass; blir det for
               trangt, brytes hele feltet til egen linje i stedet for å bli ubrukelig. */}
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Søk navn, e-post, by, org.nr..." style={{ ...crmInp, minWidth:'200px', maxWidth: mob?'none':'380px', flex: mob?'1 1 100%':'1 1 240px' }} />
-          <select value={filterStatus} onChange={e=>{ setVisOppfolging(false); setFilterStatus(e.target.value) }} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'160px', flex: mob?'1 1 45%':'none' }}>
             <option value="alle">Alle statuser</option>
             <option value="aktive">📋 Aktive (kontaktet + tilbud)</option>
+            <option value="avsluttet">🗂️ Avsluttet (tapt + inaktiv)</option>
             {Object.entries(CRM_STATUS).map(([k,v])=><option key={k} value={k}>{v.emoji} {v.label}</option>)}
           </select>
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...crmInp, maxWidth: mob?'none':'140px', flex: mob?'1 1 45%':'none' }}>
@@ -45023,10 +45020,29 @@ function CRMPage() {
               <button onClick={()=>{ setTilbudFra(''); setTilbudTil('') }} title="Fjern periodefilteret" style={{ background:'none', border:'none', color:'#64748b', fontSize:'15px', cursor:'pointer', padding:'0 2px', flexShrink:0 }}>×</button>
             )}
           </div>
-          <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth: mob?'none':'200px', flex: mob?'1 1 45%':'none' }}>
-            {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-          </select>
-          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setTilbudFra('');setTilbudTil('');setVisOppfolging(false)}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
+          {/* Sortering: «Automatisk» velger ut fra hva du ser på, og linja under sier
+              hvorfor. Velger du selv, står valget til du trykker ↺ — også når du bytter
+              kort, slik at rekkefølgen ikke endrer seg bak ryggen på deg. */}
+          <div style={{ display:'flex', flexDirection:'column', gap:'3px', flex: mob?'1 1 100%':'none', minWidth:0, maxWidth: mob?'none':'300px' }}>
+            <select value={sortBy} onChange={e=>{ const v=e.target.value; setSortBy(v); try{ window.localStorage.setItem('crm_sort', v) }catch(_){} }} title="Sortering" style={{ ...crmInp, maxWidth:'none', width:'100%' }}>
+              <option value="auto">✨ Auto: {(CRM_SORT[autoSortValg.key]?.label || '').replace(/^\S+\s/, '')}</option>
+              {Object.entries(CRM_SORT).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
+            </select>
+            <div style={{ fontSize:'11.5px', color:'#94a3b8', display:'flex', gap:'6px', alignItems:'center', flexWrap:'wrap' }}>
+              {sortBy === 'auto' ? (
+                <>
+                  <span style={{ background:'#ecfdf5', color:'#047857', border:'1px solid #a7f3d0', borderRadius:'999px', padding:'1px 8px', fontWeight:'700' }}>Automatisk</span>
+                  <span>fordi {autoSortValg.hvorfor}</span>
+                </>
+              ) : (
+                <>
+                  <span style={{ background:'#fffbeb', color:'#92400e', border:'1px solid #fde68a', borderRadius:'999px', padding:'1px 8px', fontWeight:'700' }}>Egen sortering</span>
+                  <button type="button" onClick={()=>{ setSortBy('auto'); try{ window.localStorage.setItem('crm_sort','auto') }catch(_){} }} style={{ background:'none', border:'none', color:'#059669', fontWeight:'700', cursor:'pointer', font:'inherit', fontSize:'11.5px', padding:0 }}>↺ Automatisk</button>
+                </>
+              )}
+            </div>
+          </div>
+          {!noFilters&&<button onClick={()=>{setSearch('');setFilterStatus('alle');setFilterType('alle');setFilterIndustry('alle');setFilterKilde('alle');setFilterKommune('alle');setTilbudFra('');setTilbudTil('')}} style={{ background:'#f1f5f9',border:'none',borderRadius:'8px',padding:'9px 14px',fontSize:'13px',cursor:'pointer',color:'#64748b' }}>Nullstill</button>}
           <div style={{ marginLeft: mob?'0':'auto', display:'flex', border:'1px solid #e2e8f0', borderRadius:'10px', overflow:'hidden' }}>
             {[['liste','☰ Liste'],['pipeline','🏊 Pipeline']].map(([v,l])=>(
               <button key={v} onClick={()=>setView(v)} style={{ padding:'8px 14px',border:'none',background:view===v?'#059669':'white',color:view===v?'white':'#64748b',fontWeight:view===v?'700':'500',fontSize:'13px',cursor:'pointer' }}>{l}</button>
