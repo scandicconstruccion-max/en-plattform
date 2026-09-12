@@ -44585,6 +44585,7 @@ function CRMPage() {
     return { key:'neste_asc', hvorfor:'ingen filtre — neste oppfølging først' }
   })()
   const effektivSort = sortBy === 'auto' ? autoSortValg.key : sortBy
+  const sortKol = (CRM_SORT[effektivSort] || {}).col
 
   // Filtrene som gjelder BÅDE lista og KPI-kortene — alt unntatt status. Status holdes
   // utenfor med vilje: kortene ER statusfordelingen, og de må stå stille mens du klikker
@@ -45112,7 +45113,7 @@ function CRMPage() {
                 const velg = () => setValgte(prev => { const n = new Set(prev); n.has(c.id) ? n.delete(c.id) : n.add(c.id); return n })
                 return (
                   <div key={c.id} onClick={()=> velgeModus ? velg() : setSelected(c)}
-                    style={{ background: merket?'#fef2f2':'white', borderRadius:'14px', border:`1px solid ${merket?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', gap: mob?'10px':'16px', transition:'box-shadow 0.15s' }}
+                    style={{ background: merket?'#fef2f2':'white', borderRadius:'14px', border:`1px solid ${merket?'#fecaca':'#f1f5f9'}`, padding:'16px 20px', cursor:'pointer', display:'flex', alignItems:'center', flexWrap: mob?'wrap':'nowrap', gap: mob?'10px':'16px', transition:'box-shadow 0.15s' }}
                     onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,0.08)'} onMouseLeave={e=>e.currentTarget.style.boxShadow='none'}>
                     {velgeModus && (
                       <input type="checkbox" checked={merket} onChange={velg} onClick={e=>e.stopPropagation()}
@@ -45133,9 +45134,39 @@ function CRMPage() {
                         {c.phone&&<span style={{ fontSize:'12px', color:'#64748b' }}>📞 {c.phone}</span>}
                         {c.city&&<span style={{ fontSize:'12px', color:'#64748b' }}>📍 {c.city}</span>}
                         {custContacts.length>0&&<span style={{ fontSize:'12px', color:'#2563eb' }}>👤 {custContacts.length} kontakt{custContacts.length>1?'er':''}</span>}
-                        <span style={{ fontSize:'12px', color:'#64748b' }}>📅 {custActivities.length} aktiviteter</span>
+                        {custActivities.length>0&&<span style={{ fontSize:'12px', color:'#64748b' }}>📅 {custActivities.length} aktivitet{custActivities.length>1?'er':''}</span>}
                       </div>
                     </div>
+                    {/* Datokolonne: de tre datoene lista kan sorteres på. Den det sorteres
+                        etter nå, er uthevet — da ser du hvorfor raden ligger der den ligger.
+                        Forfalt oppfølging er rød. Datoer som mangler, vises ikke. */}
+                    {(() => {
+                      const datoer = [
+                        { col:'tilbudsdato',      ikon:'📄', tekst:'Tilbud',    verdi:c.tilbudsdato },
+                        { col:'sist_kontaktet',   ikon:'📞', tekst:'Kontaktet', verdi:c.sist_kontaktet },
+                        { col:'neste_oppfolging', ikon:'📅', tekst:'Neste',     verdi:c.neste_oppfolging },
+                      ].filter(d => d.verdi)
+                      if (!datoer.length) return null
+                      return (
+                        <div style={{ flexShrink:0, display:'flex', flexDirection: mob?'row':'column', flexWrap:'wrap', gap: mob?'2px 12px':'2px', alignItems: mob?'flex-start':'flex-end', minWidth: mob?'0':'140px',
+                          // På mobil tar datoene hele bredden på egen linje, på linje med teksten.
+                          // Uten det presses navnet til én bokstav per ord av tre nowrap-datoer.
+                          flexBasis: mob?'calc(100% - 56px)':'auto', marginLeft: mob?'56px':'0' }}>
+                          {datoer.map(d => {
+                            const sortertPa = sortKol === d.col
+                            const forfalt = d.col === 'neste_oppfolging' && d.verdi <= idag
+                            return (
+                              <span key={d.col} title={sortertPa ? 'Lista er sortert på denne' : undefined}
+                                style={{ fontSize:'11.5px', whiteSpace:'nowrap',
+                                  color: forfalt ? '#dc2626' : sortertPa ? '#0f172a' : '#94a3b8',
+                                  fontWeight: (forfalt || sortertPa) ? '700' : '400' }}>
+                                {d.ikon} {d.tekst} {dvVisning(d.verdi) || d.verdi}
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )
+                    })()}
                     {c.estimated_value&&<div style={{ textAlign:'right', flexShrink:0 }}>
                       <div style={{ fontWeight:'800', fontSize:'15px', color:'#0f172a' }}>{fmtVal(c.estimated_value)}</div>
                       <div style={{ fontSize:'11px', color:'#94a3b8' }}>est. verdi</div>
