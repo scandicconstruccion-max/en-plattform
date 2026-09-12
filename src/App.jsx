@@ -44885,6 +44885,37 @@ function CRMPage() {
     } catch(e) { console.error(`[CRM] loadOppfolgingCount (mangler viewet ${CRM_OPPGAVE_VIEW}?)`, e); setOppfolgingCount(0) }
   }
 
+  const loadAux = async () => {
+    const safeQuery = (table, opts) => supabase.from(table).select(opts?.select||'*').order(opts?.order||'created_at',{ascending:opts?.asc??false}).then(r=>r.data||[]).catch(()=>[])
+    const [ct, act, proj, q, inv] = await Promise.all([
+      supabase.from('crm_contacts').select('*').then(r=>r.data||[]).catch(()=>[]),
+      safeQuery('crm_activities'),
+      supabase.from('projects').select('id,name,status,parent_id,depth,project_number').order('name').then(r=>r.data||[]).catch(()=>[]),
+      safeQuery('quotes'),
+      safeQuery('invoices'),
+    ])
+    setContacts(ct); setActivities(act); setProjects(proj); setQuotes(q); setInvoices(inv)
+  }
+
+  // Distinkte kilder + kommuner til filter-nedtrekkene. Bruker DB-aggregat (grupperer
+  // på kolonnen) så vi får unike verdier uten å hente alle 14 500 radene. Fallback: uttrekk + dedup.
+  const loadFacets = async () => {
+    const hentDistinkt = async (col) => {
+      try {
+        const { data, error } = await supabase.from('customers').select(`${col}, n:id.count()`).not(col, 'is', null).order(col, { ascending: true })
+        if (error) throw error
+        return (data || []).map(r => r[col]).filter(v => v != null && String(v).trim() !== '')
+      } catch(_) {
+        // Fallback (kappet på 1000) hvis aggregat ikke er tilgjengelig
+        const { data } = await supabase.from('customers').select(col).not(col, 'is', null).order(col, { ascending: true })
+        return Array.from(new Set((data || []).map(r => r[col]).filter(v => v != null && String(v).trim() !== '')))
+      }
+    }
+    const [ks, kom] = await Promise.all([hentDistinkt('kilde'), hentDistinkt('city')])
+    setKilder(ks); setKommuner(kom)
+  }
+
+  // Full oppfriskning etter endringer (ny/rediger/import/status).
   // Full oppfriskning etter endringer (ny/rediger/import/status).
   const refreshAll = async () => { await Promise.all([ loadList(true), loadKpis(), loadOppfolgingCount(), loadAux(), loadFacets() ]) }
 
